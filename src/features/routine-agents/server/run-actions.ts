@@ -58,24 +58,47 @@ async function executeConfirmedTool(run: RoutineRunDoc): Promise<string> {
     }
 }
 
+/** Respostas em andamento neste processo (o tick não retoma uma confirmação que ainda executa a ação). */
+const resolving = new Set<string>()
+export const isRoutineActionResolving = (runId: string): boolean => resolving.has(runId)
+
+/** Aviso entregue quando a retomada sai pelo tick (o servidor reiniciou entre a resposta e a fila). */
+export const RESOLUTION_INTERRUPTED_NOTE =
+    "(O servidor reiniciou logo depois da resposta do dono: se a ação confirmada já tiver rodado, o resultado não chegou. Confira o estado antes de repetir a ação.)"
+
+/** Texto da retomada a partir da resposta do dono (sem o resultado da ferramenta). */
+export function resolutionNote(action: { summary: string; kind: string }, decision: "confirmed" | "rejected", note?: string | null): string {
+    const extra = note?.trim() ? `\nObservação do dono: ${note.trim()}` : ""
+    if (decision === "rejected") return `Recusado pelo dono: "${action.summary}". NÃO execute essa ação; siga sem ela ou conclua.${extra}`
+    if (action.kind === "tool") return `Confirmado pelo dono: "${action.summary}".${extra}`
+    return `Confirmado pelo dono: "${action.summary}". A ação está liberada: execute-a agora.${extra}`
+}
+
+/**
+ * A resposta grava, já no claim, o texto da retomada (com o aviso de interrupção, trocado pelo
+ * resultado quando a ação roda): se o processo cair antes da fila, o tick retoma a execução com ele.
+ */
 export async function resolveRoutineAction(runId: string, decision: "confirmed" | "rejected", actorId: string, note?: string): Promise<{ status: string }> {
     const run = await loadRunDoc(runId)
     if (run.status !== "awaiting_confirmation" || !run.pendingAction || run.pendingAction.resolvedAt) throw ALREADY()
     const now = new Date()
-    const claimed = await RoutineRun.findOneAndUpdate(
-        { _id: run._id, status: "awaiting_confirmation", "pendingAction.id": run.pendingAction.id, "pendingAction.resolvedAt": null },
-        { $set: { "pendingAction.resolvedAt": now, "pendingAction.resolution": decision, "pendingAction.note": note?.trim() || null } },
-        { new: true },
-    ).lean<RoutineRunDoc | null>()
-    if (!claimed) throw ALREADY()
-    await auditRun(actorId, runId, decision === "confirmed" ? AcaoAuditoria.APROVAR : AcaoAuditoria.DEVOLVER, { evento: decision === "confirmed" ? "confirmar" : "recusar", acao: run.pendingAction.summary })
-    const summary = run.pendingAction.summary
-    const extra = note?.trim() ? `\nObservação do dono: ${note.trim()}` : ""
-    let resumeNote: string
-    if (decision === "rejected") resumeNote = `Recusado pelo dono: "${summary}". NÃO execute essa ação; siga sem ela ou conclua.${extra}`
-    else if (run.pendingAction.kind === "tool") resumeNote = `Confirmado pelo dono: "${summary}".${extra}\n${await executeConfirmedTool(claimed)}`
-    else resumeNote = `Confirmado pelo dono: "${summary}". A ação está liberada: execute-a agora.${extra}`
-    const requeued = await requeueParkedRun(claimed, "awaiting_confirmation", { resumeNote })
-    if (!requeued) routineLog.warn({ runId }, "[routine-agents] execução não voltou para a fila depois da confirmação (cancelada ou expirada no meio)")
-    return { status: requeued ? "queued" : (await loadRunDoc(runId)).status }
+    const base = resolutionNote(run.pendingAction, decision, note)
+    resolving.add(runId)
+    try {
+        const claimed = await RoutineRun.findOneAndUpdate(
+            { _id: run._id, status: "awaiting_confirmation", "pendingAction.id": run.pendingAction.id, "pendingAction.resolvedAt": null },
+            { $set: { "pendingAction.resolvedAt": now, "pendingAction.resolution": decision, "pendingAction.note": note?.trim() || null, resumeNote: `${base}\n${RESOLUTION_INTERRUPTED_NOTE}` } },
+            { new: true },
+        ).lean<RoutineRunDoc | null>()
+        if (!claimed) throw ALREADY()
+        await auditRun(actorId, runId, decision === "confirmed" ? AcaoAuditoria.APROVAR : AcaoAuditoria.DEVOLVER, { evento: decision === "confirmed" ? "confirmar" : "recusar", acao: run.pendingAction.summary }).catch((error: unknown) =>
+            routineLog.warn({ runId, err: messageOf(error) }, "[routine-agents] auditoria da resposta à confirmação não gravada"),
+        )
+        const resumeNote = decision === "confirmed" && run.pendingAction.kind === "tool" ? `${base}\n${await executeConfirmedTool(claimed)}` : base
+        const requeued = await requeueParkedRun(claimed, "awaiting_confirmation", { resumeNote })
+        if (!requeued) routineLog.warn({ runId }, "[routine-agents] execução não voltou para a fila depois da confirmação (cancelada ou expirada no meio)")
+        return { status: requeued ? "queued" : (await loadRunDoc(runId)).status }
+    } finally {
+        resolving.delete(runId)
+    }
 }

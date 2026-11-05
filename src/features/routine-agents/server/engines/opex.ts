@@ -6,6 +6,7 @@ import { compactToolOutput, redactToolInput, stringifyForDisplay } from "@/featu
 import { redactToolCalls } from "@/features/opex-agent/history"
 import type { McpTurnTools } from "@/features/opex-agent/server/mcp/tools"
 import { isRoutineForbiddenToolGroup } from "../../constants"
+import { trimRoutineHistory } from "../../history"
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 
@@ -24,6 +25,12 @@ import type { EngineInput, EngineResult } from "./types"
  */
 
 const MAX_DETAIL = 400
+
+/** Resposta às ferramentas chamadas depois que o turno já foi encerrado no mesmo passo. */
+export const TURN_ALREADY_CLOSED = {
+    status: "not_executed",
+    instruction: "A ação NÃO foi executada: o turno já foi encerrado por outra ferramenta deste passo (confirmação, hibernação ou conclusão). Chame uma ferramenta por vez.",
+} as const
 
 const parseHistory = (json: string | null | undefined): ModelMessage[] => {
     if (!json) return []
@@ -73,7 +80,8 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
     let mcp: McpTurnTools | null = null
     let text = ""
     let errorMessage: string | null = null
-    const history = parseHistory(run.messages)
+    // Histórico das ativações anteriores, sem o raciocínio passado e dentro do orçamento (`history.ts`).
+    const history = trimRoutineHistory(parseHistory(run.messages))
     const userMessage: ModelMessage = { role: "user", content: input.message }
     try {
         const { needsConfirmation } = await import("@/features/opex-agent/server/tools/registry")
@@ -95,6 +103,11 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                 inputSchema: def.modelInputSchema ?? def.input,
                 execute: async (raw: unknown, options) => {
                     const startedAt = Date.now()
+                    // Outra ferramenta do mesmo passo já encerrou o turno: não executa nem sobrescreve a pendente.
+                    if (activation.outcome !== null) {
+                        input.onStep({ kind: "tool", label: `${def.label} (não executada: turno já encerrado)`, toolName: def.name, durationMs: 0 })
+                        return TURN_ALREADY_CLOSED
+                    }
                     try {
                         if (!internal && run.snapshot.confirmIrreversible && needsConfirmation(def, overrides)) {
                             const parsed = def.input.parse(raw)
@@ -167,7 +180,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         }
         if (stepText.trim()) text = stepText.trim()
         const response = redactToolCalls(await Promise.resolve(result.responseMessages).catch(() => []), (name, raw) => redactToolInput(byName.get(name), raw))
-        return { error: errorMessage, text, messages: JSON.stringify([...history, userMessage, ...response]) }
+        return { error: errorMessage, text, messages: JSON.stringify(trimRoutineHistory([...history, userMessage, ...response])) }
     } catch (error) {
         if (signal.aborted) return { error: null, text, messages: JSON.stringify([...history, userMessage]) }
         const message = describeAiError(error)

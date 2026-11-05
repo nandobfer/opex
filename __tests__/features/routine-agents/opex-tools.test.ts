@@ -16,6 +16,8 @@ vi.mock('@/features/routine-agents/server/entries', () => mocks.entries)
 import { routineAgentTools } from '@/features/opex-agent/server/tools/routine-agents'
 import { toAgentDto } from '@/features/routine-agents/server/shared'
 import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
+import { mcpOwnerToolDecision } from '@/features/integrations/api-tokens/scopes'
+import { needsConfirmation } from '@/features/opex-agent/server/tools/registry'
 
 const tool = (name: string) => routineAgentTools.find((item) => item.name === name)!
 const ctx = { sessionId: 's', actorId: 'local' }
@@ -47,6 +49,15 @@ describe('ferramentas dos agentes rotineiros', () => {
     expect(mocks.service.setRoutineAgentStatus).toHaveBeenCalledWith(ID, 'archive', 'local')
     await tool('add_routine_entry').execute(tool('add_routine_entry').input.parse({ id: ID, texto: 'Sem vagas presenciais' }), ctx)
     expect(mocks.entries.addRoutineEntry).toHaveBeenCalledWith(ID, { text: 'Sem vagas presenciais', target: 'agent' }, 'local')
+  })
+
+  it('confirmar ação do rotineiro (que executa a ação, às vezes destrutiva) pede confirmação no chat e exige o escopo destrutivo por token', () => {
+    const confirm = tool('confirm_routine_action')
+    expect(needsConfirmation(confirm)).toBe(true)
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*'], confirm)).toEqual({ ok: false, reason: 'destructive' })
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:group:routine-agents'], confirm)).toEqual({ ok: false, reason: 'destructive' })
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*', 'mcp:owner:destructive'], confirm)).toEqual({ ok: true })
+    expect(needsConfirmation(tool('reject_routine_action'))).toBe(false)
   })
 
   it('criar sem modelo é recusado pela validação do contrato', async () => {

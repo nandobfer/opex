@@ -1,7 +1,7 @@
 /**
  * Coleção Mongoose em memória para testes de serviço (só o que os serviços usam): filtros com
- * igualdade, caminho com ponto, `$in`, `$nin`, `$ne`, `$lte`, `$gte`; `$set`/`$inc`; cadeias
- * `select/sort/limit/lean`. Ids são strings de 24 hex (o `_id` vira objeto com `toString`).
+ * igualdade, caminho com ponto, `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`; `deleteMany`; cadeias
+ * `select/sort/skip/limit/lean`. Ids são strings de 24 hex (o `_id` vira objeto com `toString`).
  */
 
 type Doc = Record<string, unknown> & { _id: FakeId }
@@ -42,6 +42,7 @@ function matchValue(actual: unknown, cond: unknown): boolean {
                 if (op === '$nin') return !values.some((item) => (value as unknown[]).some((option) => eq(item, option)))
                 if (op === '$ne') return !values.some((item) => eq(item, value))
                 if (op === '$lte') return values.some((item) => item !== null && item !== undefined && (norm(item) as number) <= (norm(value) as number))
+                if (op === '$lt') return values.some((item) => item !== null && item !== undefined && (norm(item) as number) < (norm(value) as number))
                 if (op === '$gte') return values.some((item) => item !== null && item !== undefined && (norm(item) as number) >= (norm(value) as number))
                 throw new Error(`operador não suportado: ${op}`)
             })
@@ -71,11 +72,12 @@ function apply(doc: Record<string, unknown>, update: Record<string, unknown>) {
 
 const structuredCloneSafe = <T>(value: T): T => value
 
-function chain<T>(run: (state: { sort?: Record<string, 1 | -1>; limit?: number }) => T) {
-    const state: { sort?: Record<string, 1 | -1>; limit?: number } = {}
+function chain<T>(run: (state: { sort?: Record<string, 1 | -1>; limit?: number; skip?: number }) => T) {
+    const state: { sort?: Record<string, 1 | -1>; limit?: number; skip?: number } = {}
     const api = {
         select: () => api,
         sort: (sort: Record<string, 1 | -1>) => ((state.sort = sort), api),
+        skip: (skip: number) => ((state.skip = skip), api),
         limit: (limit: number) => ((state.limit = limit), api),
         lean: async () => run(state),
         exec: async () => run(state),
@@ -87,7 +89,7 @@ function chain<T>(run: (state: { sort?: Record<string, 1 | -1>; limit?: number }
 export function createFakeCollection(defaults: () => Record<string, unknown> = () => ({})) {
     const docs: Doc[] = []
     const clone = (doc: Doc | undefined | null) => (doc ? ({ ...doc } as Doc) : null)
-    const findMany = (filter: Record<string, unknown>, state: { sort?: Record<string, 1 | -1>; limit?: number }) => {
+    const findMany = (filter: Record<string, unknown>, state: { sort?: Record<string, 1 | -1>; limit?: number; skip?: number }) => {
         let rows = docs.filter((doc) => matches(doc, filter))
         if (state.sort) {
             const entries = Object.entries(state.sort)
@@ -101,7 +103,8 @@ export function createFakeCollection(defaults: () => Record<string, unknown> = (
                 return 0
             })
         }
-        return rows.slice(0, state.limit ?? rows.length).map((doc) => clone(doc)!)
+        const start = state.skip ?? 0
+        return rows.slice(start, start + (state.limit ?? rows.length)).map((doc) => clone(doc)!)
     }
     const model = {
         docs,
@@ -131,6 +134,11 @@ export function createFakeCollection(defaults: () => Record<string, unknown> = (
                 apply(doc, update)
                 return options.new ? clone(doc) : before
             }),
+        async deleteMany(filter: Record<string, unknown> = {}) {
+            const before = docs.length
+            for (let index = docs.length - 1; index >= 0; index--) if (matches(docs[index]!, filter)) docs.splice(index, 1)
+            return { deletedCount: before - docs.length }
+        },
         async updateOne(filter: Record<string, unknown>, update: Record<string, unknown>) {
             const doc = docs.find((row) => matches(row, filter))
             if (!doc) return { modifiedCount: 0, matchedCount: 0 }

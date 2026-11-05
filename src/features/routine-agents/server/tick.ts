@@ -4,6 +4,7 @@ import { checkRunLimits } from "../limits"
 import { isActivationAlive } from "./hub"
 import { isProvisioningInFlight, PROVISIONING_INTERRUPTED_MESSAGE } from "./provisioning-registry"
 import { closeParkedRun, pumpAgent, requeueParkedRun, triggerRoutineRun } from "./runs"
+import { isRoutineActionResolving, RESOLUTION_INTERRUPTED_NOTE, resolutionNote } from "./run-actions"
 import { messageOf, publishAgentUpdated, routineDb, routineLog, type RoutineAgentDoc, type RoutineRunDoc } from "./shared"
 
 /**
@@ -12,7 +13,9 @@ import { messageOf, publishAgentUpdated, routineDb, routineLog, type RoutineAgen
  * 0. provisionamento "Provisionando"/pendente sem processo vivo (reinício) → **com erro**, para o
  *    dono usar "Tentar de novo";
  * 1. turnos perdidos (Executando/Esperando sem turno vivo, ex.: reinício) → **Erro**;
- * 2. hibernadas/aguardando confirmação além do tempo total de espera → **Expirada**;
+ * 2. confirmação já respondida que não voltou para a fila (reinício ou falha entre a resposta e a
+ *    fila) → volta para a fila com o texto gravado na resposta;
+ *    hibernadas/aguardando confirmação além do tempo total de espera → **Expirada**;
  * 3. hibernadas vencidas voltam para a fila (com o atraso registrado);
  * 4. disparos agendados vencidos: um só por gatilho, mesmo com várias janelas perdidas; agente
  *    pausado/arquivado descarta o disparo (sem acumular);
@@ -24,6 +27,8 @@ export const LOST_TURN_MESSAGE = "O turno da execução foi perdido"
 const LOST_GRACE_MS = 30_000
 /** Folga entre gravar "running"/"pending" e registrar o provisionamento vivo. */
 const PROVISIONING_GRACE_MS = 120_000
+/** Folga entre a resposta do dono e a volta para a fila (a ação confirmada pode estar rodando). */
+const RESOLVED_GRACE_MS = 60_000
 const BATCH = 100
 
 export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: number; expired: number; resumed: number; fired: number }> {
@@ -54,6 +59,18 @@ export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: num
 
     const parked = await RoutineRun.find({ status: { $in: ["hibernating", "awaiting_confirmation"] } }).limit(BATCH * 5).lean<RoutineRunDoc[]>()
     for (const run of parked) {
+        const resolvedAt = run.status === "awaiting_confirmation" ? run.pendingAction?.resolvedAt : null
+        if (resolvedAt) {
+            if (isRoutineActionResolving(String(run._id)) || now.getTime() - new Date(resolvedAt).getTime() < RESOLVED_GRACE_MS) continue
+            const action = run.pendingAction!
+            const resumeNote = run.resumeNote ?? `${resolutionNote(action, action.resolution === "rejected" ? "rejected" : "confirmed", action.note)}\n${RESOLUTION_INTERRUPTED_NOTE}`
+            if (await requeueParkedRun(run, "awaiting_confirmation", { resumeNote })) {
+                routineLog.warn({ runId: String(run._id) }, "[routine-agents] confirmação respondida retomada pelo agendador")
+                summary.resumed++
+                touched.add(String(run.agentId))
+            }
+            continue
+        }
         const parkedMs = run.parkedAt ? now.getTime() - new Date(run.parkedAt).getTime() : 0
         const verdict = checkRunLimits({ activeMs: run.activeMs ?? 0, waitingMs: (run.waitingMs ?? 0) + parkedMs, tokens: run.tokens ?? 0 }, run.snapshot.limits, "parked")
         if (verdict.kind === "expired") {

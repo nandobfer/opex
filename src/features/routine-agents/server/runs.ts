@@ -12,7 +12,7 @@ import { freeSlots } from "../slots"
 import { ROUTINE_SLOT_STATUSES, isFinalRunStatus, type RoutineRunStatus, type RoutineTriggerOrigin } from "../status"
 import { baseRoutineChannels, routineAgentTarget } from "./engramind"
 import { addUsage, beginActivation, endActivation, stopActivation, type Activation } from "./hub"
-import { forgetRunStepThrottle, recordRunStep } from "./steps"
+import { forgetRunStepThrottle, pruneRunSteps, recordRunStep } from "./steps"
 import { routineControlTools } from "./tools/internal"
 import { routineMemoryTools } from "./tools/memory"
 import type { EngineInput, EngineResult } from "./engines/types"
@@ -263,6 +263,7 @@ async function settleActivation(run: RoutineRunDoc, activation: Activation, resu
     const now = new Date()
     endActivation(runId)
     forgetRunStepThrottle(runId)
+    void pruneRunSteps(run._id).catch((error: unknown) => routineLog.warn({ runId, err: messageOf(error) }, "[routine-agents] retenção dos passos falhou"))
     const verdict = activationVerdict(activation, result, now)
     const usage = activation.usage
     const warnings = [...new Set([...(run.warnings ?? []), ...activation.warnings, ...(verdict.warning ? [verdict.warning] : [])])]

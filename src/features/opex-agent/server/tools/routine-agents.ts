@@ -165,6 +165,9 @@ export const routineAgentTools: OpexTool[] = [
         group: "routine-agents",
         label: "Confirmar ação do rotineiro",
         risk: "write",
+        // A ação confirmada pode ser destrutiva (é executada pelo Opex na confirmação): pede Confirmar/Cancelar
+        // no chat e exige `mcp:owner:destructive` por token, como a própria ação exigiria.
+        confirmByDefault: true,
         description: "Confirma a ação irreversível pendente de uma execução (retoma com a ação liberada). Respondida duas vezes → 409 ROUTINE_ACTION_ALREADY_RESOLVED.",
         input: z.object({ runId: id, observacao: z.string().max(2_000).optional() }),
         summarize: (input) => `Confirmar a ação pendente da execução ${input.runId}`,

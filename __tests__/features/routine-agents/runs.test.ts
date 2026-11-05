@@ -55,6 +55,9 @@ import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
 import { ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TURN_TIMEOUT_MESSAGE } from '@/features/routine-agents/limits'
 import { inFlight, PROVISIONING_INTERRUPTED_MESSAGE } from '@/features/routine-agents/server/provisioning-registry'
 import { reprovisionRoutineAgent } from '@/features/routine-agents/server/service'
+import { ACTIVE_LIMIT_MESSAGE, TOKEN_LIMIT_MESSAGE } from '@/features/routine-agents/limits'
+import { RESOLUTION_INTERRUPTED_NOTE } from '@/features/routine-agents/server/run-actions'
+import { MAX_RUN_STEPS, pruneRunSteps } from '@/features/routine-agents/server/steps'
 
 const ctx = { sessionId: '', actorId: 'local' }
 const call = (input: Parameters<typeof holder.engine>[0], name: string, args: unknown) => input.internalTools.find((tool) => tool.name === name)!.execute(args, ctx)
@@ -359,6 +362,113 @@ describe('provisionamento interrompido por reinício', () => {
     inFlight.set(String(alive._id), new Promise(() => undefined))
     await expect(reprovisionRoutineAgent(String(alive._id), 'retry', 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_AGENT_PROVISIONING' })
     expect(holder.startProvisioning).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('limites ligados ao turno', () => {
+  it('o uso de um passo que alcança o máximo de tokens interrompe o turno → Erro "Limite de tokens atingido"', async () => {
+    const agent = seedAgent({ limits: { ...EMPTY_ROUTINE_LIMITS, maxTokens: 100 } })
+    holder.engine = async (input) => {
+      input.onUsage({ tokens: 60, inputTokens: 50, outputTokens: 10, costUsd: null, stepId: '1', model: 'claude', provider: 'anthropic' })
+      expect(input.activation.controller.signal.aborted).toBe(false)
+      input.onUsage({ tokens: 50, inputTokens: 40, outputTokens: 10, costUsd: null, stepId: '2', model: 'claude', provider: 'anthropic' })
+      expect(input.activation.controller.signal.aborted).toBe(true)
+      return { error: null, text: '' }
+    }
+    const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(run(runId)).toMatchObject({ status: 'error', error: TOKEN_LIMIT_MESSAGE, tokens: 110 })
+  })
+
+  it('o tempo máximo ativo dispara o temporizador do turno → Erro de tempo ativo', async () => {
+    vi.useFakeTimers()
+    try {
+      const agent = seedAgent({ limits: { ...EMPTY_ROUTINE_LIMITS, maxActiveMinutes: 2 } })
+      holder.engine = (input) => new Promise((resolve) => input.activation.controller.signal.addEventListener('abort', () => resolve({ error: null, text: '' })))
+      const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+      await vi.advanceTimersByTimeAsync(2 * 60_000 - 1_000)
+      expect(run(runId).status).toBe('running')
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(run(runId)).toMatchObject({ status: 'error', error: ACTIVE_LIMIT_MESSAGE })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('confirmação respondida que não voltou para a fila', () => {
+  const resolvedRun = (agentId: unknown, resolvedAt: Date, resumeNote: string | null) =>
+    holder.runs.insert({
+      agentId,
+      seq: 1,
+      status: 'awaiting_confirmation',
+      origin: 'manual',
+      request: null,
+      snapshot: { engine: 'opex', confirmIrreversible: true, limits: EMPTY_ROUTINE_LIMITS, opex: {}, opencode: {} },
+      parkedAt: new Date(Date.now() - 10 * 60_000),
+      queuedAt: new Date(),
+      activeMs: 1_000,
+      pendingAction: { id: 'p1', summary: 'Excluir a tarefa t1', kind: 'tool', toolName: 'delete_task', toolLabel: 'Excluir tarefa', input: null, displayInput: null, requestedAt: new Date(), resolvedAt, resolution: 'confirmed', note: null },
+      resumeNote,
+    })
+
+  it('o tick retoma a execução com o texto gravado na resposta (claim feito, fila não)', async () => {
+    const agent = seedAgent()
+    const messages: string[] = []
+    holder.engine = async (input) => {
+      messages.push((input as unknown as { message: string }).message)
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const stranded = resolvedRun(agent._id, new Date(Date.now() - 5 * 60_000), `Confirmado pelo dono: "Excluir a tarefa t1".\n${RESOLUTION_INTERRUPTED_NOTE}`)
+    const recent = resolvedRun(agent._id, new Date(), 'Confirmado')
+    await runDueRoutineAgents(new Date())
+    await flush()
+    expect(run(String(stranded._id)).status).toBe('completed')
+    expect(messages[0]).toContain(RESOLUTION_INTERRUPTED_NOTE)
+    expect(run(String(recent._id)).status).toBe('awaiting_confirmation')
+  })
+
+  it('o claim já grava o texto da retomada: uma falha antes da fila deixa a execução recuperável', async () => {
+    const notes: string[] = []
+    holder.engine = async (input) => {
+      notes.push((input as unknown as { message: string }).message)
+      if (notes.length === 1) {
+        ;(input.activation as unknown as { outcome: unknown }).outcome = { kind: 'confirmation', action: { summary: 'Publicar', kind: 'request', toolName: null, toolLabel: null, input: null, displayInput: null } }
+      } else await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
+    await flush()
+    const original = holder.runs.findOneAndUpdate
+    let calls = 0
+    // A fila (segunda gravação) falha: simula o processo caindo entre a resposta e a fila.
+    holder.runs.findOneAndUpdate = ((...args: Parameters<typeof original>) => {
+      if (++calls === 2) throw new Error('banco fora')
+      return original(...args)
+    }) as typeof original
+    await expect(resolveRoutineAction(runId, 'confirmed', 'local')).rejects.toThrow('banco fora')
+    holder.runs.findOneAndUpdate = original
+    expect(run(runId)).toMatchObject({ status: 'awaiting_confirmation', resumeNote: expect.stringContaining('Confirmado pelo dono: "Publicar"') })
+    await expect(resolveRoutineAction(runId, 'confirmed', 'local')).rejects.toMatchObject({ status: 409 })
+    await runDueRoutineAgents(new Date(Date.now() + 2 * 60_000))
+    await flush()
+    expect(run(runId).status).toBe('completed')
+    expect(notes[1]).toContain('A ação está liberada')
+  })
+})
+
+describe('retenção dos passos', () => {
+  it('mantém só os passos mais recentes da execução', async () => {
+    const runId = fakeId()
+    const other = fakeId()
+    for (let index = 0; index < 8; index++) holder.steps.insert({ runId, label: `p${index}`, createdAt: new Date(1_000 + index) })
+    holder.steps.insert({ runId: other, label: 'outra', createdAt: new Date(1) })
+    expect(await pruneRunSteps(runId as never, 3)).toBe(5)
+    expect(holder.steps.docs.filter((doc) => String(doc.runId) === String(runId)).map((doc) => doc.label)).toEqual(['p5', 'p6', 'p7'])
+    expect(holder.steps.docs.some((doc) => doc.label === 'outra')).toBe(true)
+    expect(await pruneRunSteps(runId as never, 3)).toBe(0)
+    expect(MAX_RUN_STEPS).toBeGreaterThan(0)
   })
 })
 

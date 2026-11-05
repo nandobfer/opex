@@ -124,6 +124,15 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   retomada. Ficam de fora, com aviso na execução: ferramentas removidas do catálogo, desligadas pelo
   dono no Agente Opex (`disabledTools`) e as do grupo proibido aos rotineiros (também recusadas ao
   executar uma ação confirmada). Consumo por passo em `recordAiConsumption` (origem `routine-agent`).
+  **Uma ferramenta por vez depois de encerrar**: se uma ferramenta do passo já encerrou o turno
+  (confirmação, hibernação, conclusão), as chamadas seguintes do mesmo passo não executam nem
+  sobrescrevem a ação pendente (respondem "turno já encerrado, chame uma ferramenta por vez").
+  **Histórico entre ativações** (`history.ts`, `trimRoutineHistory`): sem o raciocínio passado e
+  cortado por ativação dentro do orçamento (`ROUTINE_HISTORY_CHAR_BUDGET`, o mesmo do Agente Opex) —
+  a primeira ativação (disparo) fica sempre, das demais ficam as mais recentes, com um aviso no lugar
+  das omitidas; o corte vale no envio e no que é gravado em `messages`.
+- **Retenção dos passos**: ao fechar cada turno ficam só os `MAX_RUN_STEPS` passos mais recentes da
+  execução (`pruneRunSteps`).
 - **Motor OpenCode** (`server/engines/opencode.ts`): sessão na pasta do agente (recriada se apagada;
   sessão sumida → nova, com aviso), instruções por `session.instructions`, permissões que negam os
   MCPs do host não liberados, e as ferramentas internas **por rede** num MCP do Opex por execução
@@ -138,7 +147,10 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 - Confirmar/recusar (`server/run-actions.ts`): atômico; a segunda resposta → 409
   `ROUTINE_ACTION_ALREADY_RESOLVED`. Confirmar uma ferramenta interceptada a executa no servidor e
   retoma com o resultado; confirmar um pedido retoma com "Confirmado: execute agora"; recusar retoma
-  com a recusa. A execução volta para a fila (respeita a vaga).
+  com a recusa. A execução volta para a fila (respeita a vaga). A resposta grava já no claim o texto
+  da retomada (com o aviso de que o resultado pode não ter chegado, trocado pelo resultado quando a
+  ação roda); se o processo cair ou a gravação falhar antes da fila, o agendador retoma a execução com
+  esse texto (a auditoria que falha só vira aviso no log).
 - **Cancelar** existe em todo status não final (confirmação na tela; ferramenta destrutiva no Agente
   Opex).
 
@@ -147,7 +159,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 0. Provisionamento "Provisionando"/pendente sem processo vivo há mais de 2 min → **com erro**.
 1. Executando/Esperando sem turno vivo há mais de 30 s (reinício) → **Erro** "O turno da execução foi
    perdido" (limitação conhecida: o turno vive no processo).
-2. Hibernada/aguardando além do tempo total de espera → **Expirada**.
+2. Confirmação já respondida que não voltou para a fila há mais de 1 min (e sem resposta em andamento
+   no processo) → volta para a fila com o texto gravado na resposta. Hibernada/aguardando além do
+   tempo total de espera → **Expirada**.
 3. Hibernada vencida → volta para a fila na mesma sessão, com o motivo e o atraso.
 4. Gatilho vencido: **um** disparo mesmo com várias janelas perdidas (atraso em `delayMs`); o
    próximo horário é gravado antes de disparar (dois ticks não repetem a janela); agente pausado,
@@ -190,8 +204,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 Grupo `routine-agents` (`server/tools/routine-agents.ts`, só no dono): `list_routine_agents`,
 `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`,
 `archive_routine_agent` (destrutiva), `reprovision_routine_agent`, `run_routine_agent`,
-`list_routine_runs`, `cancel_routine_run` (destrutiva), `confirm_routine_action`,
-`reject_routine_action` e `add_routine_entry`. Chamam os serviços reais; nenhum DTO traz o token.
+`list_routine_runs`, `cancel_routine_run` (destrutiva), `confirm_routine_action` (`confirmByDefault`:
+a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat e exige
+`mcp:owner:destructive` por token), `reject_routine_action` e `add_routine_entry`. Chamam os serviços reais; nenhum DTO traz o token.
 
 ## Auditoria, logs e tempo real
 
