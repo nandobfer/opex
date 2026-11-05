@@ -39,6 +39,11 @@ const quota = (overrides: Partial<OpencodeQuotaDto> = {}): OpencodeQuotaDto => (
   ...overrides,
 })
 
+/** Texto visível de cada janela da quota (sem os atributos title/aria-label). */
+function visibleResetTexts() {
+  return [...document.querySelectorAll('[data-quota-window]')].map((node) => node.textContent ?? '')
+}
+
 function renderPanel(data: OpencodeQuotaDto | Error) {
   mocks.get.mockImplementation(async () => {
     if (data instanceof Error) throw data
@@ -67,7 +72,10 @@ describe('OpencodeQuotaPanel', () => {
     expect(levels).toEqual(['critical', 'ok', 'warning'])
     expect((bars[0]!.firstElementChild as HTMLElement).classList.contains('bg-destructive')).toBe(true)
     expect((bars[1]!.firstElementChild as HTMLElement).classList.contains('bg-success')).toBe(true)
-    expect(screen.getByText('reinicia em 2 h 1 min')).toBeTruthy()
+    expect(screen.getByText('2 h 1 min')).toBeTruthy()
+    // OPE-138: o texto visível perdeu o prefixo "reinicia em"; a dica mantém a explicação.
+    expect(visibleResetTexts().some((text) => /reinicia em/i.test(text))).toBe(false)
+    expect(screen.getByText('2 h 1 min').getAttribute('title')).toMatch(/^Reinicia em /)
     expect(screen.getByText('Provider error 503')).toBeTruthy()
   })
 
@@ -79,6 +87,8 @@ describe('OpencodeQuotaPanel', () => {
     const bars = screen.getAllByRole('progressbar')
     expect(bars.map((bar) => bar.getAttribute('aria-valuenow'))).toEqual(['92', '70'])
     expect(bars[0]!.getAttribute('aria-label')).toBe('Anthropic · 5h: 92% usado, reinicia em 2 h 1 min')
+    expect(screen.getByText('2 h 1 min')).toBeTruthy()
+    expect(visibleResetTexts().some((text) => /reinicia em/i.test(text))).toBe(false)
     expect(screen.getByText('OpenCode Go · Mensal')).toBeTruthy()
     expect(screen.queryByText('Provider error 503')).toBeNull()
     expect(JSON.parse(window.localStorage.getItem(OPENCODE_QUOTA_PANEL_KEY)!)).toEqual({ collapsed: true, collapsedProviders: [] })

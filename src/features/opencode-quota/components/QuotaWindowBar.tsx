@@ -53,7 +53,7 @@ export function QuotaWindowBar({ providerName, window, now, label: labelOverride
                 <span className="flex shrink-0 items-baseline gap-1.5">
                     {resetIn && (
                         <span className="text-[10px] text-muted-foreground" title={resetTitle}>
-                            reinicia em {resetIn}
+                            {resetIn}
                         </span>
                     )}
                     <AnimatedNumber value={used} formatter={formatPercent} className={cn("font-mono font-semibold tabular-nums transition-colors duration-300", colors.text)} />
