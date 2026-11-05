@@ -363,8 +363,9 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
     (pelo token não existe confirmação no chat). O "pede confirmação" que o dono **ligou** numa
     ferramenta nas configurações do Maddox (`confirmationOverrides`) também passa a exigir o escopo
     destrutivo (no `tools/list` e no `tools/call`); desligar a confirmação de uma destrutiva não a libera.
-  - **Fora do token**: o grupo `files` (arquivos do chat dependem de uma conversa do Maddox,
-    `MADDOX_TOKEN_EXCLUDED_GROUPS`), além dos jobs (já fora do Maddox).
+  - **Fora do token**: o grupo `files` (arquivos do chat dependem de uma conversa do Maddox) e o
+    grupo `http` (Chamada HTTP sem bloqueio de rede, OPE-130: faria do Opex um proxy aberto da rede
+    interna) — `MADDOX_TOKEN_EXCLUDED_GROUPS` —, além dos jobs (já fora do Maddox).
   - **Legado**: token sem `escopos` gravado não tem escopo e acessa só as rotas livres (`whoami`),
     exatamente como antes; não ganha rotas futuras nem o MCP. A lista mostra "Legado · só whoami".
   - **Expiração** opcional (`expiraEm`, fim do dia escolhido no fuso do navegador): expirado → 401,

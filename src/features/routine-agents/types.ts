@@ -152,3 +152,14 @@ export interface RoutineRunAttentionPayload {
     /** Nome do agente (texto do toast; não é dado sensível). */
     agentName?: string
 }
+
+/** Segredo do agente rotineiro na tela (sem o valor: ele só entra). */
+export interface RoutineSecretDto {
+    id: string
+    name: string
+    description: string
+    allowedHosts: string[]
+    lastUsedAt: string | null
+    createdAt: string
+    updatedAt: string
+}

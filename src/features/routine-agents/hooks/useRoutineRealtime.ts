@@ -24,6 +24,7 @@ export function useRoutineRealtime(enabled = true): void {
         const onAgent = (payload: RoutineAgentUpdatedPayload) => {
             void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "list"] })
             if (payload?.id) void queryClient.invalidateQueries({ queryKey: routineKeys.agent(payload.id) })
+            if (payload?.id) void queryClient.invalidateQueries({ queryKey: routineKeys.secrets(payload.id) })
             if (payload?.id === "settings") void queryClient.invalidateQueries({ queryKey: routineKeys.settings })
         }
         const onRun = (payload: RoutineRunUpdatedPayload) => {

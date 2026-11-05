@@ -21,12 +21,14 @@ import { RunNowDialog } from "../runs/RunNowDialog"
 import { RoutineEntriesTab } from "./RoutineEntriesTab"
 import { RoutineMemoriesTab } from "./RoutineMemoriesTab"
 import { RoutineOverviewTab } from "./RoutineOverviewTab"
+import { RoutineSecretsTab } from "./secrets/RoutineSecretsTab"
 
 const TABS = [
     { value: "visao-geral", label: "Visão geral" },
     { value: "execucoes", label: "Execuções" },
     { value: "entradas", label: "Entradas" },
     { value: "memorias", label: "Memórias" },
+    { value: "segredos", label: "Segredos" },
 ]
 const PAGE_DEFAULTS = { aba: "visao-geral", execucao: "" }
 const PAGE_SCHEMA: UrlFilterSchema<typeof PAGE_DEFAULTS> = { aba: urlFilterCodecs.string(TABS.map((tab) => tab.value)), execucao: urlFilterCodecs.string() }
@@ -42,7 +44,7 @@ export function runDisabledReason(agent: { status: string; provisioning: { statu
 /**
  * `/agentes-rotineiros/[id]` (OPE-130), no padrão das páginas de agente (`AgentPageFrame`): Configurar,
  * "Executar agora" e as abas na URL — Visão geral (com o filtro de período compartilhado), Execuções
- * (detalhe em `?execucao=`), Entradas e Memórias. Atualiza em tempo real.
+ * (detalhe em `?execucao=`), Entradas, Memórias e Segredos. Atualiza em tempo real.
  */
 export function RoutineAgentPage({ id }: { id: string }) {
     const def = agentDef("rotineiros")
@@ -78,6 +80,7 @@ export function RoutineAgentPage({ id }: { id: string }) {
                 {aba === "execucoes" && <RoutineRunsTab agentId={agent.id} onOpen={(runId) => setPage((current) => ({ ...current, execucao: runId }))} />}
                 {aba === "entradas" && <RoutineEntriesTab agentId={agent.id} />}
                 {aba === "memorias" && <RoutineMemoriesTab agentId={agent.id} slug={agent.slug} />}
+                {aba === "segredos" && <RoutineSecretsTab agentId={agent.id} />}
             </AgentPageFrame>
             <RoutineRunDetailSheet agentId={agent.id} runId={execucao || null} onClose={() => setPage((current) => ({ ...current, execucao: "" }))} />
         </>

@@ -11,6 +11,7 @@ import { environmentTools } from "./environments"
 import { fileTools } from "./files"
 import { githubTools } from "./github"
 import { hostTools } from "./host"
+import { httpTools } from "./http"
 import { financeTools } from "./finance"
 import { integrationTools } from "./integrations"
 import { issueTools } from "./issues"
@@ -42,6 +43,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...integrationTools,
     ...jobTools,
     ...routineAgentTools,
+    ...httpTools,
     ...aiSettingsTools,
     ...prReviewTools,
     ...dashboardTools,

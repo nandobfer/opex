@@ -60,6 +60,16 @@ describe('ferramentas dos agentes rotineiros', () => {
     expect(needsConfirmation(tool('reject_routine_action'))).toBe(false)
   })
 
+  it('critério aprovado (OPE-130, D6/D7): Chamada HTTP é escrita sem confirmação por padrão, ajustável pelo dono, e fora dos tokens', async () => {
+    const { httpTools } = await import('@/features/opex-agent/server/tools/http')
+    const http = httpTools[0]!
+    expect(http).toMatchObject({ name: 'http_request', group: 'http', risk: 'write' })
+    expect(http.confirmByDefault).toBeUndefined()
+    expect(needsConfirmation(http)).toBe(false)
+    expect(needsConfirmation(http, { http_request: true })).toBe(true)
+    expect(mcpOwnerToolDecision(['mcp:owner', 'mcp:owner:tool:*', 'mcp:owner:destructive'], http)).toEqual({ ok: false, reason: 'not_grantable' })
+  })
+
   it('criar sem modelo é recusado pela validação do contrato', async () => {
     await expect(tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Vagas', objective: 'Candidatar' }), ctx)).rejects.toThrow()
     expect(mocks.service.createRoutineAgent).not.toHaveBeenCalled()

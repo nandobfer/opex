@@ -19,6 +19,23 @@ export interface RoutineInstructionInput {
     toolPrefix: string
     warnings: readonly string[]
     now: Date
+    /** Chamada HTTP liberada (nome da ferramenta no motor) e o catálogo dos segredos, sem valores. */
+    http?: { tool: string; secrets: readonly { name: string; description: string; allowedHosts: readonly string[] }[] } | null
+}
+
+/** Chamada HTTP e segredos do agente: só nomes, descrições e domínios (o valor nunca vai ao modelo). */
+function httpSection(http: NonNullable<RoutineInstructionInput["http"]>, engine: RoutineInstructionInput["engine"]): string {
+    const lines = [
+        "",
+        "## Chamadas HTTP e segredos",
+        `- Use ${http.tool} para chamar APIs e endereços (qualquer método, cabeçalhos e corpo).`,
+        http.secrets.length
+            ? "- Para usar um segredo, escreva {{secret:NOME}} na URL, num cabeçalho ou no corpo: o Opex troca pelo valor no envio e o valor volta mascarado. Nunca peça nem tente descobrir o valor."
+            : "- Este agente não tem segredos cadastrados (o dono cadastra na aba Segredos da página do agente).",
+        ...http.secrets.map((secret) => `  - ${secret.name}${secret.description ? ` — ${secret.description}` : ""}${secret.allowedHosts.length ? ` (só em ${secret.allowedHosts.join(", ")})` : ""}`),
+    ]
+    if (engine === "opencode") lines.push("- As ferramentas próprias do OpenCode (webfetch, bash) NÃO têm acesso aos segredos: use a ferramenta acima.")
+    return lines.join("\n")
 }
 
 export function routineInstructions(input: RoutineInstructionInput): string {
@@ -41,6 +58,7 @@ export function routineInstructions(input: RoutineInstructionInput): string {
             ? `- OBRIGATÓRIO: antes de QUALQUER ação irreversível (enviar candidatura, formulário, mensagem, pagamento, exclusão, compra), chame ${t("request_confirmation")} com o resumo exato da ação e encerre a resposta. Só execute depois de receber "Confirmado". Recusado: siga sem a ação ou conclua.${input.engine === "opencode" ? " O OpenCode não intercepta cliques no navegador: a confirmação depende de você." : ""}`
             : "- O dono liberou as ações irreversíveis: execute-as direto, com cuidado, e registre no relato.",
         `- No fim, chame ${t("finish")} com o relato final em pt-BR (o que foi feito, resultado e pendências).`,
+        input.http ? httpSection(input.http, input.engine) : "",
         input.warnings.length ? `\n## Avisos\n${input.warnings.map((warning) => `- ${warning}`).join("\n")}` : "",
         input.memoryBlock.trim() ? `\n## Memórias\n${input.memoryBlock.trim()}` : "",
     ]

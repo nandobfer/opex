@@ -95,7 +95,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         // Mesma política do runner do Agente Opex: ajustes dos MCPs, depois os do dono (que vencem).
         const overrides = { ...(mcp?.overrides ?? {}), ...settings.confirmationOverrides }
         const byName = new Map<string, OpexTool>([...external, ...input.internalTools].map((tool) => [tool.name, tool]))
-        const context: OpexToolContext = { sessionId: "", actorId: "local", signal, scope: OWNER_SCOPE }
+        const context: OpexToolContext = { sessionId: "", actorId: "local", signal, scope: OWNER_SCOPE, secrets: activation.secrets }
         const tools: ToolSet = {}
         for (const def of byName.values()) {
             const internal = internalNames.has(def.name)

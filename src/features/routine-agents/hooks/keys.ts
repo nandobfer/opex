@@ -9,5 +9,6 @@ export const routineKeys = {
     runs: (agentId: string) => [ROUTINE_QUERY_KEY, "runs", agentId] as const,
     run: (runId: string) => [ROUTINE_QUERY_KEY, "run", runId] as const,
     entries: (agentId: string) => [ROUTINE_QUERY_KEY, "entries", agentId] as const,
+    secrets: (agentId: string) => [ROUTINE_QUERY_KEY, "secrets", agentId] as const,
     metrics: (agentId: string, params: Record<string, string>) => [ROUTINE_QUERY_KEY, "metrics", agentId, params] as const,
 }

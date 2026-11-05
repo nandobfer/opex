@@ -56,6 +56,8 @@ export const routineOpencodeEngineSchema = z.object({
     variant: z.string().trim().max(80).nullable(),
     agent: z.string().trim().max(120).nullable(),
     enabledMcps: z.array(z.string().trim().min(1).max(120)).max(100),
+    /** "Chamadas HTTP com segredos": `http_request` no MCP da execução, com os segredos do agente (padrão desligado). */
+    httpRequests: z.boolean().optional(),
 })
 export type RoutineOpencodeEngine = z.infer<typeof routineOpencodeEngineSchema>
 
@@ -99,7 +101,7 @@ export const DEFAULT_ROUTINE_AGENT_INPUT: RoutineAgentInput = {
     instructions: "",
     engine: "opex",
     opex: { provider: null, model: "", variant: null, enabledTools: [], enabledMcpServers: [] },
-    opencode: { model: "", variant: null, agent: null, enabledMcps: [] },
+    opencode: { model: "", variant: null, agent: null, enabledMcps: [], httpRequests: false },
     confirmIrreversible: true,
     limits: EMPTY_ROUTINE_LIMITS,
     triggers: [],
@@ -151,3 +153,31 @@ export const DEFAULT_ROUTINE_AGENT_SETTINGS: RoutineAgentSettingsInput = { provi
 /** Filtro da lista da aba Rotineiros. */
 export const ROUTINE_LIST_FILTERS = ["current", "archived"] as const
 export type RoutineListFilter = (typeof ROUTINE_LIST_FILTERS)[number]
+
+/** Segredos do agente rotineiro (OPE-130, D5): nome `NOME_EM_MAIUSCULAS`, valor cifrado que nunca sai. */
+export const ROUTINE_SECRET_NAME = /^[A-Z][A-Z0-9_]{1,63}$/
+export const MAX_ROUTINE_SECRET_VALUE = 16_384
+export const MAX_ROUTINE_SECRETS = 50
+/** Domínio (`api.x.com`) ou curinga de subdomínio (`*.x.com`). */
+export const ROUTINE_SECRET_HOST = /^(\*\.)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(:\d{1,5})?$/
+
+const secretFields = {
+    name: z.string().trim().regex(ROUTINE_SECRET_NAME, "Use maiúsculas, números e _ (ex.: LINKEDIN_TOKEN), começando por letra"),
+    description: z.string().trim().max(300, "Descrição com no máximo 300 caracteres"),
+    allowedHosts: z
+        .array(z.string().trim().toLowerCase().regex(ROUTINE_SECRET_HOST, "Domínio inválido (ex.: api.linkedin.com ou *.gupy.io)"))
+        .max(20, "No máximo 20 domínios"),
+}
+
+export const routineSecretCreateSchema = z.object({
+    ...secretFields,
+    value: z.string().min(1, "Informe o valor").max(MAX_ROUTINE_SECRET_VALUE, "Valor com no máximo 16 KB"),
+})
+export type RoutineSecretCreateInput = z.infer<typeof routineSecretCreateSchema>
+
+/** Edição: valor vazio mantém o atual. */
+export const routineSecretUpdateSchema = z.object({
+    ...secretFields,
+    value: z.string().max(MAX_ROUTINE_SECRET_VALUE, "Valor com no máximo 16 KB"),
+})
+export type RoutineSecretUpdateInput = z.infer<typeof routineSecretUpdateSchema>

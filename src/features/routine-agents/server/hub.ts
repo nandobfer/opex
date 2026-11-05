@@ -1,4 +1,5 @@
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
+import type { HttpSecretVault } from "@/features/http-request/schemas"
 
 /**
  * Turnos vivos das execuções (OPE-130), em memória do processo: o controle de cada ativação
@@ -51,6 +52,8 @@ export interface Activation {
     warnings: string[]
     /** Ferramentas internas do turno (o MCP da execução, motor OpenCode, expõe só estas). */
     tools: OpexTool[]
+    /** Segredos do agente (Chamada HTTP), lidos na hora do turno; os valores só existem em memória. */
+    secrets?: HttpSecretVault
 }
 
 const globalRegistry = globalThis as unknown as { __routineActivations?: Map<string, Activation> }

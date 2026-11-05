@@ -11,6 +11,7 @@ const holder = vi.hoisted(() => ({
   agents: null as unknown as FakeCollection,
   runs: null as unknown as FakeCollection,
   steps: null as unknown as FakeCollection,
+  secrets: null as unknown as FakeCollection,
   engine: null as unknown as (input: { internalTools: { name: string; execute: (input: unknown, ctx: unknown) => Promise<unknown> }[]; activation: { controller: AbortController } }) => Promise<{ error: string | null; text: string }>,
   audit: [] as { acao: string; depois?: Record<string, unknown> }[],
   catalog: new Map<string, { name: string; label: string; group: string; input: { parse: (raw: unknown) => unknown }; execute: (input: unknown) => Promise<unknown> }>(),
@@ -36,6 +37,9 @@ vi.mock('@/lib/db/models/RoutineAgent', () => ({
   get RoutineRunStep() {
     return holder.steps
   },
+  get RoutineAgentSecret() {
+    return holder.secrets
+  },
 }))
 vi.mock('@/features/routine-agents/server/engramind', () => ({
   baseRoutineChannels: (slug: string) => ['opex', 'agentes/rotineiros/global', `agentes/rotineiros/${slug}`],
@@ -46,6 +50,7 @@ vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (n
 vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ resolveMcpTool: async () => null }))
 vi.mock('@/features/routine-agents/server/provisioning', () => ({ startProvisioning: (...args: unknown[]) => holder.startProvisioning(...(args as [])) }))
 vi.mock('@/features/routine-agents/server/engines/opex', () => ({ runOpexEngine: (input: Parameters<typeof holder.engine>[0]) => holder.engine(input) }))
+vi.mock('@/features/routine-agents/server/engines/opencode', async (importOriginal) => ({ ...(await importOriginal<object>()), runOpencodeEngine: (input: Parameters<typeof holder.engine>[0]) => holder.engine(input) }))
 
 import { triggerRoutineRun } from '@/features/routine-agents/server/runs'
 import { cancelRoutineRun, resolveRoutineAction } from '@/features/routine-agents/server/run-actions'
@@ -56,6 +61,7 @@ import { ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TURN_TIMEOUT_MESSAGE } 
 import { inFlight, PROVISIONING_INTERRUPTED_MESSAGE } from '@/features/routine-agents/server/provisioning-registry'
 import { createRoutineAgent, reprovisionRoutineAgent, updateRoutineAgent } from '@/features/routine-agents/server/service'
 import { DEFAULT_ROUTINE_AGENT_INPUT } from '@/features/routine-agents/schemas'
+import { encryptSecret } from '@/lib/crypto/secretBox'
 import { ACTIVE_LIMIT_MESSAGE, TOKEN_LIMIT_MESSAGE } from '@/features/routine-agents/limits'
 import { RESOLUTION_INTERRUPTED_NOTE } from '@/features/routine-agents/server/run-actions'
 import { MAX_RUN_STEPS, pruneRunSteps } from '@/features/routine-agents/server/steps'
@@ -91,6 +97,7 @@ beforeEach(() => {
   holder.agents = createFakeCollection()
   holder.runs = createFakeCollection(() => ({ activeMs: 0, waitingMs: 0, liveWaitMs: 0, tokens: 0, costUsd: null, costPartial: false, warnings: [], messages: null, resumeNote: null, hibernation: null, pendingAction: null, parkedAt: null, startedAt: null, finishedAt: null, opencodeSessionId: null }))
   holder.steps = createFakeCollection()
+  holder.secrets = createFakeCollection()
   holder.audit = []
   holder.events = []
   holder.engine = async (input) => {
@@ -493,6 +500,50 @@ describe('cadastro sem nome (critério aprovado OPE-130, D8)', () => {
     await updateRoutineAgent(String(agent._id), { ...input, name: '', objective: 'Novo objetivo' }, 'local')
     expect(holder.agents.docs[0]).toMatchObject({ name: '', nameKey: `pendente:${String(agent._id)}`, generated: { name: false, objective: false } })
     expect(holder.startProvisioning).toHaveBeenCalledWith(String(agent._id), 'identity', 'local')
+  })
+})
+
+describe('segredos e Chamada HTTP na ativação (critério aprovado OPE-130, D5)', () => {
+  const VALUE = 'valor-secreto-do-agente'
+  const seedSecret = (agentId: unknown) => {
+    holder.secrets.insert({ agentId, name: 'GUPY_TOKEN', description: 'Token da Gupy', allowedHosts: ['*.gupy.io'], value: encryptSecret(VALUE), lastUsedAt: null })
+  }
+
+  it('motor Opex com a Chamada HTTP liberada: as instruções listam nome, descrição e domínios (sem o valor) e o turno recebe o cofre', async () => {
+    const agent = seedAgent({ opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools: ['http_request'], enabledMcpServers: [] } })
+    seedSecret(agent._id)
+    let instructions = ''
+    let value: string | undefined
+    holder.engine = async (input) => {
+      const typed = input as unknown as { instructions: (prefix: string) => string; activation: { secrets?: { value: (name: string) => string | undefined } } }
+      instructions = typed.instructions('')
+      value = typed.activation.secrets?.value('GUPY_TOKEN')
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(instructions).toContain('GUPY_TOKEN — Token da Gupy (só em *.gupy.io)')
+    expect(instructions).toContain('{{secret:NOME}}')
+    expect(instructions).not.toContain(VALUE)
+    expect(value).toBe(VALUE)
+  })
+
+  it('motor OpenCode: http_request só entra no MCP da execução com "Chamadas HTTP com segredos" ligado', async () => {
+    const names: string[][] = []
+    holder.engine = async (input) => {
+      names.push(input.internalTools.map((tool) => tool.name))
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const off = seedAgent({ slug: 'off', engine: 'opencode', opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [] } })
+    const on = seedAgent({ slug: 'on', engine: 'opencode', opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [], httpRequests: true } })
+    await triggerRoutineRun(String(off._id), { origin: 'manual' }, 'local')
+    await flush()
+    await triggerRoutineRun(String(on._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(names[0]).not.toContain('http_request')
+    expect(names[1]).toContain('http_request')
   })
 })
 

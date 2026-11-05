@@ -6,6 +6,7 @@ import { Globe, Lock } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
+import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { buildOpexToolTree } from "@/features/opex-agent/tool-tree"
@@ -112,7 +113,22 @@ export function RoutineToolsFields({ form }: { form: UseFormReturn<RoutineAgentI
     return (
         <div className="space-y-4">
             <InternalToolsCard />
-            {engine === "opex" ? <OpexTools form={form} /> : <OpencodeMcps form={form} />}
+            {engine === "opex" ? (
+                <OpexTools form={form} />
+            ) : (
+                <>
+                    <OpencodeMcps form={form} />
+                    <FormToggleCard
+                        control={form.control}
+                        name="opencode.httpRequests"
+                        id="routine-opencode-http"
+                        label="Chamadas HTTP com segredos"
+                        description="Entrega ao agente a Chamada HTTP do Opex pelo MCP da execução, com os segredos da aba Segredos ({{secret:NOME}}). A chamada sai do servidor Opex e o OpenCode recebe só a resposta, com os segredos mascarados; webfetch e bash do OpenCode não têm acesso aos segredos."
+                        onLabel="Ligado"
+                        offLabel="Desligado"
+                    />
+                </>
+            )}
         </div>
     )
 }

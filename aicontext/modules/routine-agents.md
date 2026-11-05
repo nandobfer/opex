@@ -20,6 +20,11 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D3 | O **tempo ativo** conta Executando + Esperando (turno vivo). Hibernada e Aguardando confirmação contam no tempo máximo total esperando, que expira a execução. |
 | D4 | No **motor Opex**, com o switch ligado, as ferramentas que já pedem confirmação no Agente Opex são **interceptadas**: destrutivas e `confirmByDefault` (inclusive de MCP) e os ajustes "Pede confirmação" do dono em Agente Opex › Ferramentas, que vencem os dos MCPs (mesma mescla do runner do Agente Opex; um ajuste que libera uma destrutiva também vale). A execução vai para Aguardando confirmação e a ação só roda depois de confirmada. No OpenCode, a confirmação depende de o agente chamar `request_confirmation`. |
 
+| D5 | **Segredos** numa aba "Segredos" da página de cada rotineiro, só daquele agente. O Agente Opex usa a Chamada HTTP **sem** segredos. |
+| D6 | Uma ferramenta **"Chamada HTTP"** (`http_request`, grupo `http`) para qualquer método, `risk: "write"` e **sem** confirmação por padrão; o dono liga em Agente Opex › Ferramentas e o ajuste vale nos rotineiros (D4). |
+| D7 | A Chamada HTTP **não bloqueia endereços** (inclui a rede interna e os containers). Por isso o grupo `http` fica fora dos tokens de sistema. |
+| D8 | **Nome e objetivo opcionais**: o subagente de provisionamento gera o que ficar vazio. O nome gerado é **só o papel** ("Recrutador"), como o `navLabel` dos agentes fixos; as telas mostram "Agente <nome>" (`routineAgentTitle`). |
+
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
 
 - **Subagente de provisionamento** (`RoutineProvisioningModelCard`, `GET/PUT /api/routine-agents/settings`):
@@ -35,8 +40,9 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
   confirmação) e **"Reprovisionar"**. O editor abre por `?agente=<id>` (ou `?agente=novo`), que é o
   destino do "Configurar" da página do agente.
 - Editor (react-hook-form + o mesmo `routineAgentInputSchema` da API), em seções:
-  - **Geral**: nome (único sem diferenciar maiúsculas/acentos; o slug nasce dele e não muda —
-    `global` é reservado, colisão ganha sufixo), objetivo, instruções (markdown) e o switch
+  - **Geral**: nome (opcional — D8; único sem diferenciar maiúsculas/acentos; o slug nasce dele e
+    não muda — um "Agente" no começo não entra no slug, `global` é reservado, colisão ganha sufixo),
+    objetivo (opcional — D8), instruções (markdown) e o switch
     **"Pedir confirmação antes de ações irreversíveis"** (ligado por padrão).
   - **Motor** (`OptionTabs`): **Opex** (provedores de texto do app) ou **OpenCode no host** (modelos e
     agente do serviço OpenCode). O `ProviderModelCard` compartilhado aceita caminhos aninhados
@@ -60,6 +66,26 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
   **Arquivar**: os efeitos da pausa + sai da lista padrão e de `/agentes-rotineiros`; desarquivar volta
   **pausado**. O Engramind fica intacto (agente, token, canais, memórias).
 - Editar objetivo ou instruções **não** reprovisiona.
+
+## Nome e objetivo gerados (D8, `identity-plan.ts` + passo `identity`)
+
+- **Objetivo ou instruções são obrigatórios** ("Preencha o objetivo ou as instruções: o provisionamento
+  gera o resto a partir deles"); nome e objetivo podem ficar vazios (campos com "Opcional: gerado pelo
+  provisionamento se ficar vazio").
+- Criado sem nome, o agente ganha slug `pendente-<id>` e `nameKey` `pendente:<id>` provisórios
+  (chaves únicas próprias); a tela mostra "Agente rotineiro (gerando nome…)".
+- Passo **`identity`** (o primeiro do provisionamento, antes do Engramind): o mesmo modelo do card
+  "Subagente de provisionamento" responde `{ name, objective }` só com o que está vazio. Validação
+  restritiva (`parseGeneratedIdentity`): nome com uma ou duas palavras, inicial maiúscula, só letras,
+  até 30 caracteres, sem "Agente"/"Rotineiro" e sem repetir um agente fixo (`navLabel` do
+  `AGENT_CATALOG`) nem outro rotineiro (sem diferenciar acentos); objetivo não vazio. Recusada, **uma**
+  nova tentativa com o motivo; recusada de novo → "com erro" com "Não foi possível gerar o nome do
+  agente: <motivo>. Informe o nome e o objetivo e tente de novo." ("Tentar de novo" retoma por ele).
+- Grava só se o campo continua vazio, marca `generated.name`/`generated.objective` (selo **"Gerado"**
+  no editor, que some quando o dono edita o campo), troca o slug provisório pelo definitivo e audita
+  "gerar identidade".
+- Edição: esvaziar o nome ou o objetivo de um agente provisionado roda só o passo (modo `identity`); o
+  slug e os canais não mudam.
 
 ## Subagente de provisionamento (`server/provisioning.ts`)
 
@@ -178,8 +204,8 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   provisionamento). Abas na URL (`?aba=`): **Visão geral** (KPIs execuções, concluídas, com erro,
   tempo médio, tokens e custo, gráficos por dia, filtro de período compartilhado —
   `GET /api/routine-agents/[id]/metrics?periodo=`), **Execuções** (lista ao vivo, detalhe em
-  `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas** e
-  **Memórias**.
+  `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas**,
+  **Memórias** e **Segredos**.
 - **Entradas do dono** (não é chat): texto + destino "Este agente"/"Todos os rotineiros"; cada entrada
   grava uma memória (`routine_entries` guarda o histórico); vazio é recusado e, com o Engramind fora
   do ar, o toast de erro mantém o texto no campo.
@@ -208,6 +234,29 @@ Grupo `routine-agents` (`server/tools/routine-agents.ts`, só no dono): `list_ro
 a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat e exige
 `mcp:owner:destructive` por token), `reject_routine_action` e `add_routine_entry`. Chamam os serviços reais; nenhum DTO traz o token.
 
+## Segredos (D5, aba "Segredos", `server/secrets.ts`)
+
+- Coleção `routine_agent_secrets` (`RoutineAgentSecret`, índice único `agentId + name`): `name`
+  (`^[A-Z][A-Z0-9_]{1,63}$`), `description` (até 300, o agente lê), `value` cifrado (`secretBox`, até
+  16 KB), `allowedHosts` (domínios ou `*.dominio`; vazio = qualquer), `lastUsedAt`. Até 50 por agente.
+- Rotas do dono: `GET/POST /api/routine-agents/[id]/secrets`, `PATCH/DELETE .../secrets/[secretId]`
+  (`routineSecretCreateSchema`/`routineSecretUpdateSchema`). No PATCH, valor vazio mantém o atual.
+- O valor **só entra**: nenhuma resposta, DTO, auditoria (`SegredoAgenteRotineiro`, só nome,
+  descrição e domínios), log ou evento o traz. Tempo real pelo `routine-agent-updated` `{ id }`
+  (o `useRoutineRealtime` invalida também os segredos).
+- Tela (`components/page/secrets/`): lista com nome, "Valor: definido", descrição, domínios,
+  atualizado/último uso, **"Novo segredo"**, **Editar** (valor vazio, "Deixe vazio para manter o valor
+  atual") e **Excluir** (confirmação); diálogo com o mesmo schema, valor tipo senha com mostrar/ocultar.
+- Na ativação, o cofre (`loadRoutineSecretVault`) é lido na hora (uma edição vale já na próxima
+  ativação); os valores só ficam em memória. Com a Chamada HTTP liberada, as instruções listam nome,
+  descrição e domínios e a regra `{{secret:NOME}}` — nunca o valor.
+- **Chamada HTTP**: motor Opex = a ferramenta `http_request` liberada na árvore (recebe o cofre pelo
+  contexto; confirmação pelo ajuste do dono, D4/D6); motor OpenCode = switch **"Chamadas HTTP com
+  segredos"** (`opencode.httpRequests`, desligado por padrão) que põe a `http_request` no MCP da
+  execução — a chamada sai do servidor Opex e o OpenCode recebe só a resposta mascarada (webfetch e
+  bash do OpenCode não têm os segredos). Uma ação confirmada que é Chamada HTTP também recebe o cofre.
+  Detalhes da ferramenta em `aicontext/modules/opex-agent.md`, "Chamadas HTTP".
+
 ## Auditoria, logs e tempo real
 
 - `recordAudit` em `AgenteRotineiro` (criar, editar, pausar/retomar, arquivar/desarquivar,
@@ -223,4 +272,6 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 - O navegador do motor Opex depende de um MCP de navegador cadastrado no Opex (o container não tem
   navegador); no OpenCode, do MCP de navegador do host.
 - No OpenCode, a confirmação depende de o agente chamar a ferramenta (cliques no navegador não são
-  interceptados).
+  interceptados); a `http_request` do MCP da execução não passa pelo ajuste de confirmação do dono.
+- O mascaramento dos segredos cobre o valor literal, codificado para URL e em base64; um valor
+  transformado de outro jeito pelo destino (hash, por exemplo) não é reconhecido.

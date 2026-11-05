@@ -1,6 +1,6 @@
 /**
  * Coleção Mongoose em memória para testes de serviço (só o que os serviços usam): filtros com
- * igualdade, caminho com ponto, `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`; `deleteMany`; cadeias
+ * igualdade, caminho com ponto, `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`; `deleteOne`/`deleteMany`/`updateMany`; cadeias
  * `select/sort/skip/limit/lean`. Ids são strings de 24 hex (o `_id` vira objeto com `toString`).
  */
 
@@ -134,6 +134,16 @@ export function createFakeCollection(defaults: () => Record<string, unknown> = (
                 apply(doc, update)
                 return options.new ? clone(doc) : before
             }),
+        async deleteOne(filter: Record<string, unknown> = {}) {
+            const index = docs.findIndex((row) => matches(row, filter))
+            if (index >= 0) docs.splice(index, 1)
+            return { deletedCount: index >= 0 ? 1 : 0 }
+        },
+        async updateMany(filter: Record<string, unknown>, update: Record<string, unknown>) {
+            const rows = docs.filter((row) => matches(row, filter))
+            for (const row of rows) apply(row, update)
+            return { modifiedCount: rows.length, matchedCount: rows.length }
+        },
         async deleteMany(filter: Record<string, unknown> = {}) {
             const before = docs.length
             for (let index = docs.length - 1; index >= 0; index--) if (matches(docs[index]!, filter)) docs.splice(index, 1)

@@ -11,6 +11,7 @@ import { hashMcpSecret, routineSessionPermissions } from '@/features/routine-age
 import { beginActivation, resetActivationsForTests } from '@/features/routine-agents/server/hub'
 import { routineControlTools } from '@/features/routine-agents/server/tools/internal'
 import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
+import { httpTools } from '@/features/opex-agent/server/tools/http'
 
 const RUN = 'b'.repeat(24)
 const rpc = (body: unknown, secret = 'segredo') => handleRoutineRunMcpRequest(RUN, new Request('http://app/api/routine-agents/mcp/' + RUN, { method: 'POST', headers: { authorization: `Bearer ${secret}` }, body: JSON.stringify(body) }))
@@ -34,6 +35,22 @@ describe('MCP da execução', () => {
     expect(list.result.tools.map((item) => item.name).sort()).toEqual(['finish', 'hibernate', 'request_confirmation', 'wait'])
     await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'finish', arguments: { report: 'Pronto' } } })
     expect(activation.outcome).toEqual({ kind: 'finish', report: 'Pronto' })
+  })
+
+  it('a Chamada HTTP do MCP da execução usa os segredos do agente da execução e devolve o valor mascarado', async () => {
+    const activation = beginActivation({ runId: RUN, agentId: 'a'.repeat(24), baseTokens: 0, baseActiveMs: 0 })
+    activation.tools = [...httpTools]
+    activation.secrets = { list: () => [{ name: 'TOKEN', description: '', allowedHosts: [] }], value: (name) => (name === 'TOKEN' ? 'valor-do-agente-a' : undefined), markUsed: () => undefined }
+    const seen: string[] = []
+    vi.stubGlobal('fetch', async (_url: URL, init: RequestInit) => (seen.push(new Headers(init.headers).get('authorization') ?? ''), new Response('eco valor-do-agente-a')))
+    try {
+      const response = (await (await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'http_request', arguments: { url: 'https://api.x.com', headers: { Authorization: 'Bearer {{secret:TOKEN}}' } } } })).json()) as { result: { content: { text: string }[] } }
+      expect(seen).toEqual(['Bearer valor-do-agente-a'])
+      expect(response.result.content[0]!.text).toContain('eco {{secret:TOKEN}}')
+      expect(response.result.content[0]!.text).not.toContain('valor-do-agente-a')
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('a sessão do OpenCode nega os MCPs do host não liberados e libera o da execução', () => {

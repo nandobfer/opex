@@ -11,7 +11,9 @@ import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 /**
  * Servidor MCP de uma execução (motor OpenCode, OPE-130): `POST /api/routine-agents/mcp/<runId>`, sem
  * sessão de navegador, autenticado pelo segredo aleatório da execução (só o hash fica no banco). Expõe
- * só as ferramentas internas (memória, espera, hibernação, confirmação, conclusão) do turno vivo.
+ * só as ferramentas internas (memória, espera, hibernação, confirmação, conclusão) do turno vivo e, com
+ * "Chamadas HTTP com segredos" ligado, a `http_request` com os segredos do agente (a chamada sai do
+ * servidor Opex; o OpenCode recebe só a resposta mascarada).
  */
 
 const rpcError = (status: number, code: number, message: string) => Response.json({ jsonrpc: "2.0", id: null, error: { code, message } }, { status })
@@ -47,7 +49,7 @@ export async function handleRoutineRunMcpRequest(runId: string, req: Request): P
             const tool = tools().find((item) => item.name === name)
             if (!activation || !tool) return mcpTextResult({ error: "Ferramenta indisponível: a execução não tem turno ativo" }, true)
             try {
-                const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: "local", signal: activation.controller.signal })
+                const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: "local", signal: activation.controller.signal, secrets: activation.secrets })
                 return mcpTextResult(compactToolOutput(output))
             } catch (error) {
                 return mcpTextResult({ error: toolErrorMessage(error) }, true)

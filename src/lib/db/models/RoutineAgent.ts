@@ -5,7 +5,7 @@ import type { RoutineAgentStatus, RoutineProvisioningStatus, RoutineRunStatus, R
 
 /**
  * Coleções dos agentes rotineiros (OPE-130): `routine_agents`, `routine_runs`, `routine_run_steps`,
- * `routine_entries` e `routine_agent_settings`. Ver `aicontext/modules/routine-agents.md`. Os índices
+ * `routine_entries`, `routine_agent_secrets` e `routine_agent_settings`. Ver `aicontext/modules/routine-agents.md`. Os índices
  * são garantidos pela migração `ensure-routine-agent-indexes`.
  */
 
@@ -230,6 +230,31 @@ const RoutineEntrySchema = new Schema<IRoutineEntry>(
 )
 RoutineEntrySchema.index({ agentId: 1, createdAt: -1 })
 
+/** Segredo do agente rotineiro (OPE-130, D5): o valor só entra (cifrado) e nunca sai pela API. */
+export interface IRoutineAgentSecret {
+    agentId: Types.ObjectId
+    name: string
+    description: string
+    value: EncryptedSecret
+    allowedHosts: string[]
+    lastUsedAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+const RoutineAgentSecretSchema = new Schema<IRoutineAgentSecret>(
+    {
+        agentId: { type: Schema.Types.ObjectId, required: true },
+        name: { type: String, required: true },
+        description: { type: String, default: "" },
+        value: { type: Schema.Types.Mixed, required: true },
+        allowedHosts: { type: [String], default: [] },
+        lastUsedAt: { type: Date, default: null },
+    },
+    { collection: "routine_agent_secrets", versionKey: false, timestamps: true },
+)
+RoutineAgentSecretSchema.index({ agentId: 1, name: 1 }, { unique: true })
+
 export interface IRoutineAgentSettings {
     _id: string
     provider: string | null
@@ -254,5 +279,7 @@ export const RoutineAgent: Model<IRoutineAgent> = (models.RoutineAgent as Model<
 export const RoutineRun: Model<IRoutineRun> = (models.RoutineRun as Model<IRoutineRun>) ?? model<IRoutineRun>("RoutineRun", RoutineRunSchema)
 export const RoutineRunStep: Model<IRoutineRunStep> = (models.RoutineRunStep as Model<IRoutineRunStep>) ?? model<IRoutineRunStep>("RoutineRunStep", RoutineRunStepSchema)
 export const RoutineEntry: Model<IRoutineEntry> = (models.RoutineEntry as Model<IRoutineEntry>) ?? model<IRoutineEntry>("RoutineEntry", RoutineEntrySchema)
+export const RoutineAgentSecret: Model<IRoutineAgentSecret> =
+    (models.RoutineAgentSecret as Model<IRoutineAgentSecret>) ?? model<IRoutineAgentSecret>("RoutineAgentSecret", RoutineAgentSecretSchema)
 export const RoutineAgentSettings: Model<IRoutineAgentSettings> =
     (models.RoutineAgentSettings as Model<IRoutineAgentSettings>) ?? model<IRoutineAgentSettings>("RoutineAgentSettings", RoutineAgentSettingsSchema)

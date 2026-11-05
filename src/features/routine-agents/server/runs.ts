@@ -1,3 +1,5 @@
+import { HTTP_REQUEST_TOOL, httpTools } from "@/features/opex-agent/server/tools/http"
+import { loadRoutineSecretVault } from "./secrets"
 import { routineAgentTitle } from "../identity-plan"
 import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
@@ -147,9 +149,15 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         const resume = Boolean(run.resumeNote) || (run.activeMs ?? 0) > 0
         if (resume) recordRunStep(run, { kind: "resume", label: "Retomada", detail: run.resumeNote?.slice(0, 400) ?? null, toolName: null, durationMs: null, error: false })
         const label = `${routineAgentTitle(agent.name)} #${run.seq}`
+        // Segredos (aba Segredos): lidos agora, então uma edição vale já nesta ativação. Só os nomes vão ao modelo.
+        const httpEnabled = run.snapshot.engine === "opex" ? (run.snapshot.opex?.enabledTools ?? []).includes(HTTP_REQUEST_TOOL) : run.snapshot.opencode?.httpRequests === true
+        activation.secrets = await loadRoutineSecretVault(agent._id)
+        const secretCatalog = httpEnabled ? activation.secrets.list() : []
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
             ...routineMemoryTools({ slug: agent.slug, label, target, runId }),
+            // Motor OpenCode: a Chamada HTTP com segredos sai do servidor Opex, pelo MCP da execução.
+            ...(run.snapshot.engine === "opencode" && httpEnabled ? httpTools : []),
         ]
         activation.tools = internalTools
         const remaining = remainingActiveMs({ activeMs: run.activeMs ?? 0 }, run.snapshot.limits)
@@ -174,6 +182,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                     maxLiveWaitMinutes: run.snapshot.limits.maxLiveWaitMinutes,
                     memoryBlock: memory.block,
                     toolPrefix,
+                    http: httpEnabled ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
                     warnings: activation.warnings,
                     now: new Date(),
                 }),
