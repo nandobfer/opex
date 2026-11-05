@@ -2,12 +2,15 @@ import { RoutineAgent, RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { dueFire } from "../recurrence"
 import { checkRunLimits } from "../limits"
 import { isActivationAlive } from "./hub"
+import { isProvisioningInFlight, PROVISIONING_INTERRUPTED_MESSAGE } from "./provisioning-registry"
 import { closeParkedRun, pumpAgent, requeueParkedRun, triggerRoutineRun } from "./runs"
-import { messageOf, routineDb, routineLog, type RoutineAgentDoc, type RoutineRunDoc } from "./shared"
+import { messageOf, publishAgentUpdated, routineDb, routineLog, type RoutineAgentDoc, type RoutineRunDoc } from "./shared"
 
 /**
  * Rotina do agendador interno para os agentes rotineiros (OPE-130), chamada no fim de
  * `runSchedulerTick` (a cada minuto). Em ordem:
+ * 0. provisionamento "Provisionando"/pendente sem processo vivo (reinício) → **com erro**, para o
+ *    dono usar "Tentar de novo";
  * 1. turnos perdidos (Executando/Esperando sem turno vivo, ex.: reinício) → **Erro**;
  * 2. hibernadas/aguardando confirmação além do tempo total de espera → **Expirada**;
  * 3. hibernadas vencidas voltam para a fila (com o atraso registrado);
@@ -19,12 +22,27 @@ import { messageOf, routineDb, routineLog, type RoutineAgentDoc, type RoutineRun
 export const LOST_TURN_MESSAGE = "O turno da execução foi perdido"
 /** Folga entre reservar a vaga e registrar o turno vivo. */
 const LOST_GRACE_MS = 30_000
+/** Folga entre gravar "running"/"pending" e registrar o provisionamento vivo. */
+const PROVISIONING_GRACE_MS = 120_000
 const BATCH = 100
 
 export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: number; expired: number; resumed: number; fired: number }> {
     await routineDb()
     const summary = { lost: 0, expired: 0, resumed: 0, fired: 0 }
     const touched = new Set<string>()
+
+    const provisioning = await RoutineAgent.find({ "provisioning.status": { $in: ["running", "pending"] } }).limit(BATCH).lean<RoutineAgentDoc[]>()
+    for (const agent of provisioning) {
+        const agentId = String(agent._id)
+        const since = agent.provisioning?.at ?? agent.updatedAt
+        if (isProvisioningInFlight(agentId) || (since && now.getTime() - new Date(since).getTime() < PROVISIONING_GRACE_MS)) continue
+        const status = agent.provisioning!.status
+        const updated = await RoutineAgent.updateOne({ _id: agentId, "provisioning.status": status }, { $set: { "provisioning.status": "error", "provisioning.error": PROVISIONING_INTERRUPTED_MESSAGE } })
+        if (updated.modifiedCount) {
+            routineLog.warn({ agentId, status }, "[routine-agents] provisionamento interrompido (sem processo vivo)")
+            await publishAgentUpdated(agentId)
+        }
+    }
 
     const live = await RoutineRun.find({ status: { $in: ["running", "waiting"] }, activationStartedAt: { $lte: new Date(now.getTime() - LOST_GRACE_MS) } })
         .limit(BATCH)

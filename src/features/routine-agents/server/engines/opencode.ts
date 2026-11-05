@@ -1,4 +1,5 @@
 import { createHash, randomBytes } from "node:crypto"
+import { ROUTINE_TURN_TIMEOUT_MS } from "../../limits"
 import { RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { liveWaitBudgetMs, remainingActiveMs } from "../../limits"
 import { routineRunMcpName, routineRunMcpPath } from "../../constants"
@@ -20,7 +21,7 @@ const INSTRUCTIONS_KEY = "opex-rotineiro"
 /** Depois de concluir/hibernar/pedir confirmação, quanto o turno pode demorar a encerrar sozinho. */
 const STOP_GRACE_MS = 60_000
 /** Turno sem limite de tempo ativo: teto técnico do OpenCode. */
-const DEFAULT_TURN_TIMEOUT_MS = 6 * 3_600_000
+const DEFAULT_TURN_TIMEOUT_MS = ROUTINE_TURN_TIMEOUT_MS
 
 export const hashMcpSecret = (secret: string) => createHash("sha256").update(secret).digest("hex")
 

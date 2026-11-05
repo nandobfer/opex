@@ -1,4 +1,5 @@
 import { DomainError } from "@/lib/api/route"
+import { isRoutineForbiddenToolGroup } from "../constants"
 import { decryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
 import { RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { canCancelRun, isFinalRunStatus } from "../status"
@@ -46,6 +47,7 @@ async function executeConfirmedTool(run: RoutineRunDoc): Promise<string> {
         }
     }
     if (!tool) return `A ferramenta "${action.toolLabel ?? action.toolName}" não existe mais: a ação não foi executada.`
+    if (isRoutineForbiddenToolGroup(tool.group)) return `A ferramenta "${tool.label}" não pode ser usada por agentes rotineiros: a ação não foi executada.`
     try {
         const output = await tool.execute(tool.input.parse(raw), { sessionId: "", actorId: "local", scope: OWNER_SCOPE })
         return `Resultado de "${tool.label}" (executada pelo Opex após a confirmação): ${JSON.stringify(compactToolOutput(output)).slice(0, 8_000)}`

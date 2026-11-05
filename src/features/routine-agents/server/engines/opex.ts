@@ -5,6 +5,7 @@ import { OWNER_SCOPE } from "@/features/opex-agent/server/scope"
 import { compactToolOutput, redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
 import { redactToolCalls } from "@/features/opex-agent/history"
 import type { McpTurnTools } from "@/features/opex-agent/server/mcp/tools"
+import { isRoutineForbiddenToolGroup } from "../../constants"
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 
@@ -15,8 +16,11 @@ import type { EngineInput, EngineResult } from "./types"
  * Agente Opex.
  *
  * Decisão D4 do plano aprovado: com o switch de confirmação ligado, as ferramentas que já pedem
- * confirmação no Agente Opex (destrutivas e `confirmByDefault`) são **interceptadas** — a execução
- * vai para Aguardando confirmação e a ação só roda depois que o dono confirma.
+ * confirmação no Agente Opex (destrutivas, `confirmByDefault` e os ajustes "Pede confirmação" do dono
+ * em Agente Opex › Ferramentas, mesclados com os dos MCPs como no runner do Agente Opex) são
+ * **interceptadas** — a execução vai para Aguardando confirmação e a ação só roda depois que o dono
+ * confirma. As ferramentas desligadas pelo dono no Agente Opex e os grupos proibidos aos rotineiros
+ * (`ROUTINE_FORBIDDEN_TOOL_GROUPS`) ficam de fora, com aviso.
  */
 
 const MAX_DETAIL = 400
@@ -31,14 +35,20 @@ const parseHistory = (json: string | null | undefined): ModelMessage[] => {
     }
 }
 
-/** Ferramentas do app liberadas (as que sumiram do catálogo viram aviso). */
-async function appToolsFor(names: readonly string[], warnings: string[]): Promise<OpexTool[]> {
-    const { findOpexTool } = await import("@/features/opex-agent/server/tools/registry")
+/**
+ * Ferramentas do app liberadas. As que sumiram do catálogo, as desligadas pelo dono no Agente Opex
+ * (`enabledOpexTools`, mesmo critério do runner) e as de grupo proibido aos rotineiros viram aviso.
+ */
+export async function appToolsFor(names: readonly string[], disabledTools: readonly string[], warnings: string[]): Promise<OpexTool[]> {
+    const { enabledOpexTools, findOpexTool } = await import("@/features/opex-agent/server/tools/registry")
+    const enabled = new Set(enabledOpexTools(disabledTools).map((tool) => tool.name))
     const tools: OpexTool[] = []
     for (const name of names) {
         const tool = findOpexTool(name)
-        if (tool) tools.push(tool)
-        else warnings.push(`A ferramenta "${name}" foi liberada mas não existe mais no Opex: a execução segue sem ela.`)
+        if (!tool) warnings.push(`A ferramenta "${name}" foi liberada mas não existe mais no Opex: a execução segue sem ela.`)
+        else if (isRoutineForbiddenToolGroup(tool.group)) warnings.push(`A ferramenta "${tool.label}" não pode ser usada por agentes rotineiros: a execução segue sem ela.`)
+        else if (!enabled.has(name)) warnings.push(`A ferramenta "${tool.label}" está desligada no Agente Opex: a execução segue sem ela.`)
+        else tools.push(tool)
     }
     return tools
 }
@@ -67,11 +77,14 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
     const userMessage: ModelMessage = { role: "user", content: input.message }
     try {
         const { needsConfirmation } = await import("@/features/opex-agent/server/tools/registry")
-        const appTools = await appToolsFor(engine.enabledTools, activation.warnings)
+        const { loadOpexSettings } = await import("@/features/opex-agent/server/settings")
+        const { settings } = await loadOpexSettings()
+        const appTools = await appToolsFor(engine.enabledTools, settings.disabledTools, activation.warnings)
         mcp = await mcpToolsFor(engine.enabledMcpServers, signal, activation.warnings)
         const internalNames = new Set(input.internalTools.map((tool) => tool.name))
         const external = [...appTools, ...(mcp?.tools ?? [])].filter((tool) => !internalNames.has(tool.name))
-        const overrides = mcp?.overrides ?? {}
+        // Mesma política do runner do Agente Opex: ajustes dos MCPs, depois os do dono (que vencem).
+        const overrides = { ...(mcp?.overrides ?? {}), ...settings.confirmationOverrides }
         const byName = new Map<string, OpexTool>([...external, ...input.internalTools].map((tool) => [tool.name, tool]))
         const context: OpexToolContext = { sessionId: "", actorId: "local", signal, scope: OWNER_SCOPE }
         const tools: ToolSet = {}

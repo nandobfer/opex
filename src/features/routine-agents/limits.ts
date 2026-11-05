@@ -24,6 +24,14 @@ export type LimitVerdict = { kind: "ok" } | { kind: "error"; code: "TOKENS" | "A
 
 export const TOKEN_LIMIT_MESSAGE = "Limite de tokens atingido"
 export const ACTIVE_LIMIT_MESSAGE = "Tempo máximo de execução ativa atingido"
+/**
+ * Teto técnico de um turno (vale nos dois motores, com ou sem "Tempo máximo ativo"): um provedor ou
+ * uma ferramenta pendurados não seguram a vaga para sempre.
+ */
+export const ROUTINE_TURN_TIMEOUT_MS = 6 * 3_600_000
+export const TURN_TIMEOUT_MESSAGE = "O turno passou do teto técnico de 6 h sem terminar (provedor ou ferramenta sem resposta)"
+/** Depois de interromper, quanto esperar o motor parar antes de fechar o turno mesmo assim. */
+export const ROUTINE_STOP_GRACE_MS = 15_000
 export const WAITING_LIMIT_MESSAGE = "Tempo máximo total esperando atingido"
 
 /** Confere os limites de uma execução no passo atual (turno vivo) ou na espera (hibernada/confirmação). */

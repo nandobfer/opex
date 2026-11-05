@@ -13,6 +13,9 @@ const holder = vi.hoisted(() => ({
   steps: null as unknown as FakeCollection,
   engine: null as unknown as (input: { internalTools: { name: string; execute: (input: unknown, ctx: unknown) => Promise<unknown> }[]; activation: { controller: AbortController } }) => Promise<{ error: string | null; text: string }>,
   audit: [] as { acao: string; depois?: Record<string, unknown> }[],
+  catalog: new Map<string, { name: string; label: string; group: string; input: { parse: (raw: unknown) => unknown }; execute: (input: unknown) => Promise<unknown> }>(),
+  executed: [] as { name: string; input: unknown }[],
+  startProvisioning: vi.fn(async () => undefined),
   events: [] as { event: string; payload: Record<string, unknown> }[],
 }))
 
@@ -39,6 +42,9 @@ vi.mock('@/features/routine-agents/server/engramind', () => ({
   routineAgentTarget: async () => ({ baseUrl: 'http://engramind', token: 'agent-token' }),
 }))
 vi.mock('@/features/engramind/server/memory-context', () => ({ getAgentMemoryContext: async () => ({ block: '', source: 'live', cachedAt: null, counts: { full: 0, titles: 0, overflow: 0 }, reason: null }) }))
+vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (name: string) => holder.catalog.get(name) }))
+vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ resolveMcpTool: async () => null }))
+vi.mock('@/features/routine-agents/server/provisioning', () => ({ startProvisioning: (...args: unknown[]) => holder.startProvisioning(...(args as [])) }))
 vi.mock('@/features/routine-agents/server/engines/opex', () => ({ runOpexEngine: (input: Parameters<typeof holder.engine>[0]) => holder.engine(input) }))
 
 import { triggerRoutineRun } from '@/features/routine-agents/server/runs'
@@ -46,6 +52,9 @@ import { cancelRoutineRun, resolveRoutineAction } from '@/features/routine-agent
 import { LOST_TURN_MESSAGE, runDueRoutineAgents } from '@/features/routine-agents/server/tick'
 import { resetActivationsForTests } from '@/features/routine-agents/server/hub'
 import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
+import { ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TURN_TIMEOUT_MESSAGE } from '@/features/routine-agents/limits'
+import { inFlight, PROVISIONING_INTERRUPTED_MESSAGE } from '@/features/routine-agents/server/provisioning-registry'
+import { reprovisionRoutineAgent } from '@/features/routine-agents/server/service'
 
 const ctx = { sessionId: '', actorId: 'local' }
 const call = (input: Parameters<typeof holder.engine>[0], name: string, args: unknown) => input.internalTools.find((tool) => tool.name === name)!.execute(args, ctx)
@@ -85,6 +94,16 @@ beforeEach(() => {
     return { error: null, text: '' }
   }
   resetActivationsForTests()
+  holder.executed = []
+  holder.catalog = new Map(
+    [
+      { name: 'delete_task', label: 'Excluir tarefa', group: 'tasks' },
+      { name: 'update_routine_agent', label: 'Editar agente rotineiro', group: 'routine-agents' },
+    ].map((tool) => [tool.name, { ...tool, input: { parse: (raw: unknown) => raw }, execute: async (input: unknown) => (holder.executed.push({ name: tool.name, input }), { ok: true }) }]),
+  )
+  holder.startProvisioning.mockClear()
+  inFlight.clear()
+  process.env.INTEGRATIONS_ENCRYPTION_KEY ??= Buffer.alloc(32, 7).toString('base64')
 })
 
 describe('disparo e fila', () => {
@@ -236,6 +255,110 @@ describe('tick do agendador', () => {
     // O mesmo tick de novo não dispara a mesma janela.
     await runDueRoutineAgents(now)
     expect(runsOf(active._id)).toHaveLength(1)
+  })
+})
+
+describe('confirmação de ferramenta interceptada (motor Opex)', () => {
+  const intercepted = (toolName: string, notes: string[]) => async (input: Parameters<typeof holder.engine>[0]) => {
+    notes.push((input as unknown as { message: string }).message)
+    if (notes.length === 1) {
+      ;(input.activation as unknown as { outcome: unknown }).outcome = {
+        kind: 'confirmation',
+        action: { summary: 'Excluir a tarefa t1', kind: 'tool', toolName, toolLabel: toolName, input: JSON.stringify({ id: 't1' }), displayInput: '{"id":"t1"}' },
+      }
+    } else await call(input, 'finish', { report: 'Feito' })
+    return { error: null, text: '' }
+  }
+
+  it('confirmar executa a ferramenta com o input guardado (cifrado) e retoma com o resultado', async () => {
+    const notes: string[] = []
+    holder.engine = intercepted('delete_task', notes)
+    const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(run(runId).status).toBe('awaiting_confirmation')
+    expect(JSON.stringify(run(runId).pendingAction)).not.toContain('"id":"t1"}"')
+    expect(holder.executed).toEqual([])
+    await resolveRoutineAction(runId, 'confirmed', 'local')
+    await flush()
+    expect(holder.executed).toEqual([{ name: 'delete_task', input: { id: 't1' } }])
+    expect(notes[1]).toContain('Resultado de "Excluir tarefa"')
+    expect(run(runId).status).toBe('completed')
+  })
+
+  it('ferramenta que sumiu do catálogo retoma com o aviso, sem executar', async () => {
+    const notes: string[] = []
+    holder.engine = intercepted('removida', notes)
+    const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
+    await flush()
+    await resolveRoutineAction(runId, 'confirmed', 'local')
+    await flush()
+    expect(holder.executed).toEqual([])
+    expect(notes[1]).toContain('não existe mais: a ação não foi executada')
+  })
+
+  it('ferramenta do grupo routine-agents não é executada nem confirmada', async () => {
+    const notes: string[] = []
+    holder.engine = intercepted('update_routine_agent', notes)
+    const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
+    await flush()
+    await resolveRoutineAction(runId, 'confirmed', 'local')
+    await flush()
+    expect(holder.executed).toEqual([])
+    expect(notes[1]).toContain('não pode ser usada por agentes rotineiros')
+  })
+})
+
+describe('teto técnico do turno', () => {
+  it('sem "Tempo máximo ativo", um motor que nunca responde vira Erro no teto, libera a vaga e a fila anda', async () => {
+    vi.useFakeTimers()
+    try {
+      const agent = seedAgent({ limits: { ...EMPTY_ROUTINE_LIMITS, concurrency: 1 } })
+      let turns = 0
+      holder.engine = async (input) => {
+        if (++turns === 1) return new Promise(() => undefined) // pendurado: ignora até o sinal de interrupção
+        await call(input, 'finish', { report: 'Feito' })
+        return { error: null, text: '' }
+      }
+      const first = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+      const second = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+      expect(second.status).toBe('queued')
+      await vi.advanceTimersByTimeAsync(ROUTINE_TURN_TIMEOUT_MS - 1_000)
+      expect(run(first.runId).status).toBe('running')
+      await vi.advanceTimersByTimeAsync(1_000 + ROUTINE_STOP_GRACE_MS + 1_000)
+      expect(run(first.runId)).toMatchObject({ status: 'error', error: TURN_TIMEOUT_MESSAGE })
+      await vi.advanceTimersByTimeAsync(100)
+      expect(run(second.runId).status).toBe('completed')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+describe('provisionamento interrompido por reinício', () => {
+  const stale = (overrides: Record<string, unknown> = {}) =>
+    seedAgent({ slug: `s${Math.random()}`, provisioning: { status: 'running', error: null, at: new Date(Date.now() - 10 * 60_000), steps: {}, channels: [], extras: [], warnings: [] }, ...overrides })
+  const agentDoc = (id: unknown) => holder.agents.docs.find((doc) => doc._id === id)! as { provisioning: { status: string; error: string | null } }
+
+  it('o tick marca "com erro" o provisionamento sem processo vivo; recente ou vivo fica como está', async () => {
+    const old = stale()
+    const recent = stale({ provisioning: { status: 'running', error: null, at: new Date(), steps: {}, channels: [], extras: [], warnings: [] } })
+    const alive = stale()
+    inFlight.set(String(alive._id), new Promise(() => undefined))
+    await runDueRoutineAgents(new Date())
+    expect(agentDoc(old._id).provisioning).toMatchObject({ status: 'error', error: PROVISIONING_INTERRUPTED_MESSAGE })
+    expect(agentDoc(recent._id).provisioning.status).toBe('running')
+    expect(agentDoc(alive._id).provisioning.status).toBe('running')
+  })
+
+  it('"Tentar de novo" aceita um "running" obsoleto e recusa com 409 quando o provisionamento está vivo', async () => {
+    Object.assign(holder.runs, { aggregate: async () => [] })
+    const old = stale()
+    await reprovisionRoutineAgent(String(old._id), 'retry', 'local')
+    expect(holder.startProvisioning).toHaveBeenCalledTimes(1)
+    const alive = stale()
+    inFlight.set(String(alive._id), new Promise(() => undefined))
+    await expect(reprovisionRoutineAgent(String(alive._id), 'retry', 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_AGENT_PROVISIONING' })
+    expect(holder.startProvisioning).toHaveBeenCalledTimes(1)
   })
 })
 

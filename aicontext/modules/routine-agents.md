@@ -18,7 +18,7 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D1 | O limite "Custo máximo por execução (USD)" virou **"Máximo de tokens por execução"** (`limits.maxTokens`): os provedores diretos não informam custo. O teto vale nos dois motores, é conferido a cada passo e, estourado, encerra em **Erro** "Limite de tokens atingido". O custo continua só informativo (aparece quando o provedor informa; soma parcial é sinalizada). |
 | D2 | O subagente de provisionamento usa uma **configuração própria** de provedor/modelo (topo da aba Rotineiros). Sem ela, o provisionamento fica "com erro" com "Configure o modelo do provisionamento". |
 | D3 | O **tempo ativo** conta Executando + Esperando (turno vivo). Hibernada e Aguardando confirmação contam no tempo máximo total esperando, que expira a execução. |
-| D4 | No **motor Opex**, com o switch ligado, as ferramentas que já pedem confirmação no Agente Opex (destrutivas e `confirmByDefault`, inclusive de MCP) são **interceptadas**: a execução vai para Aguardando confirmação e a ação só roda depois de confirmada. No OpenCode, a confirmação depende de o agente chamar `request_confirmation`. |
+| D4 | No **motor Opex**, com o switch ligado, as ferramentas que já pedem confirmação no Agente Opex são **interceptadas**: destrutivas e `confirmByDefault` (inclusive de MCP) e os ajustes "Pede confirmação" do dono em Agente Opex › Ferramentas, que vencem os dos MCPs (mesma mescla do runner do Agente Opex; um ajuste que libera uma destrutiva também vale). A execução vai para Aguardando confirmação e a ação só roda depois de confirmada. No OpenCode, a confirmação depende de o agente chamar `request_confirmation`. |
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
 
@@ -36,7 +36,9 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     (`names`). Trocar o motor ou o modelo vale só para as próximas execuções (cada execução guarda um
     `snapshot` da configuração).
   - **Ferramentas**: Opex = a mesma árvore do Agente Opex (`ClienteOpexToolsCard` com a árvore do
-    dono) + os MCPs cadastrados no Opex (`ClienteOpexMcpCard`); OpenCode = os MCPs do
+    dono, **sem o grupo Agentes rotineiros** — `ROUTINE_FORBIDDEN_TOOL_GROUPS`: um rotineiro não
+    confirma ações de outras execuções nem afrouxa a própria política) + os MCPs cadastrados no Opex
+    (`ClienteOpexMcpCard`); OpenCode = os MCPs do
     `opencode.jsonc` do host (`GET /api/routine-agents/opencode-options`), com o MCP de navegador
     detectado pelo nome. As ferramentas internas aparecem fixas ("Sempre liberadas").
   - **Limites** (vazio = sem limite): execuções simultâneas, tempo máximo ativo, tempo máximo total
@@ -70,6 +72,12 @@ Cada passo marca `provisioning.steps.*`. Falha → status **"Provisionamento com
 mensagem; o agente não executa. **"Tentar de novo"** retoma: os passos são idempotentes (agente,
 token válido, canais e assinaturas não duplicam) e os extras já avaliados não são reavaliados.
 **"Reprovisionar"** refaz só os extras e **acrescenta** — nunca remove os base nem os extras antigos.
+
+O provisionamento vivo fica num registro em processo (`server/provisioning-registry.ts`). Um
+"Provisionando"/pendente **sem** provisionamento vivo é obsoleto (o servidor reiniciou no meio): o tick
+o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \"Tentar de novo\"") e
+"Tentar de novo"/"Reprovisionar" o aceitam na hora; com o provisionamento vivo, a API responde 409
+`ROUTINE_AGENT_PROVISIONING`.
 
 ## Memória e rede (`src/features/ai/agents.ts`)
 
@@ -106,7 +114,9 @@ token válido, canais e assinaturas não duplicam) e os extras já avaliados nã
 - **Motor Opex** (`server/engines/opex.ts`): `prepareModel` + `streamText` (o mesmo loop do Agente
   Opex; o `streamAi` não aceita ferramentas), o registro do Agente Opex filtrado pelas liberadas, os
   MCPs liberados (`loadMcpTools(..., { serverIds })`) e o histórico do modelo em `messages` para a
-  retomada. Consumo por passo em `recordAiConsumption` (origem `routine-agent`).
+  retomada. Ficam de fora, com aviso na execução: ferramentas removidas do catálogo, desligadas pelo
+  dono no Agente Opex (`disabledTools`) e as do grupo proibido aos rotineiros (também recusadas ao
+  executar uma ação confirmada). Consumo por passo em `recordAiConsumption` (origem `routine-agent`).
 - **Motor OpenCode** (`server/engines/opencode.ts`): sessão na pasta do agente (recriada se apagada;
   sessão sumida → nova, com aviso), instruções por `session.instructions`, permissões que negam os
   MCPs do host não liberados, e as ferramentas internas **por rede** num MCP do Opex por execução
@@ -114,6 +124,10 @@ token válido, canais e assinaturas não duplicam) e os extras já avaliados nã
   aleatório da execução — só o hash no banco; registrado como `rotina_<id>` e removido no fim).
   Serviço desligado → **Erro** com o motivo.
 - Limites conferidos a cada passo (tokens) e por temporizador (tempo ativo). Estourou → **Erro**.
+- **Teto técnico do turno** (`ROUTINE_TURN_TIMEOUT_MS`, 6 h, nos dois motores): sem "Tempo máximo
+  ativo" (ou com um maior), o turno é interrompido no teto → **Erro** "O turno passou do teto técnico de
+  6 h…". Interrompido por qualquer motivo, se o motor não parar em 15 s (provedor ou ferramenta que
+  ignoram o sinal), o turno fecha mesmo assim: a vaga é liberada e a fila anda.
 - Confirmar/recusar (`server/run-actions.ts`): atômico; a segunda resposta → 409
   `ROUTINE_ACTION_ALREADY_RESOLVED`. Confirmar uma ferramenta interceptada a executa no servidor e
   retoma com o resultado; confirmar um pedido retoma com "Confirmado: execute agora"; recusar retoma
@@ -123,6 +137,7 @@ token válido, canais e assinaturas não duplicam) e os extras já avaliados nã
 
 ### Agendador (`runDueRoutineAgents`, fim de `runSchedulerTick`)
 
+0. Provisionamento "Provisionando"/pendente sem processo vivo há mais de 2 min → **com erro**.
 1. Executando/Esperando sem turno vivo há mais de 30 s (reinício) → **Erro** "O turno da execução foi
    perdido" (limitação conhecida: o turno vive no processo).
 2. Hibernada/aguardando além do tempo total de espera → **Expirada**.

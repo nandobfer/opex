@@ -22,7 +22,7 @@ export type ActivationOutcome =
     | { kind: "confirmation"; action: PendingActionDraft }
     | { kind: "live-wait-exceeded" }
 
-export type StopReason = "canceled" | "tokens" | "active"
+export type StopReason = "canceled" | "tokens" | "active" | "turn_timeout"
 
 export interface ActivationUsage {
     tokens: number

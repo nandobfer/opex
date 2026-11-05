@@ -12,7 +12,7 @@ import { buildOpexToolTree } from "@/features/opex-agent/tool-tree"
 import { useOpexSettings } from "@/features/opex-agent/hooks/useOpexSettings"
 import { ClienteOpexToolsCard } from "@/features/opex-agent/components/settings/client/ClienteOpexToolsCard"
 import { ClienteOpexMcpCard } from "@/features/opex-agent/components/settings/client/ClienteOpexMcpCard"
-import { ROUTINE_INTERNAL_TOOLS, ROUTINE_INTERNAL_TOOL_LABELS } from "../../constants"
+import { ROUTINE_INTERNAL_TOOLS, ROUTINE_INTERNAL_TOOL_LABELS, isRoutineForbiddenToolGroup } from "../../constants"
 import type { RoutineAgentInput } from "../../schemas"
 import { useRoutineOpencodeOptions } from "../../hooks/useRoutineAgents"
 
@@ -39,7 +39,7 @@ function InternalToolsCard() {
 
 function OpexTools({ form }: { form: UseFormReturn<RoutineAgentInput> }) {
     const settings = useOpexSettings()
-    const tree = useMemo(() => buildOpexToolTree(settings.data?.tools ?? []), [settings.data?.tools])
+    const tree = useMemo(() => buildOpexToolTree((settings.data?.tools ?? []).filter((tool) => !isRoutineForbiddenToolGroup(tool.group))), [settings.data?.tools])
     if (settings.isLoading) return <Skeleton className="h-64 w-full" />
     if (settings.isError) return <ErrorState title="Não foi possível carregar as ferramentas" description={apiErrorMessage(settings.error, "Tente novamente.")} onRetry={() => void settings.refetch()} />
     return (

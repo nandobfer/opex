@@ -5,6 +5,7 @@ import { RoutineAgent, type IRoutineProvisioning } from "@/lib/db/models/Routine
 import { ROUTINE_GLOBAL_CHANNEL, ROUTINE_PROVISIONING_ORIGIN, routineChannelOf } from "../constants"
 import { EXTRA_CHANNELS_INSTRUCTIONS, extraChannelPrompt, parseExtraChannelPlan } from "../provision-plan"
 import { baseRoutineChannels, ensureRoutineEngramindAgent, ensureRoutineSubscriptions, ensureRoutineToken, listEngramindChannels } from "./engramind"
+import { inFlight } from "./provisioning-registry"
 import { loadRoutineAgentSettings } from "./settings"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated, routineLog, type RoutineAgentDoc } from "./shared"
 
@@ -25,8 +26,6 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated
 
 export type ProvisionMode = "create" | "retry" | "reprovision"
 
-const globalRegistry = globalThis as unknown as { __routineProvisioning?: Map<string, Promise<void>> }
-const inFlight = (globalRegistry.__routineProvisioning ??= new Map())
 
 const NO_MODEL_MESSAGE = "Configure o modelo do provisionamento (Integrações › Inteligência Artificial › Rotineiros)"
 

@@ -6,7 +6,7 @@ import { recordAiConsumption } from "@/lib/ai/consumption"
 import { routineIdentityOf } from "@/features/ai/agents"
 import { RoutineAgent, RoutineRun, type IRoutineRun } from "@/lib/db/models/RoutineAgent"
 import { LIVE_WAIT_OVERFLOW_HIBERNATE_MINUTES, ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
-import { ACTIVE_LIMIT_MESSAGE, TOKEN_LIMIT_MESSAGE, remainingActiveMs } from "../limits"
+import { ACTIVE_LIMIT_MESSAGE, ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TOKEN_LIMIT_MESSAGE, TURN_TIMEOUT_MESSAGE, remainingActiveMs } from "../limits"
 import { activationMessage, routineInstructions } from "../run-prompt"
 import { freeSlots } from "../slots"
 import { ROUTINE_SLOT_STATUSES, isFinalRunStatus, type RoutineRunStatus, type RoutineTriggerOrigin } from "../status"
@@ -152,7 +152,11 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         ]
         activation.tools = internalTools
         const remaining = remainingActiveMs({ activeMs: run.activeMs ?? 0 }, run.snapshot.limits)
-        if (remaining !== null) timer = setTimeout(() => stopActivation(runId, "active"), Math.max(1_000, remaining))
+        // Sem "Tempo máximo ativo" (ou com um maior que o teto), vale o teto técnico do turno.
+        timer =
+            remaining !== null && remaining <= ROUTINE_TURN_TIMEOUT_MS
+                ? setTimeout(() => stopActivation(runId, "active"), Math.max(1_000, remaining))
+                : setTimeout(() => stopActivation(runId, "turn_timeout"), ROUTINE_TURN_TIMEOUT_MS)
         let activationStep = 0
         const input: EngineInput = {
             agent,
@@ -193,14 +197,35 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                 if (maxTokens !== null && activation.baseTokens + activation.usage.tokens >= maxTokens) stopActivation(runId, "tokens")
             },
         }
-        if (run.snapshot.engine === "opex") result = await (await import("./engines/opex")).runOpexEngine(input)
-        else result = await (await import("./engines/opencode")).runOpencodeEngine(input)
+        const engine = run.snapshot.engine === "opex" ? (await import("./engines/opex")).runOpexEngine(input) : (await import("./engines/opencode")).runOpencodeEngine(input)
+        result = await untilStopped(engine, activation.controller.signal)
     } catch (error) {
         result = { error: messageOf(error), text: "" }
     } finally {
         if (timer) clearTimeout(timer)
     }
     await settleActivation(run, activation, result)
+}
+
+/**
+ * Espera o motor; se o turno for interrompido (limite, teto técnico ou cancelamento) e o motor não
+ * parar em `ROUTINE_STOP_GRACE_MS` (provedor ou ferramenta que ignoram o sinal), fecha o turno mesmo
+ * assim — a vaga é liberada e a fila anda.
+ */
+function untilStopped(engine: Promise<EngineResult>, signal: AbortSignal): Promise<EngineResult> {
+    let grace: ReturnType<typeof setTimeout> | null = null
+    let onAbort: (() => void) | null = null
+    const stopped = new Promise<EngineResult>((resolve) => {
+        onAbort = () => {
+            grace = setTimeout(() => resolve({ error: null, text: "" }), ROUTINE_STOP_GRACE_MS)
+        }
+        if (signal.aborted) onAbort()
+        else signal.addEventListener("abort", onAbort, { once: true })
+    })
+    return Promise.race([engine, stopped]).finally(() => {
+        if (grace) clearTimeout(grace)
+        if (onAbort) signal.removeEventListener("abort", onAbort)
+    })
 }
 
 /** Decide o status do fim do turno (módulo exportado para os testes). */
@@ -214,6 +239,7 @@ export function activationVerdict(activation: Pick<Activation, "outcome" | "stop
     if (activation.stopReason === "canceled") return { status: "canceled" }
     if (activation.stopReason === "tokens") return { status: "error", error: TOKEN_LIMIT_MESSAGE }
     if (activation.stopReason === "active") return { status: "error", error: ACTIVE_LIMIT_MESSAGE }
+    if (activation.stopReason === "turn_timeout") return { status: "error", error: TURN_TIMEOUT_MESSAGE }
     const outcome = activation.outcome
     if (!outcome && result.error) return { status: "error", error: result.error }
     if (!outcome) return { status: "completed", report: result.text || "Execução concluída sem relato.", warning: "O agente encerrou o turno sem chamar a ferramenta de conclusão." }
