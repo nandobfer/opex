@@ -24,7 +24,7 @@ segue o fluxo de trabalho; `navLabel` (sidebar e aba) não leva "Agente", `title
 | Mentor | `/agente-mentor` | `agente-mentor` | cliente, repositório | Visão geral, Execuções |
 | Rotineiros (OPE-130) | `/agentes-rotineiros` (lista) e `/agentes-rotineiros/[id]` | `rotineiros` | período | Visão geral, Execuções, Entradas, Memórias (por agente rotineiro) |
 
-O item **Rotineiros** (`id: "rotineiros"`, título "Agentes rotineiros") abre a lista dos agentes rotineiros; cada um tem a própria página sobre a moldura compartilhada `AgentPageFrame` (`src/components/list/AgentPageFrame.tsx`, extraída da `AgentPage`, que passou a usá-la). As métricas do catálogo (`routineMetrics`, fonte `routineRuns` no `agent-usage-daily`) somam todas as execuções; a Visão geral de cada agente vem de `GET /api/routine-agents/[id]/metrics`. Ver `modules/routine-agents.md`.
+O item **Rotineiros** (`id: "rotineiros"`, título "Agentes rotineiros") abre a lista dos agentes rotineiros; cada um tem a própria página sobre a moldura compartilhada `AgentPageFrame` (`src/components/list/AgentPageFrame.tsx`, extraída da `AgentPage`, que passou a usá-la). O cabeçalho das páginas de agente (`AgentPageHeader`) põe "Configurar" e as ações na linha do título, sempre juntos e sem quebrar entre si, com a descrição abaixo na largura inteira (OPE-130, D19); `onSettings` troca o link do "Configurar" por um botão (a página do rotineiro abre o editor ali mesmo). As métricas do catálogo (`routineMetrics`, fonte `routineRuns` no `agent-usage-daily`) somam todas as execuções; a Visão geral de cada agente vem de `GET /api/routine-agents/[id]/metrics`. Ver `modules/routine-agents.md`.
 
 O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; a página é das métricas).
 

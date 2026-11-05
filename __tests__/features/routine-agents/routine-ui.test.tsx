@@ -154,6 +154,12 @@ describe('aba Rotineiros', () => {
     expect(mocks.status).not.toHaveBeenCalled()
   })
 
+  it('critério aprovado (OPE-130, D21): o nome do agente é um link para a página dele', () => {
+    mocks.agents = [AGENT]
+    render(<RoutineAgentsSection onEdit={vi.fn()} onNew={vi.fn()} />)
+    expect(screen.getByRole('link', { name: 'Agente Vagas' }).getAttribute('href')).toBe(`/agentes-rotineiros/${AGENT.id}`)
+  })
+
   it('pausar e reprovisionar chamam as ações', () => {
     render(<RoutineAgentsSection onEdit={() => {}} onNew={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /Pausar/ }))

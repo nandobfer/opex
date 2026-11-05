@@ -13,7 +13,9 @@ export interface AgentPageFrameProps {
     icon: LucideIcon
     title: string
     description: string
-    settingsHref: string
+    settingsHref?: string
+    /** "Configurar" sem navegar (abre o editor na própria página). */
+    onSettings?: () => void
     /** Ações à direita do Configurar. */
     actions?: ReactNode
     /** Entre o cabeçalho e as abas (ex.: aviso de disponibilidade). */
@@ -32,11 +34,11 @@ export interface AgentPageFrameProps {
  * (`OptionTabs`) e o conteúdo da aba com troca animada. Usada pela `AgentPage` (agentes do catálogo) e
  * pela página de cada agente rotineiro; o estado da aba (URL) fica com quem usa.
  */
-export function AgentPageFrame({ id, icon, title, description, settingsHref, actions, notice, tabs, tab, onTabChange, filters, children }: AgentPageFrameProps) {
+export function AgentPageFrame({ id, icon, title, description, settingsHref, onSettings, actions, notice, tabs, tab, onTabChange, filters, children }: AgentPageFrameProps) {
     const reduceMotion = useReducedMotion()
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
-            <AgentPageHeader icon={icon} title={title} description={description} settingsHref={settingsHref}>
+            <AgentPageHeader icon={icon} title={title} description={description} settingsHref={settingsHref} onSettings={onSettings}>
                 {actions}
             </AgentPageHeader>
             {notice}

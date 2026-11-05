@@ -52,12 +52,14 @@ const dayKey = (date: Date) => {
     return `${p.year}-${String(p.month + 1).padStart(2, "0")}-${String(p.day).padStart(2, "0")}`
 }
 
-/** KPIs e série por dia (horário de Brasília) das execuções do agente no período. */
-export async function getRoutineAgentMetrics(agentId: string, range: { from: Date; to: Date }): Promise<RoutineAgentMetricsDto> {
-    const agent = await loadAgentDoc(agentId)
-    const runs = await RoutineRun.find({ agentId: agent._id, createdAt: { $gte: range.from, $lte: range.to } })
-        .select({ status: 1, activeMs: 1, tokens: 1, costUsd: 1, costPartial: 1, createdAt: 1, snapshot: 1 })
-        .lean<RoutineRunDoc[]>()
+type MetricsRun = Pick<RoutineRunDoc, "status" | "activeMs" | "tokens" | "costUsd" | "costPartial" | "createdAt">
+
+/**
+ * KPIs e série por dia (horário de Brasília) de um conjunto de execuções no período. Pura: usada pela
+ * Visão geral de um agente e pela lista `/agentes-rotineiros` (uma consulta para todos), para os
+ * números das duas telas nunca divergirem.
+ */
+export function aggregateRoutineMetrics(runs: readonly MetricsRun[], range: { from: Date; to: Date }, lastRunAt: string | null): RoutineAgentMetricsDto {
     const finished = runs.filter((run) => run.status === "completed" || run.status === "error" || run.status === "expired" || run.status === "canceled")
     const durations = finished.map((run) => run.activeMs ?? 0).filter((ms) => ms > 0)
     const known = runs.filter((run) => typeof run.costUsd === "number")
@@ -76,7 +78,6 @@ export async function getRoutineAgentMetrics(agentId: string, range: { from: Dat
         if (typeof run.costUsd === "number") row.costUsd = (row.costUsd ?? 0) + run.costUsd
         days.set(key, row)
     }
-    const last = await RoutineRun.findOne({ agentId: agent._id }).sort({ createdAt: -1 }).select({ createdAt: 1 }).lean()
     return {
         kpis: {
             runs: runs.length,
@@ -89,6 +90,31 @@ export async function getRoutineAgentMetrics(agentId: string, range: { from: Dat
             costPartial: runs.some((run) => run.costPartial || typeof run.costUsd !== "number") && known.length > 0,
         },
         days: [...days.values()].sort((a, b) => a.day.localeCompare(b.day)),
-        lastRunAt: last ? new Date(last.createdAt).toISOString() : null,
+        lastRunAt,
     }
+}
+
+const METRICS_FIELDS = { agentId: 1, status: 1, activeMs: 1, tokens: 1, costUsd: 1, costPartial: 1, createdAt: 1 } as const
+
+/** KPIs e série por dia (horário de Brasília) das execuções do agente no período. */
+export async function getRoutineAgentMetrics(agentId: string, range: { from: Date; to: Date }): Promise<RoutineAgentMetricsDto> {
+    const agent = await loadAgentDoc(agentId)
+    const runs = await RoutineRun.find({ agentId: agent._id, createdAt: { $gte: range.from, $lte: range.to } })
+        .select(METRICS_FIELDS)
+        .lean<RoutineRunDoc[]>()
+    const last = await RoutineRun.findOne({ agentId: agent._id }).sort({ createdAt: -1 }).select({ createdAt: 1 }).lean()
+    return aggregateRoutineMetrics(runs, range, last ? new Date(last.createdAt).toISOString() : null)
+}
+
+/** Métricas de todos os agentes não arquivados no período, numa consulta só (lista `/agentes-rotineiros`). */
+export async function getRoutineAgentsMetrics(range: { from: Date; to: Date }): Promise<Record<string, RoutineAgentMetricsDto>> {
+    await routineDb()
+    const agents = await RoutineAgent.find({ status: { $ne: "archived" } })
+        .select({ _id: 1, lastRunAt: 1 })
+        .lean<{ _id: Types.ObjectId; lastRunAt?: Date | null }[]>()
+    const ids = agents.map((agent) => agent._id)
+    const runs = ids.length ? await RoutineRun.find({ agentId: { $in: ids }, createdAt: { $gte: range.from, $lte: range.to } }).select(METRICS_FIELDS).lean<RoutineRunDoc[]>() : []
+    const byAgent = new Map<string, RoutineRunDoc[]>()
+    for (const run of runs) byAgent.set(String(run.agentId), [...(byAgent.get(String(run.agentId)) ?? []), run])
+    return Object.fromEntries(agents.map((agent) => [String(agent._id), aggregateRoutineMetrics(byAgent.get(String(agent._id)) ?? [], range, agent.lastRunAt ? new Date(agent.lastRunAt).toISOString() : null)]))
 }

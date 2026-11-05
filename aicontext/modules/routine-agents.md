@@ -32,6 +32,10 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D14 | **Gravação por chave**: `remember` aceita `canal`, `chave`, `titulo` e `tags`; com `chave` é idempotente (upsert do Engramind: a mesma chave atualiza a entrada, `criada: false`). `update_memory` edita por id com a versão lida. |
 | D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. |
 | D16 | O catálogo do Indexador fica em `experiencia/desenvolvimento` com chave `catalogo-<dono>-<repo>`; as 18 memórias de catálogo em prosa (sem chave) do canal próprio foram arquivadas (`scripts/routine-indexador-cleanup.ts`, reversível). |
+| D18 | `/agentes-rotineiros` mostra **uma linha por agente** (card na largura inteira: identificação, 4 KPIs e "Execuções por dia") com os filtros padrão `ListFilters`: busca, status, motor e período, na URL. |
+| D19 | No cabeçalho da página de agente, **"Configurar" e as ações ficam na linha do título**, sempre juntos (sem quebrar entre si); a descrição longa fica abaixo, na largura inteira, sem aumentar a distância entre título e descrição (escolha do dono na implementação, no lugar de cortar a descrição em 2 linhas). |
+| D20 | O "Configurar" da página do agente rotineiro **abre o editor ali mesmo** (`?configurar=1`), sem navegar para a integração. |
+| D21 | Na lista da aba Rotineiros da integração, o **nome do agente é um link** para `/agentes-rotineiros/[id]`. |
 | D17 | Configuração do Indexador ajustada nesta tarefa: gatilho a cada **30 min**, lote de até 5, e as seções "Ordem do trabalho", "Receita 1", "Onde gravar" e "Idempotência" reescritas (catálogo primeiro, todas as páginas, chave fixa, pulados numa entrada `catalogo-pulados`). |
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
@@ -225,10 +229,24 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 ## Páginas
 
 - `/agentes-rotineiros` (item **"Rotineiros"** da categoria Agentes, entrada `rotineiros` do
-  `AGENT_CATALOG`): agentes não arquivados com status, última execução e próximo disparo; vazio leva a
-  `?aba=rotineiros&agente=novo`.
-- `/agentes-rotineiros/[id]`: `AgentPageFrame` (moldura extraída da `AgentPage`), com **Configurar** e
-  **"Executar agora"** (diálogo com "Solicitação desta execução"; desabilitado pausado ou sem
+  `AGENT_CATALOG`, D18): uma linha por agente não arquivado (`RoutineAgentRow`, grade de
+  `routine-agents-layout.ts` compartilhada com o skeleton):
+  - identificação (link para a página do agente): nome, selos de status e provisionamento, objetivo em
+    2 linhas, motor e modelo, última execução e próximo disparo;
+  - KPIs Execuções, Concluídas, Com erro e Tokens, e o gráfico "Execuções por dia" (`UsageByDateChart`
+    compacto) do período escolhido; sem execuções → "Sem execuções no período.";
+  - filtros (`RoutineAgentsFilters`, `ListFilters`; regras puras em `list-filters.ts`, estado na URL):
+    busca por nome/objetivo (fuse.js), Status (Ativo, Pausado, Provisionando, Com erro de provisionamento —
+    o provisionamento incompleto vence o status do agente), Motor (Todos/Opex/OpenCode) e Período
+    (`MetricsPeriodFilter`, compartilhado com o `MetricsFiltersBar`) na segunda linha;
+  - métricas de todos numa chamada (`GET /api/routine-agents/metrics?periodo=&de=&ate=`,
+    `getRoutineAgentsMetrics`), com a mesma agregação pura da Visão geral (`aggregateRoutineMetrics`);
+    o tempo real invalida a chave em `routine-run-updated`;
+  - vazio sem agentes leva a `?aba=rotineiros&agente=novo`; vazio com filtros oferece "Limpar filtros";
+    mais de 50 agentes → `VirtualStack`.
+- `/agentes-rotineiros/[id]`: `AgentPageFrame` (moldura extraída da `AgentPage`), com **Configurar** (abre o
+  `RoutineAgentEditor` na própria página, `?configurar=1`, D20) e **"Executar agora"**, na linha do título
+  (D19), (diálogo com "Solicitação desta execução"; desabilitado pausado ou sem
   provisionamento). Abas na URL (`?aba=`): **Visão geral** (KPIs execuções, concluídas, com erro,
   tempo médio, tokens e custo, gráficos por dia, filtro de período compartilhado —
   `GET /api/routine-agents/[id]/metrics?periodo=`), **Execuções** (lista ao vivo, detalhe em
@@ -256,6 +274,7 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 - Dono (`requireAdminSession`): `GET/POST /api/routine-agents` (`?filtro=arquivados`),
   `GET/PATCH /api/routine-agents/[id]`, `POST .../status` (`pause|resume|archive|unarchive`),
   `POST .../provisioning` (`reprovision|retry`), `GET/POST .../runs`, `GET .../metrics`,
+  `GET /api/routine-agents/metrics` (todos os agentes não arquivados, lista `/agentes-rotineiros`),
   `GET/POST .../entries`, `.../memories`, `GET /api/routine-agents/runs/[runId]` e
   `POST .../confirm|reject|cancel`, `GET/PUT /api/routine-agents/settings`,
   `GET /api/routine-agents/opencode-options`.

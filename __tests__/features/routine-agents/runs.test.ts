@@ -633,3 +633,20 @@ describe('critério aprovado (OPE-130, D9): agente gravado com o OpenCode no mot
 })
 
 void fakeId
+
+describe('métricas da lista (critério aprovado OPE-130, D18)', () => {
+  it('a lista e a Visão geral do agente devolvem os mesmos números; agente sem execuções vem zerado', async () => {
+    const { getRoutineAgentMetrics, getRoutineAgentsMetrics } = await import('@/features/routine-agents/server/run-queries')
+    const busy = seedAgent({ slug: 'cheio' })
+    const idle = seedAgent({ slug: 'vazio' })
+    const at = new Date('2026-11-04T15:00:00Z')
+    for (const status of ['completed', 'completed', 'error']) holder.runs.insert({ agentId: busy._id, status, activeMs: 1000, tokens: 500, costUsd: null, costPartial: false, createdAt: at })
+    const range = { from: new Date('2026-11-01T03:00:00Z'), to: new Date('2026-11-05T03:00:00Z') }
+    const all = await getRoutineAgentsMetrics(range)
+    const single = await getRoutineAgentMetrics(String(busy._id), range)
+    expect(all[String(busy._id)]!.kpis).toEqual(single.kpis)
+    expect(all[String(busy._id)]!.days).toEqual(single.days)
+    expect(all[String(busy._id)]!.kpis).toMatchObject({ runs: 3, completed: 2, errors: 1, tokens: 1500 })
+    expect(all[String(idle._id)]!.kpis).toMatchObject({ runs: 0, completed: 0, errors: 0, tokens: 0 })
+  })
+})

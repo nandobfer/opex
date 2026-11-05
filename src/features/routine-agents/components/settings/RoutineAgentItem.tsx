@@ -1,8 +1,10 @@
 "use client"
 
+import Link from "next/link"
 import { Archive, ArchiveRestore, Pause, Play, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableAction } from "@/components/list/TableAction"
+import { routineAgentHref } from "../../constants"
 import { ROUTINE_ENGINE_LABELS } from "../../schemas"
 import type { RoutineAgentDto } from "../../types"
 import { formatDateTime } from "../../format"
@@ -17,7 +19,10 @@ export function RoutineAgentItem({ agent, onAction, pending }: { agent: RoutineA
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3" data-testid={`routine-agent-${agent.id}`}>
             <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">{agent.title}</span>
+                    {/* D21: o nome leva à página do agente (link: não envia o formulário das abas de IA). */}
+                    <Link href={routineAgentHref(agent.id)} className="truncate rounded-sm font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+                        {agent.title}
+                    </Link>
                     <RoutineAgentStatusBadge status={agent.status} />
                     <RoutineProvisioningBadge status={agent.provisioning.status} />
                 </div>

@@ -33,6 +33,7 @@ export function useRoutineRealtime(enabled = true): void {
             if (payload.agentId) {
                 void queryClient.invalidateQueries({ queryKey: routineKeys.runs(payload.agentId) })
                 void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "metrics", payload.agentId] })
+                void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "metrics-all"] })
             }
         }
         channel.bind(ROUTINE_AGENT_UPDATED_EVENT, onAgent)

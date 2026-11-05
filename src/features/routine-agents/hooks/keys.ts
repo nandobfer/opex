@@ -11,4 +11,6 @@ export const routineKeys = {
     entries: (agentId: string) => [ROUTINE_QUERY_KEY, "entries", agentId] as const,
     secrets: (agentId: string) => [ROUTINE_QUERY_KEY, "secrets", agentId] as const,
     metrics: (agentId: string, params: Record<string, string>) => [ROUTINE_QUERY_KEY, "metrics", agentId, params] as const,
+    /** Métricas de todos os agentes (lista `/agentes-rotineiros`). */
+    allMetrics: (params: Record<string, string>) => [ROUTINE_QUERY_KEY, "metrics-all", params] as const,
 }

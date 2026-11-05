@@ -105,3 +105,12 @@ export function useRoutineMetrics(agentId: string, params: Record<string, string
         enabled,
     })
 }
+
+/** KPIs e série por dia de cada agente não arquivado, por id (uma chamada para a lista inteira). */
+export function useRoutineAgentsMetrics(params: Record<string, string>) {
+    return useQuery({
+        queryKey: routineKeys.allMetrics(params),
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<Record<string, RoutineAgentMetricsDto>>>("/routine-agents/metrics", { params })).data),
+        placeholderData: (previous) => previous,
+    })
+}
