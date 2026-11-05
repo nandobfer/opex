@@ -63,10 +63,13 @@ export const ROUTINE_ENGINES = ["opex", "opencode"] as const
 export type RoutineEngine = (typeof ROUTINE_ENGINES)[number]
 export const ROUTINE_ENGINE_LABELS: Record<RoutineEngine, string> = { opex: "Opex", opencode: "OpenCode no host" }
 
+export const ROUTINE_IDENTITY_SOURCE_MESSAGE = "Preencha o objetivo ou as instruções: o provisionamento gera o resto a partir deles"
+
 export const routineAgentInputSchema = z
     .object({
-        name: z.string().trim().min(2, "Informe o nome (mínimo de 2 caracteres)").max(80, "Nome com no máximo 80 caracteres"),
-        objective: z.string().trim().min(1, "Informe o objetivo").max(4_000, "Objetivo com no máximo 4.000 caracteres"),
+        // Nome e objetivo opcionais (OPE-130, D8): vazios, o subagente de provisionamento os gera.
+        name: z.string().trim().max(80, "Nome com no máximo 80 caracteres").refine((value) => value === "" || value.length >= 2, "Nome com no mínimo 2 caracteres (ou deixe vazio para gerar)"),
+        objective: z.string().trim().max(4_000, "Objetivo com no máximo 4.000 caracteres"),
         instructions: z.string().max(20_000, "Instruções com no máximo 20.000 caracteres"),
         engine: z.enum(ROUTINE_ENGINES),
         opex: routineOpexEngineSchema,
@@ -76,6 +79,7 @@ export const routineAgentInputSchema = z
         triggers: z.array(routineTriggerSchema).max(20, "No máximo 20 gatilhos"),
     })
     .superRefine((value, ctx) => {
+        if (!value.objective && !value.instructions.trim()) ctx.addIssue({ code: "custom", path: ["objective"], message: ROUTINE_IDENTITY_SOURCE_MESSAGE })
         if (value.engine === "opex") {
             if (!value.opex.provider) ctx.addIssue({ code: "custom", path: ["opex", "provider"], message: "Escolha o provedor" })
             if (!value.opex.model) ctx.addIssue({ code: "custom", path: ["opex", "model"], message: "Escolha o modelo" })

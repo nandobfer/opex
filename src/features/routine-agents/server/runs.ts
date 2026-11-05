@@ -1,3 +1,4 @@
+import { routineAgentTitle } from "../identity-plan"
 import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
@@ -145,7 +146,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         if (memory.source === "cache") activation.warnings.push("Engramind indisponível: a execução usou o último contexto de memórias em cache.")
         const resume = Boolean(run.resumeNote) || (run.activeMs ?? 0) > 0
         if (resume) recordRunStep(run, { kind: "resume", label: "Retomada", detail: run.resumeNote?.slice(0, 400) ?? null, toolName: null, durationMs: null, error: false })
-        const label = `Rotineiro · ${agent.name} #${run.seq}`
+        const label = `${routineAgentTitle(agent.name)} #${run.seq}`
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
             ...routineMemoryTools({ slug: agent.slug, label, target, runId }),
@@ -165,7 +166,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
             message: activationMessage({ kind: resume ? "resume" : "start", origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote }),
             instructions: (toolPrefix) =>
                 routineInstructions({
-                    name: agent.name,
+                    name: routineAgentTitle(agent.name),
                     objective: agent.objective,
                     instructions: agent.instructions ?? "",
                     engine: run.snapshot.engine,

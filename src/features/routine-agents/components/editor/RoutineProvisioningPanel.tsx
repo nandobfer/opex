@@ -23,6 +23,7 @@ export function RoutineProvisioningPanel({ agent }: { agent: RoutineAgentDto }) 
                     · agente <code>{agent.engramindAgent}</code>
                 </span>
             </div>
+            {running && (!agent.name || !agent.objective) && <p className="text-xs text-muted-foreground">O subagente está gerando {!agent.name && !agent.objective ? "o nome e o objetivo" : !agent.name ? "o nome" : "o objetivo"} do agente.</p>}
             {state.status === "error" && (
                 <div className="space-y-2 rounded-md border border-destructive/40 p-3">
                     <p className="text-sm text-destructive">{state.error}</p>

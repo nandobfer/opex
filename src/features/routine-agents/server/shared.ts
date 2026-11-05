@@ -16,6 +16,7 @@ import {
 import type { RoutineAgentDto, RoutinePendingActionDto, RoutineRunDto } from "../types"
 import type { RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
 import type { RoutineRunStatus } from "../status"
+import { routineAgentTitle } from "../identity-plan"
 
 /** Infra comum do servidor dos agentes rotineiros (OPE-130): log, banco, auditoria, eventos e DTOs. */
 
@@ -77,9 +78,11 @@ export function toAgentDto(doc: RoutineAgentDoc, extra: { lastRun?: RoutineAgent
         .sort()[0]
     return {
         id: String(doc._id),
-        name: doc.name,
+        name: doc.name ?? "",
+        title: routineAgentTitle(doc.name),
+        generated: { name: doc.generated?.name === true, objective: doc.generated?.objective === true },
         slug: doc.slug,
-        objective: doc.objective,
+        objective: doc.objective ?? "",
         instructions: doc.instructions ?? "",
         engine: doc.engine,
         opex: doc.opex,

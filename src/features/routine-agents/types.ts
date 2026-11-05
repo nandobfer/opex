@@ -17,7 +17,7 @@ export interface RoutineProvisioningDto {
     channels: string[]
     extras: RoutineProvisioningExtraDto[]
     warnings: string[]
-    steps: { agent: boolean; token: boolean; channels: boolean; extras: boolean; workdir: boolean }
+    steps: { identity?: boolean; agent: boolean; token: boolean; channels: boolean; extras: boolean; workdir: boolean }
 }
 
 export interface RoutineTriggerDto {
@@ -28,7 +28,11 @@ export interface RoutineTriggerDto {
 
 export interface RoutineAgentDto {
     id: string
+    /** Vazio enquanto o provisionamento gera (use `routineAgentTitle`). */
     name: string
+    /** "Agente <nome>" (ou "Agente rotineiro (gerando nome…)"). */
+    title: string
+    generated: { name: boolean; objective: boolean }
     slug: string
     objective: string
     instructions: string

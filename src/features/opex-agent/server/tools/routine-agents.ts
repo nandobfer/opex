@@ -20,8 +20,8 @@ import { defineTool, type OpexTool } from "./define"
 const id = z.string().regex(/^[a-f0-9]{24}$/, "Id inválido")
 
 const agentFields = {
-    name: z.string().describe("Nome único (dele nasce o slug, que não muda)"),
-    objective: z.string().describe("Objetivo do agente"),
+    name: z.string().optional().describe("Nome único, só o papel (ex.: \"Recrutador\"; dele nasce o slug, que não muda). Vazio: o provisionamento gera"),
+    objective: z.string().optional().describe("Objetivo do agente. Vazio: o provisionamento gera a partir das instruções (objetivo ou instruções são obrigatórios)"),
     instructions: z.string().optional().describe("Instruções em markdown"),
     engine: z.enum(["opex", "opencode"]).optional().describe("Motor: opex (provedores do app) ou opencode (OpenCode no host)"),
     opex: routineOpexEngineSchema.partial().optional().describe("Motor Opex: provider, model, variant, enabledTools (nomes das ferramentas do Agente Opex), enabledMcpServers (ids)"),
@@ -84,7 +84,7 @@ export const routineAgentTools: OpexTool[] = [
         risk: "write",
         description: "Cria um agente rotineiro. O subagente de provisionamento roda sozinho em seguida (Engramind, token e canais). Sem motor informado, usa o Opex.",
         input: z.object(agentFields),
-        summarize: (input) => `Criar o agente rotineiro "${input.name}"`,
+        summarize: (input) => (input.name?.trim() ? `Criar o agente rotineiro "${input.name.trim()}"` : "Criar um agente rotineiro (nome gerado pelo provisionamento)"),
         execute: async (input, ctx) => (await service()).createRoutineAgent(mergeInput(DEFAULT_ROUTINE_AGENT_INPUT, input), ctx.actorId),
     }),
     defineTool({

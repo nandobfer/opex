@@ -54,7 +54,8 @@ import { resetActivationsForTests } from '@/features/routine-agents/server/hub'
 import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
 import { ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TURN_TIMEOUT_MESSAGE } from '@/features/routine-agents/limits'
 import { inFlight, PROVISIONING_INTERRUPTED_MESSAGE } from '@/features/routine-agents/server/provisioning-registry'
-import { reprovisionRoutineAgent } from '@/features/routine-agents/server/service'
+import { createRoutineAgent, reprovisionRoutineAgent, updateRoutineAgent } from '@/features/routine-agents/server/service'
+import { DEFAULT_ROUTINE_AGENT_INPUT } from '@/features/routine-agents/schemas'
 import { ACTIVE_LIMIT_MESSAGE, TOKEN_LIMIT_MESSAGE } from '@/features/routine-agents/limits'
 import { RESOLUTION_INTERRUPTED_NOTE } from '@/features/routine-agents/server/run-actions'
 import { MAX_RUN_STEPS, pruneRunSteps } from '@/features/routine-agents/server/steps'
@@ -469,6 +470,29 @@ describe('retenção dos passos', () => {
     expect(holder.steps.docs.some((doc) => doc.label === 'outra')).toBe(true)
     expect(await pruneRunSteps(runId as never, 3)).toBe(0)
     expect(MAX_RUN_STEPS).toBeGreaterThan(0)
+  })
+})
+
+describe('cadastro sem nome (critério aprovado OPE-130, D8)', () => {
+  const input = { ...DEFAULT_ROUTINE_AGENT_INPUT, instructions: 'Procurar vagas', opex: { ...DEFAULT_ROUTINE_AGENT_INPUT.opex, provider: 'anthropic' as const, model: 'claude' } }
+
+  it('criar sem nome grava slug e chave provisórios e dispara o provisionamento; dois sem nome não colidem', async () => {
+    const first = await createRoutineAgent(input, 'local')
+    const second = await createRoutineAgent(input, 'local')
+    expect(first.slug).toBe(`pendente-${first.id}`)
+    expect(first.title).toBe('Agente rotineiro (gerando nome…)')
+    expect(second.slug).not.toBe(first.slug)
+    expect(holder.agents.docs.map((doc) => doc.nameKey)).toEqual([`pendente:${first.id}`, `pendente:${second.id}`])
+    expect(holder.startProvisioning).toHaveBeenCalledWith(first.id, 'create', 'local')
+  })
+
+  it('esvaziar o nome de um agente provisionado gera só o nome (modo identity) e tira o selo do campo editado', async () => {
+    const agent = seedAgent({ generated: { name: true, objective: true } })
+    holder.startProvisioning.mockClear()
+    ;(holder.runs as unknown as { aggregate: () => Promise<unknown[]> }).aggregate = async () => []
+    await updateRoutineAgent(String(agent._id), { ...input, name: '', objective: 'Novo objetivo' }, 'local')
+    expect(holder.agents.docs[0]).toMatchObject({ name: '', nameKey: `pendente:${String(agent._id)}`, generated: { name: false, objective: false } })
+    expect(holder.startProvisioning).toHaveBeenCalledWith(String(agent._id), 'identity', 'local')
   })
 })
 

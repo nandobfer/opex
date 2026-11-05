@@ -6,8 +6,17 @@
 export const MAX_ROUTINE_SLUG_LENGTH = 48
 const RESERVED = new Set(["global"])
 
+/** Slug provisório do agente criado sem nome (trocado pelo definitivo no passo `identity`). */
+export const PENDING_SLUG_PREFIX = "pendente-"
+export const pendingRoutineSlug = (id: string) => `${PENDING_SLUG_PREFIX}${id}`
+export const isPendingRoutineSlug = (slug: string) => slug.startsWith(PENDING_SLUG_PREFIX)
+/** `nameKey` do agente sem nome (único por id, para não bater no índice único). */
+export const pendingRoutineNameKey = (id: string) => `pendente:${id}`
+
 export function slugifyRoutineName(name: string): string {
     const base = name
+        // Um "Agente" no começo não entra no slug ("Agente Vagas" → "vagas").
+        .replace(/^\s*agente\s+/i, "")
         .normalize("NFD")
         .replace(/[\u0300-\u036f]/g, "")
         .toLowerCase()
@@ -15,6 +24,8 @@ export function slugifyRoutineName(name: string): string {
         .replace(/^-+|-+$/g, "")
         .slice(0, MAX_ROUTINE_SLUG_LENGTH)
         .replace(/-+$/g, "")
+    // Um nome que começa como o slug provisório não pode ser confundido com ele.
+    if (isPendingRoutineSlug(base)) return `agente-${base}`.slice(0, MAX_ROUTINE_SLUG_LENGTH).replace(/-+$/g, "")
     return base || "agente"
 }
 

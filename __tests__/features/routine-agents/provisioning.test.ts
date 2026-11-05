@@ -14,6 +14,9 @@ const holder = vi.hoisted(() => ({
   settings: null as unknown as FakeCollection,
   planner: '{"subscribe":[],"create":[]}',
   plannerCalls: 0,
+  /** Respostas da identidade (D8), consumidas antes do `planner` dos canais. */
+  identity: [] as string[],
+  prompts: [] as string[],
   failTokens: false,
 }))
 
@@ -41,14 +44,17 @@ vi.mock('@/features/engramind/server/memory-network', async (importOriginal) => 
   return { ...original, ensureAppToken: async () => null }
 })
 vi.mock('@/lib/ai/stream', () => ({
-  streamAi: async function* () {
+  streamAi: async function* (input: { instructions: string; prompt: string }) {
     holder.plannerCalls++
-    yield { type: 'delta', text: holder.planner }
+    holder.prompts.push(input.prompt)
+    const identity = input.instructions.includes('Gere a identidade')
+    yield { type: 'delta', text: identity ? (holder.identity.shift() ?? '{}') : holder.planner }
   },
 }))
 
 import { provisionRoutineAgent } from '@/features/routine-agents/server/provisioning'
 import { decryptRoutineToken } from '@/features/routine-agents/server/engramind'
+import { pendingRoutineNameKey, pendingRoutineSlug } from '@/features/routine-agents/slug'
 
 const calls = (method: string, path: string) => holder.fake.state.calls.filter((call) => call.method === method && call.path === path)
 const agentDoc = () => holder.agents.docs[0]!
@@ -64,6 +70,8 @@ beforeEach(() => {
   holder.planner = '{"subscribe":[{"channel":"vagas/empresa-x","reason":"vagas da empresa"}],"create":[{"slug":"curriculos/backend","name":"Currículos","reason":"modelos de currículo"}]}'
   holder.plannerCalls = 0
   holder.failTokens = false
+  holder.identity = []
+  holder.prompts = []
   holder.agents.insert({ name: 'Vagas', slug: 'vagas', objective: 'Candidatar-se', instructions: '', engine: 'opex', status: 'active', provisioning: { status: 'pending', steps: { agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], warnings: [] }, engramindToken: null })
 })
 
@@ -116,5 +124,55 @@ describe('provisionamento do agente rotineiro', () => {
     holder.settings.docs.length = 0
     await provisionRoutineAgent(String(agentDoc()._id), 'create', 'local')
     expect(agentDoc()).toMatchObject({ provisioning: { status: 'error', error: expect.stringContaining('Configure o modelo do provisionamento') } })
+  })
+})
+
+describe('identidade gerada pelo subagente (critério aprovado OPE-130, D8)', () => {
+  const pending = (overrides: Record<string, unknown> = {}) => {
+    holder.agents.docs.length = 0
+    const doc = holder.agents.insert({ name: '', slug: 'x', objective: '', instructions: 'Procurar vagas de backend remotas na Gupy e se candidatar', engine: 'opex', status: 'active', provisioning: { status: 'pending', steps: { identity: false, agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], warnings: [] }, engramindToken: null, ...overrides })
+    doc.slug = (overrides.slug as string) ?? pendingRoutineSlug(String(doc._id))
+    doc.nameKey = pendingRoutineNameKey(String(doc._id))
+    return doc
+  }
+
+  it('sem nome nem objetivo: gera os dois (só o papel), fixa o slug definitivo e cadastra o agente com "Agente <nome>"', async () => {
+    const doc = pending()
+    holder.identity = ['{"name":"Recrutador","objective":"Candidatar-se às vagas de backend remotas."}']
+    await provisionRoutineAgent(String(doc._id), 'create', 'local')
+    expect(agentDoc()).toMatchObject({ name: 'Recrutador', nameKey: 'recrutador', slug: 'recrutador', objective: 'Candidatar-se às vagas de backend remotas.', generated: { name: true, objective: true }, provisioning: { status: 'ok' } })
+    expect(holder.fake.state.agents.has('opex/rotineiro-recrutador')).toBe(true)
+    expect(holder.fake.state.channels.has('agentes/rotineiros/recrutador')).toBe(true)
+    expect(holder.prompts[0]).toContain('Desenvolvedor')
+  })
+
+  it('nome preenchido pelo dono nunca é trocado: só o objetivo é gerado', async () => {
+    const doc = pending({ name: 'Vagas', slug: 'vagas' })
+    holder.identity = ['{"name":"Outro","objective":"Objetivo gerado."}']
+    await provisionRoutineAgent(String(doc._id), 'create', 'local')
+    expect(agentDoc()).toMatchObject({ name: 'Vagas', slug: 'vagas', objective: 'Objetivo gerado.', generated: { objective: true } })
+    expect((agentDoc() as { generated: { name?: boolean } }).generated.name).toBeUndefined()
+  })
+
+  it('resposta recusada tenta uma vez de novo com o motivo; duas recusas → com erro acionável e "Tentar de novo" retoma', async () => {
+    const doc = pending()
+    holder.identity = ['{"name":"Agente Recrutador","objective":"x"}', '{"name":"Desenvolvedor","objective":"x"}']
+    await provisionRoutineAgent(String(doc._id), 'create', 'local')
+    expect(holder.prompts[1]).toContain('A resposta anterior foi recusada')
+    expect(agentDoc()).toMatchObject({ name: '', provisioning: { status: 'error', error: expect.stringContaining('Não foi possível gerar o nome do agente') } })
+    expect(holder.fake.state.agents.size).toBe(0)
+    holder.identity = ['{"name":"Recrutador","objective":"Objetivo."}']
+    await provisionRoutineAgent(String(doc._id), 'retry', 'local')
+    expect(agentDoc()).toMatchObject({ name: 'Recrutador', slug: 'recrutador', provisioning: { status: 'ok' } })
+  })
+
+  it('modo identity (edição com o nome esvaziado): gera só o nome e não troca o slug nem os canais', async () => {
+    await provisionRoutineAgent(String(agentDoc()._id), 'create', 'local')
+    const agentsBefore = holder.fake.state.agents.size
+    agentDoc().name = ''
+    holder.identity = ['{"name":"Caçador"}']
+    await provisionRoutineAgent(String(agentDoc()._id), 'identity', 'local')
+    expect(agentDoc()).toMatchObject({ name: 'Caçador', slug: 'vagas', provisioning: { status: 'ok' } })
+    expect(holder.fake.state.agents.size).toBe(agentsBefore)
   })
 })

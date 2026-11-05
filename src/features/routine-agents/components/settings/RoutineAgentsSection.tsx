@@ -80,7 +80,7 @@ export function RoutineAgentsSection({ onEdit, onNew }: { onEdit: (id: string) =
             <ConfirmDialog
                 open={archiving !== null}
                 onOpenChange={(open) => !open && setArchiving(null)}
-                title={`Arquivar "${archiving?.name ?? ""}"?`}
+                title={`Arquivar "${archiving?.title ?? ""}"?`}
                 description="O agente para de disparar (agendados e webhook), sai da barra lateral e da lista padrão. As execuções em andamento terminam normalmente e o Engramind fica intacto."
                 confirmLabel="Arquivar"
                 variant="destructive"

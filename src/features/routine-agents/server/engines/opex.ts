@@ -9,6 +9,7 @@ import { isRoutineForbiddenToolGroup } from "../../constants"
 import { trimRoutineHistory } from "../../history"
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
+import { routineAgentTitle } from "../../identity-plan"
 
 /**
  * Motor **Opex** (OPE-130): o mesmo pipeline do Agente Opex (`prepareModel` + `streamText` da AI SDK),
@@ -136,7 +137,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                 },
             })
         }
-        prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: `Rotineiro · ${agent.name}` })
+        prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: routineAgentTitle(agent.name) })
         const result = streamText({
             model: prepared.model,
             instructions: input.instructions(""),

@@ -60,7 +60,7 @@ export function RoutineAgentPage({ id }: { id: string }) {
             <AgentPageFrame
                 id={`rotineiro-${agent.slug}`}
                 icon={def.icon}
-                title={agent.name}
+                title={agent.title}
                 description={agent.objective}
                 settingsHref={routineSettingsHref(agent.id)}
                 actions={<RunNowDialog agentId={agent.id} disabledReason={runDisabledReason(agent)} />}

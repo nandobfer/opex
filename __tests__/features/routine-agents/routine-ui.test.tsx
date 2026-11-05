@@ -13,13 +13,14 @@ const mocks = vi.hoisted(() => ({
   addEntry: vi.fn(),
   listFilter: [] as string[],
   agents: [] as unknown[],
+  loaded: undefined as unknown,
   opencode: { available: true, reason: null, mcps: [{ name: 'playwright', status: 'connected', browser: true }, { name: 'github', status: 'connected', browser: false }], browserAvailable: true },
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(), usePathname: () => '/' }))
 vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
-  useRoutineAgent: () => ({ data: undefined, isLoading: false }),
+  useRoutineAgent: () => ({ data: mocks.loaded, isLoading: false }),
   useSaveRoutineAgent: () => ({ mutate: mocks.save, isPending: false }),
   useRoutineOpencodeOptions: () => ({ data: mocks.opencode, isLoading: false }),
   useRoutineProvisioning: () => ({ mutate: mocks.provisioning, isPending: false }),
@@ -52,6 +53,8 @@ import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
 const AGENT: RoutineAgentDto = {
   id: 'a'.repeat(24),
   name: 'Vagas',
+  title: 'Agente Vagas',
+  generated: { name: false, objective: false },
   slug: 'vagas',
   objective: 'Candidatar-se',
   instructions: '',
@@ -86,9 +89,21 @@ describe('editor do agente rotineiro', () => {
   it('valida em pt-BR com o mesmo schema da API e não salva', async () => {
     render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: 'Criar agente' }))
-    await waitFor(() => expect(screen.getByText('Informe o nome (mínimo de 2 caracteres)')).toBeTruthy())
-    expect(screen.getByText('Informe o objetivo')).toBeTruthy()
+    // Critério aprovado (OPE-130, D8): nome e objetivo são opcionais, mas o objetivo ou as instruções são obrigatórios.
+    await waitFor(() => expect(screen.getByText('Preencha o objetivo ou as instruções: o provisionamento gera o resto a partir deles')).toBeTruthy())
+    expect(screen.queryByText(/Informe o nome/)).toBeNull()
     expect(mocks.save).not.toHaveBeenCalled()
+  })
+
+  it('critério aprovado (OPE-130, D8): nome e objetivo opcionais; o selo "Gerado" aparece no campo gerado', async () => {
+    mocks.loaded = { ...AGENT, name: 'Recrutador', title: 'Agente Recrutador', generated: { name: true, objective: false } }
+    render(<RoutineAgentEditor open agentId={AGENT.id} onClose={() => {}} />)
+    await waitFor(() => expect(screen.getAllByTestId('routine-generated-badge')).toHaveLength(1))
+    expect(screen.getAllByText('Opcional: gerado pelo provisionamento se ficar vazio.')).toHaveLength(2)
+    expect(screen.getByText('Editar Agente Recrutador')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('Nome'), { target: { value: 'Caçador' } })
+    await waitFor(() => expect(screen.queryByTestId('routine-generated-badge')).toBeNull())
+    mocks.loaded = undefined
   })
 
   it('as ferramentas internas aparecem sempre; no OpenCode, os MCPs do host com o navegador', async () => {
@@ -122,7 +137,7 @@ describe('aba Rotineiros', () => {
     view.unmount()
     render(<RoutineAgentsSection onEdit={() => {}} onNew={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /^Arquivar$/ }))
-    expect(screen.getByText('Arquivar "Vagas"?')).toBeTruthy()
+    expect(screen.getByText('Arquivar "Agente Vagas"?')).toBeTruthy()
     expect(mocks.status).not.toHaveBeenCalled()
   })
 

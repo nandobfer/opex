@@ -5,6 +5,7 @@ import { liveWaitBudgetMs, remainingActiveMs } from "../../limits"
 import { routineRunMcpName, routineRunMcpPath } from "../../constants"
 import { messageOf, routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
+import { routineAgentTitle } from "../../identity-plan"
 
 /**
  * Motor **OpenCode no host** (OPE-130): a sessão abre na pasta do agente no host (persistente entre
@@ -87,7 +88,7 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
             }
         }
         if (!sessionId) {
-            const session = await client.session.create({ title: `Rotineiro · ${agent.name} #${run.seq}`, ...location, metadata: { app: "opex", kind: "routine-agent", runId }, permissions })
+            const session = await client.session.create({ title: `${routineAgentTitle(agent.name)} #${run.seq}`, ...location, metadata: { app: "opex", kind: "routine-agent", runId }, permissions })
             sessionId = session.id
             await RoutineRun.updateOne({ _id: run._id }, { $set: { opencodeSessionId: sessionId } })
         }
@@ -105,7 +106,7 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
                     id: `routine:${runId}`,
                     sessionId,
                     stage: "Rotineiro",
-                    title: agent.name,
+                    title: routineAgentTitle(agent.name),
                     agent: { agent: engine.agent, model: engine.model, variant: engine.variant },
                     text: input.message,
                     timeoutMs: remaining === null ? DEFAULT_TURN_TIMEOUT_MS : Math.max(60_000, remaining + 60_000),

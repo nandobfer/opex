@@ -2,7 +2,8 @@ import { DomainError } from "@/lib/api/route"
 import { RoutineAgent, RoutineRun, type IRoutineAgent } from "@/lib/db/models/RoutineAgent"
 import { buildTriggerStates, nextFireAt } from "../recurrence"
 import type { RoutineAgentInput, RoutineListFilter } from "../schemas"
-import { routineNameKey, uniqueRoutineSlug } from "../slug"
+import { pendingRoutineNameKey, pendingRoutineSlug, routineNameKey, uniqueRoutineSlug } from "../slug"
+import { identityNeeds } from "../identity-plan"
 import type { RoutineAgentStatus } from "../status"
 import type { RoutineAgentDto } from "../types"
 import { startProvisioning } from "./provisioning"
@@ -14,6 +15,10 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, notFoundAgent, publishAgentUpd
  * webhook 409, execuções em andamento terminam) e **Arquivar** (pausa + sai da barra lateral e da lista
  * padrão). O Engramind fica intacto nos dois casos. Editar objetivo ou instruções **não** reprovisiona;
  * o slug nasce do nome e é fixo (renomear não troca os canais).
+ *
+ * Nome e objetivo são opcionais (D8): criado sem nome, o agente ganha slug e `nameKey` provisórios e o
+ * passo `identity` do provisionamento gera o que falta (e fixa o slug). Na edição, esvaziar o nome ou o
+ * objetivo gera de novo só o campo vazio (modo `identity`; o slug e os canais não mudam).
  */
 
 const NAME_TAKEN = () => new DomainError(409, "Já existe um agente rotineiro com esse nome", "ROUTINE_AGENT_NAME_TAKEN")
@@ -71,17 +76,22 @@ export async function getRoutineAgent(id: string): Promise<RoutineAgentDto> {
 
 export async function createRoutineAgent(input: RoutineAgentInput, actorId: string): Promise<RoutineAgentDto> {
     await routineDb()
-    await assertNameFree(input.name)
+    const { Types } = await import("mongoose")
+    const _id = new Types.ObjectId()
+    const named = Boolean(input.name)
+    if (named) await assertNameFree(input.name)
     const taken = new Set((await RoutineAgent.find({}).select({ slug: 1 }).lean()).map((doc) => doc.slug))
-    const slug = uniqueRoutineSlug(input.name, taken)
+    const slug = named ? uniqueRoutineSlug(input.name, taken) : pendingRoutineSlug(String(_id))
     const now = new Date()
     let doc: RoutineAgentDoc
     try {
         const created = await RoutineAgent.create({
+            _id,
             name: input.name,
-            nameKey: routineNameKey(input.name),
+            nameKey: named ? routineNameKey(input.name) : pendingRoutineNameKey(String(_id)),
             slug,
             objective: input.objective,
+            generated: { name: false, objective: false },
             instructions: input.instructions,
             engine: input.engine,
             opex: input.opex,
@@ -90,7 +100,7 @@ export async function createRoutineAgent(input: RoutineAgentInput, actorId: stri
             limits: input.limits,
             triggers: buildTriggerStates(input.triggers, [], now),
             status: "active",
-            provisioning: { status: "pending", error: null, at: null, steps: { agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], warnings: [] },
+            provisioning: { status: "pending", error: null, at: null, steps: { identity: false, agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], warnings: [] },
             engramindToken: null,
             workdir: null,
         })
@@ -108,12 +118,15 @@ export async function createRoutineAgent(input: RoutineAgentInput, actorId: stri
 
 export async function updateRoutineAgent(id: string, input: RoutineAgentInput, actorId: string): Promise<RoutineAgentDto> {
     const before = await loadAgentDoc(id)
-    if (input.name !== before.name) await assertNameFree(input.name, id)
+    if (input.name && input.name !== before.name) await assertNameFree(input.name, id)
     const triggers = buildTriggerStates(input.triggers, before.triggers ?? [], new Date())
+    const generated = before.generated ?? { name: false, objective: false }
     const next = {
         name: input.name,
-        nameKey: routineNameKey(input.name),
+        nameKey: input.name ? routineNameKey(input.name) : pendingRoutineNameKey(id),
         objective: input.objective,
+        // O selo "Gerado" some quando o dono edita (ou esvazia) o campo.
+        generated: { name: generated.name && input.name === before.name, objective: generated.objective && input.objective === before.objective },
         instructions: input.instructions,
         engine: input.engine,
         opex: input.opex,
@@ -130,6 +143,13 @@ export async function updateRoutineAgent(id: string, input: RoutineAgentInput, a
     }
     const after = await loadAgentDoc(id)
     await auditAgent(actorId, id, AcaoAuditoria.ATUALIZAR, { antes: auditView(before), depois: auditView(after) })
+    const needs = identityNeeds(after)
+    // Campo esvaziado: o subagente gera de novo só ele (o provisionamento em andamento já trata o vazio).
+    if ((needs.name || needs.objective) && !isProvisioningInFlight(id)) {
+        const mode = after.provisioning?.status === "ok" ? "identity" : "retry"
+        await RoutineAgent.updateOne({ _id: id }, { $set: { "provisioning.status": "running", "provisioning.error": null, "provisioning.at": new Date() } })
+        void startProvisioning(id, mode, actorId)
+    }
     await publishAgentUpdated(id)
     return getRoutineAgent(id)
 }

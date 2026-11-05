@@ -50,7 +50,7 @@ export function RoutineAgentsPage() {
                                 <Card className={`${ROUTINE_CARD_HEIGHT} transition-colors hover:border-primary/50`}>
                                     <CardContent className="flex h-full flex-col gap-1.5 p-4">
                                         <div className="flex items-center gap-2">
-                                            <span className="truncate font-semibold">{agent.name}</span>
+                                            <span className="truncate font-semibold">{agent.title}</span>
                                             <RoutineAgentStatusBadge status={agent.status} />
                                             <RoutineProvisioningBadge status={agent.provisioning.status} />
                                         </div>

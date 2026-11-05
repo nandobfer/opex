@@ -17,7 +17,7 @@ export function RoutineAgentItem({ agent, onAction, pending }: { agent: RoutineA
         <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-card p-3" data-testid={`routine-agent-${agent.id}`}>
             <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-medium">{agent.name}</span>
+                    <span className="truncate font-medium">{agent.title}</span>
                     <RoutineAgentStatusBadge status={agent.status} />
                     <RoutineProvisioningBadge status={agent.provisioning.status} />
                 </div>

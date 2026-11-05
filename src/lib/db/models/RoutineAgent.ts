@@ -19,7 +19,7 @@ export interface IRoutineProvisioning {
     status: RoutineProvisioningStatus
     error: string | null
     at: Date | null
-    steps: { agent: boolean; token: boolean; channels: boolean; extras: boolean; workdir: boolean }
+    steps: { identity?: boolean; agent: boolean; token: boolean; channels: boolean; extras: boolean; workdir: boolean }
     channels: string[]
     extras: { channel: string; name: string; reason: string; created: boolean }[]
     warnings: string[]
@@ -33,10 +33,13 @@ export interface IRoutineAgentToken {
 }
 
 export interface IRoutineAgent {
+    /** Vazio enquanto o subagente de provisionamento gera (D8). */
     name: string
     nameKey: string
     slug: string
     objective: string
+    /** Campos gerados pelo subagente (selo "Gerado"; some quando o dono edita o campo). */
+    generated: { name: boolean; objective: boolean }
     instructions: string
     engine: RoutineEngine
     opex: RoutineOpexEngine
@@ -56,10 +59,11 @@ export interface IRoutineAgent {
 
 const RoutineAgentSchema = new Schema<IRoutineAgent>(
     {
-        name: { type: String, required: true },
+        name: { type: String, default: "" },
         nameKey: { type: String, required: true },
         slug: { type: String, required: true },
-        objective: { type: String, required: true },
+        objective: { type: String, default: "" },
+        generated: { type: Schema.Types.Mixed, default: { name: false, objective: false } },
         instructions: { type: String, default: "" },
         engine: { type: String, enum: ["opex", "opencode"], required: true },
         opex: { type: Schema.Types.Mixed, required: true },

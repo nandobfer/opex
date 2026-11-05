@@ -74,7 +74,7 @@ export function RoutineAgentEditor({ agentId, open, onClose }: { agentId: string
         <Dialog open={open} onOpenChange={(next) => !next && onClose()}>
             <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl">
                 <DialogHeader>
-                    <DialogTitle>{agentId ? `Editar ${loaded?.name ?? "agente rotineiro"}` : "Novo agente rotineiro"}</DialogTitle>
+                    <DialogTitle>{agentId ? `Editar ${loaded?.title ?? "agente rotineiro"}` : "Novo agente rotineiro"}</DialogTitle>
                     <DialogDescription>Objetivo, motor, ferramentas, limites e gatilhos. A memória própria fica no Engramind (canal agentes/rotineiros/&lt;slug&gt;).</DialogDescription>
                 </DialogHeader>
                 {agentId && agent.isLoading ? (
@@ -84,7 +84,7 @@ export function RoutineAgentEditor({ agentId, open, onClose }: { agentId: string
                         <OptionTabs<Section> aria-label="Seções do agente rotineiro" className="w-full" options={sections} value={section} onChange={setSection} />
                         <AnimatePresence mode="wait" initial={false}>
                             <motion.div key={section} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                                {section === "geral" && <RoutineGeneralFields form={form} slug={loaded?.slug ?? null} />}
+                                {section === "geral" && <RoutineGeneralFields form={form} slug={loaded?.slug ?? null} generated={loaded?.generated} />}
                                 {section === "motor" && <RoutineEngineFields form={form} editing={Boolean(agentId)} />}
                                 {section === "ferramentas" && <RoutineToolsFields form={form} />}
                                 {section === "limites" && <RoutineLimitsFields form={form} />}
