@@ -10,5 +10,5 @@ export const dynamic = "force-dynamic"
  */
 export const POST = withRoute<{ runId: string }>(async ({ req, params }) => handleRoutineRunMcpRequest(params.runId, req))
 
-export const GET = withRoute(async () => new Response(null, { status: 405, headers: { Allow: "POST" } }))
-export const DELETE = withRoute(async () => new Response(null, { status: 405, headers: { Allow: "POST" } }))
+export const GET = withRoute<{ runId: string }>(async () => new Response(null, { status: 405, headers: { Allow: "POST" } }))
+export const DELETE = withRoute<{ runId: string }>(async () => new Response(null, { status: 405, headers: { Allow: "POST" } }))
