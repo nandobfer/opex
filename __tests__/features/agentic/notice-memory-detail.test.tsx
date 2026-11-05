@@ -139,6 +139,39 @@ describe("NoticeMemoryDetail", () => {
             expect(memoryCalls()).toContain("/ai/agents/developer-global/memories/m_main")
         })
 
+        it("aprovada como fusão (principal, updated): mostra a memória gravada como editada", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({ status: "updated", memoryId: "m_main" }))
+            routes["/ai/agents/developer-global/memories/m_main"] = () => ok({ ...MEMORY, id: "m_main", resumo: "Memória global fundida" })
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "main" }])
+            open()
+            await waitFor(() => expect(within(panel()).getByText("Memória global fundida")).toBeTruthy())
+            expect(panel().textContent).toContain("Memória editada")
+        })
+
+        it("execução que não existe mais (404): avisa, sem nova tentativa", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => {
+                throw gone("MENTOR_RUN_NOT_FOUND")
+            }
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "main" }])
+            open()
+            await waitFor(() => expect(panel().textContent).toContain("A execução do Agente Mentor não existe mais."))
+            expect(memoryCalls()).toHaveLength(1)
+        })
+
+        it("falha ao ler a execução: Tentar novamente relê", { timeout: 15000 }, async () => {
+            let fail = true
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => {
+                if (fail) throw new Error("Mongo fora do ar")
+                return ok(mentorRun({}))
+            }
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "main" }])
+            open()
+            await waitFor(() => expect(panel().textContent).toContain("Não foi possível carregar a memória."), { timeout: 6000 })
+            fail = false
+            fireEvent.click(within(panel()).getByRole("button", { name: /Tentar novamente/ }))
+            await waitFor(() => expect(panel().textContent).toContain("Proposta global."))
+        })
+
         it("aprovada (parte separada): lê a memória da outra lista, com a central e a ação da parte", async () => {
             routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({ status: "created", memoryId: "m_main", extraMemoryId: "m_extra" }))
             routes[`/agentic/centrals/${C}/memories/m_extra`] = () => ok({ ...MEMORY, id: "m_extra", resumo: "Memória da central gravada" })
