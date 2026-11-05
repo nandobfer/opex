@@ -30,6 +30,9 @@ export async function cancelRoutineRun(runId: string, actorId: string): Promise<
     return { status: "canceled" }
 }
 
+/** Teto técnico da ferramenta executada depois da confirmação do dono. */
+export const CONFIRMED_TOOL_TIMEOUT_MS = 5 * 60_000
+
 async function executeConfirmedTool(run: RoutineRunDoc): Promise<string> {
     const action = run.pendingAction!
     const raw = action.input && isEncryptedSecret(action.input) ? (JSON.parse(decryptSecret(action.input)) as unknown) : {}
@@ -52,7 +55,16 @@ async function executeConfirmedTool(run: RoutineRunDoc): Promise<string> {
         // Uma Chamada HTTP confirmada usa os segredos do agente, lidos agora.
         const { loadRoutineSecretVault } = await import("./secrets")
         const secrets = await loadRoutineSecretVault(run.agentId)
-        const output = await tool.execute(tool.input.parse(raw), { sessionId: "", actorId: "local", scope: OWNER_SCOPE, secrets })
+        // Teto técnico: uma ferramenta (ex.: MCP externo) que nunca responde não pode prender a retomada.
+        const controller = new AbortController()
+        let timer: ReturnType<typeof setTimeout> | undefined
+        const timeout = new Promise<never>((_, reject) => {
+            timer = setTimeout(() => {
+                controller.abort()
+                reject(new Error(`tempo esgotado (${Math.round(CONFIRMED_TOOL_TIMEOUT_MS / 60_000)} min sem resposta da ferramenta)`))
+            }, CONFIRMED_TOOL_TIMEOUT_MS)
+        })
+        const output = await Promise.race([tool.execute(tool.input.parse(raw), { sessionId: "", actorId: "local", scope: OWNER_SCOPE, secrets, signal: controller.signal }), timeout]).finally(() => clearTimeout(timer))
         return `Resultado de "${tool.label}" (executada pelo Opex após a confirmação): ${JSON.stringify(compactToolOutput(output)).slice(0, 8_000)}`
     } catch (error) {
         return `A ação confirmada falhou: ${messageOf(error)}`

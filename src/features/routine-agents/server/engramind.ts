@@ -118,6 +118,12 @@ export async function listEngramindChannels(target: EngramindTarget): Promise<Ch
     return rows
 }
 
+/** Separa os canais assinados entre ativos e arquivados (ou sumidos) no Engramind, na ordem recebida. */
+export async function activeRoutineChannels(channels: readonly string[], target: EngramindTarget): Promise<{ active: string[]; archived: string[] }> {
+    const live = new Set((await listEngramindChannels(target)).map((channel) => channel.slug))
+    return { active: channels.filter((channel) => live.has(channel)), archived: channels.filter((channel) => !live.has(channel)) }
+}
+
 /** Alvo com o token do agente rotineiro (mesma URL base da integração); `null` sem token legível. */
 export async function routineAgentTarget(stored: IRoutineAgentToken | null | undefined): Promise<EngramindTarget | null> {
     const token = decryptRoutineToken(stored)

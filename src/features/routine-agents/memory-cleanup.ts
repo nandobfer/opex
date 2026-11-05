@@ -3,7 +3,9 @@
  * memória nova (sem `key`) a cada reescrita do mesmo repositório no canal próprio, em prosa: título
  * `dono/nome: resumo` e texto começando por "Repositório dono/nome", "Catálogo: dono/nome" etc. Seleção
  * pura: só entra memória SEM chave que descreve um repositório (essas formas, `catalogo: dono/nome` ou o
- * JSON com `"repo": "dono/nome"`). Memória com chave (ex.: o estado do Indexador) nunca é selecionada.
+ * JSON com `"repo": "dono/nome"`). Memória com chave (ex.: o estado do Indexador) nunca é selecionada, e só
+ * entra o que o PRÓPRIO agente gravou (autor `opex/rotineiro-<slug>` com origem "rotineiro"): uma entrada
+ * do dono (aba Entradas, rede) ou de outro autor nunca é arquivada, mesmo que o texto case.
  */
 
 export interface CleanupCandidate {
@@ -12,6 +14,13 @@ export interface CleanupCandidate {
     title?: string | null
     key?: string | null
     status?: string
+    author?: { agent?: string | null } | null
+    origin?: { source?: string | null } | null
+}
+
+/** Autoria exigida: o próprio agente rotineiro, gravando pela ferramenta (origem "rotineiro"). */
+export function isOwnRoutineMemory(memory: Pick<CleanupCandidate, "author" | "origin">, agentRef: string): boolean {
+    return memory.author?.agent === agentRef && memory.origin?.source === "rotineiro"
 }
 
 const CATALOG_TITLE = /^\s*catalogo:\s*[\w.-]+\/[\w.-]+/i
@@ -19,7 +28,8 @@ const CATALOG_JSON = /"repo"\s*:\s*"[\w.-]+\/[\w.-]+"/
 const REPO_TITLE = /^\s*[\w.-]+\/[\w.-]+\s*:/
 const REPO_PROSE = /^\s*(?:(?:O\s+)?reposit[óo]rio(?:\s+p[úu]blico)?|cat[áa]logo:?)\s+[\w.-]+\/[\w.-]+/i
 
-export function isCatalogProse(memory: CleanupCandidate): boolean {
+export function isCatalogProse(memory: CleanupCandidate, agentRef: string): boolean {
+    if (!isOwnRoutineMemory(memory, agentRef)) return false
     if (memory.key) return false
     if (memory.status === "archived") return false
     return CATALOG_TITLE.test(memory.text) || CATALOG_TITLE.test(memory.title ?? "") || CATALOG_JSON.test(memory.text) || REPO_TITLE.test(memory.title ?? "") || REPO_PROSE.test(memory.text)

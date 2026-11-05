@@ -169,6 +169,16 @@ export async function executeHttpRequest(input: HttpRequestInput, options: Execu
                 warning = `Redirecionamento para ${next.host} não seguido: o segredo ${blocked.name} só pode ser usado em ${blocked.allowedHosts.join(", ")}`
                 break
             }
+            // Com segredo na chamada, mudar de origem só vale se TODOS os segredos usados permitem o host
+            // de destino; segredo sem domínios nunca sai da origem pedida (cabeçalho customizado e corpo
+            // também levariam o valor). Devolve o 3xx com aviso.
+            if (used.size && next.origin !== url.origin) {
+                const unrestricted = catalog.filter((item) => used.has(item.name) && !item.allowedHosts.length).map((item) => item.name)
+                if (unrestricted.length) {
+                    warning = `Redirecionamento para ${next.host} não seguido: a chamada usa segredo (${unrestricted.join(", ")}) sem domínios permitidos e o destino é outra origem. Chame a URL de destino diretamente, se for confiável, ou cadastre os domínios do segredo.`
+                    break
+                }
+            }
             await response.body?.cancel().catch(() => undefined)
             if (next.origin !== url.origin) {
                 headers.delete("authorization")

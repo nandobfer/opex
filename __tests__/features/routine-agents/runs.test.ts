@@ -14,7 +14,8 @@ const holder = vi.hoisted(() => ({
   secrets: null as unknown as FakeCollection,
   engine: null as unknown as (input: { internalTools: { name: string; execute: (input: unknown, ctx: unknown) => Promise<unknown> }[]; activation: { controller: AbortController } }) => Promise<{ error: string | null; text: string }>,
   audit: [] as { acao: string; depois?: Record<string, unknown> }[],
-  catalog: new Map<string, { name: string; label: string; group: string; input: { parse: (raw: unknown) => unknown }; execute: (input: unknown) => Promise<unknown> }>(),
+  archivedChannels: [] as string[],
+  catalog: new Map<string, { name: string; label: string; group: string; input: { parse: (raw: unknown) => unknown }; execute: (input: unknown, ctx?: unknown) => Promise<unknown> }>(),
   executed: [] as { name: string; input: unknown }[],
   startProvisioning: vi.fn(async () => undefined),
   events: [] as { event: string; payload: Record<string, unknown> }[],
@@ -46,6 +47,7 @@ vi.mock('@/lib/db/models/RoutineAgent', () => ({
 vi.mock('@/features/routine-agents/server/engramind', () => ({
   baseRoutineChannels: (slug: string) => ['opex', 'agentes/rotineiros/global', `agentes/rotineiros/${slug}`],
   routineAgentTarget: async () => ({ baseUrl: 'http://engramind', token: 'agent-token' }),
+  activeRoutineChannels: async (channels: string[]) => ({ active: channels.filter((channel) => !holder.archivedChannels.includes(channel)), archived: channels.filter((channel) => holder.archivedChannels.includes(channel)) }),
 }))
 vi.mock('@/features/engramind/server/memory-context', () => ({ getAgentMemoryContext: async () => ({ block: '', source: 'live', cachedAt: null, counts: { full: 0, titles: 0, overflow: 0 }, reason: null }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (name: string) => holder.catalog.get(name) }))
@@ -65,7 +67,7 @@ import { createRoutineAgent, reprovisionRoutineAgent, updateRoutineAgent } from 
 import { DEFAULT_ROUTINE_AGENT_INPUT } from '@/features/routine-agents/schemas'
 import { encryptSecret } from '@/lib/crypto/secretBox'
 import { ACTIVE_LIMIT_MESSAGE, TOKEN_LIMIT_MESSAGE } from '@/features/routine-agents/limits'
-import { RESOLUTION_INTERRUPTED_NOTE } from '@/features/routine-agents/server/run-actions'
+import { CONFIRMED_TOOL_TIMEOUT_MS, isRoutineActionResolving, RESOLUTION_INTERRUPTED_NOTE } from '@/features/routine-agents/server/run-actions'
 import { MAX_RUN_STEPS, pruneRunSteps } from '@/features/routine-agents/server/steps'
 
 const ctx = { sessionId: '', actorId: 'local' }
@@ -101,6 +103,7 @@ beforeEach(() => {
   holder.steps = createFakeCollection()
   holder.secrets = createFakeCollection()
   holder.audit = []
+  holder.archivedChannels = []
   holder.events = []
   holder.engine = async (input) => {
     await call(input, 'finish', { report: 'Feito' })
@@ -296,6 +299,31 @@ describe('confirmação de ferramenta interceptada (motor Opex)', () => {
     expect(holder.executed).toEqual([{ name: 'delete_task', input: { id: 't1' } }])
     expect(notes[1]).toContain('Resultado de "Excluir tarefa"')
     expect(run(runId).status).toBe('completed')
+  })
+
+  it('ferramenta confirmada que nunca responde: no teto técnico retoma com "tempo esgotado" e sai do estado de resolução', async () => {
+    vi.useFakeTimers()
+    try {
+      let signal: AbortSignal | undefined
+      holder.catalog.set('pendurada', { name: 'pendurada', label: 'MCP pendurado', group: 'mcp', input: { parse: (raw: unknown) => raw }, execute: (_input: unknown, ctx?: unknown) => ((signal = (ctx as { signal?: AbortSignal }).signal), new Promise(() => undefined)) })
+      const notes: string[] = []
+      holder.engine = intercepted('pendurada', notes)
+      const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
+      await vi.advanceTimersByTimeAsync(50)
+      expect(run(runId).status).toBe('awaiting_confirmation')
+      const resolving = resolveRoutineAction(runId, 'confirmed', 'local')
+      await vi.advanceTimersByTimeAsync(50)
+      expect(isRoutineActionResolving(runId)).toBe(true)
+      await vi.advanceTimersByTimeAsync(CONFIRMED_TOOL_TIMEOUT_MS + 1_000)
+      await resolving
+      await vi.advanceTimersByTimeAsync(100)
+      expect(signal?.aborted).toBe(true)
+      expect(isRoutineActionResolving(runId)).toBe(false)
+      expect(notes[1]).toContain('A ação confirmada falhou: tempo esgotado')
+      expect(run(runId).status).toBe('completed')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('ferramenta que sumiu do catálogo retoma com o aviso, sem executar', async () => {
@@ -502,6 +530,28 @@ describe('cadastro sem nome (critério aprovado OPE-130, D8)', () => {
     await updateRoutineAgent(String(agent._id), { ...input, name: '', objective: 'Novo objetivo' }, 'local')
     expect(holder.agents.docs[0]).toMatchObject({ name: '', nameKey: `pendente:${String(agent._id)}`, generated: { name: false, objective: false } })
     expect(holder.startProvisioning).toHaveBeenCalledWith(String(agent._id), 'identity', 'local')
+  })
+})
+
+describe('canais de memória na ativação (critério aprovado OPE-130, D13)', () => {
+  it('canal extra arquivado no Engramind sai das instruções e da lista de memória, com aviso no relato', async () => {
+    holder.archivedChannels = ['experiencia/arquivado']
+    const agent = seedAgent({ provisioning: { status: 'ok', error: null, at: null, steps: {}, channels: [], extras: [{ channel: 'experiencia/arquivado', name: 'Arquivado', reason: 'x', created: true }, { channel: 'experiencia/ativo', name: 'Ativo', reason: 'x', created: true }], warnings: [] } })
+    let instructions = ''
+    let refused: unknown = null
+    holder.engine = async (input) => {
+      instructions = (input as unknown as { instructions: (prefix: string) => string }).instructions('')
+      refused = await call(input, 'list_my_memories', { canal: 'experiencia/arquivado' }).catch((error: unknown) => error)
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    const channelsLine = instructions.split('\n').find((line) => line.includes('num destes canais'))!
+    expect(channelsLine).toContain('experiencia/ativo')
+    expect(channelsLine).not.toContain('experiencia/arquivado')
+    expect(refused).toMatchObject({ code: 'ROUTINE_CHANNEL_NOT_ALLOWED' })
+    expect(run(runId).warnings.join(' ')).toContain('Canal arquivado no Engramind, fora desta execução: experiencia/arquivado')
   })
 })
 

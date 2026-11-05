@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { catalogRepoOf, isCatalogProse } from '@/features/routine-agents/memory-cleanup'
+import { catalogRepoOf, isCatalogProse as isCatalogProseOf, type CleanupCandidate } from '@/features/routine-agents/memory-cleanup'
+
+const AGENT = 'opex/rotineiro-indexador'
+const OWN = { author: { agent: AGENT }, origin: { source: 'rotineiro' } }
+const isCatalogProse = (memory: CleanupCandidate) => isCatalogProseOf({ ...OWN, ...memory }, AGENT)
 
 /** Seleção da limpeza do catálogo em prosa (critério aprovado OPE-130, D16). */
 
@@ -22,6 +26,14 @@ describe('isCatalogProse', () => {
     expect(isCatalogProse({ id: 'm5', text: '{"repo": "nandobfer/petify"}', key: 'catalogo-nandobfer-petify' })).toBe(false)
     expect(isCatalogProse({ id: 'm6', text: 'catalogo: nandobfer/petify', status: 'archived' })).toBe(false)
     expect(isCatalogProse({ id: 'm11', key: 'indexador-estado', title: 'Indexador: estado da execução seq 7', text: 'Estado do Indexador… Catálogo: 35 repositórios' })).toBe(false)
+  })
+
+  it('não seleciona entrada do dono nem de outro autor, mesmo com texto de catálogo', () => {
+    const text = 'Repositório acme/legacy não deve ser indexado'
+    expect(isCatalogProse({ id: 'd1', text, origin: { source: 'owner' } })).toBe(false)
+    expect(isCatalogProse({ id: 'd2', text, author: { agent: null }, origin: { source: 'owner' } })).toBe(false)
+    expect(isCatalogProse({ id: 'd3', text, author: { agent: 'opex/rotineiro-outro' } })).toBe(false)
+    expect(isCatalogProse({ id: 'd4', text })).toBe(true)
   })
 
   it('catalogRepoOf extrai o repositório', () => {

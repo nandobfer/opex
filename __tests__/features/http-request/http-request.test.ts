@@ -151,6 +151,24 @@ describe('segredos na chamada', () => {
     expect(result).toMatchObject({ status: 302, warning: expect.stringContaining('não seguido') })
   })
 
+  it('segredo sem domínios: redirecionamento para outra origem não reenvia cabeçalho customizado nem corpo', async () => {
+    const secrets = vault([{ name: 'API_KEY', value: SECRET }])
+    const redirect = fakeFetch([new Response(null, { status: 307, headers: { location: 'https://outro-dominio.example/x' } })])
+    const result = await executeHttpRequest(input({ method: 'POST', url: 'https://api.x.com/a', headers: { 'X-Api-Key': '{{secret:API_KEY}}' }, body: { type: 'json', value: { token: '{{secret:API_KEY}}' } } }), { fetchImpl: redirect.impl, secrets })
+    expect(redirect.calls).toHaveLength(1)
+    expect(redirect.calls[0]!.url).toBe('https://api.x.com/a')
+    expect(result).toMatchObject({ status: 307, redirected: false, warning: expect.stringContaining('sem domínios permitidos') })
+    expect(JSON.stringify(result)).not.toContain(SECRET)
+  })
+
+  it('segredo sem domínios: redirecionamento na mesma origem continua sendo seguido', async () => {
+    const secrets = vault([{ name: 'API_KEY', value: SECRET }])
+    const redirect = fakeFetch([new Response(null, { status: 307, headers: { location: '/b' } }), new Response('ok', { status: 200 })])
+    const result = await executeHttpRequest(input({ url: 'https://api.x.com/a', headers: { 'X-Api-Key': '{{secret:API_KEY}}' } }), { fetchImpl: redirect.impl, secrets })
+    expect(redirect.calls.map((call) => call.url)).toEqual(['https://api.x.com/a', 'https://api.x.com/b'])
+    expect(result).toMatchObject({ status: 200, redirected: true })
+  })
+
   it('sem cofre (Agente Opex no chat), {{secret:…}} é recusado', async () => {
     await expect(executeHttpRequest(input({ url: 'https://x.com', headers: { A: '{{secret:TOKEN}}' } }), { fetchImpl: fakeFetch([]).impl })).rejects.toBeInstanceOf(HttpRequestError)
     await expect(executeHttpRequest(input({ url: 'https://x.com', headers: { A: '{{secret:TOKEN}}' } }), { fetchImpl: fakeFetch([]).impl })).rejects.toThrow(/só existem nos agentes rotineiros/)

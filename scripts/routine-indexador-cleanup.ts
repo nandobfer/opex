@@ -24,7 +24,7 @@ async function main() {
     const { AI_MEMORY_AUDIT_ENTITY } = await import("@/features/ai/constants")
     const { isCatalogProse, catalogRepoOf } = await import("@/features/routine-agents/memory-cleanup")
     const { routineChannelOf } = await import("@/features/routine-agents/constants")
-    type Row = { id: string; text: string; title: string | null; key?: string | null; status: string; channel: string }
+    type Row = { id: string; text: string; title: string | null; key?: string | null; status: string; channel: string; author?: { agent?: string | null } | null; origin?: { source?: string | null } | null }
     const listAll = async (channel: string) => {
         const rows: Row[] = []
         let cursor: string | null = null
@@ -37,10 +37,13 @@ async function main() {
     }
     const own = routineChannelOf(slug)
     const rows = await listAll(own)
-    const selected = rows.filter(isCatalogProse)
+    const { routineAgentRef } = await import("@/features/routine-agents/server/engramind")
+    const agentRef = routineAgentRef(slug)
+    // Só o que o próprio agente gravou: entradas do dono (ou de outro autor) ficam, mesmo que o texto case.
+    const selected = rows.filter((row) => isCatalogProse(row, agentRef))
     const byRepo = new Map<string, number>()
     for (const row of selected) byRepo.set(catalogRepoOf(row) ?? "?", (byRepo.get(catalogRepoOf(row) ?? "?") ?? 0) + 1)
-    console.info(`[cleanup] ${own}: ${rows.length} ativas, ${selected.length} de catálogo em prosa a arquivar, ${rows.length - selected.length} ficam`)
+    console.info(`[cleanup] ${own}: ${rows.length} ativas, ${selected.length} de catálogo em prosa gravadas por ${agentRef} a arquivar, ${rows.length - selected.length} ficam`)
     for (const [repo, count] of [...byRepo].sort()) console.info(`  ${repo}: ${count}`)
     for (const row of selected) console.info(`  - ${row.id} ${(row.title ?? row.text).slice(0, 80).replace(/\s+/g, " ")}`)
     const catalog = await listAll(catalogChannel)
