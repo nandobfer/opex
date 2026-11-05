@@ -234,6 +234,15 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `@engramind/client@<versão>` em `minimumReleaseAgeExclude` (`pnpm-workspace.yaml`). Sem essa entrada,
   o `pnpm install --frozen-lockfile` do `Dockerfile` recusa uma versão recém-publicada. A edição de canal
   pelo token de app (lib 0.2.0 com Engramind 0.13.0) não muda nada no Opex, que roda no modo gestor.
+- **Universo do agente fora da rede** (lib 0.3.0, OPE-130): `AgentUniverse` (`agent="app/agente"`,
+  `defaultCreateChannel`, `allowCreate`) — o mesmo `AgentUniverseView` da rede no `?universo=agente:…`. Usado
+  na aba Memórias dos agentes rotineiros. **"Nova memória"** no universo do agente escolhe o canal entre os
+  assinados e não arquivados (`MemoryEditorTarget.channels`).
+- **Nome no hover da partícula** (lib 0.3.0): sem hover, o nome curto cortado; com o cursor, o **nome
+  completo destacado** (borda na cor da partícula, fonte maior) no `MemoryHoverLabelLayer`, uma camada fora
+  da área com zoom como o card (`clampLabelRect` o mantém inteiro no quadro; sem eventos de ponteiro). No
+  toque e com o card aberto, não há rótulo. Vale em todos os universos (rede, listas de `/integracoes/ia`,
+  rotineiros).
 - **Testes**: o `vitest.config.ts` coloca a lib em `server.deps.inline` (os `vi.mock` de `@xyflow/react`,
   `framer-motion` e `next/*` valem dentro dela). O SSE é simulado por um `EventSource` falso
   (`__tests__/helpers/engramind-live.ts`). As funções puras e os componentes que saíram do Opex (rede,

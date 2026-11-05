@@ -82,7 +82,7 @@ export function RoutineAgentPage({ id }: { id: string }) {
                 {aba === "visao-geral" && <RoutineOverviewTab agentId={agent.id} params={params} />}
                 {aba === "execucoes" && <RoutineRunsTab agentId={agent.id} onOpen={(runId) => setPage((current) => ({ ...current, execucao: runId }))} />}
                 {aba === "entradas" && <RoutineEntriesTab agentId={agent.id} />}
-                {aba === "memorias" && <RoutineMemoriesTab agentId={agent.id} slug={agent.slug} />}
+                {aba === "memorias" && <RoutineMemoriesTab slug={agent.slug} />}
                 {aba === "segredos" && <RoutineSecretsTab agentId={agent.id} />}
             </AgentPageFrame>
             <RoutineRunDetailSheet agentId={agent.id} runId={execucao || null} onClose={() => setPage((current) => ({ ...current, execucao: "" }))} />

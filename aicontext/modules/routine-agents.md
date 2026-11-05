@@ -24,6 +24,10 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D6 | Uma ferramenta **"Chamada HTTP"** (`http_request`, grupo `http`) para qualquer método, `risk: "write"` e **sem** confirmação por padrão; o dono liga em Agente Opex › Ferramentas e o ajuste vale nos rotineiros (D4). |
 | D7 | A Chamada HTTP **não bloqueia endereços** (inclui a rede interna e os containers). Por isso o grupo `http` fica fora dos tokens de sistema. |
 | D8 | **Nome e objetivo opcionais**: o subagente de provisionamento gera o que ficar vazio. O nome gerado é **só o papel** ("Recrutador"), como o `navLabel` dos agentes fixos; as telas mostram "Agente <nome>" (`routineAgentTitle`). |
+| D9 | O **motor Opex não usa o OpenCode**: os provedores dele são os do Agente Opex (Gemini, Anthropic, OpenAI, DeepSeek — `OPEX_PROVIDER_IDS`); o OpenCode é só o motor "OpenCode no host". O card do subagente de provisionamento continua aceitando o OpenCode (D2). |
+| D10 | A aba **Memórias** do rotineiro é **um card** com o **universo do agente igual ao de `/engramind`** (`AgentUniverse` da lib `@engramind/client`, o mesmo componente da rede): todas as memórias dos canais que ele assina. |
+| D11 | **"Nova memória"** no universo do agente escolhe o **canal** entre os assinados e não arquivados (inicial: o canal próprio do rotineiro), em `/engramind` e no rotineiro. |
+| D12 | Com o cursor sobre a partícula de uma memória, o nome aparece **completo e destacado** (antes sumia), em todos os universos. |
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
 
@@ -44,7 +48,8 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     não muda — um "Agente" no começo não entra no slug, `global` é reservado, colisão ganha sufixo),
     objetivo (opcional — D8), instruções (markdown) e o switch
     **"Pedir confirmação antes de ações irreversíveis"** (ligado por padrão).
-  - **Motor** (`OptionTabs`): **Opex** (provedores de texto do app) ou **OpenCode no host** (modelos e
+  - **Motor** (`OptionTabs`): **Opex** (só os provedores do Agente Opex — D9; o OpenCode não aparece,
+    com a dica "Para usar o OpenCode, escolha o motor OpenCode no host") ou **OpenCode no host** (modelos e
     agente do serviço OpenCode). O `ProviderModelCard` compartilhado aceita caminhos aninhados
     (`names`). Trocar o motor ou o modelo vale só para as próximas execuções (cada execução guarda um
     `snapshot` da configuração).
@@ -208,6 +213,17 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   `GET /api/routine-agents/[id]/metrics?periodo=`), **Execuções** (lista ao vivo, detalhe em
   `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas**,
   **Memórias** e **Segredos**.
+- **Memórias** (`RoutineMemoriesTab`, D10/D11): um card "Rede de memórias" com o `AgentUniverse` da lib
+  (`agent="opex/rotineiro-<slug>"`, `defaultCreateChannel` = canal próprio), dentro do
+  `OpexEngramindProvider`: as memórias de `opex`, `agentes/rotineiros/global`, do canal próprio e dos
+  extras, com as ações do `/engramind` (ativar, fixar, editar, mover, histórico, excluir, pelo proxy do
+  gestor) e o tempo real pelo SSE da lib. "Nova memória" pede o canal entre os assinados. Agente ainda não
+  cadastrado no Engramind: estado vazio da lib (concluir o provisionamento). As Entradas continuam
+  gravando no canal próprio ou no global.
+- **Agente gravado com o OpenCode no motor Opex** (antes de D9): o DTO devolve o provedor e o modelo
+  vazios (o editor pede outro; o banco só muda ao salvar); o disparo (manual, agendado, webhook, Agente
+  Opex) é recusado com 409 `ROUTINE_ENGINE_PROVIDER_INVALID`, sem criar execução, e "Executar agora" fica
+  desativado com o motivo; uma execução já na fila com esse snapshot termina em Erro sem chamar o modelo.
 - **Entradas do dono** (não é chat): texto + destino "Este agente"/"Todos os rotineiros"; cada entrada
   grava uma memória (`routine_entries` guarda o histórico); vazio é recusado e, com o Engramind fora
   do ar, o toast de erro mantém o texto no campo.
