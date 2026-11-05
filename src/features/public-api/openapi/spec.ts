@@ -5,6 +5,7 @@ import type { MaddoxMcpDocsCatalog } from "@/features/maddox-agent/server/mcp-ca
 import { API_SCOPE_ALL, MCP_OWNER_ALL_TOOLS, MCP_OWNER_DESTRUCTIVE, MCP_OWNER_SCOPE, MADDOX_TOKEN_EXCLUDED_GROUPS } from "@/features/integrations/api-tokens/scopes"
 import { API_TOKEN_SECURITY_SCHEME, publicRouteScope } from "../routes"
 import { whoAmIResponseSchema } from "../schemas"
+import { routineWebhookBodySchema, routineWebhookResponseSchema } from "@/features/routine-agents/schemas"
 import { buildMaddoxMcpSpecSection } from "./maddox-mcp"
 
 /**
@@ -29,6 +30,7 @@ export const SECURITY_SCHEMES = {
 export const API_TOKEN_SCOPE_DOCS: readonly { scope: string; description: string }[] = [
     { scope: API_SCOPE_ALL, description: "Todas as rotas da API v1 que exigem escopo (atuais e futuras)." },
     { scope: "api:v1:<recurso>", description: "Uma rota da API v1 (o escopo exigido aparece em cada operação)." },
+    { scope: "api:v1:routine-agents", description: "Webhook externo dos agentes rotineiros: disparar execuções (`POST /api/v1/routine-agents/{id}/runs`)." },
     { scope: MCP_OWNER_SCOPE, description: "Usar o servidor MCP do dono (initialize, ping, tools/list) e as ferramentas do grupo Contexto." },
     { scope: MCP_OWNER_ALL_TOOLS, description: "Todas as ferramentas do MCP do dono, inclusive as que forem adicionadas depois." },
     { scope: "mcp:owner:group:<grupo>", description: "As ferramentas de um grupo (dinâmico: ferramenta nova do grupo entra sozinha)." },
@@ -58,6 +60,8 @@ export const insufficientScopeResponse = (required: string) => ({
 
 /** Rotas públicas por token documentadas (com o escopo de cada uma): `../routes.ts`. */
 export { PUBLIC_TOKEN_ROUTES } from "../routes"
+
+const ROUTINE_RUNS_SCOPE = publicRouteScope("/api/v1/routine-agents/{id}/runs") as string
 
 const ref = (name: string) => ({ $ref: `#/components/schemas/${name}` })
 
@@ -114,7 +118,7 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
             ].join("\n"),
         },
         servers: [{ url: BASE_PATH || "/", description: "Mesmo host desta documentação (com o subcaminho público do app)" }],
-        tags: [{ name: "Token", description: "Conferência do token de sistema." }, ...(mcp?.tags ?? [])],
+        tags: [{ name: "Token", description: "Conferência do token de sistema." }, { name: "Agentes rotineiros", description: "Webhook externo dos agentes rotineiros (OPE-130)." }, ...(mcp?.tags ?? [])],
         paths: {
             "/api/v1/whoami": {
                 get: {
@@ -140,6 +144,46 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
                     },
                 },
             },
+            "/api/v1/routine-agents/{id}/runs": {
+                post: {
+                    operationId: "triggerRoutineAgentRun",
+                    tags: ["Agentes rotineiros"],
+                    summary: "Dispara uma execução de um agente rotineiro",
+                    description: [
+                        "Webhook externo: cria uma execução **nova** do agente rotineiro (o webhook nunca reativa uma execução existente).",
+                        "`request` e `payload` (opcionais) entram no contexto da execução; o `payload` serializado tem teto de 64 KB.",
+                        "O gatilho \"Webhook externo\" do agente precisa estar ligado. Acompanhe a execução na página do agente (`/agentes-rotineiros/{id}`).",
+                        "",
+                        scopeSentence(ROUTINE_RUNS_SCOPE),
+                    ].join("\n"),
+                    ...tokenOperationSecurity(ROUTINE_RUNS_SCOPE),
+                    parameters: [{ name: "id", in: "path", required: true, description: "Id do agente rotineiro (aparece na URL da página do agente).", schema: { type: "string", pattern: "^[a-f0-9]{24}$" } }],
+                    requestBody: {
+                        required: false,
+                        content: jsonContent(ref("RoutineAgentRunBody"), { request: "Candidate-se às vagas novas de backend publicadas hoje", payload: { source: "rss", items: 3 } }),
+                    },
+                    responses: {
+                        "201": { description: "Execução criada (na fila ou já executando).", content: jsonContent(ref("RoutineAgentRunResponse"), { success: true, data: { runId: "66f0c0ffee0000000000beef", status: "running" } }) },
+                        "400": errorResponse("Corpo inválido ou `payload` acima de 64 KB.", "O payload passa de 64 KB (80 KB)", "PAYLOAD_TOO_LARGE"),
+                        "401": errorResponse("Token ausente, inválido, revogado ou expirado.", "Token ausente, inválido, revogado ou expirado", "UNAUTHENTICATED"),
+                        "403": insufficientScopeResponse(ROUTINE_RUNS_SCOPE),
+                        "404": errorResponse("Agente rotineiro inexistente.", "Agente rotineiro não encontrado", "ROUTINE_AGENT_NOT_FOUND"),
+                        "409": {
+                            description: "Agente pausado ou arquivado (`ROUTINE_AGENT_PAUSED`), gatilho de webhook desligado (`ROUTINE_AGENT_WEBHOOK_DISABLED`) ou agente sem provisionamento (`ROUTINE_AGENT_NOT_PROVISIONED`).",
+                            content: {
+                                "application/json": {
+                                    schema: ref("ApiError"),
+                                    examples: {
+                                        paused: { value: { success: false, error: "O agente rotineiro está pausado ou arquivado", code: "ROUTINE_AGENT_PAUSED" } },
+                                        webhookDisabled: { value: { success: false, error: "O gatilho de webhook deste agente está desligado", code: "ROUTINE_AGENT_WEBHOOK_DISABLED" } },
+                                        notProvisioned: { value: { success: false, error: "O agente rotineiro ainda não foi provisionado", code: "ROUTINE_AGENT_NOT_PROVISIONED" } },
+                                    },
+                                },
+                            },
+                        },
+                    },
+                },
+            },
             ...(mcp?.paths ?? {}),
         },
         components: {
@@ -162,6 +206,12 @@ export function buildPublicApiSpec(options: PublicApiSpecOptions = {}): JsonObje
                 WhoAmIResponse: {
                     type: "object",
                     properties: { success: { const: true }, data: fromZod(whoAmIResponseSchema) },
+                    required: ["success", "data"],
+                },
+                RoutineAgentRunBody: fromZod(routineWebhookBodySchema, "input"),
+                RoutineAgentRunResponse: {
+                    type: "object",
+                    properties: { success: { const: true }, data: fromZod(routineWebhookResponseSchema) },
                     required: ["success", "data"],
                 },
                 ApiError: {

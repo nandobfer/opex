@@ -24,6 +24,8 @@ const TOOL_PREFIX = "mcp:owner:tool:"
 const GROUP_PREFIX = "mcp:owner:group:"
 
 export const apiRouteScope = (resource: string) => `${API_PREFIX}${resource}`
+/** Webhook externo dos agentes rotineiros (`POST /api/v1/routine-agents/{id}/runs`, OPE-130). */
+export const ROUTINE_AGENTS_API_SCOPE = "api:v1:routine-agents"
 export const mcpOwnerToolScope = (tool: string) => `${TOOL_PREFIX}${tool}`
 export const mcpOwnerGroupScope = (group: string) => `${GROUP_PREFIX}${group}`
 

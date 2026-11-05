@@ -151,11 +151,14 @@ async function connectServer(server: ServerDoc, signal?: AbortSignal): Promise<C
 }
 
 /** Conecta aos MCPs do turno; falhas viram avisos e ficam registradas na situação do MCP. */
-export async function loadMcpTools(scope: OpexServerScope, signal?: AbortSignal): Promise<McpTurnTools> {
-    const servers = await serversFor(scope).catch((error: unknown) => {
+export async function loadMcpTools(scope: OpexServerScope, signal?: AbortSignal, options: { serverIds?: readonly string[] } = {}): Promise<McpTurnTools> {
+    const all = await serversFor(scope).catch((error: unknown) => {
         log.warn({ err: error }, "[opex-mcp] falha ao ler os MCPs")
         return [] as ServerDoc[]
     })
+    // Agentes rotineiros (OPE-130): só os MCPs liberados na configuração do agente.
+    const allowed = options.serverIds ? new Set(options.serverIds) : null
+    const servers = allowed ? all.filter((server) => allowed.has(server._id.toString())) : all
     if (!servers.length) return EMPTY
     const settled = await Promise.allSettled(servers.map((server) => connectServer(server, signal)))
     const clients: MCPClient[] = []
