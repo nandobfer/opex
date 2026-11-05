@@ -13,6 +13,7 @@ import { AGENT_METRICS_FILTER_SCHEMA, DEFAULT_AGENT_METRICS_FILTERS } from "@/fe
 import { METRICS_PERIOD_LABELS, METRICS_PERIODS } from "@/features/agent-metrics/period"
 import { routineSettingsHref } from "../../constants"
 import { ROUTINE_PROVISIONING_LABELS } from "../../status"
+import { ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE } from "../../schemas"
 import { useRoutineAgent } from "../../hooks/useRoutineAgents"
 import { useRoutineRealtime } from "../../hooks/useRoutineRealtime"
 import { RoutineRunDetailSheet } from "../runs/RoutineRunDetailSheet"
@@ -35,9 +36,11 @@ const PAGE_SCHEMA: UrlFilterSchema<typeof PAGE_DEFAULTS> = { aba: urlFilterCodec
 const PERIODS = METRICS_PERIODS.map((value) => ({ value, label: METRICS_PERIOD_LABELS[value] }))
 
 /** Por que "Executar agora" está desabilitado (`null` = pode executar). */
-export function runDisabledReason(agent: { status: string; provisioning: { status: keyof typeof ROUTINE_PROVISIONING_LABELS } }): string | null {
+export function runDisabledReason(agent: { status: string; provisioning: { status: keyof typeof ROUTINE_PROVISIONING_LABELS }; engine?: string; opex?: { provider: string | null } }): string | null {
     if (agent.status !== "active") return "Retome o agente para executar"
     if (agent.provisioning.status !== "ok") return ROUTINE_PROVISIONING_LABELS[agent.provisioning.status]
+    // D9: o DTO devolve o provedor vazio quando o gravado não vale no motor Opex.
+    if (agent.engine === "opex" && agent.opex && !agent.opex.provider) return ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE
     return null
 }
 

@@ -565,4 +565,21 @@ describe('segredos e Chamada HTTP na ativação (critério aprovado OPE-130, D5)
   })
 })
 
+describe('critério aprovado (OPE-130, D9): agente gravado com o OpenCode no motor Opex', () => {
+  it('o DTO chega com o provedor vazio e o disparo é recusado (409) sem criar execução', async () => {
+    const agent = seedAgent({ opex: { provider: 'opencode', model: 'anthropic/claude', variant: null, enabledTools: [], enabledMcpServers: [] } })
+    const { toAgentDto } = await import('@/features/routine-agents/server/shared')
+    const dto = toAgentDto(agent as never)
+    expect(dto.opex).toMatchObject({ provider: null, model: '' })
+    await expect(triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_ENGINE_PROVIDER_INVALID' })
+    expect(holder.runs.docs).toHaveLength(0)
+  })
+
+  it('uma execução já na fila com esse snapshot termina em Erro sem chamar o modelo', async () => {
+    const { runOpexEngine } = await vi.importActual<typeof import('@/features/routine-agents/server/engines/opex')>('@/features/routine-agents/server/engines/opex')
+    const result = await runOpexEngine({ agent: {}, run: { snapshot: { opex: { provider: 'opencode', model: 'x', variant: null, enabledTools: [], enabledMcpServers: [] } }, messages: null }, activation: { controller: new AbortController(), warnings: [] } } as never)
+    expect(result.error).toContain('O motor Opex não usa o OpenCode')
+  })
+})
+
 void fakeId

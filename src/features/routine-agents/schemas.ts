@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { MIN_MASKABLE_SECRET_LENGTH } from "@/features/http-request/secrets"
+import { OPEX_PROVIDER_IDS } from "@/features/opex-agent/constants"
 import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { MAX_RUN_REQUEST_CHARS } from "./constants"
 
@@ -43,8 +44,19 @@ export const routineLimitsSchema = z.object({
 export type RoutineLimits = z.infer<typeof routineLimitsSchema>
 export const EMPTY_ROUTINE_LIMITS: RoutineLimits = { concurrency: null, maxActiveMinutes: null, maxWaitingMinutes: null, maxTokens: null, maxLiveWaitMinutes: null }
 
+/**
+ * Decisão D9 do plano aprovado (OPE-130): o motor Opex usa só os provedores do Agente Opex (Gemini,
+ * Anthropic, OpenAI, DeepSeek) — o OpenCode não aceita as ferramentas do app e é o próprio motor
+ * "OpenCode no host".
+ */
+export const ROUTINE_OPEX_PROVIDER_IDS = OPEX_PROVIDER_IDS
+export const ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE = "O motor Opex não usa o OpenCode: em Configurar, escolha Gemini, Anthropic, OpenAI ou DeepSeek, ou troque o motor para OpenCode no host."
+/** Provedor gravado que o motor Opex não aceita (agentes salvos antes de D9 com `opencode`). */
+export const isInvalidRoutineOpexProvider = (engine: string, provider: string | null | undefined): boolean =>
+    engine === "opex" && provider !== null && provider !== undefined && !(ROUTINE_OPEX_PROVIDER_IDS as readonly string[]).includes(provider)
+
 export const routineOpexEngineSchema = z.object({
-    provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+    provider: z.enum(ROUTINE_OPEX_PROVIDER_IDS, { error: "Escolha o provedor" }).nullable(),
     model: z.string().trim().max(200),
     variant: z.string().trim().max(80).nullable(),
     enabledTools: z.array(z.string().trim().min(1).max(120)).max(500),

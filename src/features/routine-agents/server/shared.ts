@@ -1,4 +1,5 @@
 import { Types } from "mongoose"
+import { isInvalidRoutineOpexProvider } from "../schemas"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
@@ -85,7 +86,8 @@ export function toAgentDto(doc: RoutineAgentDoc, extra: { lastRun?: RoutineAgent
         objective: doc.objective ?? "",
         instructions: doc.instructions ?? "",
         engine: doc.engine,
-        opex: doc.opex,
+        // D9: provedor gravado antes da regra (ex.: `opencode`) chega vazio, para o editor pedir outro.
+        opex: isInvalidRoutineOpexProvider("opex", doc.opex?.provider) ? { ...doc.opex, provider: null, model: "", variant: null } : doc.opex,
         opencode: doc.opencode,
         confirmIrreversible: doc.confirmIrreversible !== false,
         limits: doc.limits,

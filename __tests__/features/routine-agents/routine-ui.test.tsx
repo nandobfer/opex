@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   listFilter: [] as string[],
   agents: [] as unknown[],
   loaded: undefined as unknown,
+  providers: [] as { id: string; connected: boolean }[],
   opencode: { available: true, reason: null, mcps: [{ name: 'playwright', status: 'connected', browser: true }, { name: 'github', status: 'connected', browser: false }], browserAvailable: true },
 }))
 
@@ -35,7 +36,7 @@ vi.mock('@/features/routine-agents/hooks/useRoutineRuns', () => ({
   useAddRoutineEntry: () => ({ mutate: mocks.addEntry, isPending: false }),
 }))
 vi.mock('@/features/ai/hooks/useAi', () => ({
-  useAiProviderStatuses: () => ({ providers: [] }),
+  useAiProviderStatuses: () => ({ providers: mocks.providers }),
   useAiModels: () => ({ data: [], isLoading: false, isError: false }),
   useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
 }))
@@ -48,7 +49,7 @@ import { RoutineEntriesTab } from '@/features/routine-agents/components/page/Rou
 import { attentionToast } from '@/features/routine-agents/hooks/useRoutineRealtime'
 import { runDisabledReason } from '@/features/routine-agents/components/page/RoutineAgentPage'
 import type { RoutineAgentDto } from '@/features/routine-agents/types'
-import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
+import { DEFAULT_ROUTINE_AGENT_INPUT, EMPTY_ROUTINE_LIMITS, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE, routineAgentInputSchema } from '@/features/routine-agents/schemas'
 
 const AGENT: RoutineAgentDto = {
   id: 'a'.repeat(24),
@@ -119,6 +120,18 @@ describe('editor do agente rotineiro', () => {
     expect(screen.getByLabelText('Navegador')).toBeTruthy()
   })
 
+  it('critério aprovado (OPE-130, D9): o motor Opex não oferece o OpenCode; o motor OpenCode continua com o seletor fixo', () => {
+    mocks.providers = ['opencode', 'gemini', 'anthropic', 'openai', 'deepseek'].map((id) => ({ id, connected: true }))
+    render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Motor' }))
+    expect(screen.getByRole('radio', { name: 'Anthropic' })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: 'OpenCode' })).toBeNull()
+    expect(screen.getByText(/O OpenCode não aparece: ele não aceita as ferramentas do app/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('radio', { name: 'OpenCode no host' }))
+    expect(screen.queryByRole('radio', { name: 'Anthropic' })).toBeNull()
+    mocks.providers = []
+  })
+
   it('critério aprovado (OPE-130, limite por tokens): o limite de custo deu lugar ao máximo de tokens', () => {
     render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
     fireEvent.click(screen.getByRole('radio', { name: 'Limites' }))
@@ -176,5 +189,19 @@ describe('toast e ações', () => {
     expect(runDisabledReason(AGENT)).toBeNull()
     expect(runDisabledReason({ ...AGENT, status: 'paused' })).toContain('Retome')
     expect(runDisabledReason({ ...AGENT, provisioning: { ...AGENT.provisioning, status: 'error' } })).toBe('Provisionamento com erro')
+  })
+})
+
+describe('critério aprovado (OPE-130, D9): provedores do motor Opex', () => {
+  const base = { ...DEFAULT_ROUTINE_AGENT_INPUT, instructions: 'Procurar vagas' }
+  it('o schema recusa o OpenCode no motor Opex e aceita os quatro provedores diretos', () => {
+    expect(routineAgentInputSchema.safeParse({ ...base, opex: { ...base.opex, provider: 'opencode', model: 'x' } }).success).toBe(false)
+    for (const provider of ['gemini', 'anthropic', 'openai', 'deepseek']) expect(routineAgentInputSchema.safeParse({ ...base, opex: { ...base.opex, provider, model: 'x' } }).success).toBe(true)
+    expect(routineAgentInputSchema.safeParse({ ...base, engine: 'opencode', opencode: { ...base.opencode, model: 'a/b' } }).success).toBe(true)
+  })
+
+  it('"Executar agora" fica desativado com o motivo quando o provedor gravado não vale', () => {
+    expect(runDisabledReason({ status: 'active', provisioning: { status: 'ok' }, engine: 'opex', opex: { provider: null } })).toBe(ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE)
+    expect(runDisabledReason({ status: 'active', provisioning: { status: 'ok' }, engine: 'opex', opex: { provider: 'anthropic' } })).toBeNull()
   })
 })

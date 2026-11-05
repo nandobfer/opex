@@ -5,7 +5,8 @@ import { Field } from "@/components/ui/field"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { ProviderModelCard } from "@/features/ai/components/shared/ProviderModelCard"
 import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
-import { AI_TEXT_PROVIDER_IDS, type AiTextProviderId } from "@/lib/ai/providers"
+import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
+import { isOpexProviderId, type OpexProviderId } from "@/features/opex-agent/constants"
 import { ROUTINE_ENGINES, ROUTINE_ENGINE_LABELS, type RoutineAgentInput, type RoutineEngine } from "../../schemas"
 
 const ENGINE_OPTIONS = ROUTINE_ENGINES.map((value) => ({ value, label: ROUTINE_ENGINE_LABELS[value] }))
@@ -20,6 +21,8 @@ export function RoutineEngineFields({ form, editing }: { form: UseFormReturn<Rou
     const engine = useWatch({ control: form.control, name: "engine" })
     const { providers: all } = useAiProviderStatuses()
     const providers = all.filter((item) => (AI_TEXT_PROVIDER_IDS as readonly string[]).includes(item.id))
+    // D9: o motor Opex usa só os provedores do Agente Opex; o OpenCode é o próprio motor "OpenCode no host".
+    const opexProviders = providers.filter((item) => isOpexProviderId(item.id))
     return (
         <div className="space-y-4">
             <Field id="routine-engine" label="Motor">
@@ -31,18 +34,21 @@ export function RoutineEngineFields({ form, editing }: { form: UseFormReturn<Rou
             </Field>
             {editing && <p className="text-xs text-muted-foreground">Trocar o motor ou o modelo vale só para as próximas execuções; as em andamento seguem com a configuração do disparo.</p>}
             {engine === "opex" ? (
+                <div className="space-y-2">
                 <ProviderModelCard
                     form={form}
-                    providers={providers}
+                    providers={opexProviders}
                     names={OPEX_NAMES}
                     hideAgent
                     idPrefix="routine-opex"
                     onProviderChange={(provider) => {
-                        form.setValue("opex.provider", provider as AiTextProviderId, { shouldDirty: true, shouldValidate: true })
+                        form.setValue("opex.provider", provider as OpexProviderId, { shouldDirty: true, shouldValidate: true })
                         form.setValue("opex.model", "", { shouldDirty: true })
                         form.setValue("opex.variant", null, { shouldDirty: true })
                     }}
                 />
+                <p className="text-xs text-muted-foreground">O OpenCode não aparece: ele não aceita as ferramentas do app. Para usar o OpenCode, escolha o motor OpenCode no host.</p>
+                </div>
             ) : (
                 <ProviderModelCard form={form} providers={providers} names={OPENCODE_NAMES} fixedProvider="opencode" idPrefix="routine-opencode" />
             )}

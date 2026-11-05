@@ -8,6 +8,7 @@ import type { McpTurnTools } from "@/features/opex-agent/server/mcp/tools"
 import { isRoutineForbiddenToolGroup } from "../../constants"
 import { trimRoutineHistory } from "../../history"
 import { TURN_ALREADY_CLOSED } from "../tools/guarded"
+import { isInvalidRoutineOpexProvider, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE } from "../../schemas"
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
@@ -79,6 +80,8 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
     let text = ""
     let errorMessage: string | null = null
     // Histórico das ativações anteriores, sem o raciocínio passado e dentro do orçamento (`history.ts`).
+    // D9: snapshot gravado com um provedor que o motor Opex não aceita (ex.: `opencode`).
+    if (isInvalidRoutineOpexProvider("opex", engine.provider)) return { error: ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE, text: "" }
     const history = trimRoutineHistory(parseHistory(run.messages))
     const userMessage: ModelMessage = { role: "user", content: input.message }
     try {

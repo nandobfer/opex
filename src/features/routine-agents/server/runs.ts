@@ -1,3 +1,4 @@
+import { isInvalidRoutineOpexProvider, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE } from "../schemas"
 import { guardedRoutineTool } from "./tools/guarded"
 import { HTTP_REQUEST_TOOL, httpTools } from "@/features/opex-agent/server/tools/http"
 import { loadRoutineSecretVault } from "./secrets"
@@ -70,6 +71,7 @@ const NOT_PROVISIONED = () => new DomainError(409, "O agente rotineiro ainda nã
 export function assertRunnable(agent: RoutineAgentDoc): void {
     if (agent.status !== "active") throw PAUSED()
     if (agent.provisioning?.status !== "ok") throw NOT_PROVISIONED()
+    if (isInvalidRoutineOpexProvider(agent.engine, agent.opex?.provider)) throw new DomainError(409, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE, "ROUTINE_ENGINE_PROVIDER_INVALID")
 }
 
 export async function triggerRoutineRun(agentId: string, input: TriggerInput, actorId: string): Promise<{ runId: string; status: RoutineRunStatus }> {
