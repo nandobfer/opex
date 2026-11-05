@@ -64,10 +64,13 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
         if (!base) return { error: "Configure a URL pública do Opex (integração Engramind › Conexão) para o OpenCode alcançar as ferramentas do agente rotineiro", text, sessionId }
         const secret = randomBytes(32).toString("base64url")
         await RoutineRun.updateOne({ _id: run._id }, { $set: { mcp: { name: mcpName, secretHash: hashMcpSecret(secret) } } })
-        const hostMcps = await client.mcp
-            .list(location)
-            .then((result) => result.data.map((server) => server.name))
-            .catch(() => [] as string[])
+        // Sem a lista, as permissões não negariam os MCPs não liberados: falha fechada, com erro acionável.
+        let hostMcps: string[]
+        try {
+            hostMcps = (await client.mcp.list(location)).data.map((server) => server.name)
+        } catch (error) {
+            return { error: `Não foi possível listar os MCPs do host para aplicar as permissões da sessão: ${messageOf(error)}. Dispare de novo.`, text, sessionId }
+        }
         if (hostMcps.includes(mcpName)) await client.mcp.remove({ server: mcpName, ...location }).catch(() => undefined)
         await client.mcp.add({
             server: mcpName,
@@ -81,8 +84,12 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
                 .get({ sessionID: sessionId })
                 .then(() => true)
                 .catch(() => false)
-            if (exists) await client.session.update({ sessionID: sessionId, permissions }).catch(() => undefined)
-            else {
+            // Sem atualizar as permissões, a sessão antiga seguiria com a lista desatualizada: abre uma nova.
+            const updated = exists && (await client.session.update({ sessionID: sessionId, permissions }).then(() => true).catch(() => false))
+            if (exists && !updated) {
+                activation.warnings.push("Não foi possível atualizar as permissões da sessão anterior do OpenCode: a execução continuou numa sessão nova.")
+                sessionId = null
+            } else if (!exists) {
                 activation.warnings.push("A sessão anterior do OpenCode não existe mais: a execução continuou numa sessão nova.")
                 sessionId = null
             }

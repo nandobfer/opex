@@ -7,6 +7,7 @@ import { redactToolCalls } from "@/features/opex-agent/history"
 import type { McpTurnTools } from "@/features/opex-agent/server/mcp/tools"
 import { isRoutineForbiddenToolGroup } from "../../constants"
 import { trimRoutineHistory } from "../../history"
+import { TURN_ALREADY_CLOSED } from "../tools/guarded"
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
@@ -27,11 +28,7 @@ import { routineAgentTitle } from "../../identity-plan"
 
 const MAX_DETAIL = 400
 
-/** Resposta às ferramentas chamadas depois que o turno já foi encerrado no mesmo passo. */
-export const TURN_ALREADY_CLOSED = {
-    status: "not_executed",
-    instruction: "A ação NÃO foi executada: o turno já foi encerrado por outra ferramenta deste passo (confirmação, hibernação ou conclusão). Chame uma ferramenta por vez.",
-} as const
+export { TURN_ALREADY_CLOSED } from "../tools/guarded"
 
 const parseHistory = (json: string | null | undefined): ModelMessage[] => {
     if (!json) return []

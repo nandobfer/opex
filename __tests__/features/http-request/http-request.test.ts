@@ -156,6 +156,18 @@ describe('segredos na chamada', () => {
     await expect(executeHttpRequest(input({ url: 'https://x.com', headers: { A: '{{secret:TOKEN}}' } }), { fetchImpl: fakeFetch([]).impl })).rejects.toThrow(/só existem nos agentes rotineiros/)
   })
 
+  it('segredo curto demais para ser mascarado é recusado sem enviar; o cadastro exige o mínimo', async () => {
+    const { impl, calls } = fakeFetch([])
+    await expect(executeHttpRequest(input({ url: 'https://x.com', headers: { A: '{{secret:PIN}}' } }), { fetchImpl: impl, secrets: vault([{ name: 'PIN', value: '123' }]) })).rejects.toThrow(/curto demais/)
+    expect(calls).toHaveLength(0)
+    const { routineSecretCreateSchema, routineSecretUpdateSchema } = await import('@/features/routine-agents/schemas')
+    const base = { name: 'PIN', description: '', allowedHosts: [] }
+    expect(routineSecretCreateSchema.safeParse({ ...base, value: '123' }).error?.issues[0]?.message).toMatch(/no mínimo 4 caracteres/)
+    expect(routineSecretCreateSchema.safeParse({ ...base, value: '1234' }).success).toBe(true)
+    expect(routineSecretUpdateSchema.safeParse({ ...base, value: '' }).success).toBe(true)
+    expect(routineSecretUpdateSchema.safeParse({ ...base, value: '12' }).success).toBe(false)
+  })
+
   it('a mensagem de erro de rede também sai mascarada', async () => {
     const failure = Object.assign(new TypeError('fetch failed'), { cause: { code: 'X', message: `falhou com ${SECRET}` } })
     await expect(executeHttpRequest(input({ url: 'https://x.com', headers: { A: '{{secret:TOKEN}}' } }), { fetchImpl: fakeFetch([failure]).impl, secrets: vault([{ name: 'TOKEN', value: SECRET }]) })).rejects.toThrow('falhou com {{secret:TOKEN}}')

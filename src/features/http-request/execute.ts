@@ -1,6 +1,6 @@
 import { loggerFor } from "@/lib/logger"
 import { MAX_HTTP_REDIRECTS, type HttpBody, type HttpRequestInput, type HttpRequestOutput, type HttpSecretVault } from "./schemas"
-import { collectSecretNames, hostAllowed, maskSecrets, maskSecretText, substituteSecrets } from "./secrets"
+import { collectSecretNames, hostAllowed, maskSecrets, maskSecretText, MIN_MASKABLE_SECRET_LENGTH, substituteSecrets } from "./secrets"
 
 /**
  * Execução da "Chamada HTTP" (OPE-130, D6/D7). Sem bloqueio de rede (D7): qualquer endereço, inclusive
@@ -112,6 +112,8 @@ export async function executeHttpRequest(input: HttpRequestInput, options: Execu
     for (const name of used) {
         const value = vault!.value(name)
         if (value === undefined) throw new HttpRequestError(`O segredo ${name} não existe neste agente. Disponíveis: ${catalog.map((item) => item.name).join(", ") || "nenhum"}`)
+        // Um valor curto não seria mascarado na resposta: recusa sem enviar (segredo antigo, de antes do mínimo).
+        if (value.length < MIN_MASKABLE_SECRET_LENGTH) throw new HttpRequestError(`O segredo ${name} é curto demais para ser protegido (mínimo de ${MIN_MASKABLE_SECRET_LENGTH} caracteres): edite-o na aba Segredos`)
         values.set(name, value)
     }
     const allSecrets = catalog.flatMap((item) => {

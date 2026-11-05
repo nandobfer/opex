@@ -164,7 +164,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   MCPs do host não liberados, e as ferramentas internas **por rede** num MCP do Opex por execução
   (`POST /api/routine-agents/mcp/<runId>`, em `PUBLIC_PREFIXES`, autenticado por um segredo
   aleatório da execução — só o hash no banco; registrado como `rotina_<id>` e removido no fim).
-  Serviço desligado → **Erro** com o motivo.
+  Serviço desligado → **Erro** com o motivo. As permissões falham fechadas: sem conseguir listar os
+  MCPs do host → **Erro** acionável; sessão reaproveitada cujas permissões não puderam ser atualizadas
+  → sessão nova, com aviso. As chamadas ao MCP da execução (memória, Chamada HTTP) viram passos.
 - Limites conferidos a cada passo (tokens) e por temporizador (tempo ativo). Estourou → **Erro**.
 - **Teto técnico do turno** (`ROUTINE_TURN_TIMEOUT_MS`, 6 h, nos dois motores): sem "Tempo máximo
   ativo" (ou com um maior), o turno é interrompido no teto → **Erro** "O turno passou do teto técnico de
@@ -237,8 +239,8 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 ## Segredos (D5, aba "Segredos", `server/secrets.ts`)
 
 - Coleção `routine_agent_secrets` (`RoutineAgentSecret`, índice único `agentId + name`): `name`
-  (`^[A-Z][A-Z0-9_]{1,63}$`), `description` (até 300, o agente lê), `value` cifrado (`secretBox`, até
-  16 KB), `allowedHosts` (domínios ou `*.dominio`; vazio = qualquer), `lastUsedAt`. Até 50 por agente.
+  (`^[A-Z][A-Z0-9_]{1,63}$`), `description` (até 300, o agente lê), `value` cifrado (`secretBox`, de 4 caracteres
+  a 16 KB), `allowedHosts` (domínios ou `*.dominio`; vazio = qualquer), `lastUsedAt`. Até 50 por agente.
 - Rotas do dono: `GET/POST /api/routine-agents/[id]/secrets`, `PATCH/DELETE .../secrets/[secretId]`
   (`routineSecretCreateSchema`/`routineSecretUpdateSchema`). No PATCH, valor vazio mantém o atual.
 - O valor **só entra**: nenhuma resposta, DTO, auditoria (`SegredoAgenteRotineiro`, só nome,
@@ -254,7 +256,11 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
   contexto; confirmação pelo ajuste do dono, D4/D6); motor OpenCode = switch **"Chamadas HTTP com
   segredos"** (`opencode.httpRequests`, desligado por padrão) que põe a `http_request` no MCP da
   execução — a chamada sai do servidor Opex e o OpenCode recebe só a resposta mascarada (webfetch e
-  bash do OpenCode não têm os segredos). Uma ação confirmada que é Chamada HTTP também recebe o cofre.
+  bash do OpenCode não têm os segredos). Nesse caminho vale a mesma política do motor Opex
+  (`guardedRoutineTool`): desligada no Agente Opex, a ferramenta fica de fora com aviso; com o switch
+  de confirmação ligado e o ajuste "pede confirmação" do dono, vira Aguardando confirmação. Cada
+  chamada ao MCP da execução vira passo da execução (entrada sem segredos). Uma ação confirmada que é
+  Chamada HTTP também recebe o cofre.
   Detalhes da ferramenta em `aicontext/modules/opex-agent.md`, "Chamadas HTTP".
 
 ## Auditoria, logs e tempo real
@@ -272,6 +278,7 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 - O navegador do motor Opex depende de um MCP de navegador cadastrado no Opex (o container não tem
   navegador); no OpenCode, do MCP de navegador do host.
 - No OpenCode, a confirmação depende de o agente chamar a ferramenta (cliques no navegador não são
-  interceptados); a `http_request` do MCP da execução não passa pelo ajuste de confirmação do dono.
+  interceptados).
 - O mascaramento dos segredos cobre o valor literal, codificado para URL e em base64; um valor
-  transformado de outro jeito pelo destino (hash, por exemplo) não é reconhecido.
+  transformado de outro jeito pelo destino (hash, por exemplo) não é reconhecido. Por isso o valor
+  tem no mínimo 4 caracteres (um segredo mais curto é recusado no cadastro e na chamada).

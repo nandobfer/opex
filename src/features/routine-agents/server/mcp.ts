@@ -1,6 +1,8 @@
 import { timingSafeEqual } from "node:crypto"
 import { JSON_RPC_ERRORS, MCP_UNAUTHORIZED_CODE, handleMcpBody, mcpTextResult } from "@/features/maddox-agent/mcp-protocol"
-import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
+import { Types } from "mongoose"
+import { compactToolOutput, redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
+import { recordRunStep } from "./steps"
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
 import { RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { activationOf } from "./hub"
@@ -48,11 +50,21 @@ export async function handleRoutineRunMcpRequest(runId: string, req: Request): P
             const activation = activationOf(runId)
             const tool = tools().find((item) => item.name === name)
             if (!activation || !tool) return mcpTextResult({ error: "Ferramenta indisponível: a execução não tem turno ativo" }, true)
+            const startedAt = Date.now()
+            // Passo da execução (o `publish` do motor OpenCode não registra as ferramentas deste MCP):
+            // entrada sem segredos (marcadores `{{secret:…}}`, nunca o valor).
+            const step = (label: string, detail: string | null, error = false) =>
+                recordRunStep({ _id: new Types.ObjectId(runId), agentId: new Types.ObjectId(activation.agentId) }, { kind: "tool", label: label.slice(0, 200), toolName: tool.name, durationMs: Date.now() - startedAt, detail: detail?.slice(0, 400) ?? null, error })
+            const input = (stringifyForDisplay(redactToolInput(tool, args)) ?? "").slice(0, 400)
             try {
                 const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: "local", signal: activation.controller.signal, secrets: activation.secrets })
+                const pending = (output as { status?: unknown } | null)?.status === "confirmation_required"
+                step(pending ? `${tool.label} (aguardando confirmação)` : tool.label, input || null)
                 return mcpTextResult(compactToolOutput(output))
             } catch (error) {
-                return mcpTextResult({ error: toolErrorMessage(error) }, true)
+                const message = toolErrorMessage(error)
+                step(tool.label, message, true)
+                return mcpTextResult({ error: message }, true)
             }
         },
     })

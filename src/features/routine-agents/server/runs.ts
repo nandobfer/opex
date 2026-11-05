@@ -1,3 +1,4 @@
+import { guardedRoutineTool } from "./tools/guarded"
 import { HTTP_REQUEST_TOOL, httpTools } from "@/features/opex-agent/server/tools/http"
 import { loadRoutineSecretVault } from "./secrets"
 import { routineAgentTitle } from "../identity-plan"
@@ -152,12 +153,21 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         // Segredos (aba Segredos): lidos agora, então uma edição vale já nesta ativação. Só os nomes vão ao modelo.
         const httpEnabled = run.snapshot.engine === "opex" ? (run.snapshot.opex?.enabledTools ?? []).includes(HTTP_REQUEST_TOOL) : run.snapshot.opencode?.httpRequests === true
         activation.secrets = await loadRoutineSecretVault(agent._id)
-        const secretCatalog = httpEnabled ? activation.secrets.list() : []
+        // Motor OpenCode: a Chamada HTTP do MCP da execução segue a política do dono no Agente Opex
+        // (ferramenta desligada fica de fora; "pede confirmação" vira Aguardando confirmação), como no motor Opex.
+        let opencodeHttp: typeof httpTools = []
+        if (run.snapshot.engine === "opencode" && httpEnabled) {
+            const { loadOpexSettings } = await import("@/features/opex-agent/server/settings")
+            const { settings } = await loadOpexSettings()
+            if (settings.disabledTools.includes(HTTP_REQUEST_TOOL)) activation.warnings.push('A ferramenta "Chamada HTTP" está desligada no Agente Opex: a execução segue sem ela.')
+            else opencodeHttp = httpTools.map((tool) => guardedRoutineTool(tool, { activation, confirmIrreversible: run.snapshot.confirmIrreversible, overrides: settings.confirmationOverrides }))
+        }
+        const secretCatalog = httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? activation.secrets.list() : []
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
             ...routineMemoryTools({ slug: agent.slug, label, target, runId }),
             // Motor OpenCode: a Chamada HTTP com segredos sai do servidor Opex, pelo MCP da execução.
-            ...(run.snapshot.engine === "opencode" && httpEnabled ? httpTools : []),
+            ...opencodeHttp,
         ]
         activation.tools = internalTools
         const remaining = remainingActiveMs({ activeMs: run.activeMs ?? 0 }, run.snapshot.limits)
@@ -182,7 +192,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                     maxLiveWaitMinutes: run.snapshot.limits.maxLiveWaitMinutes,
                     memoryBlock: memory.block,
                     toolPrefix,
-                    http: httpEnabled ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
+                    http: httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
                     warnings: activation.warnings,
                     now: new Date(),
                 }),

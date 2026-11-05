@@ -14,6 +14,8 @@ const holder = vi.hoisted(() => ({
   calls: { add: [] as unknown[], remove: [] as unknown[], create: [] as unknown[], update: [] as unknown[], turns: [] as unknown[] },
   runUpdates: [] as unknown[],
   turnOutcome: { outcome: 'done' as string, message: null as string | null },
+  listError: false,
+  updateError: false,
 }))
 
 vi.mock('@/lib/db/models/RoutineAgent', () => ({ RoutineRun: { updateOne: async (_filter: unknown, update: unknown) => void holder.runUpdates.push(update) } }))
@@ -24,7 +26,10 @@ vi.mock('@/lib/ai/opencode-client', () => ({
     if (holder.clientError) throw holder.clientError
     return {
       mcp: {
-        list: async () => ({ data: holder.hostMcps.map((name) => ({ name })) }),
+        list: async () => {
+          if (holder.listError) throw new Error('timeout')
+          return { data: holder.hostMcps.map((name) => ({ name })) }
+        },
         add: async (args: unknown) => void holder.calls.add.push(args),
         remove: async (args: unknown) => void holder.calls.remove.push(args),
       },
@@ -33,7 +38,10 @@ vi.mock('@/lib/ai/opencode-client', () => ({
           if (!holder.existing.has(sessionID)) throw new Error('not found')
           return { id: sessionID }
         },
-        update: async (args: unknown) => void holder.calls.update.push(args),
+        update: async (args: unknown) => {
+          if (holder.updateError) throw new Error('falhou')
+          holder.calls.update.push(args)
+        },
         create: async (args: unknown) => (holder.calls.create.push(args), { id: 'ses_nova' }),
         instructions: { entry: { put: async () => undefined } },
       },
@@ -80,6 +88,8 @@ beforeEach(() => {
   holder.calls = { add: [], remove: [], create: [], update: [], turns: [] }
   holder.runUpdates = []
   holder.turnOutcome = { outcome: 'done', message: null }
+  holder.listError = false
+  holder.updateError = false
 })
 
 describe('routineSessionPermissions', () => {
@@ -135,6 +145,23 @@ describe('runOpencodeEngine', () => {
     expect((await runOpencodeEngine(alive.input)).sessionId).toBe('ses_viva')
     expect(holder.calls.create).toEqual([])
     expect(holder.calls.update).toEqual([expect.objectContaining({ sessionID: 'ses_viva' })])
+  })
+
+  it('falha fechada: sem a lista de MCPs do host, a execução vira Erro sem abrir sessão nem registrar o MCP', async () => {
+    holder.listError = true
+    const result = await runOpencodeEngine(engineInput().input)
+    expect(result.error).toContain('Não foi possível listar os MCPs do host')
+    expect(holder.calls.add).toEqual([])
+    expect(holder.calls.create).toEqual([])
+  })
+
+  it('sessão antiga cujas permissões não puderam ser atualizadas: abre uma sessão nova com as permissões atuais', async () => {
+    holder.existing.add('ses_viva')
+    holder.updateError = true
+    const { input, activation } = engineInput('ses_viva')
+    expect((await runOpencodeEngine(input)).sessionId).toBe('ses_nova')
+    expect(activation.warnings).toContain('Não foi possível atualizar as permissões da sessão anterior do OpenCode: a execução continuou numa sessão nova.')
+    expect((holder.calls.create[0] as { permissions: unknown[] }).permissions).toContainEqual({ action: 'github_*', resource: '*', effect: 'deny' })
   })
 
   it('turno que falha no OpenCode vira Erro com a mensagem', async () => {

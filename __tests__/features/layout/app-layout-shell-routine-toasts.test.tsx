@@ -76,6 +76,22 @@ describe("AppLayoutShell — toasts de atenção dos agentes rotineiros (OPE-130
         expect(mocks.push).toHaveBeenCalledWith(routineAgentHref("a1", "r1"))
     })
 
+    it("fim de execução vira toast de sucesso/erro com \"Abrir execução\"", () => {
+        render(
+            <AppLayoutShell ownerName="Ana">
+                <p>conteúdo</p>
+            </AppLayoutShell>,
+        )
+        emit("routine-run-attention", { id: "r2", agentId: "a1", kind: "finished", status: "completed", agentName: "Vagas" })
+        emit("routine-run-attention", { id: "r3", agentId: "a1", kind: "finished", status: "error", agentName: "Vagas" })
+        const [done, doneOptions] = mocks.toast.success.mock.calls[0] as [string, { action: { label: string; onClick: () => void } }]
+        expect(done).toBe('Execução do agente "Vagas" concluída')
+        expect(doneOptions.action.label).toBe("Abrir execução")
+        doneOptions.action.onClick()
+        expect(mocks.push).toHaveBeenCalledWith(routineAgentHref("a1", "r2"))
+        expect(mocks.toast.error).toHaveBeenCalledTimes(1)
+    })
+
     it("ao desmontar o shell, a assinatura sai", () => {
         const view = render(
             <AppLayoutShell ownerName="Ana">

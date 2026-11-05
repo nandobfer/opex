@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { MIN_MASKABLE_SECRET_LENGTH } from "@/features/http-request/secrets"
 import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { MAX_RUN_REQUEST_CHARS } from "./constants"
 
@@ -157,6 +158,9 @@ export type RoutineListFilter = (typeof ROUTINE_LIST_FILTERS)[number]
 /** Segredos do agente rotineiro (OPE-130, D5): nome `NOME_EM_MAIUSCULAS`, valor cifrado que nunca sai. */
 export const ROUTINE_SECRET_NAME = /^[A-Z][A-Z0-9_]{1,63}$/
 export const MAX_ROUTINE_SECRET_VALUE = 16_384
+/** Abaixo disso o valor não é mascarado com segurança na resposta (`MIN_MASKABLE_SECRET_LENGTH`). */
+export const MIN_ROUTINE_SECRET_VALUE = MIN_MASKABLE_SECRET_LENGTH
+export const ROUTINE_SECRET_TOO_SHORT = `Valor com no mínimo ${MIN_MASKABLE_SECRET_LENGTH} caracteres (valores mais curtos não podem ser mascarados na resposta)`
 export const MAX_ROUTINE_SECRETS = 50
 /** Domínio (`api.x.com`) ou curinga de subdomínio (`*.x.com`). */
 export const ROUTINE_SECRET_HOST = /^(\*\.)?([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)*[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(:\d{1,5})?$/
@@ -171,13 +175,16 @@ const secretFields = {
 
 export const routineSecretCreateSchema = z.object({
     ...secretFields,
-    value: z.string().min(1, "Informe o valor").max(MAX_ROUTINE_SECRET_VALUE, "Valor com no máximo 16 KB"),
+    value: z.string().min(1, "Informe o valor").min(MIN_ROUTINE_SECRET_VALUE, ROUTINE_SECRET_TOO_SHORT).max(MAX_ROUTINE_SECRET_VALUE, "Valor com no máximo 16 KB"),
 })
 export type RoutineSecretCreateInput = z.infer<typeof routineSecretCreateSchema>
 
 /** Edição: valor vazio mantém o atual. */
 export const routineSecretUpdateSchema = z.object({
     ...secretFields,
-    value: z.string().max(MAX_ROUTINE_SECRET_VALUE, "Valor com no máximo 16 KB"),
+    value: z
+        .string()
+        .max(MAX_ROUTINE_SECRET_VALUE, "Valor com no máximo 16 KB")
+        .refine((value) => value === "" || value.length >= MIN_ROUTINE_SECRET_VALUE, ROUTINE_SECRET_TOO_SHORT),
 })
 export type RoutineSecretUpdateInput = z.infer<typeof routineSecretUpdateSchema>

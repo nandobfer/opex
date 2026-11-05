@@ -8,6 +8,9 @@
 
 export const SECRET_PLACEHOLDER = /\{\{\s*secret:([A-Z][A-Z0-9_]{1,63})\s*\}\}/g
 
+/** Valores mais curtos não são mascarados (casariam com qualquer texto): o cadastro exige este mínimo. */
+export const MIN_MASKABLE_SECRET_LENGTH = 4
+
 export const placeholderOf = (name: string) => `{{secret:${name}}}`
 
 /** Nomes de segredo usados em qualquer string do valor (recursivo). */
@@ -52,9 +55,9 @@ const base64Url = (value: string) => value.replace(/\+/g, "-").replace(/\//g, "_
 function maskForms(secrets: readonly { name: string; value: string }[]): { form: string; name: string }[] {
     const forms: { form: string; name: string }[] = []
     for (const { name, value } of secrets) {
-        if (value.length < 4) continue
+        if (value.length < MIN_MASKABLE_SECRET_LENGTH) continue
         const b64 = Buffer.from(value, "utf8").toString("base64")
-        for (const form of new Set([value, encodeURIComponent(value), b64, b64.replace(/=+$/, ""), base64Url(b64)])) if (form.length >= 4) forms.push({ form, name })
+        for (const form of new Set([value, encodeURIComponent(value), b64, b64.replace(/=+$/, ""), base64Url(b64)])) if (form.length >= MIN_MASKABLE_SECRET_LENGTH) forms.push({ form, name })
     }
     return forms.sort((a, b) => b.form.length - a.form.length)
 }

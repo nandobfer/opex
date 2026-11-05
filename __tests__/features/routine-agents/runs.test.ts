@@ -18,7 +18,9 @@ const holder = vi.hoisted(() => ({
   executed: [] as { name: string; input: unknown }[],
   startProvisioning: vi.fn(async () => undefined),
   events: [] as { event: string; payload: Record<string, unknown> }[],
+  opexSettings: { disabledTools: [] as string[], confirmationOverrides: {} as Record<string, boolean> },
 }))
+vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: holder.opexSettings }) }))
 
 vi.mock('@/lib/db', () => ({
   dbConnect: async () => undefined,
@@ -544,6 +546,22 @@ describe('segredos e Chamada HTTP na ativação (critério aprovado OPE-130, D5)
     await flush()
     expect(names[0]).not.toContain('http_request')
     expect(names[1]).toContain('http_request')
+  })
+
+  it('critério aprovado (OPE-130, D6): Chamada HTTP desligada pelo dono no Agente Opex fica fora do MCP da execução, com aviso', async () => {
+    holder.opexSettings = { disabledTools: ['http_request'], confirmationOverrides: {} }
+    const names: string[][] = []
+    holder.engine = async (input) => {
+      names.push(input.internalTools.map((tool) => tool.name))
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const agent = seedAgent({ slug: 'on2', engine: 'opencode', opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [], httpRequests: true } })
+    const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(names[0]).not.toContain('http_request')
+    expect(run(runId).warnings).toContain('A ferramenta "Chamada HTTP" está desligada no Agente Opex: a execução segue sem ela.')
+    holder.opexSettings = { disabledTools: [], confirmationOverrides: {} }
   })
 })
 
