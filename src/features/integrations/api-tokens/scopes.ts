@@ -24,11 +24,14 @@ const TOOL_PREFIX = "mcp:owner:tool:"
 const GROUP_PREFIX = "mcp:owner:group:"
 
 export const apiRouteScope = (resource: string) => `${API_PREFIX}${resource}`
+/** Webhook externo dos agentes rotineiros (`POST /api/v1/routine-agents/{id}/runs`, OPE-130). */
+export const ROUTINE_AGENTS_API_SCOPE = "api:v1:routine-agents"
 export const mcpOwnerToolScope = (tool: string) => `${TOOL_PREFIX}${tool}`
 export const mcpOwnerGroupScope = (group: string) => `${GROUP_PREFIX}${group}`
 
 /** Grupos que o token não recebe: os arquivos do chat dependem de uma conversa do Maddox. */
-export const MADDOX_TOKEN_EXCLUDED_GROUPS: readonly string[] = ["files"]
+// `http` (OPE-130, D7): sem bloqueio de rede, liberá-lo a um token faria do Opex um proxy aberto da rede interna.
+export const MADDOX_TOKEN_EXCLUDED_GROUPS: readonly string[] = ["files", "http"]
 
 const SCOPE_PATTERN = /^(api:v1:(\*|[a-z0-9][a-z0-9_.-]*)|mcp:owner|mcp:owner:destructive|mcp:owner:tool:(\*|[A-Za-z0-9_-]+)|mcp:owner:group:[a-z0-9][a-z0-9-]*)$/
 

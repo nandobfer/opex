@@ -12,6 +12,10 @@
  * - **Agente Arquiteto**: uma lista própria, nas instruções de toda geração do diagrama do plano.
  * - **agente desenvolvedor** (mesas e forks): as globais, que valem em todas as centrais, e uma lista
  *   por central (`scope: "central"`).
+ * - **Agentes rotineiros** (OPE-130): o global dos rotineiros e uma lista por agente rotineiro
+ *   (`scope: "routine"`, canal `agentes/rotineiros/<slug>`). Cada agente rotineiro é uma identidade
+ *   dinâmica no Engramind (`opex/rotineiro-<slug>`, fora de `MEMORY_IDENTITIES`), provisionada pela
+ *   feature `routine-agents`.
  */
 
 export const AI_AGENT_IDS = [
@@ -28,6 +32,8 @@ export const AI_AGENT_IDS = [
     "architect",
     "developer-global",
     "developer-central",
+    "routine-global",
+    "routine-specific",
 ] as const
 export type AiAgentId = (typeof AI_AGENT_IDS)[number]
 
@@ -73,8 +79,8 @@ export interface AiAgentDef {
     title: string
     description: string
     tab: string
-    /** `central`: uma lista por central; `client`: uma lista por cliente do portal. */
-    scope?: "central" | "client"
+    /** `central`: uma lista por central; `client`: uma lista por cliente do portal; `routine`: uma por agente rotineiro (slug). */
+    scope?: "central" | "client" | "routine"
     /** Canal do Engramind (nas listas com escopo, o prefixo seguido do id). */
     channel: string
     /** Agente dono da lista (`null` nas Memórias do Opex, de todos). */
@@ -189,6 +195,23 @@ export const AI_AGENTS: Record<AiAgentId, AiAgentDef> = {
         channel: "agentes/desenvolvedor/central",
         consumer: "desenvolvedor",
     },
+    "routine-global": {
+        label: "todos os agentes rotineiros",
+        title: "Memórias dos rotineiros",
+        description: "Instruções e fatos permanentes que valem para todos os agentes rotineiros. O dono e os próprios rotineiros gravam aqui.",
+        tab: "rotineiros",
+        channel: "agentes/rotineiros/global",
+        consumer: null,
+    },
+    "routine-specific": {
+        label: "este agente rotineiro",
+        title: "Memórias do agente rotineiro",
+        description: "Instruções e fatos permanentes que só este agente rotineiro segue: o que ele já fez, as correções do dono e as entradas gravadas na página dele.",
+        tab: "rotineiros",
+        scope: "routine",
+        channel: "agentes/rotineiros",
+        consumer: null,
+    },
 }
 
 /** Listas sem escopo exibidas numa aba de `/integracoes/ia` (as por central/cliente têm card próprio). */
@@ -201,6 +224,11 @@ export function isCentralScopedAgent(agentId: AiAgentId): boolean {
     return AI_AGENTS[agentId].scope === "central"
 }
 
+/** Lista com uma coleção por agente rotineiro (a memória exige `routineSlug`). */
+export function isRoutineScopedAgent(agentId: AiAgentId): boolean {
+    return AI_AGENTS[agentId].scope === "routine"
+}
+
 /** Lista com uma coleção por cliente do portal (a memória exige `clientId`). */
 export function isClientScopedAgent(agentId: AiAgentId): boolean {
     return AI_AGENTS[agentId].scope === "client"
@@ -210,18 +238,29 @@ export function isAiAgentId(value: string): value is AiAgentId {
     return (AI_AGENT_IDS as readonly string[]).includes(value)
 }
 
-/** Lista de uma central ou de um cliente (as demais listas ignoram). */
+/** Lista de uma central, de um cliente ou de um agente rotineiro (as demais listas ignoram). */
 export interface MemoryListScope {
     centralId?: string | null
     clientId?: string | null
+    routineSlug?: string | null
 }
 
 const OBJECT_ID = /^[a-f0-9]{24}$/
+/** Slug de agente rotineiro (`global` é o canal dos rotineiros, nunca um agente). */
+const ROUTINE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
+
+export function isRoutineSlug(value: string | null | undefined): value is string {
+    return Boolean(value) && ROUTINE_SLUG.test(value!) && value !== "global" && value!.length <= 60
+}
 
 /** Canal do Engramind de uma lista (nas listas com escopo, `null` sem um id válido). */
 export function memoryChannelOf(agentId: AiAgentId, scope: MemoryListScope = {}): string | null {
     const def = AI_AGENTS[agentId]
     if (!def.scope) return def.channel
+    if (def.scope === "routine") {
+        const slug = scope.routineSlug?.trim()
+        return isRoutineSlug(slug) ? `${def.channel}/${slug}` : null
+    }
     const id = (def.scope === "central" ? scope.centralId : scope.clientId)?.trim().toLowerCase()
     return id && OBJECT_ID.test(id) ? `${def.channel}/${id}` : null
 }
@@ -230,6 +269,7 @@ export interface ResolvedMemoryList {
     agentId: AiAgentId
     centralId?: string
     clientId?: string
+    routineSlug?: string
 }
 
 /** Lista de um canal (webhook, contexto); `null` para canal fora do mapeamento (ignorado pelos cards). */
@@ -243,6 +283,10 @@ export function listOfChannel(slug: string | null | undefined): ResolvedMemoryLi
         }
         if (!slug.startsWith(`${def.channel}/`)) continue
         const id = slug.slice(def.channel.length + 1)
+        if (def.scope === "routine") {
+            if (!isRoutineSlug(id)) continue
+            return { agentId, routineSlug: id }
+        }
         if (!OBJECT_ID.test(id)) return null
         return def.scope === "central" ? { agentId, centralId: id } : { agentId, clientId: id }
     }
@@ -323,5 +367,18 @@ export function maddoxMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
 
 /** Agente (`app/agente`) de memórias do Opex no Engramind (aba Identidades marca "Memórias do Opex"). */
 export function isOpexMemoryAgent(appSlug: string | null | undefined, agentSlug: string | null | undefined): boolean {
-    return appSlug === "opex" && Boolean(agentSlug) && (MEMORY_IDENTITIES as readonly string[]).includes(agentSlug!.split("/").pop()!)
+    if (appSlug !== "opex" || !agentSlug) return false
+    const slug = agentSlug.split("/").pop()!
+    return (MEMORY_IDENTITIES as readonly string[]).includes(slug) || isRoutineAgentIdentity(slug)
 }
+
+/** Prefixo do agente de um rotineiro no Engramind (`opex/rotineiro-<slug>`, OPE-130). */
+export const ROUTINE_IDENTITY_PREFIX = "rotineiro-"
+export type RoutineIdentity = `rotineiro-${string}`
+
+/** Identidade de memória de um agente rotineiro (`rotineiro-<slug>`). */
+export function isRoutineAgentIdentity(slug: string | null | undefined): slug is RoutineIdentity {
+    return Boolean(slug?.startsWith(ROUTINE_IDENTITY_PREFIX)) && isRoutineSlug(slug!.slice(ROUTINE_IDENTITY_PREFIX.length))
+}
+
+export const routineIdentityOf = (slug: string): RoutineIdentity => `${ROUTINE_IDENTITY_PREFIX}${slug}`

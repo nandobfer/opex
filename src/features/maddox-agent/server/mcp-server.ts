@@ -130,7 +130,7 @@ export async function callMaddoxToolAsToken(token: ApiTokenDto, name: string, ar
             sessionId: "",
             actorId: actorIdOf(scope),
             scope,
-            origin: { kind: "api-token", tokenId: token.id, nome: token.nome, prefixo: token.prefixo },
+            origin: { kind: "api-token", tokenId: token.id, nome: token.nome, prefixo: token.prefixo, scopes: token.escopos },
         })
         log.info({ ...ref, tool: name, scope: "owner", durationMs: Date.now() - startedAt, ok: true }, "[maddox] ferramenta do Opex por token de sistema")
         return mcpTextResult(compactToolOutput(output))

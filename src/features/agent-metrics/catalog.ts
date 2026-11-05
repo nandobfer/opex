@@ -1,4 +1,4 @@
-import { Bot, Calculator, CodeXml, GitPullRequest, GraduationCap, Orbit, Swords, Tags, Wand2, type LucideIcon } from "lucide-react"
+import { Bot, Calculator, CodeXml, GitPullRequest, GraduationCap, Orbit, Repeat, Swords, Tags, Wand2, type LucideIcon } from "lucide-react"
 import type { AiTab } from "@/features/ai/constants"
 import { ARCHITECT_ICON } from "@/features/architect-agent/components/icons"
 
@@ -9,7 +9,7 @@ import { ARCHITECT_ICON } from "@/features/architect-agent/components/icons"
  * palavra "Agente"; o título da página leva.
  */
 
-export const AGENT_IDS = ["opex", "maddox", "orcamentista", "catalogador", "refinador", "desenvolvedor", "arquiteto", "adversario", "revisor", "mentor"] as const
+export const AGENT_IDS = ["opex", "maddox", "orcamentista", "catalogador", "refinador", "desenvolvedor", "arquiteto", "adversario", "revisor", "mentor", "rotineiros"] as const
 export type AgentId = (typeof AGENT_IDS)[number]
 
 export interface AgentDef {
@@ -152,6 +152,19 @@ export const AGENT_CATALOG: readonly AgentDef[] = [
         filters: { client: true, repo: true },
         hasHistory: false,
         hasMemories: false,
+    },
+    {
+        // OPE-130: um item para todos os agentes rotineiros; a página lista os agentes e cada um tem a sua.
+        id: "rotineiros",
+        navLabel: "Rotineiros",
+        title: "Agentes rotineiros",
+        description: "Agentes autônomos configuráveis que executam sozinhos, esperam, hibernam e pedem confirmação antes de ações irreversíveis. Atualiza em tempo real.",
+        icon: Repeat,
+        href: "/agentes-rotineiros",
+        settingsTab: "rotineiros",
+        filters: { client: false, repo: false },
+        hasHistory: false,
+        hasMemories: true,
     },
 ]
 

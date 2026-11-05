@@ -11,6 +11,7 @@ import { environmentTools } from "./environments"
 import { fileTools } from "./files"
 import { githubTools } from "./github"
 import { hostTools } from "./host"
+import { httpTools } from "./http"
 import { financeTools } from "./finance"
 import { integrationTools } from "./integrations"
 import { issueTools } from "./issues"
@@ -20,6 +21,7 @@ import { memoryTools } from "./memories"
 import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { previewTools } from "./previews"
+import { routineAgentTools } from "./routine-agents"
 import { serviceTools } from "./services"
 import { taskTools } from "./tasks"
 import { timeTools } from "./time"
@@ -40,6 +42,8 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...issueTools,
     ...integrationTools,
     ...jobTools,
+    ...routineAgentTools,
+    ...httpTools,
     ...aiSettingsTools,
     ...prReviewTools,
     ...dashboardTools,

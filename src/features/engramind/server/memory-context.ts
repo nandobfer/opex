@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto"
-import type { MemoryConsumer } from "@/features/ai/agents"
+import type { MemoryConsumer, RoutineIdentity } from "@/features/ai/agents"
 import type { ContextView } from "../types"
-import { engramindCall } from "./client"
+import { engramindCall, type EngramindTarget } from "./client"
 import { agentTarget } from "./memory-network"
 import { ENGRAMIND_STATE_ID, EngramindContextCache, EngramindState, engramindDb } from "./models"
 import { engramindLog, publishEngramind } from "./shared"
@@ -43,9 +43,14 @@ export interface MemoryContextResult {
 export interface MemoryContextOptions {
     /** Foco do turno (já sem segredos e cortado: `buildMemoryFocus`). Nunca vai para log, cache ou evento. */
     focus?: string
+    /** Alvo com o token do agente (agentes rotineiros guardam o próprio token, OPE-130). */
+    target?: EngramindTarget
 }
 
-export const contextCacheKey = (consumer: MemoryConsumer, channels: readonly string[]) => createHash("sha256").update(`${consumer}|${[...channels].sort().join(",")}`).digest("hex")
+/** Quem lê o contexto: um consumidor fixo ou um agente rotineiro (`rotineiro-<slug>`). */
+export type ContextConsumer = MemoryConsumer | RoutineIdentity
+
+export const contextCacheKey = (consumer: ContextConsumer, channels: readonly string[]) => createHash("sha256").update(`${consumer}|${[...channels].sort().join(",")}`).digest("hex")
 
 /** Hash do foco normalizado (o texto nunca é gravado). */
 export const focusHashOf = (focus: string | undefined) => (focus ? createHash("sha256").update(focus.replace(/\s+/g, " ").trim()).digest("hex") : null)
@@ -71,7 +76,7 @@ interface DeliveryMeta {
  * atrasa a resposta nem lança. O consumo ao vivo da rede vem do webhook `memory.consumed` do Engramind
  * (OPE-116), emitido pelo próprio `get_context` com o token do agente (inclusive o `304`).
  */
-function recordContextDelivery(consumer: MemoryConsumer, channels: readonly string[], memoryIds: readonly string[], delivered: readonly string[], meta: DeliveryMeta): void {
+function recordContextDelivery(consumer: ContextConsumer, channels: readonly string[], memoryIds: readonly string[], delivered: readonly string[], meta: DeliveryMeta): void {
     void import("./deliveries")
         .then(({ recordDelivery }) => recordDelivery(consumer, { fullIds: memoryIds, titleIds: meta.titleIds, counts: meta.counts, channels, delivered, version: meta.version, focusMode: meta.focusMode, source: meta.source }))
         .catch((error: unknown) => engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] última entrega do contexto não registrada"))
@@ -87,7 +92,7 @@ async function markHealth(ok: boolean, reason: string | null): Promise<void> {
     if (wasUnavailable === ok) await publishEngramind({ type: "memories.context" }).catch(() => undefined)
 }
 
-export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: readonly string[], options: MemoryContextOptions = {}): Promise<MemoryContextResult> {
+export async function getAgentMemoryContext(consumer: ContextConsumer, channels: readonly string[], options: MemoryContextOptions = {}): Promise<MemoryContextResult> {
     let cached: Awaited<ReturnType<typeof readCache>> = null
     try {
         await engramindDb()
@@ -96,7 +101,7 @@ export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: 
         engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] não foi possível ler o cache do contexto das memórias")
     }
     try {
-        const target = await agentTarget(consumer)
+        const target = options.target ?? (consumer.startsWith("rotineiro-") ? null : await agentTarget(consumer as MemoryConsumer))
         if (!target) throw new Error("token do agente de memórias indisponível (confira canais e agentes na aba Migração de memórias)")
         let focus = options.focus?.trim() ? options.focus : undefined
         const fetchContext = async (withFocus: string | undefined) => {
@@ -155,7 +160,7 @@ export async function getAgentMemoryContext(consumer: MemoryConsumer, channels: 
     }
 }
 
-async function readCache(consumer: MemoryConsumer, channels: readonly string[]) {
+async function readCache(consumer: ContextConsumer, channels: readonly string[]) {
     return EngramindContextCache.findById(contextCacheKey(consumer, channels)).lean()
 }
 

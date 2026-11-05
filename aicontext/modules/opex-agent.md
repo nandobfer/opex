@@ -264,6 +264,7 @@ risco (os catálogos são distintos).
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
 | Jobs agendados | `list_jobs` (dono e portal, filtro `origin`), `schedule_job`, `update_job` (só jobs do dono), `cancel_job`* (dono e portal) — ver "Jobs" |
+| Agentes rotineiros (só no dono) | `list_routine_agents`, `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`, `archive_routine_agent`*, `reprovision_routine_agent`, `run_routine_agent`, `list_routine_runs`, `cancel_routine_run`*, `confirm_routine_action`, `reject_routine_action`, `add_routine_entry` — os mesmos serviços da aba Rotineiros e das páginas `/agentes-rotineiros`; nenhum DTO traz o token do agente no Engramind. Ver `modules/routine-agents.md` |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
 | Agente Revisor | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
 | Dashboards | `get_dashboard` |
@@ -477,6 +478,31 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
 - **Auditoria** na entidade `McpServidor` (criar/editar/habilitar/confirmação/excluir; sem segredos,
   sem argumentos e sem a query da URL) e evento `opex-mcp-updated` `{ id }` em `private-app`
   (`useOpexMcpRealtime`).
+
+### Chamadas HTTP
+
+Grupo `http` (`server/tools/http.ts`, núcleo em `src/features/http-request/`), só no dono. Decisões da
+OPE-130: **D6** — uma ferramenta `http_request` ("Chamada HTTP") para qualquer método, `risk: "write"`
+e **sem** confirmação por padrão (ajustável na árvore de ferramentas); **D7** — sem bloqueio de
+endereços (inclui a rede interna e os containers), e por isso o grupo fica **fora dos tokens de
+sistema** (`MADDOX_TOKEN_EXCLUDED_GROUPS`).
+
+- Entrada (`httpRequestInputSchema`): `method` (GET padrão, POST, PUT, PATCH, DELETE, HEAD, OPTIONS),
+  `url` (http/https), `query`, `headers` (qualquer um), `body` (`json` value · `text` value/contentType
+  · `form` fields · `multipart` fields/files em base64 — o Content-Type com boundary é do `fetch` ·
+  `base64` value/contentType), `timeoutSeconds` (1–120, padrão 30), `followRedirects` (padrão sim, até
+  10; 303 e 301/302 de POST viram GET; `Authorization`/`Cookie` saem em outra origem), `responseType`
+  (`auto` padrão, `text`, `json`, `base64`, `none`) e `maxResponseBytes` (padrão 1 MB, máximo 5 MB,
+  lido em stream e cortado).
+- Saída: `{ ok, status, statusText, url, redirected, headers (set-cookie em lista), contentType,
+  bodyType, body, bytes, truncated, durationMs, warning? }`. 4xx/5xx **não** é erro (`ok: false`);
+  rede, DNS, TLS e tempo limite viram erro em pt-BR. Sem cookie jar.
+- **Segredos** (só nos agentes rotineiros, `context.secrets`): `{{secret:NOME}}` na URL, query,
+  cabeçalhos e corpo é trocado só no servidor; segredo inexistente ou fora do domínio permitido
+  (conferido também em cada redirecionamento) é recusado sem enviar; tudo o que volta é mascarado
+  (literal, URL e base64). No chat, `{{secret:…}}` é recusado ("Segredos só existem nos agentes
+  rotineiros"). Ver `aicontext/modules/routine-agents.md`, "Segredos".
+- Log Pino só com método, host, status, duração e bytes (sem URL completa, cabeçalhos nem corpo).
 
 ### Terminal do host
 
