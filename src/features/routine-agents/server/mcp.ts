@@ -3,6 +3,7 @@ import { JSON_RPC_ERRORS, MCP_UNAUTHORIZED_CODE, handleMcpBody, mcpTextResult } 
 import { Types } from "mongoose"
 import { compactToolOutput, redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
 import { recordRunStep } from "./steps"
+import { TURN_ALREADY_CLOSED } from "./tools/guarded"
 import { toolErrorMessage } from "@/features/opex-agent/server/tools/define"
 import { RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { activationOf } from "./hub"
@@ -56,6 +57,12 @@ export async function handleRoutineRunMcpRequest(runId: string, req: Request): P
             const step = (label: string, detail: string | null, error = false) =>
                 recordRunStep({ _id: new Types.ObjectId(runId), agentId: new Types.ObjectId(activation.agentId) }, { kind: "tool", label: label.slice(0, 200), toolName: tool.name, durationMs: Date.now() - startedAt, detail: detail?.slice(0, 400) ?? null, error })
             const input = (stringifyForDisplay(redactToolInput(tool, args)) ?? "").slice(0, 400)
+            // Mesma regra do motor Opex: a primeira ferramenta que encerra o turno (confirmação, hibernação,
+            // conclusão) vence; as chamadas seguintes (inclusive paralelas) não executam nem a sobrescrevem.
+            if (activation.outcome !== null) {
+                step(`${tool.label} (não executada: turno já encerrado)`, input || null)
+                return mcpTextResult(TURN_ALREADY_CLOSED)
+            }
             try {
                 const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: "local", signal: activation.controller.signal, secrets: activation.secrets })
                 const pending = (output as { status?: unknown } | null)?.status === "confirmation_required"

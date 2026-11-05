@@ -89,6 +89,27 @@ describe('MCP da execução', () => {
     }
   })
 
+  it('critério aprovado (OPE-130, primeira que encerra o turno vence): no MCP, finish depois de request_confirmation e hibernate depois de finish não sobrescrevem', async () => {
+    const activation = beginActivation({ runId: RUN, agentId: 'a'.repeat(24), baseTokens: 0, baseActiveMs: 0 })
+    activation.tools = routineControlTools({ activation, limits: EMPTY_ROUTINE_LIMITS, confirmIrreversible: true, setPhase: async () => undefined })
+    const call = (name: string, args: unknown, id: number) => rpc({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } })
+    await call('request_confirmation', { summary: 'Enviar a candidatura para a vaga X' }, 10)
+    const first = activation.outcome
+    expect(first).toMatchObject({ kind: 'confirmation' })
+    const closed = (await (await call('finish', { report: 'Pronto' }, 11)).json()) as { result: { content: { text: string }[] } }
+    expect(closed.result.content[0]!.text).toContain('not_executed')
+    expect(activation.outcome).toBe(first)
+
+    resetActivationsForTests()
+    const other = beginActivation({ runId: RUN, agentId: 'a'.repeat(24), baseTokens: 0, baseActiveMs: 0 })
+    other.tools = routineControlTools({ activation: other, limits: EMPTY_ROUTINE_LIMITS, confirmIrreversible: true, setPhase: async () => undefined })
+    await call('finish', { report: 'Concluído' }, 12)
+    await call('hibernate', { minutes: 5, reason: 'esperar' }, 13)
+    expect(other.outcome).toEqual({ kind: 'finish', report: 'Concluído' })
+    await flush()
+    expect(holder.steps.some((step) => String(step.label).includes('não executada: turno já encerrado'))).toBe(true)
+  })
+
   it('a sessão do OpenCode nega os MCPs do host não liberados e libera o da execução', () => {
     expect(routineSessionPermissions(['playwright', 'github', 'rotina_x'], ['playwright'], 'rotina_x')).toEqual([
       { action: 'github_*', resource: '*', effect: 'deny' },
