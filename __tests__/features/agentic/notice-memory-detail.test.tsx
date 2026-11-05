@@ -16,6 +16,7 @@ vi.mock("@/lib/api", async (original) => {
 })
 
 import { NoticeMemoryDetail } from "@/features/agentic/components/workbench/NoticeMemoryDetail"
+import { TimelineItemView } from "@/features/agentic/components/workbench/TimelineItemView"
 import type { WorkbenchNoticeMemoryRef } from "@/features/agentic/types"
 
 /** OPE-139: painel do aviso de memória na Saída da IA — lê a memória do Engramind só ao abrir. */
@@ -46,6 +47,10 @@ function renderNotice(memories: WorkbenchNoticeMemoryRef[]) {
         </QueryClientProvider>,
     )
 }
+const RUN_ID = "f".repeat(24)
+const GLOBAL_PROPOSAL = { action: "create", memoryId: null, text: "Proposta global.", target: "developer-global", centralId: null }
+const CENTRAL_PROPOSAL = { action: "update", memoryId: "m_old", text: "Proposta da central.", target: "developer-central", centralId: C }
+const mentorRun = (overrides: Record<string, unknown>) => ({ id: RUN_ID, status: "suggested", proposal: GLOBAL_PROPOSAL, extraProposal: CENTRAL_PROPOSAL, memoryId: null, extraMemoryId: null, ...overrides })
 const open = () => fireEvent.click(screen.getByRole("button", { name: /ver detalhes/ }))
 const panel = () => screen.getByTestId("memory-detail-panel")
 const memoryCalls = () => mocks.get.mock.calls.map((call) => call[0] as string).filter((path) => path !== "/ai/memories/meta")
@@ -120,5 +125,84 @@ describe("NoticeMemoryDetail", () => {
         await waitFor(() => expect(within(panel()).getByText("Rodar só os testes afetados")).toBeTruthy())
         fireEvent.click(within(panel()).getByRole("radio", { name: "Parte separada" }))
         await waitFor(() => expect(within(panel()).getByText("Parte da central")).toBeTruthy())
+    })
+
+    describe("sugestão do Mentor depois da decisão", () => {
+        it("aprovada (principal): mostra a memória gravada, lida do Engramind", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({ status: "created", memoryId: "m_main" }))
+            routes["/ai/agents/developer-global/memories/m_main"] = () => ok({ ...MEMORY, id: "m_main", resumo: "Memória global gravada" })
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "main" }])
+            open()
+            await waitFor(() => expect(within(panel()).getByText("Memória global gravada")).toBeTruthy())
+            expect(panel().textContent).toContain("Memória nova")
+            expect(panel().textContent).not.toContain("Sugestão, ainda não gravada")
+            expect(memoryCalls()).toContain("/ai/agents/developer-global/memories/m_main")
+        })
+
+        it("aprovada (parte separada): lê a memória da outra lista, com a central e a ação da parte", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({ status: "created", memoryId: "m_main", extraMemoryId: "m_extra" }))
+            routes[`/agentic/centrals/${C}/memories/m_extra`] = () => ok({ ...MEMORY, id: "m_extra", resumo: "Memória da central gravada" })
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "extra" }])
+            open()
+            await waitFor(() => expect(within(panel()).getByText("Memória da central gravada")).toBeTruthy())
+            expect(panel().textContent).toContain("Memória editada")
+            expect(panel().textContent).toContain(`agentes/desenvolvedor/central/${C}`)
+            expect(memoryCalls()).not.toContain("/ai/agents/developer-global/memories/m_main")
+        })
+
+        it("parte separada ainda aguardando: mostra a proposta dela como não gravada", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({}))
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "extra" }])
+            open()
+            await waitFor(() => expect(panel().textContent).toContain("Proposta da central."))
+            expect(panel().textContent).toContain("Sugestão, ainda não gravada")
+            expect(panel().textContent).toContain("Memórias da central")
+        })
+
+        it("parte separada descartada na aprovação: avisa e não lê memória", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({ status: "created", memoryId: "m_main", extraProposal: null }))
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "extra" }])
+            open()
+            await waitFor(() => expect(panel().textContent).toContain("Esta parte da sugestão foi descartada."))
+            expect(memoryCalls()).toEqual([`/adversarial/mentor/runs/${RUN_ID}`])
+        })
+
+        it("descartada: mostra a proposta com o status, sem memória", async () => {
+            routes[`/adversarial/mentor/runs/${RUN_ID}`] = () => ok(mentorRun({ status: "discarded" }))
+            renderNotice([{ kind: "suggestion", mentorRunId: RUN_ID, part: "main" }])
+            open()
+            await waitFor(() => expect(panel().textContent).toContain("Proposta global."))
+            expect(panel().textContent).not.toContain("Sugestão, ainda não gravada")
+            expect(memoryCalls()).toEqual([`/adversarial/mentor/runs/${RUN_ID}`])
+        })
+    })
+})
+
+describe("TimelineItemView: aviso de memória na Saída da IA", () => {
+    const renderItem = (memories?: WorkbenchNoticeMemoryRef[]) => {
+        const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+        return render(
+            <QueryClientProvider client={client}>
+                <TimelineItemView item={{ kind: "notice", key: "n1", level: "info", message: "Memória gravada pelo agente: Sempre rode", ...(memories ? { memories } : {}) }} />
+            </QueryClientProvider>,
+        )
+    }
+
+    it("aviso com referência: o texto abre o painel com a memória", async () => {
+        routes["/ai/agents/developer-global/memories/m_1"] = () => ok(MEMORY)
+        renderItem([{ kind: "memory", agentId: "developer-global", memoryId: "m_1", action: "created" }])
+        open()
+        await waitFor(() => expect(within(panel()).getByText("Rodar só os testes afetados")).toBeTruthy())
+        expect(within(panel()).getByLabelText("Texto completo da memória").textContent).toBe(MEMORY.texto)
+    })
+
+    it("aviso sem referência (vazia ou ausente): texto simples, sem gatilho", () => {
+        const { unmount } = renderItem([])
+        expect(screen.getByText("Memória gravada pelo agente: Sempre rode").tagName).toBe("SPAN")
+        expect(screen.queryByRole("button", { name: /ver detalhes/ })).toBeNull()
+        unmount()
+        renderItem()
+        expect(screen.queryByRole("button", { name: /ver detalhes/ })).toBeNull()
+        expect(mocks.get).not.toHaveBeenCalled()
     })
 })
