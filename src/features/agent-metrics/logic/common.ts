@@ -171,6 +171,39 @@ export interface RunTotals {
     durationCount: number
 }
 
+/** Execução como `runTotals` precisa (campos de `agent_runs`; ausente ou `null` = sem registro). */
+export interface RunTotalsItem {
+    ok?: boolean | null
+    costUsd?: number | null
+    inputTokens?: number | null
+    outputTokens?: number | null
+    durationMs?: number | null
+}
+
+const isNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value)
+
+/** Soma as execuções contando só quem tem o registro (custo, tokens — entrada ou saída — e duração). */
+export function runTotals(rows: readonly RunTotalsItem[]): RunTotals {
+    const totals: RunTotals = { runs: 0, failures: 0, costSum: 0, costCount: 0, tokenSum: 0, tokenCount: 0, durationSum: 0, durationCount: 0 }
+    for (const row of rows) {
+        totals.runs++
+        if (row.ok === false) totals.failures++
+        if (isNumber(row.costUsd)) {
+            totals.costSum += row.costUsd
+            totals.costCount++
+        }
+        if (isNumber(row.inputTokens) || isNumber(row.outputTokens)) {
+            totals.tokenSum += (isNumber(row.inputTokens) ? row.inputTokens : 0) + (isNumber(row.outputTokens) ? row.outputTokens : 0)
+            totals.tokenCount++
+        }
+        if (isNumber(row.durationMs)) {
+            totals.durationSum += row.durationMs
+            totals.durationCount++
+        }
+    }
+    return totals
+}
+
 export type RunKpiId = "runs" | "run-failures" | "run-cost" | "run-tokens" | "run-duration"
 
 /**
