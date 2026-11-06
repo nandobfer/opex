@@ -541,25 +541,42 @@ const writeTools = [
             const current = await withContext(where, () => githubRequest<RestIssue>(path, { signal: context.signal, label: "opex: issue" }))
             if (current.pull_request) throw new OpexToolError(`${repoName}#${number} é um pull request, não uma issue.`)
 
-            const patch: { title?: string; body?: string; labels?: string[] } = {}
+            const patch: { title?: string; body?: string } = {}
             if (title !== undefined) patch.title = title
             if (body !== undefined) patch.body = body
-            let notPresent: string[] = []
-            const labelsBefore = labelNamesOf(current)
-            if (addLabels.length || removeLabels.length) {
-                const toAdd = addLabels.length ? await existingLabels(repoName, addLabels, context.signal) : []
-                notPresent = removeLabels.filter((name) => !labelsBefore.some((label) => sameLabel(label, name)))
-                const merged = [...labelsBefore, ...toAdd.filter((name) => !labelsBefore.some((label) => sameLabel(label, name)))]
-                patch.labels = merged.filter((label) => !removeLabels.some((name) => sameLabel(label, name)))
+            // Labels pelos endpoints próprios (POST adiciona, DELETE remove uma por vez): atômicos por label,
+            // não regravam o conjunto lido antes e não desfazem uma mudança feita no meio (ex.: a sincronização).
+            const toAdd = addLabels.length ? await existingLabels(repoName, addLabels, context.signal) : []
+            const removing = [...new Map(removeLabels.map((name) => [name.toLowerCase(), name])).values()].filter((name) => !toAdd.some((label) => sameLabel(label, name)))
+
+            if (Object.keys(patch).length) {
+                await withContext(where, () => githubRequest<RestIssue>(path, { method: "PATCH", body: patch, signal: context.signal, label: "opex: editar issue" })).catch(rejected("Edição da issue"))
+            }
+            if (toAdd.length) {
+                await withContext(where, () => githubRequest(`${path}/labels`, { method: "POST", body: { labels: toAdd }, signal: context.signal, label: "opex: adicionar labels" })).catch(rejected("Labels"))
+            }
+            const removed: string[] = []
+            const notPresent: string[] = []
+            for (const name of removing) {
+                try {
+                    await githubRequest(`${path}/labels/${encodeURIComponent(name)}`, { method: "DELETE", signal: context.signal, label: "opex: remover label" })
+                    removed.push(name)
+                } catch (error) {
+                    // 404 = a issue não tinha a label (ou ela não existe no repositório): vira aviso, não erro.
+                    if (error instanceof GithubError && error.status === 404) notPresent.push(name)
+                    else throw error
+                }
             }
 
-            const updated = await withContext(where, () => githubRequest<RestIssue>(path, { method: "PATCH", body: patch, signal: context.signal, label: "opex: editar issue" })).catch(rejected("Edição da issue"))
+            const updated = await withContext(where, () => githubRequest<RestIssue>(path, { signal: context.signal, label: "opex: issue" }))
             await auditRelation(context.actorId, repoName, AcaoAuditoria.ATUALIZAR, {
                 issue: number,
-                campos: Object.keys(patch),
+                campos: [...Object.keys(patch), ...(toAdd.length || removed.length ? ["labels"] : [])],
                 ...(patch.title !== undefined ? { tituloAntes: current.title, titulo: patch.title } : {}),
                 ...(patch.body !== undefined ? { corpo: "alterado" } : {}),
-                ...(patch.labels ? { labelsAntes: labelsBefore, labels: patch.labels } : {}),
+                ...(toAdd.length ? { labelsAdicionadas: toAdd } : {}),
+                ...(removed.length ? { labelsRemovidas: removed } : {}),
+                ...(toAdd.length || removed.length ? { labelsAntes: labelNamesOf(current), labels: labelNamesOf(updated) } : {}),
             })
             const task = await findIssueTask(repoName, number).catch(() => null)
             return {

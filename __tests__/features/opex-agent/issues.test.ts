@@ -35,7 +35,7 @@ vi.mock('@/features/opex-agent/server/issue-graph', async (original) => ({
 }))
 vi.mock('@/lib/db', async (original) => ({ ...(await original<object>()), recordAudit: mocks.recordAudit }))
 
-import { graphqlUrlOf } from '@/features/github/client'
+import { GithubError, graphqlUrlOf } from '@/features/github/client'
 import { prsOf, toIssueNode, type RawNode } from '@/features/opex-agent/issue-nodes'
 import {
   compareRank,
@@ -455,38 +455,66 @@ describe('escritas de relações', () => {
 })
 
 describe('update_issue (OPE-141, porte do MT-28 do my-tasks)', () => {
-  const current = { number: 88, title: 'Antigo', state: 'open', html_url: 'https://github.com/sipal/crm/issues/88', updated_at: '2026-11-06T10:00:00Z', comments: 0, labels: [{ name: 'bug' }, { name: 'P1' }], body: 'corpo antigo' }
-  const githubFake = (patched: Record<string, unknown> = {}) =>
-    mocks.githubRequest.mockImplementation(async (_path: string, options?: unknown) => {
-      const method = (options as { method?: string } | undefined)?.method
-      return method === 'PATCH' ? { ...current, ...(options as { body: Record<string, unknown> }).body, ...patched, labels: ((options as { body: { labels?: string[] } }).body.labels ?? ['bug', 'P1']).map((name) => ({ name })) } : current
+  const current = () => ({ number: 88, title: 'Antigo', state: 'open', html_url: 'https://github.com/sipal/crm/issues/88', updated_at: '2026-11-06T10:00:00Z', comments: 0, labels: [{ name: 'bug' }, { name: 'P1' }], body: 'corpo antigo' })
+  /** Issue simulada no GitHub: PATCH muda título/corpo, POST/DELETE de labels mexem uma por uma (404 quando a issue não tem). */
+  const githubFake = () => {
+    const issue = current()
+    mocks.githubRequest.mockImplementation(async (path: string, options?: unknown) => {
+      const { method, body } = (options ?? {}) as { method?: string; body?: Record<string, unknown> }
+      if (method === 'PATCH') Object.assign(issue, body)
+      if (method === 'POST' && path.endsWith('/labels')) issue.labels.push(...(body!.labels as string[]).map((name) => ({ name })))
+      if (method === 'DELETE') {
+        const name = decodeURIComponent(path.split('/labels/')[1]!)
+        const index = issue.labels.findIndex((label) => label.name.toLowerCase() === name.toLowerCase())
+        if (index < 0) throw new GithubError('Label does not exist', 'NOT_FOUND', 404)
+        issue.labels.splice(index, 1)
+      }
+      return issue
     })
+    return issue
+  }
+  const calls = (method: string) => mocks.githubRequest.mock.calls.filter(([, options]) => (options as { method?: string } | undefined)?.method === method)
 
   beforeEach(() => {
     mocks.githubPaginate.mockResolvedValue([{ name: 'bug' }, { name: 'P1' }, { name: 'Feature' }])
     mocks.findIssueTask.mockResolvedValue(null)
   })
 
-  it('edita título, corpo e labels (nome exato do repositório), pede confirmação e audita sem o corpo', async () => {
+  it('edita título e corpo (PATCH sem labels) e as labels pelos endpoints próprios, com o nome exato do repositório; pede confirmação e audita sem o corpo', async () => {
     githubFake()
     const result = await run('update_issue')({ repo: 'Sipal/CRM', number: 88, title: 'Novo', body: 'corpo novo', addLabels: ['feature'], removeLabels: ['p1'] })
-    expect(mocks.githubRequest).toHaveBeenLastCalledWith('/repos/sipal/crm/issues/88', expect.objectContaining({ method: 'PATCH', body: { title: 'Novo', body: 'corpo novo', labels: ['bug', 'Feature'] } }))
+    expect(calls('PATCH')).toEqual([['/repos/sipal/crm/issues/88', expect.objectContaining({ body: { title: 'Novo', body: 'corpo novo' } })]])
+    expect(calls('POST')).toEqual([['/repos/sipal/crm/issues/88/labels', expect.objectContaining({ body: { labels: ['Feature'] } })]])
+    expect(calls('DELETE').map(([path]) => path)).toEqual(['/repos/sipal/crm/issues/88/labels/p1'])
     expect(result).toMatchObject({ ok: true, issue: { number: 88, title: 'Novo', labels: ['bug', 'Feature'], body: 'corpo novo' } })
     expect(result.warning).toBeUndefined()
     expect(needsConfirmation(findOpexTool('update_issue')!)).toBe(true)
     expect(mocks.recordAudit).toHaveBeenCalledOnce()
     const audit = JSON.stringify(mocks.recordAudit.mock.calls[0])
     expect(audit).toContain('"corpo":"alterado"')
+    expect(audit).toContain('"labelsAdicionadas":["Feature"]')
     expect(audit).not.toContain('corpo novo')
+  })
+
+  it('regressão (F3): label mudada por outro depois da leitura não é desfeita, porque o conjunto não é regravado', async () => {
+    const issue = githubFake()
+    mocks.githubPaginate.mockImplementation(async () => {
+      issue.labels.push({ name: 'P0' }) // a sincronização muda a prioridade enquanto a ferramenta roda
+      return [{ name: 'bug' }, { name: 'P0' }, { name: 'P1' }, { name: 'Feature' }]
+    })
+    const result = await run('update_issue')({ repo: 'Sipal/CRM', number: 88, addLabels: ['Feature'] })
+    expect(calls('PATCH')).toEqual([])
+    expect((result.issue as { labels: string[] }).labels).toEqual(['bug', 'P1', 'P0', 'Feature'])
   })
 
   it('recusa sem nenhum campo, PR no lugar de issue e label inexistente (com a lista válida, sem gravar)', async () => {
     await expect(run('update_issue')({ repo: 'Sipal/CRM', number: 88 })).rejects.toThrow('Informe title')
-    mocks.githubRequest.mockResolvedValue({ ...current, pull_request: {} })
+    mocks.githubRequest.mockResolvedValue({ ...current(), pull_request: {} })
     await expect(run('update_issue')({ repo: 'Sipal/CRM', number: 105, title: 'x' })).rejects.toThrow('pull request')
     githubFake()
     await expect(run('update_issue')({ repo: 'Sipal/CRM', number: 88, addLabels: ['urgente'] })).rejects.toThrow('Labels inexistentes em sipal/crm: urgente. Labels válidas: bug, P1, Feature.')
-    expect(mocks.githubRequest).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PATCH' }))
+    expect(calls('PATCH')).toEqual([])
+    expect(calls('POST')).toEqual([])
     expect(mocks.recordAudit).not.toHaveBeenCalled()
   })
 

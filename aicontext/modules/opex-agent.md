@@ -425,9 +425,13 @@ integração GitHub (Issues: leitura; escrita para registrar relações). Só no
   caracteres, substitui o atual; o Opex não tem rodapé de tarefa no corpo) e as **labels** de qualquer
   issue (`addLabels`/`removeLabels`, até 20 cada). `addLabels` só aceita labels que já existem no
   repositório (lista paginada, sem diferenciar maiúsculas; grava o nome exato de lá): uma inexistente
-  recusa **sem gravar** com a lista das válidas; label a remover que a issue não tem vira `warning`.
+  recusa **sem gravar** com a lista das válidas. Título e corpo vão por `PATCH` (sem `labels`); as labels
+  vão pelos endpoints próprios, atômicos por label (`POST /issues/{n}/labels` para adicionar e
+  `DELETE /issues/{n}/labels/{nome}` para remover), para não regravar o conjunto lido antes e desfazer uma
+  mudança feita no meio (ex.: pela sincronização); label a remover que a issue não tem (404) vira
+  `warning`. A resposta relê a issue no fim.
   Recusa sem nenhum campo e PR no lugar de issue. Auditoria `RepositorioGithub` com os campos, título
-  antes/depois e labels antes/depois (o corpo só como "alterado"); o card mostra o corpo cortado
+  antes/depois, labels adicionadas/removidas e antes/depois (o corpo só como "alterado"); o card mostra o corpo cortado
   (`redact`, 2 mil caracteres). Com tarefa vinculada, devolve `linkedTask` (código) e a nota de que a
   tarefa recebe a mudança pela **sincronização tarefa ↔ issue** (decisão do dono: sem aviso de
   divergência nem `update_task`; vale a edição mais recente, então uma edição posterior da tarefa pode
