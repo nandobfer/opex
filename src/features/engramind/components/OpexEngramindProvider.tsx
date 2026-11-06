@@ -16,6 +16,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
 import { ENGRAMIND_INTEGRATION_HREF, ENGRAMIND_PAGE_HREF, OPEX_APP_SLUG } from "../constants"
 import { useAgentActivity } from "../hooks/useAgentActivity"
+import { useUniverseLayout } from "../hooks/useUniverseLayout"
 import { centralChannelLabels } from "../network/channel-labels"
 import { agentIcon } from "./network/agent-icons"
 import { AboutCard } from "./page/AboutCard"
@@ -75,6 +76,8 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
     const centrals = useCentrals(channelLabels)
     const labels = useMemo(() => centralChannelLabels(Array.isArray(centrals.data) ? centrals.data : []), [centrals.data])
     const activity = useAgentActivity()
+    // Layout dos universos (aba Visualização): vale para a rede, os universos de IA e os dos rotineiros; muda ao vivo.
+    const universeLayout = useUniverseLayout({ realtime: true })
     // Gravadas (auditoria do Opex): só os agentes do app do Opex (`opex/<identidade>`).
     const agentWrites = useCallback(
         (id: string) => {
@@ -108,6 +111,7 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
             onConfigure={onConfigure}
             messages={messages}
             slots={slots}
+            universeLayout={universeLayout.data?.config}
             storagePrefix=""
         >
             {children}

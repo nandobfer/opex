@@ -7,7 +7,7 @@ import { api, apiErrorCode, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { ENGRAMIND_QUERY_KEY, ENGRAMIND_UPDATED_EVENT } from "../constants"
+import { ENGRAMIND_QUERY_KEY, ENGRAMIND_UPDATED_EVENT, UNIVERSE_LAYOUT_EVENT_TYPE } from "../constants"
 
 /**
  * Base dos hooks do Engramind: tudo passa pelas rotas `/api/engramind/**` do Opex (axios do projeto,
@@ -108,6 +108,7 @@ export function areasForEvent(type: string): string[] {
     if (type === "jobs.updated" || type === "status.updated") return ["jobs", "status"]
     if (type.startsWith("env.")) return ["env", "status", "connection"]
     if (type === "migration.updated") return ["migration"]
+    if (type === UNIVERSE_LAYOUT_EVENT_TYPE) return ["universe-layout"]
     return []
 }
 

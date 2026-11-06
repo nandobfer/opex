@@ -491,3 +491,12 @@ export interface MemoryMigrationDto {
     firstCompletedAt: string | null
     lastImportAt: string | null
 }
+
+/** Layout dos universos de memórias (`GET /api/engramind/universe-layout`, OPE-142). */
+export interface UniverseLayoutDto {
+    /** Configuração completa em uso (o padrão da lib quando nada foi gravado). */
+    config: import("@engramind/client").UniverseLayoutConfig
+    /** `true` quando nada foi gravado (vale o padrão). */
+    isDefault: boolean
+    updatedAt: string | null
+}

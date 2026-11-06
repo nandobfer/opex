@@ -2,7 +2,7 @@
 
 import { useState, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { Activity, ArrowRightLeft, BookOpen, Cable, FileCog, KeyRound, SlidersHorizontal, Users } from "lucide-react"
+import { Activity, ArrowRightLeft, BookOpen, Cable, FileCog, KeyRound, Orbit, SlidersHorizontal, Users } from "lucide-react"
 import type { IntegrationDef } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
@@ -19,6 +19,7 @@ import { MigrationTab } from "./migration/MigrationTab"
 import { OperationTab } from "./operation/OperationTab"
 import { ProvidersTab } from "./providers/ProvidersTab"
 import { SettingsTab } from "./settings/SettingsTab"
+import { UniverseLayoutTab } from "./universe-layout/UniverseLayoutTab"
 
 interface EngramindEditorFormProps {
     def: IntegrationDef
@@ -37,6 +38,7 @@ const TABS: IntegrationTabDef<EngramindTab>[] = [
     { id: "sobre", label: "Sobre", icon: BookOpen },
     { id: "conexao", label: "Conexão", icon: Cable },
     { id: "configuracoes", label: "Configurações", icon: SlidersHorizontal },
+    { id: "visualizacao", label: "Visualização", icon: Orbit },
     { id: "provedores", label: "Provedores", icon: KeyRound },
     { id: "identidades", label: "Identidades", icon: Users },
     { id: "operacao", label: "Operação", icon: Activity },
@@ -45,7 +47,7 @@ const TABS: IntegrationTabDef<EngramindTab>[] = [
 ]
 
 /**
- * Página da integração Engramind em abas (`?aba=`): Sobre, Conexão, Configurações, Provedores,
+ * Página da integração Engramind em abas (`?aba=`): Sobre, Conexão, Configurações, Visualização, Provedores,
  * Identidades, Operação, Variáveis de ambiente e Migração de memórias. Trocar de aba com alterações pede descarte.
  */
 export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: EngramindEditorFormProps) {
@@ -67,6 +69,7 @@ export function EngramindEditorForm({ def, data, draft, setDraft, dirty, pending
                 {tab === "sobre" && <AboutTab />}
                 {tab === "conexao" && <ConnectionTab key={resetKey} {...tabProps} data={data} draft={draft} setDraft={setDraft} dirty={dirty} pending={pending} onSave={onSave} onUndo={onUndo} onExplore={onExplore} />}
                 {tab === "configuracoes" && <SettingsTab key={resetKey} {...tabProps} />}
+                {tab === "visualizacao" && <UniverseLayoutTab key={resetKey} {...tabProps} />}
                 {tab === "provedores" && <ProvidersTab key={resetKey} {...tabProps} />}
                 {tab === "identidades" && <IdentitiesTab key={resetKey} {...tabProps} />}
                 {tab === "operacao" && <OperationTab key={resetKey} {...tabProps} />}

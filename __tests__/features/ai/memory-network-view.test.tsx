@@ -5,6 +5,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { openStats } from '../../helpers/engramind-stats'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { flowItems, xyflowMock } from '../../helpers/xyflow'
 
@@ -102,6 +103,8 @@ describe('universo de uma lista de memórias', () => {
     expect(screen.getByTestId('memory-card-uses').textContent).toContain('7 usos')
     expect(screen.getByTestId('memory-card-last-use').textContent).toBe('nunca usada')
     expect(card.textContent).toContain('Memória do dono')
+    expect(screen.queryByTestId('network-stats')).toBeNull()
+    await openStats()
     expect(screen.getByTestId('stat-active').textContent).toBe('2')
     expect(screen.getByTestId('stat-inactive').textContent).toBe('1')
   })
