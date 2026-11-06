@@ -110,6 +110,7 @@ describe('areasForEvent', () => {
     ['identities.updated', ['apps', 'agents', 'tokens', 'connection']],
     ['jobs.updated', ['jobs', 'status']],
     ['env.applied', ['env', 'status', 'connection']],
+    ['universe-layout', ['universe-layout']],
     ['desconhecido', []],
   ])('%s → %j', (type, areas) => {
     expect(areasForEvent(type)).toEqual(areas)
