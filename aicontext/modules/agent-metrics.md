@@ -52,6 +52,16 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
   - KPIs do agente (`KpiCard` com `AnimatedNumber`); sem base, **"—"** (nunca 0%). Métrica não
     retroativa mostra "Dados desde dd/mm/aaaa" no cartão e no aviso do topo (`DataSinceNotice`);
     aproximada no passado mostra "Aproximado antes de dd/mm/aaaa".
+  - **KPIs das execuções** (OPE-141, porte do `runKpis` do MT-40 do my-tasks; `runKpis` em
+    `logic/common.ts`, DTO `runKpis`): **Execuções**, **% de falhas**, **Custo** (soma), **Tokens**
+    (soma, entrada + saída) e **Duração média** (minutos) das execuções do período em `agent_runs`
+    (`runTotalsOf`, com os filtros de cliente e repositório; execuções excluídas não contam). Sem
+    registro de custo, tokens ou duração, ou sem execuções no caso da % de falhas, **"—"** (nunca 0).
+    Aparecem **mesmo sem base** no período, depois dos KPIs do agente. Decisão do dono: quando o agente
+    já mostra um KPI com o mesmo significado, fica o dele e o comum não se repete (`RUN_KPIS_COVERED`
+    em `server/metrics.ts`): Revisor sem Duração média e % de falhas, Mentor e Catalogador sem % de
+    falhas, Agentes rotineiros sem Execuções e % de falhas. O esqueleto mostra 10 cartões
+    (`OVERVIEW_SKELETON_KPIS`).
   - **Gráfico de linhas único** por agente com as porcentagens ao longo do tempo (eixo X = data, uma
     linha por métrica; `MultiLineChart`): a legenda tem uma **caixa de seleção por linha**; a seleção
     fica salva no navegador por gráfico (`usePersistentState`, chave
@@ -59,11 +69,24 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
     abrirem com o padrão novo); todas desmarcadas → "Selecione ao menos uma métrica". Ao abrir, no
     máximo 3 linhas vêm marcadas (as principais de cada agente; ver abaixo). Desenho (modelo puro em
     `src/components/metrics/line-chart-model.ts`):
-    - **cor e traço únicos por série**, pela posição na lista completa do gráfico (marcar ou desmarcar
-      não troca as outras cores): `LINE_SERIES_COLORS` (`charts/palette.ts`, tokens `--chart-1..10`,
-      com os dois roxos nas pontas); acima de 10 séries a cor se repete com traço tracejado, e a
-      combinação cor + traço nunca se repete. A legenda e o tooltip mostram o mesmo traço
-      (`LineSwatch`);
+    - **cor e traço por significado** (decisão do dono na OPE-141, porte do MT-40 do my-tasks;
+      módulo puro `series-style.ts`, aplicado no servidor por `styleLineChart`): a mesma métrica tem a
+      mesma cor e o mesmo traço em todos os agentes — positivas em verde/azul (`--chart-positive-1/2`:
+      one shot, concluídas, com resumo, dentro da margem, 1ª aprovação em verde; CI corrigido, tags,
+      aprovados, sugestões aceitas em azul), informativas em roxo/rosa/branco (`--chart-info-1..3`:
+      lições, ações confirmadas, nós; interrompidas, retomadas, ligações) e negativas por criticidade,
+      vermelho > laranja > amarelo (`--chart-negative-1..3`: regressão e falhas em vermelho; bloqueio,
+      correção de prévia e erro médio em laranja; conflito, CI com falha, nova tentativa e prévias
+      corrigidas em amarelo). Linhas da mesma cor no mesmo gráfico se diferenciam pelo traço (cheio,
+      tracejado `6 3`, pontilhado `2 3`: regressão cheia, reabertas tracejada, achado de regressão
+      pontilhada). Só do Opex: bloqueios ignorados (`ignored`) e erros dos rotineiros (`errors`) em
+      vermelho; **Conversas por data** com Dono em roxo e Portal em rosa, ambos cheios (decisão do
+      dono); **Tokens por data** em roxo. Achados por categoria do Adversário têm escala própria
+      (`CATEGORY_STYLE`: segurança/bug/regressão em vermelho, dados/requisito/tratamento de erro em
+      laranja, caso de borda/testes/regra do projeto em amarelo, design/consistência/estilo em branco).
+      **Série sem significado** (chave fora do mapa) mantém a cor pela posição na lista completa do
+      gráfico: `LINE_SERIES_COLORS` (`charts/palette.ts`, tokens `--chart-1..10`); acima de 10 séries a
+      cor se repete com traço tracejado. A legenda e o tooltip mostram o mesmo traço (`LineSwatch`);
     - **linha suave** (`type="monotone"`): a curva passa por todos os pontos e, por ser monotônica
       entre dois deles, nunca ultrapassa os valores reais (sem "bicos" nem picos inventados). Decisão
       do dono na OPE-131, que substitui a linha reta (`type="linear"`) da OPE-122. O eixo de % é fixo
@@ -85,8 +108,12 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
       corrigido", só mesas com CI falho); a tabela acessível tem a coluna n. Ponto com n abaixo de 3
       (`MIN_RELIABLE_SAMPLE`) sai **vazado** (pouco representativo), com a nota no tooltip e a
       explicação abaixo do gráfico.
-  - **Uso por data** (`UsageByDateChart`): execuções (e falhas) por dia, semana ou mês.
-  - Distribuições em barras (`RankedBarsCard`): categorias, ferramentas, destinos, tags, etapas.
+  - **Uso por data** (`UsageByDateChart`): execuções (roxo, `SINGLE_MEASURE_COLOR`) e falhas
+    (vermelho, `--chart-negative-1`) por dia, semana ou mês (OPE-141).
+  - Distribuições em barras (`RankedBarsCard`): categorias, ferramentas, destinos, tags, etapas. Barras de
+    uma medida só ficam em **roxo contínuo** (`SINGLE_MEASURE_COLOR`); o **Destino das lições** do Mentor
+    tem cor por lista (`styleBarChart`: Adversário roxo, Desenvolvedor global rosa, por central branco;
+    `color` de cada item, desenhada com `colorKey` no `RankedBarsCard`).
   - Agrupamento: por dia até 31 dias, por semana até ~6 meses, por mês acima disso.
   - Estados: esqueleto com a mesma grade (`MetricsOverviewSkeleton`, classes de
     `src/components/metrics/layout.ts`), erro com **Tentar novamente**, sem base no período →
@@ -230,9 +257,10 @@ Extraídos dos Dashboards (que passaram a usá-los): `charts/` (`ChartCard`, `Tr
 ## Testes
 
 `__tests__/features/agent-metrics/` (`period`, `developer-logic`, `agents-logic`, `record` — falha do
-banco não rejeita, rotina e marcadores —, `routes` e `agent-page`), `__tests__/components/metrics/`
+banco não rejeita, rotina e marcadores —, `routes`, `agent-page` — KPIs das execuções também sem base —,
+`series-style` — cor por significado — e `run-kpis` — somas, "—" e o que cada agente já cobre), `__tests__/components/metrics/`
 (legenda selecionável salva no navegador, "Selecione ao menos uma métrica", "—" e Último uso;
 `line-chart-model` — cores e traços únicos, eixo 0–100, amostra pequena; `multi-line-chart-lines` —
-recharts simulado: cores do print, linha suave e contínua, marcador vazado, tooltip com n e esqueleto),
+recharts simulado: cores do print, cor por significado (OPE-141), linha suave e contínua, marcador vazado, tooltip com n e esqueleto),
 `__tests__/features/layout/navigation.test.ts` (10 agentes, ordem, nomes e ícones iguais às abas,
 página de cada um) e `__tests__/features/ai/ai-tabs.test.tsx`.

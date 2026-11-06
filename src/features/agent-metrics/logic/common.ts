@@ -1,6 +1,6 @@
 import { bucketKeyFor, bucketKeys, type BucketMode } from "@/lib/time/buckets"
 import { METRICS_TIME_ZONE } from "../constants"
-import type { MetricLineChartDto, MetricLineChartInput, MetricPointDto, MetricSampleDto, UsagePointDto } from "../types"
+import type { MetricKpiDto, MetricLineChartDto, MetricLineChartInput, MetricPointDto, MetricSampleDto, UsagePointDto } from "../types"
 
 /** Helpers puros das métricas dos agentes (OPE-122). */
 
@@ -157,4 +157,34 @@ export function countBy<T>(items: readonly T[], keyOf: (item: T) => string | nul
         counts.set(key, (counts.get(key) ?? 0) + 1)
     }
     return [...counts.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key))
+}
+
+/** Totais das execuções do período (`agent_runs`): o que cada KPI comum precisa, com a contagem de quem tem registro. */
+export interface RunTotals {
+    runs: number
+    failures: number
+    costSum: number
+    costCount: number
+    tokenSum: number
+    tokenCount: number
+    durationSum: number
+    durationCount: number
+}
+
+export type RunKpiId = "runs" | "run-failures" | "run-cost" | "run-tokens" | "run-duration"
+
+/**
+ * KPIs comuns das execuções (OPE-141, porte do `runKpis` do MT-40 do my-tasks): Execuções, % de falhas,
+ * Custo (soma), Tokens (soma) e Duração média. Sem registro, "—" (nunca 0). `covered` tira os que o
+ * agente já mostra com o mesmo significado (decisão do dono: fica o KPI do agente).
+ */
+export function runKpis(totals: RunTotals, covered: readonly RunKpiId[] = []): MetricKpiDto[] {
+    const all: MetricKpiDto[] = [
+        { id: "runs", label: "Execuções", hint: "No período", value: totals.runs, format: "count", since: null },
+        { id: "run-failures", label: "% de falhas", hint: "Execuções que terminaram com erro", value: pct(totals.failures, totals.runs), format: "percent", since: null },
+        { id: "run-cost", label: "Custo", hint: "Soma das execuções com custo registrado", value: totals.costCount ? totals.costSum : null, format: "usd", since: null },
+        { id: "run-tokens", label: "Tokens", hint: "Soma das execuções com tokens registrados", value: totals.tokenCount ? totals.tokenSum : null, format: "tokens", since: null },
+        { id: "run-duration", label: "Duração média", hint: "Das execuções com duração registrada, em minutos", value: totals.durationCount ? totals.durationSum / totals.durationCount / 60_000 : null, format: "duration", since: null },
+    ]
+    return all.filter((item) => !covered.includes(item.id as RunKpiId))
 }

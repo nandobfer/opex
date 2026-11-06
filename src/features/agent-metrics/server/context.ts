@@ -9,7 +9,7 @@ import { TaskBoardColumn } from "@/lib/db/models/TaskBoard"
 import { dayKey, type BucketMode } from "@/lib/time/buckets"
 import { agentDef, type AgentId } from "../catalog"
 import { METRICS_TIME_ZONE, type TrackingKey } from "../constants"
-import { usageSeries, type BucketContext } from "../logic/common"
+import { usageSeries, type BucketContext, type RunTotals } from "../logic/common"
 import { metricsBucketMode, parseMargin, resolveMetricsRange, type AgentMetricsQuery, type MetricsRange } from "../period"
 import type { MetricKpiDto, MetricFormat, UsagePointDto } from "../types"
 
@@ -86,6 +86,31 @@ export async function usageOf(ctx: MetricsContext): Promise<UsagePointDto[]> {
         }
     }
     return usageSeries(rows, ctx.bucket)
+}
+
+const EMPTY_RUN_TOTALS: RunTotals = { runs: 0, failures: 0, costSum: 0, costCount: 0, tokenSum: 0, tokenCount: 0, durationSum: 0, durationCount: 0 }
+
+/** Totais das execuções do período com os filtros (KPIs comuns das execuções, OPE-141). */
+export async function runTotalsOf(ctx: MetricsContext): Promise<RunTotals> {
+    const known = (field: string) => ({ $cond: [{ $ne: [{ $ifNull: [field, null] }, null] }, 1, 0] })
+    const hasTokens = { $or: [{ $ne: [{ $ifNull: ["$inputTokens", null] }, null] }, { $ne: [{ $ifNull: ["$outputTokens", null] }, null] }] }
+    const [row] = await AgentRun.aggregate<RunTotals>([
+        { $match: { agent: ctx.agent, finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to }, ...mongoFilters(ctx), ...COUNTED_RUN } },
+        {
+            $group: {
+                _id: null,
+                runs: { $sum: 1 },
+                failures: { $sum: { $cond: ["$ok", 0, 1] } },
+                costSum: { $sum: { $ifNull: ["$costUsd", 0] } },
+                costCount: { $sum: known("$costUsd") },
+                tokenSum: { $sum: { $add: [{ $ifNull: ["$inputTokens", 0] }, { $ifNull: ["$outputTokens", 0] }] } },
+                tokenCount: { $sum: { $cond: [hasTokens, 1, 0] } },
+                durationSum: { $sum: { $ifNull: ["$durationMs", 0] } },
+                durationCount: { $sum: known("$durationMs") },
+            },
+        },
+    ])
+    return row ? { runs: row.runs, failures: row.failures, costSum: row.costSum, costCount: row.costCount, tokenSum: row.tokenSum, tokenCount: row.tokenCount, durationSum: row.durationSum, durationCount: row.durationCount } : EMPTY_RUN_TOTALS
 }
 
 /** Opções dos filtros (clientes e repositórios). */
