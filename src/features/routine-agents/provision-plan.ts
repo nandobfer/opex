@@ -6,7 +6,8 @@ import { z } from "zod"
  * - canal inexistente em `subscribe` é descartado (com aviso);
  * - `create` com slug que já existe vira **assinatura** do existente (nunca recria);
  * - canais base (`opex`, global dos rotineiros, canal próprio) nunca entram nem saem por aqui;
- * - canais de outros agentes (`agentes/...`) ficam fora: o rotineiro não lê a memória privada deles.
+ * - canais de outros agentes (`agentes/...`) ficam fora: o rotineiro não lê a memória privada deles;
+ * - canal **bloqueado pelo dono** (OPE-143) nunca entra, mesmo que o modelo o proponha em `subscribe` ou `create`.
  */
 
 export const CHANNEL_SLUG = /^[a-z0-9]+(?:[-_][a-z0-9]+)*(?:\/[a-z0-9]+(?:[-_][a-z0-9]+)*)*$/
@@ -50,7 +51,7 @@ export function extractJsonObject(text: string): unknown {
     }
 }
 
-export function parseExtraChannelPlan(text: string, existing: readonly { slug: string; name: string }[], alreadyExtra: readonly string[] = []): ExtraChannelPlan {
+export function parseExtraChannelPlan(text: string, existing: readonly { slug: string; name: string }[], alreadyExtra: readonly string[] = [], blocked: readonly string[] = []): ExtraChannelPlan {
     const raw = extractJsonObject(text)
     const parsed = answerSchema.safeParse(raw ?? {})
     if (!raw || !parsed.success) throw new Error("O subagente de provisionamento não devolveu um JSON válido")
@@ -58,6 +59,7 @@ export function parseExtraChannelPlan(text: string, existing: readonly { slug: s
     const warnings: string[] = []
     const items: ExtraChannelPlanItem[] = []
     const seen = new Set<string>(alreadyExtra)
+    const blockedSet = new Set(blocked)
     const push = (item: ExtraChannelPlanItem) => {
         if (seen.has(item.channel) || items.length >= MAX_EXTRA_CHANNELS) return
         seen.add(item.channel)
@@ -65,6 +67,10 @@ export function parseExtraChannelPlan(text: string, existing: readonly { slug: s
     }
     for (const entry of parsed.data.subscribe) {
         const slug = entry.channel.trim()
+        if (blockedSet.has(slug)) {
+            warnings.push(blockedWarning(slug))
+            continue
+        }
         if (!known.has(slug)) {
             warnings.push(`Canal "${slug}" não existe no Engramind: ignorado.`)
             continue
@@ -78,15 +84,21 @@ export function parseExtraChannelPlan(text: string, existing: readonly { slug: s
             warnings.push(`Canal novo "${slug}" com slug inválido ou reservado: ignorado.`)
             continue
         }
+        if (blockedSet.has(slug)) {
+            warnings.push(blockedWarning(slug))
+            continue
+        }
         const exists = known.has(slug)
         push({ channel: slug, name: exists ? (known.get(slug) ?? slug) : entry.name.trim() || slug, description: entry.description.trim(), reason: entry.reason.trim() || "Canal novo para o objetivo do agente", create: !exists })
     }
     return { items, warnings }
 }
 
+const blockedWarning = (slug: string) => `Canal "${slug}" está bloqueado neste agente: ignorado.`
+
 /** Prompt do subagente (sem segredos: só nome, objetivo, instruções e a lista de canais). */
-export function extraChannelPrompt(agent: { name: string; objective: string; instructions: string }, channels: readonly { slug: string; name: string; description: string | null }[], current: readonly string[]): string {
-    const list = channels.filter((channel) => isEligibleExtraChannel(channel.slug))
+export function extraChannelPrompt(agent: { name: string; objective: string; instructions: string }, channels: readonly { slug: string; name: string; description: string | null }[], current: readonly string[], blocked: readonly string[] = []): string {
+    const list = channels.filter((channel) => isEligibleExtraChannel(channel.slug) && !blocked.includes(channel.slug))
     return [
         `Agente rotineiro: ${agent.name}`,
         `Objetivo: ${agent.objective}`,
@@ -95,6 +107,7 @@ export function extraChannelPrompt(agent: { name: string; objective: string; ins
         "Canais de memória existentes no Engramind (slug — nome — descrição):",
         list.length ? list.map((channel) => `- ${channel.slug} — ${channel.name}${channel.description ? ` — ${channel.description}` : ""}`).join("\n") : "- (nenhum)",
         current.length ? `\nJá assinados como extras: ${current.join(", ")}` : "",
+        blocked.length ? `\nBloqueados pelo dono (não assine nem crie, nem em "subscribe" nem em "create"): ${blocked.join(", ")}` : "",
     ]
         .filter((line) => line !== "")
         .join("\n")
@@ -105,6 +118,7 @@ export const EXTRA_CHANNELS_INSTRUCTIONS = [
     "Decida quais canais de memória EXTRAS o agente deve assinar, além dos canais base (que ele já assina).",
     "Assine canais existentes cujo assunto ajude o objetivo. Só crie um canal novo quando nenhum existente servir e o assunto for reaproveitável por outros agentes (ex.: \"vagas/empresa-x\").",
     "Slugs: minúsculas, números, hífen, sublinhado e barras (ex.: \"vagas/empresa-x\"); nunca comece com \"agentes/\" nem use \"opex\".",
+    "Nunca proponha um canal que o dono bloqueou para este agente (a lista vem no pedido): ele é descartado.",
     `No máximo ${MAX_EXTRA_CHANNELS} canais. Pode não escolher nenhum.`,
     'Responda SOMENTE um JSON: {"subscribe":[{"channel":"slug","reason":"motivo curto em pt-BR"}],"create":[{"slug":"slug","name":"Nome","description":"Descrição","reason":"motivo curto"}]}',
 ].join("\n")

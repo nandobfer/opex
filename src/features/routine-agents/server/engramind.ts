@@ -58,6 +58,19 @@ export async function ensureRoutineSubscriptions(slug: string, channels: readonl
     return created
 }
 
+/**
+ * Cancela a assinatura **exata** do agente no canal (OPE-143): só a assinatura vai; o canal, as memórias e os
+ * outros assinantes ficam. Assinatura por prefixo (`x/*`) não é tocada. Devolve `absent` quando não há
+ * assinatura (já cancelada à mão), o que torna a operação idempotente. Falha do Engramind sobe.
+ */
+export async function removeRoutineSubscription(slug: string, channel: string, target: EngramindTarget): Promise<"removed" | "absent"> {
+    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: routineAgentRef(slug), limit: 200 } }, { target })
+    const found = (list?.subscriptions ?? []).filter((item) => item.target === channel && !item.is_prefix)
+    if (!found.length) return "absent"
+    for (const item of found) await engramindCall("DELETE", { path: `/v1/subscriptions/${enc(item.id)}` }, { target })
+    return "removed"
+}
+
 export function decryptRoutineToken(stored: IRoutineAgentToken | null | undefined): string | null {
     if (!stored || !isEncryptedSecret(stored.secret)) return null
     try {

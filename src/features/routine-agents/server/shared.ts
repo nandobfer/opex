@@ -100,6 +100,7 @@ export function toAgentDto(doc: RoutineAgentDoc, extra: { lastRun?: RoutineAgent
             at: iso(doc.provisioning?.at),
             channels: doc.provisioning?.channels ?? [],
             extras: doc.provisioning?.extras ?? [],
+            blocked: (doc.provisioning?.blocked ?? []).map((item) => ({ channel: item.channel, name: item.name, at: new Date(item.at).toISOString() })),
             warnings: doc.provisioning?.warnings ?? [],
             steps: doc.provisioning?.steps ?? { agent: false, token: false, channels: false, extras: false, workdir: false },
         },

@@ -4,7 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
-import type { RoutineAgentInput, RoutineAgentSettingsInput, RoutineListFilter } from "../schemas"
+import type { RoutineAgentInput, RoutineAgentSettingsInput, RoutineChannelAction, RoutineListFilter } from "../schemas"
 import type { RoutineAgentDto, RoutineOpencodeOptionsDto } from "../types"
 import { routineKeys } from "./keys"
 
@@ -65,6 +65,26 @@ export function useRoutineProvisioning() {
             void queryClient.invalidateQueries({ queryKey: routineKeys.all })
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível provisionar o agente")),
+    })
+}
+
+const CHANNEL_ACTION_TOASTS: Record<RoutineChannelAction, string> = {
+    block: "Canal removido e bloqueado neste agente",
+    unblock: "Canal desbloqueado",
+    resubscribe: "Canal assinado de novo",
+}
+
+/** Remover/bloquear, desbloquear ou assinar de novo um canal extra (OPE-143). Sem otimismo: o Engramind confirma antes. */
+export function useRoutineChannelAction() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async ({ id, action, channel }: { id: string; action: RoutineChannelAction; channel: string }) => unwrapApi((await api.post<ApiResponse<RoutineAgentDto>>(`/routine-agents/${id}/provisioning/channels`, { action, channel })).data),
+        onSuccess: (agent, { action }) => {
+            toast.success(CHANNEL_ACTION_TOASTS[action])
+            queryClient.setQueryData(routineKeys.agent(agent.id), agent)
+            void queryClient.invalidateQueries({ queryKey: routineKeys.all })
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível alterar o canal do agente")),
     })
 }
 

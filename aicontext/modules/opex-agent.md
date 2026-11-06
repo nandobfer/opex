@@ -264,7 +264,7 @@ risco (os catálogos são distintos).
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
 | Jobs agendados | `list_jobs` (dono e portal, filtro `origin`), `schedule_job`, `update_job` (só jobs do dono), `cancel_job`* (dono e portal) — ver "Jobs" |
-| Agentes rotineiros (só no dono) | `list_routine_agents`, `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`, `archive_routine_agent`*, `reprovision_routine_agent`, `run_routine_agent`, `list_routine_runs`, `cancel_routine_run`*, `confirm_routine_action`, `reject_routine_action`, `add_routine_entry` — os mesmos serviços da aba Rotineiros e das páginas `/agentes-rotineiros`; nenhum DTO traz o token do agente no Engramind. Ver `modules/routine-agents.md` |
+| Agentes rotineiros (só no dono) | `list_routine_agents`, `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`, `archive_routine_agent`*, `reprovision_routine_agent`, `block_routine_agent_channel`*, `unblock_routine_agent_channel`, `run_routine_agent`, `list_routine_runs`, `cancel_routine_run`*, `confirm_routine_action`, `reject_routine_action`, `add_routine_entry` — os mesmos serviços da aba Rotineiros e das páginas `/agentes-rotineiros`; nenhum DTO traz o token do agente no Engramind. Ver `modules/routine-agents.md` |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
 | Agente Revisor | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
 | Dashboards | `get_dashboard` |

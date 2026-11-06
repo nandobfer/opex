@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({
   service: { listRoutineAgents: vi.fn(async () => []), getRoutineAgent: vi.fn(), createRoutineAgent: vi.fn(async () => ({ id: 'x' })), updateRoutineAgent: vi.fn(async () => ({ id: 'x' })), setRoutineAgentStatus: vi.fn(async () => ({})), reprovisionRoutineAgent: vi.fn(async () => ({})) },
+  channels: { blockRoutineChannel: vi.fn(async () => ({})), unblockRoutineChannel: vi.fn(async () => ({})) },
   runs: { triggerRoutineRun: vi.fn(async () => ({ runId: 'r', status: 'running' })) },
   actions: { cancelRoutineRun: vi.fn(async () => ({ status: 'canceled' })), resolveRoutineAction: vi.fn(async () => ({ status: 'queued' })) },
   entries: { addRoutineEntry: vi.fn(async () => ({ id: 'e' })) },
 }))
 vi.mock('@/features/routine-agents/server/service', () => mocks.service)
+vi.mock('@/features/routine-agents/server/provisioning-channels', () => mocks.channels)
 vi.mock('@/features/routine-agents/server/runs', () => mocks.runs)
 vi.mock('@/features/routine-agents/server/run-actions', () => mocks.actions)
 vi.mock('@/features/routine-agents/server/entries', () => mocks.entries)
@@ -26,11 +28,11 @@ const ID = 'a'.repeat(24)
 beforeEach(() => vi.clearAllMocks())
 
 describe('ferramentas dos agentes rotineiros', () => {
-  it('existem as 13 ferramentas; arquivar e cancelar são destrutivas', () => {
+  it('existem as 15 ferramentas; arquivar, bloquear canal e cancelar são destrutivas', () => {
     expect(routineAgentTools.map((item) => item.name).sort()).toEqual(
-      ['add_routine_entry', 'archive_routine_agent', 'cancel_routine_run', 'confirm_routine_action', 'create_routine_agent', 'get_routine_agent', 'list_routine_agents', 'list_routine_runs', 'pause_routine_agent', 'reject_routine_action', 'reprovision_routine_agent', 'run_routine_agent', 'update_routine_agent'].sort(),
+      ['add_routine_entry', 'archive_routine_agent', 'block_routine_agent_channel', 'cancel_routine_run', 'confirm_routine_action', 'create_routine_agent', 'get_routine_agent', 'list_routine_agents', 'list_routine_runs', 'pause_routine_agent', 'reject_routine_action', 'reprovision_routine_agent', 'run_routine_agent', 'unblock_routine_agent_channel', 'update_routine_agent'].sort(),
     )
-    expect(routineAgentTools.filter((item) => item.risk === 'destructive').map((item) => item.name).sort()).toEqual(['archive_routine_agent', 'cancel_routine_run'])
+    expect(routineAgentTools.filter((item) => item.risk === 'destructive').map((item) => item.name).sort()).toEqual(['archive_routine_agent', 'block_routine_agent_channel', 'cancel_routine_run'])
     expect(new Set(routineAgentTools.map((item) => item.group))).toEqual(new Set(['routine-agents']))
   })
 
@@ -47,6 +49,12 @@ describe('ferramentas dos agentes rotineiros', () => {
     ])
     await tool('archive_routine_agent').execute(tool('archive_routine_agent').input.parse({ id: ID }), ctx)
     expect(mocks.service.setRoutineAgentStatus).toHaveBeenCalledWith(ID, 'archive', 'local')
+    await tool('block_routine_agent_channel').execute(tool('block_routine_agent_channel').input.parse({ id: ID, canal: 'vagas/empresa-x' }), ctx)
+    expect(mocks.channels.blockRoutineChannel).toHaveBeenCalledWith(ID, 'vagas/empresa-x', 'local')
+    await tool('unblock_routine_agent_channel').execute(tool('unblock_routine_agent_channel').input.parse({ id: ID, canal: 'vagas/empresa-x', assinar: true }), ctx)
+    expect(mocks.channels.unblockRoutineChannel).toHaveBeenCalledWith(ID, 'vagas/empresa-x', { resubscribe: true }, 'local')
+    await tool('unblock_routine_agent_channel').execute(tool('unblock_routine_agent_channel').input.parse({ id: ID, canal: 'vagas/empresa-x' }), ctx)
+    expect(mocks.channels.unblockRoutineChannel).toHaveBeenLastCalledWith(ID, 'vagas/empresa-x', { resubscribe: false }, 'local')
     await tool('add_routine_entry').execute(tool('add_routine_entry').input.parse({ id: ID, texto: 'Sem vagas presenciais' }), ctx)
     expect(mocks.entries.addRoutineEntry).toHaveBeenCalledWith(ID, { text: 'Sem vagas presenciais', target: 'agent' }, 'local')
   })

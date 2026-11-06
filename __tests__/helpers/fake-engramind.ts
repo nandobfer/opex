@@ -65,6 +65,7 @@ export const CONTRACT_ROUTES: readonly (readonly [string, string])[] = [
   ['GET', '/v1/agents/{agent}'],
   ['GET', '/v1/subscriptions'],
   ['POST', '/v1/subscriptions'],
+  ['DELETE', '/v1/subscriptions/{subscription}'],
   ['GET', '/v1/tokens'],
   ['POST', '/v1/tokens'],
   ['POST', '/v1/tokens/{token}/revoke'],
@@ -283,7 +284,14 @@ export function createFakeEngramind() {
       state.agents.set(`${body.app}/${body.slug}`, { slug: String(body.slug), disabled_at: null })
       return { slug: body.slug, created: true }
     }
-    if (method === 'GET' && path === '/v1/subscriptions') return { subscriptions: state.subscriptions.filter((item) => item.agent === request.query?.agent).map((item) => ({ target: item.target })) }
+    if (method === 'GET' && path === '/v1/subscriptions') return { subscriptions: state.subscriptions.filter((item) => item.agent === request.query?.agent).map((item) => ({ id: `sub_${item.agent}|${item.target}`, target: item.target, is_prefix: item.target.endsWith('*') })) }
+    if (method === 'DELETE' && path.startsWith('/v1/subscriptions/')) {
+      const [agent, target] = decodeURIComponent(seg('/v1/subscriptions/')).replace(/^sub_/, '').split('|')
+      const index = state.subscriptions.findIndex((item) => item.agent === agent && item.target === target)
+      if (index < 0) throw fail(404, 'SUBSCRIPTION_NOT_FOUND')
+      state.subscriptions.splice(index, 1)
+      return { deleted: true }
+    }
     if (method === 'POST' && path === '/v1/subscriptions') {
       const existing = state.subscriptions.find((item) => item.agent === body.agent && item.target === body.target)
       if (existing && existing.mode === String(body.mode)) return { created: false }

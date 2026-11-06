@@ -3,6 +3,7 @@ import { MIN_MASKABLE_SECRET_LENGTH } from "@/features/http-request/secrets"
 import { OPEX_PROVIDER_IDS } from "@/features/opex-agent/constants"
 import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { MAX_RUN_REQUEST_CHARS } from "./constants"
+import { CHANNEL_SLUG } from "./provision-plan"
 
 /**
  * Contrato dos agentes rotineiros (OPE-130, módulo PURO): o MESMO schema valida a API e o formulário
@@ -200,3 +201,12 @@ export const routineSecretUpdateSchema = z.object({
         .refine((value) => value === "" || value.length >= MIN_ROUTINE_SECRET_VALUE, ROUTINE_SECRET_TOO_SHORT),
 })
 export type RoutineSecretUpdateInput = z.infer<typeof routineSecretUpdateSchema>
+
+/** Ação do dono sobre um canal extra do provisionamento (OPE-143): remover+bloquear, desbloquear ou assinar de novo. */
+export const ROUTINE_CHANNEL_ACTIONS = ["block", "unblock", "resubscribe"] as const
+export type RoutineChannelAction = (typeof ROUTINE_CHANNEL_ACTIONS)[number]
+export const routineChannelActionSchema = z.object({
+    action: z.enum(ROUTINE_CHANNEL_ACTIONS),
+    channel: z.string().trim().toLowerCase().min(1, "Informe o canal").max(120, "Canal com no máximo 120 caracteres").regex(CHANNEL_SLUG, "Slug de canal inválido"),
+})
+export type RoutineChannelActionInput = z.infer<typeof routineChannelActionSchema>

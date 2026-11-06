@@ -5,10 +5,12 @@ import { Button } from "@/components/ui/button"
 import { ROUTINE_PROVISIONING_LABELS } from "../../status"
 import type { RoutineAgentDto } from "../../types"
 import { useRoutineProvisioning } from "../../hooks/useRoutineAgents"
+import { RoutineBlockedChannels } from "./RoutineBlockedChannels"
+import { RoutineExtraChannelsList } from "./RoutineExtraChannelsList"
 
 /**
  * Resultado do subagente de provisionamento: o agente no Engramind, os canais base e os extras com o
- * motivo. Com erro, mostra a mensagem e "Tentar de novo" (retoma o que faltou, sem duplicar).
+ * motivo (com "Remover") e os canais bloqueados. Com erro, mostra a mensagem e "Tentar de novo" (retoma o que faltou, sem duplicar).
  */
 export function RoutineProvisioningPanel({ agent }: { agent: RoutineAgentDto }) {
     const provisioning = useRoutineProvisioning()
@@ -42,21 +44,8 @@ export function RoutineProvisioningPanel({ agent }: { agent: RoutineAgentDto }) 
                     ))}
                 </ul>
             </div>
-            <div className="space-y-1">
-                <p className="text-xs font-semibold">Canais extras</p>
-                {state.extras.length === 0 ? (
-                    <p className="text-xs text-muted-foreground">{state.steps.extras ? "O subagente não escolheu canais extras." : "Ainda não avaliados."}</p>
-                ) : (
-                    <ul className="space-y-1.5">
-                        {state.extras.map((extra) => (
-                            <li key={extra.channel} className="rounded-md border p-2 text-xs">
-                                <code>{extra.channel}</code> {extra.created && <span className="ml-1 rounded-full bg-primary/10 px-1.5 text-primary">criado</span>}
-                                <p className="text-muted-foreground">{extra.reason}</p>
-                            </li>
-                        ))}
-                    </ul>
-                )}
-            </div>
+            <RoutineExtraChannelsList agent={agent} disabled={running} />
+            <RoutineBlockedChannels agent={agent} disabled={running} />
             {state.warnings.length > 0 && (
                 <ul className="space-y-1 text-xs text-warning">
                     {state.warnings.map((warning) => (
@@ -74,7 +63,7 @@ export function RoutineProvisioningPanel({ agent }: { agent: RoutineAgentDto }) 
                     <RefreshCw className="h-4 w-4" aria-hidden /> Reprovisionar
                 </Button>
             </div>
-            <p className="text-[11px] text-muted-foreground">Reprovisionar reavalia só os canais extras e acrescenta; nunca remove opex, o global dos rotineiros nem o canal próprio.</p>
+            <p className="text-[11px] text-muted-foreground">Reprovisionar reavalia só os canais extras e acrescenta, exceto os bloqueados; nunca remove opex, o global dos rotineiros nem o canal próprio.</p>
         </div>
     )
 }

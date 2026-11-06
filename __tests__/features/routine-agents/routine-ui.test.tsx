@@ -67,7 +67,7 @@ const AGENT: RoutineAgentDto = {
   triggers: [],
   schedule: [],
   status: 'active',
-  provisioning: { status: 'ok', error: null, at: null, channels: [], extras: [], warnings: [], steps: { agent: true, token: true, channels: true, extras: true, workdir: true } },
+  provisioning: { status: 'ok', error: null, at: null, channels: [], extras: [], blocked: [], warnings: [], steps: { agent: true, token: true, channels: true, extras: true, workdir: true } },
   webhookEnabled: false,
   workdir: null,
   engramindAgent: 'opex/rotineiro-vagas',

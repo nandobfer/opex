@@ -10,12 +10,19 @@ export interface RoutineProvisioningExtraDto {
     created: boolean
 }
 
+export interface RoutineProvisioningBlockedDto {
+    channel: string
+    name: string
+    at: string
+}
+
 export interface RoutineProvisioningDto {
     status: RoutineProvisioningStatus
     error: string | null
     at: string | null
     channels: string[]
     extras: RoutineProvisioningExtraDto[]
+    blocked: RoutineProvisioningBlockedDto[]
     warnings: string[]
     steps: { identity?: boolean; agent: boolean; token: boolean; channels: boolean; extras: boolean; workdir: boolean }
 }
