@@ -13,7 +13,11 @@ export interface PublicTokenRoute {
     summary: string
 }
 
-export const PUBLIC_TOKEN_ROUTES = [{ method: "GET", path: "/api/v1/whoami", scope: null, summary: "Confere o token" }] as const satisfies readonly PublicTokenRoute[]
+export const PUBLIC_TOKEN_ROUTES = [
+    { method: "GET", path: "/api/v1/whoami", scope: null, summary: "Confere o token" },
+    // Webhook externo dos agentes rotineiros (OPE-130): dispara uma execução nova.
+    { method: "POST", path: "/api/v1/routine-agents/{id}/runs", scope: "api:v1:routine-agents", summary: "Dispara uma execução de um agente rotineiro" },
+] as const satisfies readonly PublicTokenRoute[]
 
 export type PublicTokenRoutePath = (typeof PUBLIC_TOKEN_ROUTES)[number]["path"]
 

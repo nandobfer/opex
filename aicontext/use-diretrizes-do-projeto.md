@@ -103,9 +103,10 @@ serviços `app` (produção) e `app-dev` (profile `dev`, watch), porta `PORT` (p
 #### Entrega contínua (CI/CD)
 
 O deploy de produção é automatizado no GitHub Actions (`.github/workflows/ci-cd.yml`): a suíte
-Vitest roda em todo push na `main` e em todo pull request (bloqueante de merge via proteção de
-branch), a imagem é construída **no runner** e transferida para o servidor por SCP, onde é
-importada (`docker load`) e o serviço é recriado com Compose — sem build no servidor. Detalhes,
+Vitest roda em todo pull request (bloqueante de merge via proteção de branch) e **não** roda no push
+da `main`, porque o merge já entra com o CI verde; na `main` o pipeline vai direto para o build. A
+imagem é construída **no runner** e transferida para o servidor por SCP, onde é importada
+(`docker load`) e o serviço é recriado com Compose — sem build no servidor. Detalhes,
 configuração de secrets/variables e rollback em `modules/deployment.md`.
 
 #### Subcaminho público (proxy com prefixo)

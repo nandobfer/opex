@@ -15,13 +15,20 @@ interface ClienteOpexMcpCardProps {
     /** Ids dos MCPs liberados para o cliente. */
     value: readonly string[]
     onChange: (next: string[]) => void
+    /** Texto do card (padrão: o do portal do cliente; os agentes rotineiros passam o deles). */
+    description?: string
+    /** Aviso quando há MCP ligado (`null` = sem aviso). */
+    warning?: string | null
 }
+
+const DEFAULT_MCP_DESCRIPTION = "Servidores MCP cadastrados em Provedores de IA › Agente Opex › MCPs. Ligue os que o agente deste cliente pode usar."
+const DEFAULT_MCP_WARNING = "Os usuários do cliente acessam o sistema externo com as credenciais do MCP (as suas). As ferramentas seguem a confirmação configurada no MCP."
 
 /**
  * MCPs do Agente Opex liberados para o portal do cliente (desligados por padrão). Os usuários do
  * cliente usam as ferramentas do MCP com as credenciais cadastradas pelo dono.
  */
-export function ClienteOpexMcpCard({ value, onChange }: ClienteOpexMcpCardProps) {
+export function ClienteOpexMcpCard({ value, onChange, description = DEFAULT_MCP_DESCRIPTION, warning = DEFAULT_MCP_WARNING }: ClienteOpexMcpCardProps) {
     const query = useOpexMcpServers()
     useOpexMcpRealtime()
     const selected = new Set(value)
@@ -39,11 +46,11 @@ export function ClienteOpexMcpCard({ value, onChange }: ClienteOpexMcpCardProps)
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">MCPs</CardTitle>
-                <CardDescription>Servidores MCP cadastrados em Provedores de IA › Agente Opex › MCPs. Ligue os que o agente deste cliente pode usar.</CardDescription>
+                <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">
                 <AnimatePresence initial={false}>
-                    {anySelected && (
+                    {anySelected && warning && (
                         <motion.p
                             key="warning"
                             initial={{ opacity: 0, height: 0 }}
@@ -53,8 +60,7 @@ export function ClienteOpexMcpCard({ value, onChange }: ClienteOpexMcpCardProps)
                             className="flex items-start gap-2 overflow-hidden text-xs text-warning"
                             role="note"
                         >
-                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> Os usuários do cliente acessam o sistema externo com as credenciais do MCP (as suas). As ferramentas seguem a
-                            confirmação configurada no MCP.
+                            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> {warning}
                         </motion.p>
                     )}
                 </AnimatePresence>

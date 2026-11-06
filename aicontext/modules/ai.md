@@ -144,6 +144,10 @@ e opções na própria aba da página "Inteligência Artificial".
   | Adversário | `agente-adversario` | Revisor da implementação (ícone `Swords`) — `modules/adversarial-agent.md` |
   | Revisor | `revisao-pr` | Só a configuração; as revisões ficam em `/agente-revisor` — `modules/pr-review.md` |
   | Mentor | `agente-mentor` | Lições das mesas que viram memórias (ícone `GraduationCap`) — `modules/adversarial-agent.md`, "Agente Mentor" |
+  | Rotineiros | `rotineiros` | Agentes rotineiros (ícone `Repeat`): lista, editor (`?agente=<id>`/`novo`) e o modelo do subagente de provisionamento — `modules/routine-agents.md` |
+
+  O `ProviderModelCard` compartilhado aceita `names` (caminhos aninhados, ex.: `opex.model` nos
+  agentes rotineiros), `hideAgent` e `idPrefix`; sem eles, usa os campos `provider/model/agent/variant`.
 
   O título das memórias é gerado pelo Redator do Engramind (não há aba própria). Cada página de agente
   (`/agente-<nome>`, `modules/agent-metrics.md`) tem o botão **Configurar**, que leva à aba acima.

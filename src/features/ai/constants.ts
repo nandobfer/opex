@@ -7,7 +7,7 @@ import type { AiProviderId } from "@/lib/ai/providers"
  * na ordem do catálogo de agentes (`AGENT_CATALOG`, OPE-122). Orçamentista e Catalogador fundem duas
  * features cada (uma seção por feature).
  */
-export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor"] as const
+export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor", "rotineiros"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /**

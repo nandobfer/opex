@@ -1,9 +1,9 @@
 name: CI/CD
 
-# CI (testes Vitest) roda em todo push na main e em todo pull request, com a suíte dividida em shards.
+# CI (testes Vitest) roda só em pull request, com a suíte dividida em shards: é o check bloqueante do merge.
 # Localmente, a IA roda só os testes afetados pela mudança (AGENTS.md, seção 6).
-# CD (build + deploy) roda apenas para a main: constrói a imagem no runner,
-# exporta, transfere por SCP e recria o serviço no servidor de produção.
+# CD (build + deploy) roda apenas para a main e não repete a suíte, porque o merge já entra com o CI verde.
+# Constrói a imagem no runner, exporta, transfere por SCP e recria o serviço no servidor de produção.
 on:
   push:
     branches: [main]
@@ -16,6 +16,8 @@ permissions:
 jobs:
   vitest:
     name: Vitest (${{ matrix.shard }}/${{ strategy.job-total }})
+    # Testes só no pull request: na main o CD vai direto para build + deploy.
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     # O grupo inclui o shard: sem ele o `cancel-in-progress` cancelaria o shard irmão.
@@ -49,7 +51,7 @@ jobs:
 
   build:
     name: Build image
-    needs: vitest
+    # Sem `needs: vitest`: os testes rodam só no PR e o build/deploy da main não espera a suíte.
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 45

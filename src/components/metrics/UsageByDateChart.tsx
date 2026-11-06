@@ -11,7 +11,7 @@ const CONFIG = {
 }
 
 /** Gráfico **Uso por data**: execuções (e falhas) do agente por dia, semana ou mês. */
-export function UsageByDateChart({ points, unit }: { points: readonly { bucket: string; runs: number; failures: number }[]; unit: string }) {
+export function UsageByDateChart({ points, unit, height = CHART_HEIGHT }: { points: readonly { bucket: string; runs: number; failures: number }[]; unit: string; /** Altura da área do gráfico (padrão das Visões gerais). */ height?: number }) {
     if (!points.some((point) => point.runs > 0)) return <EmptyChart message="Nenhum uso no período." />
     return (
         <BarsChart
@@ -23,7 +23,7 @@ export function UsageByDateChart({ points, unit }: { points: readonly { bucket: 
             ]}
             config={CONFIG}
             ariaLabel="Uso por data"
-            height={CHART_HEIGHT}
+            height={height}
             xTickFormatter={formatBucketLabel}
             valueFormatter={(value) => Math.round(value).toLocaleString("pt-BR")}
             table={{

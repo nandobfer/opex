@@ -164,6 +164,11 @@ export interface EngramindMemory {
     created_at: string
     updated_at: string
     archived_at: string | null
+    /** Chave única no canal (`A-Z a-z 0-9 : _ -`, até 80), imutável; `null` sem chave. */
+    key?: string | null
+    tags?: string[]
+    /** Título do cliente travado (o Redator não troca). */
+    title_locked?: boolean
 }
 
 export interface MemoryRevision {
@@ -186,6 +191,8 @@ export interface SearchResults {
 export interface MemoryWrite {
     memory: EngramindMemory
     duplicate: boolean
+    /** Com `key` + `upsert`: `false` quando a memória da chave foi editada (nenhuma nova gravada). */
+    created?: boolean
     similar: { id: string; text?: string; title?: string | null; score?: number }[]
 }
 
