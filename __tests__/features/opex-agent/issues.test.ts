@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({
   githubRequest: vi.fn(async (_path: string, _options?: unknown): Promise<unknown> => ({})),
   githubPaginate: vi.fn(async (_path: string, _options?: unknown): Promise<unknown[]> => []),
   listTasks: vi.fn(async (): Promise<unknown> => ({ tasks: [] })),
-  findIssueTask: vi.fn(async (): Promise<{ id: string } | null> => null),
+  findIssueTask: vi.fn(async (): Promise<{ id: string; code?: string | null } | null> => null),
   getTask: vi.fn(async (_id: string): Promise<unknown> => ({})),
   active: new Set<string>(),
   recordAudit: vi.fn(async () => {}),
@@ -451,6 +451,58 @@ describe('escritas de relações', () => {
     expect(mocks.githubRequest).toHaveBeenLastCalledWith('/repos/sipal/crm/issues/118/sub_issues', expect.objectContaining({ method: 'POST', body: { sub_issue_id: 777, replace_parent: true } }))
     await run('remove_sub_issue')({ repo: 'Sipal/CRM', parent: 118, subIssue: 89 })
     expect(mocks.githubRequest).toHaveBeenLastCalledWith('/repos/sipal/crm/issues/118/sub_issue', expect.objectContaining({ method: 'DELETE', body: { sub_issue_id: 777 } }))
+  })
+})
+
+describe('update_issue (OPE-141, porte do MT-28 do my-tasks)', () => {
+  const current = { number: 88, title: 'Antigo', state: 'open', html_url: 'https://github.com/sipal/crm/issues/88', updated_at: '2026-11-06T10:00:00Z', comments: 0, labels: [{ name: 'bug' }, { name: 'P1' }], body: 'corpo antigo' }
+  const githubFake = (patched: Record<string, unknown> = {}) =>
+    mocks.githubRequest.mockImplementation(async (_path: string, options?: unknown) => {
+      const method = (options as { method?: string } | undefined)?.method
+      return method === 'PATCH' ? { ...current, ...(options as { body: Record<string, unknown> }).body, ...patched, labels: ((options as { body: { labels?: string[] } }).body.labels ?? ['bug', 'P1']).map((name) => ({ name })) } : current
+    })
+
+  beforeEach(() => {
+    mocks.githubPaginate.mockResolvedValue([{ name: 'bug' }, { name: 'P1' }, { name: 'Feature' }])
+    mocks.findIssueTask.mockResolvedValue(null)
+  })
+
+  it('edita título, corpo e labels (nome exato do repositório), pede confirmação e audita sem o corpo', async () => {
+    githubFake()
+    const result = await run('update_issue')({ repo: 'Sipal/CRM', number: 88, title: 'Novo', body: 'corpo novo', addLabels: ['feature'], removeLabels: ['p1'] })
+    expect(mocks.githubRequest).toHaveBeenLastCalledWith('/repos/sipal/crm/issues/88', expect.objectContaining({ method: 'PATCH', body: { title: 'Novo', body: 'corpo novo', labels: ['bug', 'Feature'] } }))
+    expect(result).toMatchObject({ ok: true, issue: { number: 88, title: 'Novo', labels: ['bug', 'Feature'], body: 'corpo novo' } })
+    expect(result.warning).toBeUndefined()
+    expect(needsConfirmation(findOpexTool('update_issue')!)).toBe(true)
+    expect(mocks.recordAudit).toHaveBeenCalledOnce()
+    const audit = JSON.stringify(mocks.recordAudit.mock.calls[0])
+    expect(audit).toContain('"corpo":"alterado"')
+    expect(audit).not.toContain('corpo novo')
+  })
+
+  it('recusa sem nenhum campo, PR no lugar de issue e label inexistente (com a lista válida, sem gravar)', async () => {
+    await expect(run('update_issue')({ repo: 'Sipal/CRM', number: 88 })).rejects.toThrow('Informe title')
+    mocks.githubRequest.mockResolvedValue({ ...current, pull_request: {} })
+    await expect(run('update_issue')({ repo: 'Sipal/CRM', number: 105, title: 'x' })).rejects.toThrow('pull request')
+    githubFake()
+    await expect(run('update_issue')({ repo: 'Sipal/CRM', number: 88, addLabels: ['urgente'] })).rejects.toThrow('Labels inexistentes em sipal/crm: urgente. Labels válidas: bug, P1, Feature.')
+    expect(mocks.githubRequest).not.toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ method: 'PATCH' }))
+    expect(mocks.recordAudit).not.toHaveBeenCalled()
+  })
+
+  it('label a remover que a issue não tem vira aviso; issue vinculada devolve a tarefa e a nota da sincronização', async () => {
+    githubFake()
+    mocks.findIssueTask.mockResolvedValue({ id: 't88', code: 'CRM-88' })
+    const result = await run('update_issue')({ repo: 'Sipal/CRM', number: 88, removeLabels: ['wontfix'] })
+    expect(result.warning).toBe('A issue não tinha estas labels: wontfix.')
+    expect(result.linkedTask).toBe('CRM-88')
+    expect(result.taskSync).toContain('sincronização')
+  })
+
+  it('o card mostra o corpo cortado', () => {
+    const tool = findOpexTool('update_issue')!
+    const redacted = tool.redact!({ repo: 'Sipal/CRM', number: 88, body: 'x'.repeat(5000) }) as { body: string }
+    expect(redacted.body.length).toBeLessThan(2100)
   })
 })
 
