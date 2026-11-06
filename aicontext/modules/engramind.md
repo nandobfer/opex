@@ -508,6 +508,12 @@ provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento redu
 
 ### Estatísticas (`StatsCard`, números com `AnimatedNumber`)
 
+- **Recolhível em qualquer tela (lib 0.6.0, OPE-142):** o card do canto da rede (visão inicial, Apps x
+  canais, universo do canal e universo do agente) **começa recolhido** num botão com o título e o resumo
+  ("Universo do agente · 120 memórias"; no celular só o resumo). O clique o abre por cima do quadro e o botão
+  "Recolher estatísticas" o fecha, com o foco acompanhando a troca. O estado vive enquanto a visão está aberta:
+  eventos ao vivo, filtros e a mudança do layout dos universos não o recolhem, e trocar de visão ou de
+  universo o monta de novo, recolhido. A escolha não é guardada no navegador. O skeleton mostra só o botão.
 - Apps x canais: apps, canais, memórias ativas/inativas, consumos ao vivo, total por canal e por app
   (alcance). Visão do app: agentes, canais, memórias ativas/inativas, consumos ao vivo desde que a tela
   abriu, total por canal e por agente (alcance = soma das memórias dos canais ligados). Os canais
@@ -570,12 +576,12 @@ Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas
 
 ### Celular (`useIsMobile`, até 767 px)
 
-As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela estreita; no computador
-nada muda.
+As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela estreita.
 
-- **Estatísticas recolhidas:** o `StatsCard` começa como um botão no canto com o resumo ("N agentes ·
-  M canais" na visão inicial, "N memórias" no universo); o toque abre o card por cima do quadro (largura
-  toda menos a margem) e "Recolher estatísticas" fecha. O filtro por app fica dentro do card aberto.
+- **Estatísticas recolhidas:** o `StatsCard` recolhido mostra só o resumo ("N agentes · M canais" na visão
+  inicial, "N memórias" no universo); o toque abre o card por cima do quadro (largura toda menos a margem) e
+  "Recolher estatísticas" fecha (desde a lib 0.6.0 vale também no computador; ver "Estatísticas"). O filtro
+  por app fica dentro do card aberto.
 - **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha e roda sozinha ao digitar (o × dentro
   do campo limpa); embaixo, **Filtros** (com quantos estão ativos, sem contar a busca) abre os mesmos
   campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa gaveta
@@ -955,7 +961,8 @@ de cor fixa do pacote). No Opex ficam os testes da integração, com a lib real 
 `__tests__/helpers/xyflow.tsx` (o happy-dom não mede o canvas) e o SSE pelo `EventSource` falso de
 `__tests__/helpers/engramind-live.ts`:
 
-- `__tests__/components/engramind/network.test.tsx`: a rede pelo `OpexEngramindProvider` (visões, Apps x
+- `__tests__/components/engramind/network.test.tsx`: a rede pelo `OpexEngramindProvider` (o card de estatísticas
+  abre recolhido, e os testes que leem os números o abrem com `openStats` de `__tests__/helpers/engramind-stats.ts`; visões, Apps x
   canais por `?app=`, card da memória, filtros no navegador, "N gravadas", rótulos das centrais, consumo ao
   vivo e eventos pelo SSE).
 - `__tests__/components/engramind/opex-engramind-provider.test.tsx`: o detalhe do canal com as Configurações

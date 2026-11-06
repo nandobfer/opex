@@ -4,6 +4,7 @@ import React from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { openStats } from '../../helpers/engramind-stats'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { fitBounds, flowItems, flowState, setCenter, xyflowMock } from '../../helpers/xyflow'
 import { MOBILE_MEDIA_QUERY } from '@/hooks/useMediaQuery'
@@ -163,6 +164,7 @@ describe('visão inicial', () => {
     expect(screen.getByTestId('channel-node-opex')).toBeTruthy()
     expect(screen.queryByTestId('channel-node-agentes/opex/velho')).toBeNull()
     expect(screen.getByTestId('edge-opex/opex→agentes/opex/global')).toBeTruthy()
+    await openStats()
     expect(screen.getByTestId('stat-agents').textContent).toBe('1')
     expect(screen.getByTestId('stat-active').textContent).toBe('2')
     expect(screen.getByTestId('stat-inactive').textContent).toBe('1')
@@ -173,6 +175,19 @@ describe('visão inicial', () => {
     expect(screen.queryByTestId('agent-node-outro/off')).toBeNull()
     expect(screen.getByTestId('edge-outro/bot→opex')).toBeTruthy()
     expect(screen.queryByTestId('channel-node-agentes/opex/global')).toBeNull()
+  })
+
+  it('OPE-142 (lib 0.6.0): no computador o card de estatísticas também abre recolhido, com título e resumo no botão; abre e recolhe', async () => {
+    inApp('opex')
+    mount()
+    const toggle = await screen.findByTestId('network-stats-toggle')
+    expect(screen.queryByTestId('network-stats')).toBeNull()
+    expect(toggle.getAttribute('aria-expanded')).toBe('false')
+    expect(toggle.textContent).toMatch(/agentes? · \d+ cana(l|is)/)
+    await openStats()
+    fireEvent.click(screen.getByRole('button', { name: 'Recolher estatísticas' }))
+    expect(await screen.findByTestId('network-stats-toggle')).toBeTruthy()
+    expect(screen.queryByTestId('network-stats')).toBeNull()
   })
 
   it('nome do canal: prefixo discreto em cima e a ponta final como título; o slug inteiro no hover', async () => {
@@ -277,6 +292,7 @@ describe('visão inicial', () => {
     expect(liveConnections()[0]?.url).toBe('/api/engramind/events')
     // Um consumo de dois canais (dois eventos `memory.consumed` com o mesmo `consumption`) é um pulso só.
     await emitConsumption({ agent: 'opex/opex', kind: 'context', channels: ['opex', 'agentes/opex/global'], memoryIds: ['m_1', 'm_2'] })
+    await openStats()
     expect(screen.getByTestId('stat-live').getAttribute('data-value')).toBe('1')
     await emitConsumption({ agent: 'x/y', kind: 'context', channels: ['canal/fora'], memoryIds: ['m_x'] })
     await emitConsumption({ agent: null, kind: 'context', channels: ['opex'], memoryIds: ['m_1'] })
@@ -288,6 +304,7 @@ describe('visão inicial', () => {
     mount()
     await screen.findByTestId('agent-node-opex/opex')
     await emitConsumption({ agent: 'x/y', kind: 'search', channels: ['opex'], memoryIds: ['m_1'] })
+    await openStats()
     expect(screen.getByTestId('stat-live').getAttribute('data-value')).toBe('1')
   })
 })
@@ -316,6 +333,7 @@ describe('universos', () => {
     expect(screen.getByTestId('memory-node-m_1')).toBeTruthy()
     expect(screen.getByTestId('memory-node-m_3').getAttribute('data-archived')).toBe('true')
     expect(screen.queryByTestId('memory-node-m_2')).toBeNull()
+    await openStats()
     expect(screen.getByTestId('stat-subscribers').textContent).toBe('2')
     fireEvent.keyDown(window, { key: 'Escape' })
     expect(nav.push).toHaveBeenCalledWith('/engramind', { scroll: false })
@@ -335,6 +353,7 @@ describe('universos', () => {
     mount()
     await screen.findByTestId('memory-node-m_1')
     const all = channelColors(channels.map((item) => item.slug))
+    await openStats()
     const legend = screen.getByTestId('channel-legend')
     const styles = [...legend.querySelectorAll('span[aria-hidden]')].map((dot) => dot.getAttribute('style') ?? '').join(' | ')
     // `opex` tem 2 memórias (uma inativa) e `agentes/opex/global` tem 1: o roxo primário vai para `opex`.
@@ -366,6 +385,7 @@ describe('universos', () => {
     mount()
     expect(await screen.findByTestId('memory-node-m_1')).toBeTruthy()
     expect(screen.getByTestId('memory-node-m_2')).toBeTruthy()
+    await openStats()
     const legend = screen.getByTestId('channel-legend')
     expect(legend.textContent).toContain('opex')
     expect(legend.textContent).toContain('agentes/opex/global')
@@ -553,6 +573,7 @@ describe('universos', () => {
     await emitConsumption({ agent: 'opex/opex', kind: 'context', channels: ['opex'], delivered: ['opex'], memoryIds: ['m_1', 'm_nao_carregada'] })
     await waitFor(() => expect(size()).toBeGreaterThan(before))
     expect(screen.queryByTestId('memory-node-m_nao_carregada')).toBeNull()
+    await openStats()
     expect(screen.getByTestId('stat-live').textContent).toBe('1')
   })
 
@@ -745,6 +766,7 @@ describe('OPE-113', () => {
       expect(edge(id).getAttribute('data-authored')).toBeNull()
       expect(edge(id).getAttribute('data-stroke-width')).toBe(String(ORBIT_STROKE_WIDTH.normal))
     }
+    await openStats()
     expect(screen.getByTestId('authored-link-legend').textContent).toContain('Link destacado')
   })
 
@@ -819,6 +841,7 @@ describe('OPE-113', () => {
     await screen.findByTestId('edge-opex/opex→opex')
     memories = [...memories, ownerMemory('m_8', 'opex')]
     emit('engramind-updated', { type: 'memory.created', channel: 'opex' })
+    await openStats()
     await waitFor(() => expect(screen.getByTestId('stat-active').getAttribute('data-value')).toBe('3'))
     expect(travelDots()).toEqual([])
     memories = [...memories, memory('m_9', 'opex')]
@@ -973,6 +996,7 @@ describe('OPE-113 (rodada 2)', () => {
     // O card vem depois da área da rede e o seletor saiu da legenda.
     const canvas = screen.getByTestId('react-flow')
     expect(canvas.compareDocumentPosition(screen.getByTestId('about-actions')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    await openStats()
     expect(within(screen.getByTestId('network-stats')).queryByRole('radiogroup')).toBeNull()
     expect(within(group).getAllByRole('radio').map((radio) => radio.textContent)).toEqual(['Órbita', 'Radial'])
     expect(within(group).getByRole('radio', { name: 'Órbita' }).getAttribute('aria-checked')).toBe('true')
@@ -1033,6 +1057,7 @@ describe('OPE-129: Apps x canais', () => {
       expect(screen.getByTestId('edge-app:opex→opex')).toBeTruthy()
       expect(screen.getByTestId('edge-app:opex→agentes/opex/global')).toBeTruthy()
       expect(screen.getByTestId('edge-app:outro→opex')).toBeTruthy()
+      await openStats()
       expect(screen.getByTestId('stat-apps').textContent).toBe('2')
       expect(screen.getByTestId('stat-channels').textContent).toBe('2')
       expect(screen.getByTestId('stats-by-app').textContent).toContain('Opex')
@@ -1055,6 +1080,7 @@ describe('OPE-129: Apps x canais', () => {
     expect(screen.getByTestId('channel-node-opex')).toBeTruthy()
     expect(screen.queryByTestId('channel-node-agentes/opex/global')).toBeNull()
     expect(screen.getByTestId('breadcrumb-current').textContent).toBe('App Outro')
+    await openStats()
     expect(within(screen.getByTestId('network-stats')).getByText('Outro')).toBeTruthy()
   })
 
@@ -1106,6 +1132,7 @@ describe('OPE-129: Apps x canais', () => {
         await screen.findByTestId('channel-node-agentes/opex/inativas')
         expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull()
         expect(screen.queryByTestId('edge-app:opex→agentes/opex/vazio')).toBeNull()
+        await openStats()
         expect(screen.getByTestId('stat-channels').textContent).toBe('3')
         expect(screen.getByTestId('stats-by-channel').textContent).not.toContain('vazio')
         cleanup()
@@ -1133,6 +1160,7 @@ describe('OPE-129: Apps x canais', () => {
       subscriptions[0]!.reaches = ['agentes/opex/global', 'agentes/opex/vazio']
       try {
         mount()
+        await openStats()
         expect(await screen.findByTestId('empty-channels')).toBeTruthy()
         expect(screen.queryByTestId('channel-node-agentes/opex/vazio')).toBeNull()
         fireEvent.click(screen.getByRole('button', { name: 'Abrir o canal agentes/opex/vazio' }))
@@ -1156,6 +1184,7 @@ describe('OPE-129: Apps x canais', () => {
       try {
         inApp('opex')
         mount()
+        await openStats()
         const list = await screen.findByTestId('empty-channels')
         expect(within(list).getByRole('button', { name: 'Abrir o canal agentes/opex/vazio' })).toBeTruthy()
         expect(within(list).queryByRole('button', { name: 'Abrir o canal agentes/outro/vazio' })).toBeNull()
