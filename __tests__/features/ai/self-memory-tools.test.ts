@@ -41,7 +41,16 @@ describe('memória própria', () => {
     const result = await tool(ctx({ onChange }), 'remember')({ lista: 'opex-owner', texto: text })
     expect(mocks.create).toHaveBeenCalledWith('opex-owner', text, 'local', expect.objectContaining({ agent: { consumer: 'opex', label: 'Agente Opex' } }))
     expect(result).toMatchObject({ ok: true, lista: 'opex-owner', id: 'm_1' })
-    expect(onChange).toHaveBeenCalledWith(expect.stringContaining('Memória gravada pelo agente: OPE-12'))
+    expect(onChange).toHaveBeenCalledWith(expect.stringContaining('Memória gravada pelo agente: OPE-12'), [{ kind: 'memory', agentId: 'opex-owner', memoryId: 'm_1', action: 'created' }])
+  })
+
+  it('OPE-139: o aviso leva a referência da memória (com o escopo), nunca o texto; excluir também', async () => {
+    const onChange = vi.fn()
+    await tool(ctx({ onChange }), 'remember')({ lista: 'opex-client-specific', texto: 'Cliente X quer PDF.', clientId: K })
+    expect(onChange.mock.calls[0]![1]).toEqual([{ kind: 'memory', agentId: 'opex-client-specific', memoryId: 'm_1', clientId: K, action: 'created' }])
+    expect(JSON.stringify(onChange.mock.calls[0]![1])).not.toContain('PDF')
+    await tool(ctx({ onChange }), 'forget_my_memory')({ lista: 'opex-owner', memoryId: 'm_1' })
+    expect(onChange).toHaveBeenLastCalledWith(expect.stringContaining('excluída'), [{ kind: 'memory', agentId: 'opex-owner', memoryId: 'm_1', action: 'deleted' }])
   })
 
   it('portal: só a lista do cliente da sessão; o cliente é forçado pelo servidor (o modelo não escolhe)', async () => {

@@ -19,7 +19,7 @@ vi.mock("next/link", () => ({
 }))
 
 import { SidebarNavGroup } from "@/features/layout/components/sidebar/SidebarNavGroup"
-import { HOVER_POPOVER_CLOSE_DELAY } from "@/features/layout/hooks/useHoverPopover"
+import { HOVER_POPOVER_CLOSE_DELAY } from "@/hooks/useHoverPopover"
 import type { NavGroupDef } from "@/features/layout/types"
 
 const GROUP: NavGroupDef = {

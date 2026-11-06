@@ -4,6 +4,8 @@ import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { getLocalUser } from "@/lib/local-user"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { flushWorkbenchEvents, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
+import type { WorkbenchNoticeMemoryRef } from "@/features/agentic/types"
+import { noticeMemoryRef } from "@/features/ai/memory-notice"
 import {
     MENTOR_AUDIT_ENTITY,
     MENTOR_DECISION_CONSUMPTION_ORIGIN,
@@ -117,10 +119,10 @@ async function verdictOf(workbenchId: string): Promise<MentorCase["adversarialVe
     return { summary: latest.summary, findings: (latest.findings ?? []).slice(0, 20).map((finding) => finding.title) }
 }
 
-function notice(workbenchId: string, level: "info" | "warn", message: string): Promise<void> {
+function notice(workbenchId: string, level: "info" | "warn", message: string, memories?: WorkbenchNoticeMemoryRef[]): Promise<void> {
     return (async () => {
         await prepareHub(workbenchId)
-        publishWorkbenchEvent(workbenchId, { type: "notice", level, message })
+        publishWorkbenchEvent(workbenchId, { type: "notice", level, message, ...(memories?.length ? { memories } : {}) })
         await flushWorkbenchEvents(workbenchId)
     })().catch(() => undefined)
 }
@@ -205,6 +207,10 @@ async function applyProposal(run: Pick<IMentorRun, "_id" | "workbenchId" | "task
         : await createAgentMemory(proposal.target, proposal.text, actorId, options)
     return { status: (update ? "updated" : "created") as MentorRunStatus, memoryId: result.memoria.id }
 }
+
+/** Referência da memória gravada para o aviso da mesa (o painel lê a memória do Engramind ao abrir). */
+const appliedRef = (proposal: MentorProposal, applied: { status: MentorRunStatus; memoryId: string }): WorkbenchNoticeMemoryRef =>
+    noticeMemoryRef(proposal.target, { id: applied.memoryId }, applied.status === "updated" ? "updated" : "created", { centralId: proposal.centralId ?? undefined })
 
 /** Nome da lista no aviso da mesa ("do Agente Adversário", "do agente desenvolvedor (da central)"…). */
 const targetPhrase: Record<MentorTarget, string> = {
@@ -316,7 +322,8 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
             const extra: MentorProposal | null =
                 split && !splitBlocked ? { ...resolveSplitAction(split, splitMemories.map((memory) => memory.id)), target: split.target, centralId: centralOf(split.target, input.centralId) } : null
             if (settings.saveMode === "suggest") {
-                await notice(input.workbenchId, "info", `O Agente Mentor sugeriu uma memória ${targetPhrase[target]}: aprove ou descarte em Integrações › Inteligência Artificial › Agente Mentor.`)
+                const suggestions: WorkbenchNoticeMemoryRef[] = [{ kind: "suggestion", mentorRunId: runId, part: "main" }, ...(extra ? [{ kind: "suggestion" as const, mentorRunId: runId, part: "extra" as const }] : [])]
+                await notice(input.workbenchId, "info", `O Agente Mentor sugeriu uma memória ${targetPhrase[target]}: aprove ou descarte em Integrações › Inteligência Artificial › Agente Mentor.`, suggestions)
                 return await finish("suggested", { proposal, extraProposal: extra })
             }
             const applied = await applyProposal({ _id: new Types.ObjectId(runId), workbenchId: input.workbenchId, taskCode: input.taskCode }, proposal, getLocalUser().id)
@@ -330,7 +337,8 @@ export async function processMentorRun(runId: string, input: MentorRunInput, set
                 })
             }
             const phrase = extraApplied ? `${targetPhrase[target]} e ${targetPhrase[extra!.target]}` : targetPhrase[target]
-            await notice(input.workbenchId, "info", applied.status === "updated" ? `O Agente Mentor atualizou uma memória ${phrase} com a lição deste turno.` : `O Agente Mentor registrou uma memória nova ${phrase} com a lição deste turno.`)
+            const written = [appliedRef(proposal, applied), ...(extraApplied ? [appliedRef(extra!, extraApplied)] : [])]
+            await notice(input.workbenchId, "info", applied.status === "updated" ? `O Agente Mentor atualizou uma memória ${phrase} com a lição deste turno.` : `O Agente Mentor registrou uma memória nova ${phrase} com a lição deste turno.`, written)
             return await finish(applied.status, { proposal, memoryId: applied.memoryId, ...(extraApplied ? { extraProposal: extra, extraMemoryId: extraApplied.memoryId } : {}), splitRejection })
         }
         return await finish("discarded", { sanitizerReason: rejection, skipRejection, splitRejection })
@@ -375,6 +383,15 @@ export async function getMentorRunMemory(id: string): Promise<MentorRunMemoryDto
         if (error instanceof DomainError && error.status === 404) return { state: "missing", resumo: null, resumoPendente: false, atualizadaEm: null }
         throw error
     }
+}
+
+/** Uma execução (o painel da sugestão no aviso da mesa lê a proposta onde ela está gravada). */
+export async function getMentorRun(id: string): Promise<MentorRunDto> {
+    if (!Types.ObjectId.isValid(id)) throw new DomainError(404, "Execução não encontrada", "MENTOR_RUN_NOT_FOUND")
+    await mentorDb()
+    const run = (await MentorRun.findById(id).lean()) as IMentorRun | null
+    if (!run) throw new DomainError(404, "Execução não encontrada", "MENTOR_RUN_NOT_FOUND")
+    return toMentorRunDto(run)
 }
 
 async function suggestedRun(id: string): Promise<IMentorRun> {

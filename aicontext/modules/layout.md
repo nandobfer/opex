@@ -71,7 +71,7 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   item (a logo leva a ela). Também exporta `HOME_HREF` (`/dashboard`), `PERSISTENT_PAGE_HREFS`,
   `pageTransitionKey`, `flattenNav` (expande os grupos: `APP_NAV_ITEMS` tem todas as rotas
   navegáveis), `navGroupActive`, `formatBadge`, `badgeLabel`, `isActiveHref` e `activeNavHref`.
-- `sidebar/SidebarNavGroup` (+ `hooks/useHoverPopover`): o grupo é um item da barra que abre um
+- `sidebar/SidebarNavGroup` (+ `src/hooks/useHoverPopover`): o grupo é um item da barra que abre um
   painel **à direita, fora da barra** (portal do Radix Popover, ancorado ao gatilho, `sideOffset` 12 e
   limitado à janela), animado com Framer Motion. Abre ao **passar o mouse** e também por **clique,
   toque e teclado**:
@@ -91,7 +91,8 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   Popover, posição/limites, animação, título e setas entre os links.
 - **Item com painel de hover** (`NavItemDef.panel`, `sidebar/SidebarHoverNavItem`): um link que
   **navega no clique** e, com a barra recolhida, abre um painel à direita ao passar o mouse (mesmo
-  `useHoverPopover` dos grupos: dois sinais de presença, fecha 150 ms depois de sair dos dois; toque não
+  `useHoverPopover` dos grupos — `src/hooks/useHoverPopover.ts`, compartilhado; a opção `pinOnClick`, usada
+  no detalhe de memória da mesa, faz o clique fixar o painel —: dois sinais de presença, fecha 150 ms depois de sair dos dois; toque não
   abre). O link é `Popover.Anchor` (não gatilho), então o clique não alterna o painel. Teclado: Enter
   navega, **seta →** abre o painel com o foco no primeiro link (`openFromKeyboard`) e Esc fecha
   devolvendo o foco ao item. Mudar de rota fecha. O conteúdo vem de fora do layout:

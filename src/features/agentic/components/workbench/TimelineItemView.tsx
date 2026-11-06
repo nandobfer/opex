@@ -6,6 +6,7 @@ import { Markdown } from "@/components/ui/markdown"
 import { cn } from "@/lib/utils"
 import { MessageFiles } from "@/components/chat-attachments/MessageFiles"
 import { DECISION_LABELS, type TimelineItem } from "../../timeline"
+import { NoticeMemoryDetail } from "./NoticeMemoryDetail"
 import { PrWatchItem } from "./PrWatchItem"
 import { ToolItem } from "./ToolItem"
 import { AdversarialVerdictItem } from "@/features/adversarial-agent/components/workbench/AdversarialVerdictItem"
@@ -62,7 +63,8 @@ export function TimelineItemView({ item, latestPrWatch = false }: { item: Timeli
             const Icon = style.icon
             return (
                 <p className={cn("flex items-start gap-2 text-xs", style.className)}>
-                    <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> <span className="whitespace-pre-wrap">{item.message}</span>
+                    <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />{" "}
+                    {item.memories?.length ? <NoticeMemoryDetail message={item.message} memories={item.memories} /> : <span className="whitespace-pre-wrap">{item.message}</span>}
                 </p>
             )
         }

@@ -480,7 +480,10 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 - Memória do dono: editar sim; excluir/inativar não (`OWNER_MEMORY_PROTECTED`) — o dono exclui pela tela
   ou pedindo ao Agente Opex (`delete_agent_memory`, com o card de confirmação).
 - Até 5 mutações por turno (`SELF_MEMORY_TURN_LIMIT`); as respostas trazem
-  `similares` e `foraDoContexto` para o agente consolidar; cada mutação gera um aviso no turno.
+  `similares` e `foraDoContexto` para o agente consolidar; cada mutação gera um aviso no turno. Na mesa,
+  no fork e na revisão do Adversário, o aviso leva a **referência** da memória (`onChange(message,
+  memories)`, `noticeMemoryRef`; nunca o texto) e a Saída da IA abre o detalhe lido do Engramind
+  (`agentic-dev.md`, "Avisos de memória com detalhe").
 - O **Agente Mentor** também grava como agente (`opex/mentor`, token `read+write`, ator `agente:mentor`),
   mas não é consumidor: não tem lista, contexto, aprendizado autônomo nem chave na tela; o card mostra o
   rótulo da origem ("Mentor · OPE-xx"). Ver `modules/adversarial-agent.md`, "Agente Mentor".

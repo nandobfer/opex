@@ -3,6 +3,8 @@ import { DomainError } from "@/lib/api/route"
 import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
 import { AI_AGENTS, contextChannelsFor, contextListsFor, writableListsFor, type AiAgentId, type MemoryConsumer, type MemoryListScope, type MemoryTurn } from "../../agents"
 import { firstSentence } from "../../memory-text"
+import { noticeMemoryRef } from "../../memory-notice"
+import type { NoticeMemoryAction, WorkbenchNoticeMemoryRef } from "@/features/agentic/types"
 import { SELF_MEMORY_TOOL_METAS, SELF_MEMORY_TURN_LIMIT } from "../../self-memory"
 import type { MemoryDto, MemoryMutationResult } from "../../types"
 import { createAgentMemory, deleteAgentMemory, listAgentMemories, updateAgentMemory } from "../agent-memory-service"
@@ -25,8 +27,8 @@ export interface SelfMemoryContext {
     turnKey: string
     actorId: string
     auditContext?: Record<string, unknown>
-    /** Aviso discreto no turno a cada gravação. */
-    onChange?: (message: string) => void
+    /** Aviso discreto no turno a cada gravação, com a referência da memória (o painel do aviso a lê). */
+    onChange?: (message: string, memories: WorkbenchNoticeMemoryRef[]) => void
 }
 
 const counters = new Map<string, { count: number; at: number }>()
@@ -118,7 +120,8 @@ function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgent
     const writable = listingLists ?? writableListsFor(context.consumer, context.turn)
     const writableEnum = z.enum(writable as [AiAgentId, ...AiAgentId[]]).describe(`Lista: ${writable.map((id) => `${id} = ${AI_AGENTS[id].title}`).join("; ")}`)
     const needsClient = Boolean(listingLists) || (context.turn.kind !== "client" && writable.some((id) => AI_AGENTS[id].scope === "client"))
-    const notify = (verb: string, memory: MemoryDto) => context.onChange?.(`Memória ${verb} pelo agente: ${firstSentence(memory.texto, 90)}`)
+    const notify = (verb: string, list: AiAgentId, memory: MemoryDto, action: NoticeMemoryAction) =>
+        context.onChange?.(`Memória ${verb} pelo agente: ${firstSentence(memory.texto, 90)}`, [noticeMemoryRef(list, memory, action)])
     const agent = { consumer: context.consumer, label: context.label }
     const write = { agent, auditContext: context.auditContext }
 
@@ -149,7 +152,7 @@ function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgent
                 const list = assertWritable(context, input.lista)
                 takeSlot(context.turnKey)
                 const result = await createAgentMemory(list, input.texto, context.actorId, { ...listScopeFor(context, list, input.clientId), categoria: input.categoria, fixada: input.fixada, ...write })
-                if (!result.duplicada) notify("gravada", result.memoria)
+                if (!result.duplicada) notify("gravada", list, result.memoria, "created")
                 return resultView(list, result)
             },
         }),
@@ -163,7 +166,7 @@ function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgent
                 if (input.texto === undefined && input.categoria === undefined) throw new DomainError(400, "Informe o texto ou a categoria", "VALIDATION_ERROR")
                 takeSlot(context.turnKey)
                 const result = await updateAgentMemory(list, input.memoryId, { texto: input.texto, categoria: input.categoria, versao: input.versao }, context.actorId, { ...listScopeFor(context, list, input.clientId), ...write })
-                notify("editada", result.memoria)
+                notify("editada", list, result.memoria, "updated")
                 return resultView(list, result)
             },
         }),
@@ -176,7 +179,7 @@ function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgent
                 const list = assertWritable(context, input.lista)
                 takeSlot(context.turnKey)
                 const result = await updateAgentMemory(list, input.memoryId, { fixada: input.fixada }, context.actorId, { ...listScopeFor(context, list, input.clientId), ...write })
-                notify(input.fixada ? "fixada" : "desafixada", result.memoria)
+                notify(input.fixada ? "fixada" : "desafixada", list, result.memoria, input.fixada ? "pinned" : "unpinned")
                 return resultView(list, result)
             },
         }),
@@ -189,7 +192,7 @@ function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgent
                 const list = assertWritable(context, input.lista)
                 takeSlot(context.turnKey)
                 const result = await updateAgentMemory(list, input.memoryId, { ativa: input.ativa }, context.actorId, { ...listScopeFor(context, list, input.clientId), ...write })
-                notify(input.ativa ? "reativada" : "inativada", result.memoria)
+                notify(input.ativa ? "reativada" : "inativada", list, result.memoria, input.ativa ? "activated" : "archived")
                 return resultView(list, result)
             },
         }),
@@ -202,7 +205,7 @@ function selfMemoryWriteTools(context: SelfMemoryContext, listingLists?: AiAgent
                 const list = assertWritable(context, input.lista)
                 takeSlot(context.turnKey)
                 const removed = await deleteAgentMemory(list, input.memoryId, context.actorId, listScopeFor(context, list, input.clientId), write)
-                notify("excluída", removed)
+                notify("excluída", list, removed, "deleted")
                 return { ok: true, excluida: view(list, removed) }
             },
         }),

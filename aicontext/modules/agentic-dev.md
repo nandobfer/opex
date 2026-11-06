@@ -1134,6 +1134,25 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   volta sozinho) e aparece um botão flutuante **Ir para o final**; ao voltar ao fim ou clicar no
   botão, o acompanhamento **retoma**. O botão rola suave, desligando o movimento com
   `prefers-reduced-motion`.
+- **Avisos de memória com detalhe** (OPE-139): os avisos de gravação de memória na Saída da IA (mesa e
+  forks) — "Memória gravada/editada/fixada/desafixada/reativada/inativada/excluída pelo agente…" (agente
+  desenvolvedor e Agente Adversário) e "O Agente Mentor registrou/atualizou/sugeriu uma memória…" — têm
+  o texto como gatilho de um painel (`NoticeMemoryDetail` → `MemoryDetailPopover`): **passar o mouse**
+  abre a prévia e o **clique fixa** o painel (fecha por Esc, clique fora, botão de fechar ou outro
+  clique no texto; `useHoverPopover` com `pinOnClick`). O painel mostra **título** (com "Resumo sendo
+  gerado…" enquanto o Engramind não responde), **canal** (título da lista + slug), **categoria**
+  (rótulo da lista de categorias), **conteúdo completo** e a ação no rodapé.
+  - O evento `notice` leva só a **referência** (`memories?: WorkbenchNoticeMemoryRef[]`):
+    `{ kind: "memory", agentId, memoryId, centralId?, clientId?, action }` ou, na sugestão do Mentor,
+    `{ kind: "suggestion", mentorRunId, part: "main" | "extra" }`. Título, categoria e texto **não** são
+    copiados para o evento: o painel lê a memória **ao abrir**, pelas rotas do dono da lista
+    (`memoryDetailPath` de `src/features/ai/memory-notice.ts`), que consultam o Engramind com o token do
+    app. A sugestão lê a execução (`GET /api/adversarial/mentor/runs/[id]`): aguardando, mostra a
+    proposta como "Sugestão, ainda não gravada" (categoria "Definida ao gravar"); aprovada, mostra a
+    memória gravada.
+  - Lição dividida pelo Mentor (global + central): abas **Principal** e **Parte separada**.
+  - Memória excluída (aviso de exclusão ou 404 depois) mostra "não está mais no Engramind"; falha de
+    leitura mostra "Tentar novamente". Avisos antigos, sem a referência, continuam como texto.
 
 ## Chat durante a execução
 

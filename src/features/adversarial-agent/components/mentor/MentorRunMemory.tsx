@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { BookOpen, Loader2, RotateCw } from "lucide-react"
+import { BookOpen, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Field } from "@/components/ui/field"
@@ -11,6 +11,7 @@ import { OptionTabs } from "@/components/ui/option-tabs"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
 import { MEMORY_TEXT_MAX } from "@/features/ai/memory-text"
+import { MEMORY_READING_TEXT_CLASS, MemoryReadingText, MemorySummaryPending } from "@/features/ai/components/memories/MemoryReading"
 import { MENTOR_TARGET_LABELS, MENTOR_TARGETS, type MentorTarget } from "../../mentor/constants"
 import type { MentorRunDto } from "../../mentor/types"
 import { useMentorRunMemory } from "../../hooks/useMentor"
@@ -18,8 +19,8 @@ import { MentorRunChip, MentorRunSection } from "./MentorRunSection"
 
 const fade = { initial: { opacity: 0, y: 4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -4 }, transition: { duration: 0.18 } }
 
-/** Área de leitura do texto completo: largura de leitura, tipografia confortável e rolagem interna. */
-export const MENTOR_MEMORY_TEXT_CLASS = "max-h-[40vh] max-w-prose overflow-y-auto whitespace-pre-wrap break-words rounded-md border bg-background/40 px-3 py-2.5 text-sm leading-relaxed"
+/** Área de leitura do texto completo (compartilhada com o painel de memória dos avisos da mesa). */
+export const MENTOR_MEMORY_TEXT_CLASS = MEMORY_READING_TEXT_CLASS
 
 /** Resumo da memória gravada (Engramind), em destaque; sem memória ou sem resumo, estado vazio discreto. */
 function MemorySummary({ run }: { run: MentorRunDto }) {
@@ -43,9 +44,7 @@ function MemorySummary({ run }: { run: MentorRunDto }) {
                             {data.resumoPendente && query.expired ? (
                                 <p className="text-xs text-muted-foreground">O resumo ainda não ficou pronto: este é o texto provisório.</p>
                             ) : data.resumoPendente ? (
-                                <p className="flex items-center gap-1 text-xs text-muted-foreground">
-                                    <Loader2 className="h-3 w-3 animate-spin" aria-hidden /> Resumo sendo gerado pelo Engramind…
-                                </p>
+                                <MemorySummaryPending />
                             ) : (
                                 data.atualizadaEm && <p className="text-xs text-muted-foreground">Atualizada {formatDistanceToNow(new Date(data.atualizadaEm), { addSuffix: true, locale: ptBR })}</p>
                             )}
@@ -113,9 +112,7 @@ export function MentorRunMemory({ run, editable, text, target, onTextChange, onT
                     </Field>
                 </>
             ) : (
-                <div aria-label="Texto completo da memória" className={MENTOR_MEMORY_TEXT_CLASS}>
-                    {proposal.text}
-                </div>
+                <MemoryReadingText>{proposal.text}</MemoryReadingText>
             )}
             {run.extraProposal && (
                 <div className="space-y-1.5 rounded-lg border bg-muted/20 p-3">

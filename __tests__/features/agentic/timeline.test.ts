@@ -13,6 +13,19 @@ describe('applyTimelineLine', () => {
     expect(state.items[1]).toMatchObject({ text: 'Olá' })
   })
 
+  it('OPE-139: aviso leva as referências de memória; aviso antigo (sem o campo) fica com lista vazia', () => {
+    const ref = { kind: 'memory' as const, agentId: 'developer-global' as const, memoryId: 'm_1', action: 'created' as const }
+    const state = run([
+      { type: 'reset' },
+      { type: 'notice', level: 'info', message: 'Memória gravada pelo agente: X', memories: [ref], seq: 1, ts },
+      { type: 'notice', level: 'warn', message: 'Aviso antigo', seq: 2, ts },
+    ])
+    expect(state.items).toEqual([
+      { kind: 'notice', key: 'notice-1', level: 'info', message: 'Memória gravada pelo agente: X', memories: [ref] },
+      { kind: 'notice', key: 'notice-2', level: 'warn', message: 'Aviso antigo', memories: [] },
+    ])
+  })
+
   it('ferramenta é atualizada pelo id (progresso ao vivo e fim)', () => {
     const state = run([
       { type: 'reset' },

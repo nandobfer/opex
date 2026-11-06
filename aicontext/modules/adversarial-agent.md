@@ -295,7 +295,8 @@ na tela e na API; `withMentorDefaults`).
   sugestão volta a aguardar e a nova tentativa **não repete** o que já foi gravado (`memoryId`/
   `extraMemoryId`). As gravações do Mentor **não** contam como
   aprendizado do agente (`selfLearned` lê só `agente:desenvolvedor` e `agente:adversario`). A mesa recebe um aviso discreto (`notice` info) na Saída da IA,
-  citando a lista. O desenvolvedor segue a memória nova a partir do próximo turno.
+  citando a lista, com a referência das memórias gravadas (ou da execução, na sugestão) para o painel de
+  detalhe (`agentic-dev.md`, "Avisos de memória com detalhe"). O desenvolvedor segue a memória nova a partir do próximo turno.
 - **Execução** (`adversarial_mentor_runs`, `server/mentor/models.ts`): fila em memória por mesa
   (`globalThis.__opexMentorQueue`, uma por vez), status
   `queued → running → skipped | discarded | suggested | created | updated | failed`, com nota/limiar,
@@ -423,6 +424,7 @@ lista) e o redator configurados.
 | `/api/ai/agents/adversarial/memories*` | Memórias (rotas do módulo de memórias dos agentes; sem limite de quantidade) |
 | `GET/PUT /api/ai/features/adversarial-mentor` | Configuração do Agente Mentor |
 | `GET /api/adversarial/mentor/runs?q&statuses&sources&triggers&centrals&from&to&page&limit` | Execuções paginadas no recorte (mesmo envelope; marca as órfãs como falhas antes de listar) |
+| `GET /api/adversarial/mentor/runs/[id]` | Uma execução (`MentorRunDto`, `getMentorRun`; 404 `MENTOR_RUN_NOT_FOUND`): painel da sugestão no aviso da mesa |
 | `GET /api/adversarial/mentor/runs/[id]/memory` | Resumo (Engramind) da memória gravada pela execução: `{ state: "none" \| "ok" \| "missing", resumo, resumoPendente, atualizadaEm }` (`getMentorRunMemory`) |
 | `POST /api/adversarial/mentor/runs/[id]/approve` `{ text?, target?, extraText?, includeExtra? }`, `POST …/discard` | Aprovar (texto editável; a parte separada também) ou descartar uma sugestão (409 `MENTOR_RUN_NOT_SUGGESTED`) |
 | `GET/POST /api/adversarial/mentor/reorganizations` | Histórico (20 mais recentes + centrais) / inicia a revisão `{ targets?, centralIds? }` (409 `MENTOR_REORG_RUNNING`) |

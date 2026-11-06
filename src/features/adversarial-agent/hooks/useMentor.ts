@@ -8,6 +8,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
+import { isGoneError } from "@/features/ai/hooks/useMemoryDetail"
 import { MENTOR_FEATURE, MENTOR_HISTORY_LIMIT, MENTOR_TARGET_LABELS, MENTOR_UPDATED_EVENT, type MentorTarget } from "../mentor/constants"
 import type { MentorRunListParams } from "../mentor/filters"
 import type { MentorSettings } from "../mentor/schemas"
@@ -125,4 +126,15 @@ export function useMentorRealtime(enabled = true): void {
             releaseChannel(name)
         }
     }, [enabled, queryClient])
+}
+
+/** Uma execução do Mentor, lida quando o painel da sugestão (aviso da mesa, OPE-139) abre. */
+export function useMentorRun(id: string | null, enabled: boolean) {
+    return useQuery({
+        queryKey: [...MENTOR_RUNS_KEY, "one", id],
+        queryFn: () => get<MentorRunDto>(`/adversarial/mentor/runs/${id}`),
+        enabled: enabled && id !== null,
+        staleTime: 15_000,
+        retry: (count, error) => !isGoneError(error) && count < 2,
+    })
 }
