@@ -129,18 +129,24 @@ export async function runSsh(command: string, timeoutMs: number, options: { quie
                 ),
             ),
         )
-        conn.connect({
-            host: settings.host,
-            port: settings.port,
-            username: settings.username,
-            privateKey: settings.privateKey,
-            readyTimeout: 15_000,
-            hostVerifier: (key: Buffer) => {
-                const print = fingerprintOf(key)
-                if (print === settings.fingerprint) return true
-                hostMismatch = print
-                return false
-            },
-        })
+        try {
+            conn.connect({
+                host: settings.host,
+                port: settings.port,
+                username: settings.username,
+                privateKey: settings.privateKey,
+                readyTimeout: 15_000,
+                hostVerifier: (key: Buffer) => {
+                    const print = fingerprintOf(key)
+                    if (print === settings.fingerprint) return true
+                    hostMismatch = print
+                    return false
+                },
+            })
+        } catch (error) {
+            // O ssh2 lança na hora quando não consegue ler a chave (mal formatada ou protegida por senha).
+            const message = error instanceof Error ? error.message : String(error)
+            done(() => reject(new DomainError(422, `Chave privada SSH inválida ou protegida por senha: ${message}. Use uma chave sem senha na integração OpenCode`, "OPENCODE_SSH_KEY_INVALID")))
+        }
     })
 }
