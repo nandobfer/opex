@@ -27,6 +27,8 @@ vi.mock('@/features/opex-agent/server/session-retention', () => ({ cleanupIdleAg
 
 import {
   CronJobRunError,
+  FAST_JOB_LEASE_MS,
+  runFastSchedulerTick,
   registerInternalJob,
   rescheduleJobs,
   runJobNow,
@@ -259,5 +261,43 @@ describe('rescheduleJobs', () => {
   it('ignora agendamento inválido', async () => {
     await rescheduleJobs([{ ...httpJob, schedule: { type: 'daily', time: '25:00' } }])
     expect(mocks.updateOne).not.toHaveBeenCalled()
+  })
+})
+
+describe('rotinas em segundos e tick rápido (OPE-145)', () => {
+  const fastJob: CronJobConfig = { id: 'fast-job', label: 'Rápida', kind: 'internal', schedule: { type: 'interval', seconds: 10 }, enabled: true }
+  const minuteJob: CronJobConfig = { id: 'minute-job', label: 'Minuto', kind: 'internal', schedule: { type: 'interval', minutes: 1 }, enabled: true }
+
+  it('o tick de minuto ignora as rotinas em segundos e o tick rápido roda só elas, com lease curto', async () => {
+    const fast = vi.fn(async () => 'ok')
+    const minute = vi.fn(async () => 'ok')
+    registerInternalJob('fast-job', fast)
+    registerInternalJob('minute-job', minute)
+    mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: true, jobs: [fastJob, minuteJob] })
+    mocks.findOneAndUpdate.mockResolvedValue({ jobId: 'x' })
+
+    const now = new Date('2026-11-06T12:00:01.000Z')
+    expect((await runSchedulerTick(now)).executed).toEqual(['minute-job'])
+    expect(fast).not.toHaveBeenCalled()
+
+    mocks.findOneAndUpdate.mockClear()
+    expect((await runFastSchedulerTick(now)).executed).toEqual(['fast-job'])
+    expect(minute).toHaveBeenCalledTimes(1)
+    expect(fast).toHaveBeenCalledTimes(1)
+    const claim = mocks.findOneAndUpdate.mock.calls[0]![1] as { $set: { lockedUntil: Date; nextRunAt: Date } }
+    expect(claim.$set.lockedUntil.getTime() - now.getTime()).toBe(FAST_JOB_LEASE_MS)
+    expect(claim.$set.nextRunAt.toISOString()).toBe('2026-11-06T12:00:10.000Z')
+  })
+
+  it('tick rápido respeita o agendador desligado e a rotina desligada', async () => {
+    mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: false, jobs: [fastJob] })
+    expect(await runFastSchedulerTick()).toEqual({ skipped: 'disabled', executed: [] })
+    mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: true, jobs: [{ ...fastJob, enabled: false }] })
+    expect((await runFastSchedulerTick()).executed).toEqual([])
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled()
+  })
+
+  it('tickReference na grade de 10 s', () => {
+    expect(tickReference(new Date('2026-11-06T12:00:13.500Z'), 10_000).toISOString()).toBe('2026-11-06T12:00:09.999Z')
   })
 })

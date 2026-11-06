@@ -1,29 +1,14 @@
 "use client"
 
-import type { ReactNode } from "react"
 import Link from "next/link"
 import { AnimatePresence } from "framer-motion"
 import { FileWarning, Gauge, PlugZap, TriangleAlert } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
+import { PanelMessage } from "@/components/metrics/PanelMessage"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { integrationPath } from "@/lib/integrations/catalog"
 import type { OpencodeQuotaDto } from "../types"
 import { QuotaProviderGroup } from "./QuotaProviderGroup"
-
-function PanelMessage({ icon: Icon, tone = "muted", title, description, children }: { icon: LucideIcon; tone?: "muted" | "warning" | "destructive"; title: string; description?: string; children?: ReactNode }) {
-    const color = tone === "destructive" ? "text-destructive" : tone === "warning" ? "text-warning" : "text-muted-foreground"
-    return (
-        <div className="flex gap-2 rounded-md bg-muted/40 p-2 text-[11px]" role={tone === "muted" ? "status" : "alert"}>
-            <Icon className={`mt-0.5 h-3.5 w-3.5 shrink-0 ${color}`} aria-hidden />
-            <div className="min-w-0 flex-1 space-y-1">
-                <p className="font-medium text-foreground">{title}</p>
-                {description && <p className="text-muted-foreground">{description}</p>}
-                {children}
-            </div>
-        </div>
-    )
-}
 
 interface QuotaPanelBodyProps {
     data: OpencodeQuotaDto | undefined

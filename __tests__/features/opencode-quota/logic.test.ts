@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatResetIn, hasMultipleAccounts, keepLastGoodWindows, isQuotaStale, normalizeQuotaSnapshot, quotaErrorMessage, quotaHash, quotaLevel, rowValueText, snapshotCheckedAt, summaryLabel, summaryWindows, usedPercent } from '@/features/opencode-quota/logic'
-import type { QuotaProviderDto, QuotaWindowDto } from '@/features/opencode-quota/types'
+import { formatResetIn, hasMultipleAccounts, keepLastGoodWindows, isQuotaStale, normalizeQuotaSnapshot, quotaErrorMessage, quotaHash, quotaLevel, rowValueText, snapshotCheckedAt, summaryLabel, summaryWindows, usedPercent, visibleQuotaLevel, visibleQuotaWindows } from '@/features/opencode-quota/logic'
+import type { OpencodeQuotaDto, QuotaProviderDto, QuotaWindowDto } from '@/features/opencode-quota/types'
 import { quotaSnapshotSchema } from '@/features/opencode-quota/schemas'
 
 const CHECKED = new Date('2026-10-28T12:00:00Z')
@@ -182,5 +182,36 @@ describe('regras de exibição', () => {
     const a = normalizeQuotaSnapshot(v6, CHECKED)
     const b = normalizeQuotaSnapshot({ ...v6, providers: v6.providers.map((provider) => ({ ...provider, okAtMs: 1, checkedAtMs: 2 })) }, new Date())
     expect(quotaHash(a)).toBe(quotaHash(b))
+  })
+})
+
+describe('visibleQuotaLevel — bolinha da quota (OPE-145)', () => {
+  const NOW = Date.parse('2026-11-06T12:00:00.000Z')
+  const win = (id: string, usedPercent: number | null, account: string | null = null) => ({ id, label: id, account, usedPercent, value: usedPercent === null ? 'R$ 10' : null, resetAt: null })
+  const quota = (providers: OpencodeQuotaDto['providers'], over: Partial<OpencodeQuotaDto> = {}): OpencodeQuotaDto => ({ state: 'ok', message: null, exportedAt: '2026-11-06T11:59:00.000Z', checkedAt: '2026-11-06T12:00:00.000Z', providers, ...over })
+  const anthropic = { id: 'anthropic', name: 'Anthropic', status: 'ok' as const, errors: [], windows: [win('5h', 20), win('weekly', 90)] }
+  const go = { id: 'opencode-go', name: 'OpenCode Go', status: 'ok' as const, errors: [], windows: [win('monthly', 65)] }
+  const expanded = { collapsed: false, collapsedProviders: [] as string[] }
+
+  it('bloco expandido: todas as janelas dos provedores expandidos (pior caso)', () => {
+    expect(visibleQuotaLevel(quota([anthropic, go]), expanded, NOW)).toBe('critical')
+  })
+
+  it('provedor recolhido conta só a barra-resumo que aparece', () => {
+    expect(visibleQuotaLevel(quota([anthropic, go]), { collapsed: false, collapsedProviders: ['anthropic'] }, NOW)).toBe('warning')
+    expect(visibleQuotaWindows(quota([anthropic, go]), { collapsed: false, collapsedProviders: ['anthropic'] }).map((window) => window.id)).toEqual(['5h', 'monthly'])
+  })
+
+  it('bloco recolhido: barras-resumo dos provedores não recolhidos', () => {
+    expect(visibleQuotaLevel(quota([anthropic, go]), { collapsed: true, collapsedProviders: [] }, NOW)).toBe('warning')
+    expect(visibleQuotaLevel(quota([anthropic, go]), { collapsed: true, collapsedProviders: ['opencode-go'] }, NOW)).toBe('ok')
+    expect(visibleQuotaLevel(quota([anthropic, go]), { collapsed: true, collapsedProviders: ['anthropic', 'opencode-go'] }, NOW)).toBeNull()
+  })
+
+  it('cinza: sem dado, estado de falha, sem barra com % ou desatualizada', () => {
+    expect(visibleQuotaLevel(undefined, expanded, NOW)).toBeNull()
+    expect(visibleQuotaLevel(quota([], { state: 'missing' }), expanded, NOW)).toBeNull()
+    expect(visibleQuotaLevel(quota([{ ...go, windows: [win('saldo', null)] }]), expanded, NOW)).toBeNull()
+    expect(visibleQuotaLevel(quota([go], { exportedAt: '2026-11-06T11:00:00.000Z' }), expanded, NOW)).toBeNull()
   })
 })

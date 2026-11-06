@@ -52,7 +52,11 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   a sessão e volta para `/login`; a versão fica na linha inferior da barra. Na gaveta do mobile
   (expandida) o rodapé mantém o dono, a versão e o "Sair" inline.
 - Acima do rodapé, o `AppSidebar` aceita `footerItems` (repassado pelo `AppShell` como
-  `sidebarFooterItems`): o `AppLayoutShell` (menu do dono) e o `ClientePortalShell` usam, com o
+  `sidebarFooterItems`): o menu do dono (`AppLayoutShell`) mostra, acima dos agentes, o item
+  **"Servidor e quota"** (OPE-145, `ServerQuotaSidebarItem`, sobre o `SidebarHoverButtonItem`: botão que
+  não navega e abre um painel por hover, clique, toque e teclado; tooltip com `SidebarTooltip suppressed`
+  enquanto o painel está aberto; o `SidebarHoverPanel` aceita `focusSelector` para painéis com botões) —
+  ver `modules/host-metrics.md`. O `AppLayoutShell` e o `ClientePortalShell` usam, com o
   **item único dos agentes de chat** (`AgentChatNavItem`): abre o último agente escolhido (Agente
   Opex ou Agente Maddox) num popover, com a troca no cabeçalho; nome, ícone e cor acompanham o agente
   ativo (Ctrl+Shift+O / Ctrl+Shift+M) — ver `modules/opex-agent.md` e `modules/maddox-agent.md`. No

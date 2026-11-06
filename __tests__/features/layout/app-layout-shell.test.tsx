@@ -20,7 +20,8 @@ vi.mock("next/link", () => ({
     }),
 }))
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
-vi.mock("@/features/opex-agent/components/agents/AgentChatNavItem", () => ({ AgentChatNavItem: () => null }))
+vi.mock("@/features/opex-agent/components/agents/AgentChatNavItem", () => ({ AgentChatNavItem: () => <li data-testid="agent-nav-item-mock" /> }))
+vi.mock("@/features/host-metrics/components/ServerQuotaSidebarItem", () => ({ ServerQuotaSidebarItem: () => <li data-testid="server-quota-item-mock" /> }))
 vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
 vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
 vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({ IntegrationTestDialog: () => null }))
@@ -67,5 +68,16 @@ describe("AppLayoutShell — menu do dono liga o submenu de Integrações (OPE-1
         const panel = screen.getByTestId("sidebar-item-panel-integrations")
         const rows = Array.from(panel.querySelectorAll("li[data-integration-id]")).map((row) => row.getAttribute("data-integration-id"))
         expect(rows).toEqual(["github", "pusher"])
+    })
+
+    it("o rodapé do dono mostra \"Servidor e quota\" logo acima do Agente Opex (OPE-145)", () => {
+        render(
+            <AppLayoutShell ownerName="Ana">
+                <p>conteúdo</p>
+            </AppLayoutShell>,
+        )
+        const footer = screen.getByTestId("sidebar-footer-items")
+        const items = Array.from(footer.querySelectorAll("li")).map((item) => item.getAttribute("data-testid"))
+        expect(items).toEqual(["server-quota-item-mock", "agent-nav-item-mock"])
     })
 })

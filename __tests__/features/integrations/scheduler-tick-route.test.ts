@@ -5,12 +5,14 @@ const mocks = vi.hoisted(() => ({
   getIntegrationConfig: vi.fn(),
   registerBuiltInJobs: vi.fn(),
   runSchedulerTick: vi.fn(),
+  runFastSchedulerTick: vi.fn(),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.getIntegrationConfig }))
 vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({
   registerBuiltInJobs: mocks.registerBuiltInJobs,
   runSchedulerTick: mocks.runSchedulerTick,
+  runFastSchedulerTick: mocks.runFastSchedulerTick,
 }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
@@ -28,6 +30,7 @@ beforeEach(() => {
   vi.stubEnv('CRON_SECRET', 'segredo-env')
   mocks.getIntegrationConfig.mockResolvedValue({ cronSecret: 'segredo-banco' })
   mocks.runSchedulerTick.mockResolvedValue({ executed: ['cancel'] })
+  mocks.runFastSchedulerTick.mockResolvedValue({ executed: [] })
 })
 
 afterEach(() => vi.unstubAllEnvs())
@@ -70,5 +73,17 @@ describe('GET/POST /api/routines/scheduler-tick (tick externo)', () => {
     const res = await GET(tickRequest('segredo-env'))
     expect(res.status).toBe(500)
     expect((await res.json()).error).toBe('Erro ao executar o tick do agendador')
+  })
+
+  it('inclui as rotinas em segundos (tick rápido) no mesmo disparo (OPE-145)', async () => {
+    mocks.runFastSchedulerTick.mockResolvedValue({ executed: ['host-metrics-refresh'] })
+    const body = await (await GET(tickRequest('segredo-env'))).json()
+    expect(body).toEqual({ success: true, executed: ['cancel', 'host-metrics-refresh'] })
+  })
+
+  it('agendador desligado não roda o tick rápido', async () => {
+    mocks.runSchedulerTick.mockResolvedValue({ skipped: 'disabled', executed: [] })
+    await GET(tickRequest('segredo-env'))
+    expect(mocks.runFastSchedulerTick).not.toHaveBeenCalled()
   })
 })

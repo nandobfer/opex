@@ -1,7 +1,8 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ChevronDown, Gauge, RefreshCw } from "lucide-react"
+import { ChevronDown, Gauge } from "lucide-react"
+import { RefreshIconButton } from "@/components/metrics/RefreshIconButton"
 import { StaleBadge } from "@/components/metrics/StaleBadge"
 import { useNow } from "@/hooks/useNow"
 import { apiErrorMessage } from "@/lib/api"
@@ -51,18 +52,7 @@ export function OpencodeQuotaPanel() {
                     <span className="shrink-0">Quota do OpenCode</span>
                 </button>
                 {stale && <StaleBadge title="O opencode-quota não consulta nenhum provedor há mais de 30 min. Confira se o OpenCode está rodando com o plugin atualizado." />}
-                <button
-                    type="button"
-                    onClick={() => refresh.mutate()}
-                    disabled={refresh.isPending}
-                    aria-label="Atualizar quota do OpenCode"
-                    title="Atualizar"
-                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-60"
-                >
-                    <motion.span animate={busy && !reduceMotion ? { rotate: 360 } : { rotate: 0 }} transition={busy ? { duration: 0.8, repeat: Infinity, ease: "linear" } : { duration: 0 }} className="flex">
-                        <RefreshCw className="h-3.5 w-3.5" aria-hidden />
-                    </motion.span>
-                </button>
+                <RefreshIconButton onClick={() => refresh.mutate()} disabled={refresh.isPending} busy={busy} ariaLabel="Atualizar quota do OpenCode" />
                 <button
                     type="button"
                     onClick={toggleCollapsed}

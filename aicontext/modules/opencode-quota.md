@@ -95,11 +95,13 @@ OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal�
   **expandidos**, rotuladas "Provedor · janela" (`summaryLabel`; com várias contas,
   "Provedor (conta) · janela"). Provedores recolhidos ficam ocultos; sem dados `ok` ou com todos
   recolhidos, aparece só o título.
-- Cada janela (`QuotaWindowBar`): rótulo, só o tempo restante até o reset ("2 h 15 min",
+- Cada janela (`QuotaWindowBar`, sobre a barra compartilhada `UsageBar` de `src/components/metrics/`): rótulo, só o tempo restante até o reset ("2 h 15 min",
   `formatResetIn`, relógio de 30 s), % usado com `AnimatedNumber` e barra `role="progressbar"`.
   O texto visível não tem o prefixo "reinicia em"; a dica (`title`, "Reinicia em dd/MM às HH:mm")
   e o `aria-label` da barra mantêm a explicação (", reinicia em 2 h 15 min").
-- **Cores por uso** (tokens): `< 60%` `success`, `60–84%` `warning`, `≥ 85%` `destructive`.
+- **Cores por uso** (tokens): `< 60%` `success`, `60–84%` `warning`, `≥ 85%` `destructive` — regra
+  compartilhada `usageLevel`/`USAGE_LEVEL_CLASSES` (`src/components/metrics/usage-level.ts`), a mesma dos
+  recursos do servidor.
 - **Animações** (Framer Motion, respeitando movimento reduzido): a barra cresce de 0 ao carregar e
   do valor anterior ao atualizar; a cor transiciona; expandir/recolher (card e provedor) anima altura e opacidade;
   provedores entram/saem com fade; acima de 95% a barra pulsa suavemente; o ícone de atualizar gira
@@ -110,5 +112,16 @@ OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal�
 - Estados: skeleton ao carregar; `missing` ("Plugin opencode-quota não respondeu", com instruções para instalar/atualizar o plugin 6.x e reiniciar o `opencode serve`); `unconfigured` com
   atalho para a integração; erro com "Tentar novamente"; "Nenhum provedor com quota". Falha da quota
   nunca esconde a lista de tarefas.
-- Tempo real: `useOpencodeQuotaRealtime` invalida a consulta no evento; a reconexão do Pusher refaz as
+- **Painel "Servidor e quota" da barra lateral** (OPE-145, `modules/host-metrics.md`): o mesmo
+  `OpencodeQuotaPanel`, abaixo do bloco Servidor, com a mesma preferência (`useQuotaPanelPrefs`), query e
+  evento. A **bolinha da quota** usa `visibleQuotaLevel` (`logic.ts`): pior faixa entre as barras com %
+  que o painel mostra com a preferência salva (`visibleQuotaWindows`) — bloco expandido: todas as
+  janelas dos provedores expandidos e as barras-resumo dos recolhidos; bloco recolhido: as barras-resumo
+  dos provedores não recolhidos. Cinza (`null`) sem leitura, com `missing`/`unconfigured`/`error`, sem
+  nenhuma barra com % ou desatualizada (`isQuotaStale`). Segue a preferência mesmo com o painel fechado.
+- Selo "Desatualizado", botão "Atualizar" e avisos usam os componentes compartilhados `StaleBadge`,
+  `RefreshIconButton` e `PanelMessage` (`src/components/metrics/`).
+- Tempo real: `useOpencodeQuotaRealtime` invalida a consulta no evento com `cancelRefetch: false` — com
+  o painel montado na barra lateral e em `/desenvolvimento`, as duas assinaturas resultam numa busca só;
+  a reconexão do Pusher refaz as
   consultas ativas (`useRealtimeConnection`). Sem polling no cliente.

@@ -267,6 +267,14 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   `scheduleSignature: { $ne }` em `syncJobState`.
 - Agenda amigável (`src/lib/integrations/schedule.ts`, horário de Brasília): intervalo, diário,
   semanal e mensal. Editar o agendamento recalcula na hora (`rescheduleJobs`).
+- **Intervalo em segundos** (OPE-145): `{ type: "interval", seconds }` (10 a 3600; `isSecondsSchedule`,
+  `intervalMs`), ao lado do formato em minutos, que não muda. Roda no **tick rápido**
+  (`runFastSchedulerTick`, `setInterval` de 10 s iniciado junto pelo `startCronScheduler`): mesmo lease no
+  Mongo, mas de 60 s (`FAST_JOB_LEASE_MS`), referência na grade de 10 s, sem os ganchos pesados do tick de
+  minuto e sem debug a cada execução (só falhas). O tick de minuto ignora essas rotinas; o
+  `/api/routines/scheduler-tick` roda os dois. No editor, a unidade "segundos" só aparece nas rotinas
+  (`ScheduleEditor allowSeconds`, no `CronJobsEditor`); o agendamento do Engramind recusa segundos.
+  Hoje usada por `host-metrics-refresh` (10 s, recursos do servidor — `modules/host-metrics.md`).
 - Rotinas **HTTP** chamam `POST {URL interna}{path}` com `Bearer {cron secret}`. URL interna =
   campo "URL base interna" ou `http://127.0.0.1:${PORT}` (padrão 3100).
 - **Executar agora** (com confirmação): executa a versão salva, só reivindica o lease

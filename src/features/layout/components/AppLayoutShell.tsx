@@ -2,6 +2,7 @@
 
 import type { ReactNode } from "react"
 import { AgentChatNavItem } from "@/features/opex-agent/components/agents/AgentChatNavItem"
+import { ServerQuotaSidebarItem } from "@/features/host-metrics/components/ServerQuotaSidebarItem"
 import { IntegrationsSidebarItem } from "@/features/integrations/components/sidebar/IntegrationsSidebarItem"
 import { useRoutineAttentionToasts } from "@/features/routine-agents/hooks/useRoutineRealtime"
 import { AppShell } from "./AppShell"
@@ -14,8 +15,13 @@ interface AppLayoutShellProps {
     children: ReactNode
 }
 
-/** Item único dos agentes de chat (Agente Opex e Agente Maddox) no rodapé do menu do dono. */
-const ownerFooterItems = (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} />
+/** Rodapé do menu do dono: "Servidor e quota" (OPE-145) acima do item único dos agentes de chat (Agente Opex e Agente Maddox). */
+const ownerFooterItems = (collapsed: boolean) => (
+    <>
+        <ServerQuotaSidebarItem collapsed={collapsed} />
+        <AgentChatNavItem collapsed={collapsed} />
+    </>
+)
 
 /** Submenu de Integrações no hover (OPE-120), só no menu do dono. */
 const ownerItemPanels: AppSidebarItemPanels = { integrations: IntegrationsSidebarItem }
