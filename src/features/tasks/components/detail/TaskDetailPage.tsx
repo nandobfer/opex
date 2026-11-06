@@ -42,7 +42,7 @@ import { TaskSummaryCard } from "./TaskSummaryCard"
 import { TaskDetailTabs, type TaskDetailTabId } from "./TaskDetailTabs"
 import { TaskLineCommentsProvider } from "./line-comments/LineCommentsContext"
 
-/** Página da tarefa (`/tarefas/[id]`). */
+/** Página da tarefa (`/tarefas/[código]`; a rota resolve o código e entrega o id). */
 export function TaskDetailPage({ id }: { id: string }) {
     const reduceMotion = useReducedMotion()
     const router = useRouter()

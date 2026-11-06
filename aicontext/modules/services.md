@@ -64,7 +64,7 @@ Regras de borda (`computeServiceAmounts`, `logic.ts`, puro):
   (`PendingAttachmentsField`), **data do serviço** (default hoje) e os **três campos reativos**.
   Salvar volta para `/financeiro` com toast.
 - `/financeiro/servicos/[id]` — detalhe (`ServiceDetailPage`): código + badges, título/summary,
-  descrição, cliente, repositório, **tarefa vinculada** (link para `/tarefas/{id}`), data, horas
+  descrição, cliente, repositório, **tarefa vinculada** (link para `/tarefas/{código}`, `taskPath`), data, horas
   real/inflada, faturamento, painel de IA e **anexos**, com **Editar** e **Excluir** (ou **Restaurar**
   quando arquivado).
 - `/financeiro/servicos/[id]/editar` — o mesmo formulário; mudar a **descrição** regera título/resumo/

@@ -117,7 +117,7 @@ com badge próprio, mas ficam **fora** dos totais e contadores.
   abertura animada por Framer Motion, respeitando movimento reduzido): nome, contagem, horas do
   cliente e faturamento. No **celular** as métricas do grupo vão para uma **linha própria**, abaixo
   do nome do cliente.
-- `components/FinanceTaskRow.tsx` — cada **tarefa** concluída: código (link para `/tarefas/{id}`),
+- `components/FinanceTaskRow.tsx` — cada **tarefa** concluída: código (link para `/tarefas/{código}`, `taskPath`),
   título, repositório (`GithubRepoLabel`), data de conclusão e os valores (horas reais, horas do
   cliente e R$). No **celular** os valores vão para uma **linha própria**, abaixo do título.
 - `components/FinanceServiceRow.tsx` — cada **serviço**: badge "Serviço" (e "Arquivado" quando for o

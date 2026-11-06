@@ -75,7 +75,7 @@ export function TaskCreatePage() {
                             onSubmit={async (values) => {
                                 try {
                                     const task = await create.mutateAsync({ ...values, attachmentIds: pending.ids })
-                                    router.push(taskPath(task.id))
+                                    router.push(taskPath(task))
                                 } catch {
                                     // Toast já mostrado; o formulário fica aberto para corrigir.
                                 }

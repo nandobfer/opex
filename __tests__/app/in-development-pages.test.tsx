@@ -10,6 +10,7 @@ const mocks = vi.hoisted(() => ({
     notFound: vi.fn(() => {
         throw new Error("NEXT_NOT_FOUND")
     }),
+    resolveTaskRoute: vi.fn(),
 }))
 
 vi.mock("framer-motion", () => framerMotionMock())
@@ -19,6 +20,7 @@ vi.mock("@/features/dashboard/components/DashboardPage", () => ({ DashboardPage:
 vi.mock("@/features/tasks/components/detail/TaskDetailPage", () => ({
     TaskDetailPage: ({ id }: { id: string }) => <div data-testid="task">{id}</div>,
 }))
+vi.mock("@/features/tasks/server/resolve-route", () => ({ resolveTaskRoute: mocks.resolveTaskRoute }))
 vi.mock("@/features/integrations/components/IntegrationDetailPage", () => ({
     IntegrationDetailPage: ({ id }: { id: string }) => <div data-testid="detail">{id}</div>,
 }))
@@ -45,11 +47,21 @@ describe("páginas do app", () => {
         expect(screen.getByTestId("dashboard")).toBeTruthy()
     })
 
-    it("Tarefas renderiza o quadro; /tarefas/[id] abre a página da tarefa", async () => {
+    it("Tarefas renderiza o quadro; /tarefas/[código] abre a página da tarefa com o id resolvido", async () => {
         render(<TarefasPage />)
         expect(screen.getByTestId("tasks")).toBeTruthy()
-        render(await TarefaPage({ params: Promise.resolve({ id: "65f0a1b2c3d4e5f6a7b8c9d0" }) }))
+        mocks.resolveTaskRoute.mockResolvedValue({ kind: "render", id: "65f0a1b2c3d4e5f6a7b8c9d0" })
+        render(await TarefaPage({ params: Promise.resolve({ id: "ope-145" }) }))
+        expect(mocks.resolveTaskRoute.mock.calls[0]?.[0]).toBe("ope-145")
+        expect(mocks.resolveTaskRoute.mock.calls[0]?.[1].pathFor("OPE-145")).toBe("/tarefas/ope-145")
         expect(screen.getByTestId("task").textContent).toBe("65f0a1b2c3d4e5f6a7b8c9d0")
+        expect(mocks.redirect).not.toHaveBeenCalled()
+    })
+
+    it("/tarefas/<id> (URL antiga) redireciona para o código, preservando a query string", async () => {
+        mocks.resolveTaskRoute.mockResolvedValue({ kind: "redirect", path: "/tarefas/ope-145" })
+        await TarefaPage({ params: Promise.resolve({ id: "6aee2de28d89a2641930701f" }), searchParams: Promise.resolve({ aba: "spec" }) })
+        expect(mocks.redirect).toHaveBeenCalledWith("/tarefas/ope-145?aba=spec")
     })
 
     it("endereço desconhecido: aviso dentro do shell com volta ao início, nunca 404 cru", () => {

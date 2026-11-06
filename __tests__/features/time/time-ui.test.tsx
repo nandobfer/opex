@@ -113,7 +113,7 @@ describe('controle de horas é somente leitura', () => {
 describe('TimeLogItem (Horas agênticas)', () => {
   it('mostra tarefa, descrição e uso (agente/modelo/tokens/custo) sem ações', () => {
     render(<TimeLogItem log={log({ active: false, endTime: new Date().toISOString(), duration: 90 })} />)
-    expect(screen.getByRole('link', { name: 'OPX-1' }).getAttribute('href')).toBe(`/tarefas/${A}`)
+    expect(screen.getByRole('link', { name: 'OPX-1' }).getAttribute('href')).toBe('/tarefas/opx-1')
     expect(screen.getByText('1h 30min')).toBeTruthy()
     expect(screen.getByText('Desenvolvimento agêntico · Implementando')).toBeTruthy()
     expect(screen.getByText('build')).toBeTruthy()

@@ -89,7 +89,7 @@ export function OwnerPreviewReviewPage({ draftId }: { draftId: string }) {
     const approveDraft = async () => {
         try {
             const task = await approve.mutateAsync(priorityOverride ?? undefined)
-            router.push(taskPath(task.id))
+            router.push(taskPath(task))
         } catch {
             // Erro exibido abaixo.
         }

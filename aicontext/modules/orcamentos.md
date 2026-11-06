@@ -102,7 +102,7 @@ aprovados e prévias corrigidas) — ver `modules/agent-metrics.md`.
   pré-visualização e atalho de volta ao Opex. Sem itens internos do dono. No rodapé, o **Agente
   Opex** aparece quando o dono o ativou para o cliente (sessões e ferramentas privadas por usuário;
   ver `opex-agent.md`).
-- Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[id]`, `/cliente/nova`,
+- Rotas: `/cliente/dashboard`, `/cliente/tarefas`, `/cliente/tarefa/[código]` (código em minúsculas; o id redireciona, só para as tarefas do cliente em escopo — ver `modules/tasks.md`, "Endereço da página"), `/cliente/nova`,
   `/cliente/revisao/[draftId]`, `/cliente/financeiro` (admin), `/cliente/usuarios` (admin) e, para o
   **admin**, `/cliente/servicos/[id]` (detalhe de um serviço criado pelo dono).
 - **Tarefas**: mesma visão de antes (kanban/tabela somente leitura, **exceto a prioridade**), com

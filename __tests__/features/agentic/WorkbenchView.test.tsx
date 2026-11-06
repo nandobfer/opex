@@ -44,7 +44,7 @@ const workbench = (patch: Partial<WorkbenchDto> = {}) =>
 const central = { id: 'c1' } as unknown as CentralDto
 
 const taskQuery = (patch: Record<string, unknown> = {}) => ({
-  data: { id: 't1', description: 'Texto da **descrição**', technicalSpec: 'Critérios da spec' },
+  data: { id: 't1', code: 'OPX-1', description: 'Texto da **descrição**', technicalSpec: 'Critérios da spec' },
   isLoading: false,
   isError: false,
   error: null,
@@ -88,11 +88,11 @@ describe('WorkbenchView — abas Descrição e Especificação', () => {
   })
 
   it('sem especificação mostra o estado vazio com o atalho para a tarefa', () => {
-    mocks.useTaskDetail.mockReturnValue(taskQuery({ data: { id: 't1', description: 'x', technicalSpec: null } }))
+    mocks.useTaskDetail.mockReturnValue(taskQuery({ data: { id: 't1', code: 'OPX-1', description: 'x', technicalSpec: null } }))
     render(<WorkbenchView workbench={workbench()} central={central} />)
     fireEvent.click(tab('Especificação'))
     expect(screen.getByText('Sem especificação técnica.')).toBeTruthy()
-    expect(screen.getByRole('link', { name: 'Abrir a tarefa' }).getAttribute('href')).toBe('/tarefas/t1')
+    expect(screen.getByRole('link', { name: 'Abrir a tarefa' }).getAttribute('href')).toBe('/tarefas/opx-1')
   })
 
   it('erro ao carregar a tarefa permite tentar novamente', () => {
