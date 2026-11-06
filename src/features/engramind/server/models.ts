@@ -58,6 +58,8 @@ export interface IEngramindState {
      * id e o prefixo (o segredo é o campo privado `appToken` da integração).
      */
     appToken?: { tokenId: string; prefix: string; issuedAt: Date } | null
+    /** Layout dos universos de memórias (OPE-142): a configuração gravada e quando; sem ela vale o padrão da lib. */
+    universeLayout?: { config: Record<string, unknown>; updatedAt: Date } | null
 }
 
 /** Último contexto de memórias recebido por agente e combinação de canais (reserva com o Engramind fora do ar). */
@@ -115,6 +117,7 @@ const stateSchema = new Schema<IEngramindState>(
         agentTokens: { type: Schema.Types.Mixed, default: null },
         memoryContext: { type: Schema.Types.Mixed, default: null },
         appToken: { type: Schema.Types.Mixed, default: null },
+        universeLayout: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false },
 )

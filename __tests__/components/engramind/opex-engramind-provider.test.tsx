@@ -1,12 +1,12 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AxiosError, AxiosHeaders } from 'axios'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import { xyflowMock } from '../../helpers/xyflow'
+import { flowItems, xyflowMock } from '../../helpers/xyflow'
 import { installFakeEventSource } from '../../helpers/engramind-live'
 
 /**
@@ -25,8 +25,8 @@ const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), put
 vi.mock('@/lib/api', async (original) => ({ ...(await original<object>()), api: net }))
 vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: () => false, acquireChannel: vi.fn(), releaseChannel: vi.fn() }))
 
-import { EngramindError } from '@engramind/client'
-import { EngramindNetwork } from '@engramind/client/react'
+import { DEFAULT_UNIVERSE_LAYOUT, EngramindError } from '@engramind/client'
+import { EngramindNetwork, MemoryUniverse } from '@engramind/client/react'
 import { OpexEngramindProvider, toLibError } from '@/features/engramind/components/OpexEngramindProvider'
 import { EngramindChannelPage } from '@/features/engramind/components/page/channels/EngramindChannelPage'
 
@@ -68,6 +68,50 @@ describe('OpexEngramindProvider com a lib', () => {
     )
     fireEvent.click(await screen.findByRole('button', { name: /Configurar/ }))
     expect(nav.push).toHaveBeenCalledWith('/integracoes/engramind?aba=conexao')
+  })
+})
+
+describe('layout dos universos (OPE-142)', () => {
+  const universe = (
+    <MemoryUniverse
+      center={{ kind: 'channel', id: 'eng/global', label: 'eng/global' }}
+      staleAfterDays={90}
+      actions={{ onActive: vi.fn(), onPin: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), readOnly: true }}
+      memories={Array.from({ length: 30 }, (_, index) => ({
+        id: `m${index}`, channel: 'eng/global', title: `M ${index}`, text: 't', category: 'fact', status: 'active' as const, version: 1,
+        createdAt: new Date(Date.now() - index * 86_400_000).toISOString(), updatedAt: now, retrievals: 0, injections: 0, lastRetrievedAt: null, verifiedAt: null, stale: false, author: null,
+      }))}
+    />
+  )
+  const radiusOf = (id: string) => {
+    const node = flowItems.nodes.find((item) => item.id === id) as unknown as { position: { x: number; y: number } }
+    return Math.hypot(node.position.x, node.position.y)
+  }
+
+  it('sem configuração gravada: o padrão (anéis concêntricos, a mais nova no raio 150)', async () => {
+    net.get.mockImplementation(async (url: string) => ({ data: { success: true, data: url === '/engramind/universe-layout' ? { config: DEFAULT_UNIVERSE_LAYOUT, isDefault: true, updatedAt: null } : respond(url) } }))
+    wrap(<OpexEngramindProvider channelLabels={false}>{universe}</OpexEngramindProvider>)
+    await waitFor(() => expect(net.get).toHaveBeenCalledWith('/engramind/universe-layout', expect.anything()))
+    expect(Math.round(radiusOf('m0'))).toBe(150)
+    expect(radiusOf('m29')).toBeGreaterThan(radiusOf('m0'))
+  })
+
+  it('a configuração gravada vale no universo da lib (mais novas por fora) e muda ao vivo sem recarregar', async () => {
+    const saved = { config: { ...DEFAULT_UNIVERSE_LAYOUT, order: 'newest-outside', firstRadius: 140 }, isDefault: false, updatedAt: now }
+    net.get.mockImplementation(async (url: string) => ({ data: { success: true, data: url === '/engramind/universe-layout' ? JSON.parse(JSON.stringify(saved)) : respond(url) } }))
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    render(
+      <QueryClientProvider client={client}>
+        <OpexEngramindProvider channelLabels={false}>{universe}</OpexEngramindProvider>
+      </QueryClientProvider>,
+    )
+    await waitFor(() => expect(Math.round(radiusOf('m29'))).toBe(140))
+    expect(radiusOf('m0')).toBeGreaterThan(radiusOf('m29'))
+    saved.config = { ...DEFAULT_UNIVERSE_LAYOUT, order: 'newest-inside', firstRadius: 100 } as never
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: ['engramind', 'universe-layout'] })
+    })
+    await waitFor(() => expect(Math.round(radiusOf('m0'))).toBe(100))
   })
 })
 

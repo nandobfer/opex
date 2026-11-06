@@ -72,6 +72,7 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
 | Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data), o card Geral (debug) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
 | Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
+| Visualização | Layout dos universos de memórias (OPE-142; ver "Aba Visualização"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
 | Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex"). A proteção vale também no servidor (proxy e agente, `guardOwnToken` com o `whoami` atual): o token não é revogado, rebaixado nem ganha validade (`expires_at`), e o app não é desativado nem excluído (`409 ENGRAMIND_OWN_TOKEN`). |
 | Operação | Status (versão, banco, backup, identidades, fila, Redator, embeddings, webhooks, retenção), Jobs (filtro por tipo/estado, Retentar nos `failed`), Chamadas ao LLM (finalidade, desde), Consumo (agrupamento e período) e Auditoria (entidade, ação e período). Listas paginadas por cursor ("Carregar mais") e virtualizadas acima de 50. |
@@ -242,9 +243,11 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `upsert`, `title` (travado) e `tags` do `POST /v1/memories`, `expected_version` no `PATCH` e os filtros
   `key`/`fields=title` do `GET /v1/memories`, sempre com o token do agente e só nos canais que ele assina
   (`src/features/routine-agents/server/memory-channels.ts`).
-- **Universo com respiro, mais novas por fora e cores distintas** (lib 0.4.0, OPE-142): a rede continua
-  só consumindo a lib; o layout (`layoutUniverse`) e as cores (`channelColors`/`pickChannelColors`) estão
-  descritos em "Universo do canal", "Universo do agente" e na tabela "Partículas".
+- **Layout configurável e cores distintas** (lib 0.5.0, OPE-142): o layout dos universos vem da prop
+  `universeLayout` do `EngramindProvider` (a configuração da aba Visualização) e as cores dos canais
+  esgotam as matizes antes de repetir (ver "Aba Visualização" e "Universo do agente"). A 0.4.0 trocou o
+  desenho por anéis soltos; a 0.5.0 voltou ao desenho original como **padrão** e passou tudo para a
+  configuração.
 - **Nome no hover da partícula** (lib 0.3.0): sem hover, o nome curto cortado; com o cursor, o **nome
   completo destacado** (borda na cor da partícula, fonte maior) no `MemoryHoverLabelLayer`, uma camada fora
   da área com zoom como o card (`clampLabelRect` o mantém inteiro no quadro; sem eventos de ponteiro). No
@@ -259,6 +262,49 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
 - **Pendências no Engramind** (para o modo app da lib, não para o Opex): o prazo de desuso e os pesos da
   busca em `get_consumer_settings`, o estado do webhook do próprio app para o token de app e a edição dos
   canais criados pelo app. A tarefa está em `docs/engramind-consumer-settings.md` do repositório da lib.
+
+### Aba Visualização (OPE-142)
+
+`?aba=visualizacao` em `/integracoes/engramind`: um **layout único** para todos os universos de memórias
+(a rede em `/engramind`, os universos de `/integracoes/ia` e a aba Memórias dos agentes rotineiros). O
+`OpexEngramindProvider` lê a configuração (`useUniverseLayout`, `GET /api/engramind/universe-layout`) e a
+passa à lib na prop `universeLayout`; ao salvar, o servidor publica `engramind-updated`
+`{ type: "universe-layout" }` e as telas abertas redesenham sem recarregar (as partículas deslizam para as
+novas posições e o quadro se reenquadra).
+
+- **Padrão = o desenho original**: anéis concêntricos perfeitos a partir do raio 150, +58 px por anel,
+  ~46 px entre vizinhas, giro de ≈ 34,95° (0,61 rad) por anel, as mais novas por dentro, distribuição
+  proporcional às vagas e sem desvio. Sem documento gravado vale o padrão (`DEFAULT_UNIVERSE_LAYOUT` da lib).
+  As cores dos canais **não** fazem parte da configuração (matizes distintas antes de repetir o tom, OPE-142).
+- **Campos** (o contrato, os intervalos e as mensagens pt-BR vêm do `universeLayoutSchema` da lib, o mesmo no
+  formulário e no servidor):
+  - Disposição: `layout` (`rings` | `spiral`), `orderBy` (`created` | `updated` | `last-use` | `uses`), `order`
+    (`newest-inside` | `newest-outside`: o maior valor do critério por dentro ou por fora; o rótulo acompanha
+    o critério), `grouping` (`none` | `channel`: arcos contíguos por canal) e `firstRadius`.
+  - Anéis (só com `rings`): `ringGap`, `slot`, `minPerRing`, `ringRotationDeg` e `balance`
+    (`proportional` | `fill`).
+  - Espiral (só com `spiral`): `spiralSpacing` e `spiralAngleDeg` (137,508° = ângulo de ouro).
+  - Desvio: `angleJitter` (% do passo angular), `radiusJitter` (% da distância entre anéis, até 49 %: as
+    faixas dos anéis nunca se misturam), `jitterSeed` (embaralha de forma estável; sem `Math.random()`),
+    `avoidOverlap` e `minDistance` (o desvio é reduzido até a partícula ficar a essa distância das outras).
+  - Partículas: `particleMinPx` e `particleMaxPx` (o máximo não pode ser menor que o mínimo).
+  Cada campo tem rótulo, tooltip (`help/universe-layout.ts`), intervalo, padrão e "Voltar ao padrão"; o campo
+  alterado fica destacado.
+- **Predefinições** (`UNIVERSE_LAYOUT_PRESETS`): "Anéis (padrão)", "Anéis soltos" (a 0.4.0: 84/68, desvio
+  35 %/32 %, mais novas por fora) e "Espiral". Aplicar preenche o formulário como alteração pendente.
+- **Prévia**: o `MemoryUniverse` da lib com memórias de exemplo (`network/sample-universe.ts`, determinístico;
+  quantidade 1–500, canais 1–8 e centro agente/canal, só da prévia), alimentado pelos valores **ainda não
+  salvos** (válidos, com espera de 150 ms). Não consulta o Engramind nem abre o SSE.
+- **Exportar / Importar**: Exportar mostra o JSON dos valores do formulário (`$schema`
+  `engramind-universe-layout`, `version` 1) com Copiar. Importar recebe o JSON (inteiro ou só os campos a
+  mudar; os ausentes assumem o padrão), valida e preenche o formulário como **alteração pendente**; JSON
+  inválido lista os erros por campo e não altera nada. Quem grava é o Salvar.
+- **Salvar** (`PUT /api/engramind/universe-layout`): modo restritivo, campo desconhecido ou fora do intervalo
+  é recusado com 400 sem gravar. Grava em `engramind_state.universeLayout` (`{ config, updatedAt }`), audita
+  (`entidadeId: "universe-layout"`, antes e depois), loga e publica o evento só nas telas (`live: false`,
+  sem SSE). **Restaurar padrão** (`DELETE`) apaga a configuração, com confirmação. Configuração gravada que
+  ficou inválida cai no padrão, com aviso no log.
+- Como as demais abas de IA, a aba não tem `<form>` próprio: Salvar é `type="button"` com `handleSubmit`.
 
 ### Visões
 
@@ -362,20 +408,16 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   grava o slug; a busca da opção acha pela sigla e pelo slug), no `ChannelPanel` e no editor de
   memória. Todo lugar novo que mostrar um canal usa esse helper.
 - **Universo do canal** (`MemoryUniverse`): o canal no centro e uma partícula por memória (ativas,
-  fixadas e inativas) em órbitas pela **idade** (`layoutUniverse`, OPE-114; sentido invertido na
-  OPE-142: as mais antigas, pela criação, perto do centro e as **mais novas por fora**; data inválida conta
-  como a mais antiga e vai para o anel interno), com links fracos ao
-  centro. Todas as partículas do universo do canal usam o **roxo primário** (o canal é o maior do seu
-  universo), também em `/integracoes/ia`. Anéis a partir de `UNIVERSE_FIRST_RADIUS`, com `UNIVERSE_RING_GAP` entre anéis e `UNIVERSE_SLOT` entre
-  vizinhas (OPE-142: mais respiro): o número de anéis é o mínimo que comporta todas, e elas são
-  distribuídas proporcionalmente às vagas de cada anel (`universeRingCounts`), então o universo cresce
-  para fora com densidade constante e o último anel não fica quase vazio. Cada partícula sai um pouco do
-  anel em **ângulo e raio** por um desvio **estável derivado do `id`** (sem `Math.random()`: a mesma
-  memória cai no mesmo lugar em toda renderização), então o desenho não é um alvo de círculos. O desvio
-  nunca tira a partícula da faixa do seu anel (as faixas de anéis vizinhos não se misturam: mais antigas
-  por dentro, mais novas por fora) e é reduzido até a partícula ficar a `UNIVERSE_MIN_DISTANCE` de todas
-  as outras, então nada se sobrepõe. Canal arquivado abre apagado e somente leitura, sem Nova memória.
-- **Universo do agente**: as memórias de todos os canais que ele assina, nas mesmas órbitas por idade
+  fixadas e inativas) em órbitas pela **idade** (`layoutUniverse`, OPE-114), com links fracos ao centro.
+  O desenho vem da configuração da aba Visualização (OPE-142); o **padrão** é o original: as mais novas,
+  pela criação, mais perto; as mais antigas mais longe; data inválida no anel externo. Todas as
+  partículas do universo do canal usam o **roxo primário** (o canal é o maior do seu universo), também em
+  `/integracoes/ia`. Anéis concêntricos a partir do raio 150 (+58 por anel, ~46 px entre vizinhas): o
+  número de anéis é o mínimo que comporta todas, e elas são distribuídas proporcionalmente às vagas de
+  cada anel (`universeRingCounts`; 15 → 1 anel, 50 → 12/17/21, 100 → 4 anéis), então o universo cresce
+  para fora com densidade constante e o último anel não fica quase vazio. Canal arquivado abre apagado e
+  somente leitura, sem Nova memória.
+- **Universo do agente**: as memórias de todos os canais que ele assina, no mesmo desenho do universo do canal
   (o agente no centro). A **partícula** e a legenda "Por canal" (cor e total) têm a **cor do canal**
   (OPE-114), assim como o selo de canal do card. A cor estável vem de `channelColors`, calculado sobre
   **todos** os canais e lido por universo com `pickChannelColors`: base `--chart-2..6` preferida pelo hash do slug
@@ -409,8 +451,8 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
 | Atributo | Regra |
 |---|---|
 | Cor | A do canal da memória (`universeChannelColors`): roxo primário para o canal com mais memórias do universo (e em todo universo de canal), cor estável `--chart-2..6` (matizes distintas antes de repetir; ver o universo do agente) para os demais. Apagada em direção ao cinza pelo brilho (`particleColor`); a bolinha do card usa a cor do canal sem o brilho (`baseColor`). |
-| Distância | A idade (criação): **mais antiga no anel interno, mais nova no externo** (OPE-142; data inválida conta como a mais antiga), com desvio estável pelo `id` dentro da faixa do anel. Anéis e `universeRingCounts` como descrito no universo do canal; vale com o agente ou o canal no centro. |
-| Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
+| Distância | Pelo layout configurado (aba Visualização, OPE-142). Padrão: a idade (criação), mais nova no anel interno e mais antiga no externo (data inválida conta como a mais antiga), em anéis concêntricos. Pode usar outro critério (atualização, último uso ou uso), o sentido inverso, espiral, agrupamento por canal e desvio estável pelo `id`. Anéis e `universeRingCounts` como descrito no universo do canal; vale com o agente ou o canal no centro. |
+| Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px por padrão; faixa configurável); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
 | Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = `last_retrieved_at` do Engramind ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação), igual para todos os apps (OPE-116). Consumida ao vivo desde a última leitura: brilho cheio na hora, inclusive a `stale_candidate` (a releitura traz o estado do Engramind). |
 | Fixada | Anel primário e alfinete no card; brilho mínimo 0,25. |
 | Inativa | Contorno tracejado, sem brilho nem cor; o switch Ativa muda na hora. |
@@ -458,8 +500,8 @@ dados não mudam, para o layout e os nodes não recalcularem a cada render.
 
 **Memória nova** (criada, movida para cá ou chegada pelo tempo real, depois da primeira carga;
 `useEnteringIds`, `ENTER_MS` = 600 ms): a partícula nasce do centro do universo e vai até a sua órbita
-crescendo de 0 (mola) até a sua órbita pela idade (a recém-criada, aqui ou por outra origem, vai ao anel
-externo; a movida mantém a criação original e vai ao anel da sua idade), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
+crescendo de 0 (mola) até a sua órbita pela idade (a recém-criada, aqui ou por outra origem, vai ao anel das
+mais novas (o interno, no padrão); a movida mantém a criação original e vai ao anel da sua idade), o link se desenha (`pathLength`) e um pulso marca a chegada. As vizinhas cuja
 órbita mudou com o recálculo deslizam da posição antiga para a nova (~450 ms). A animação de entrada
 espera o React Flow medir e mostrar o node (dois quadros). Na lista otimista de `/integracoes/ia`, a
 provisória (`pendente-…`) nasce e a definitiva herda o estado. Movimento reduzido: aparece direto.
@@ -881,6 +923,7 @@ depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pe
 | `GET /api/engramind/environments` | Opções do seletor de Ambiente |
 | `GET\|POST\|PUT\|PATCH\|DELETE /api/engramind/<recurso>` | Proxy do catálogo (`[...path]`): `settings`, `channels/:channel/settings`, `secrets/:key`, `providers/redator/test`, `providers/embedding/{test,models}`, `embeddings/reembed`, `apps[/:app]`, `agents[/:agent]`, `tokens[/:token[/revoke]]`, `channels[/:channel[/archive\|restore\|stats]]`, `subscriptions[/:id]`, `memories[/:memory[/history\|revert\|pin\|unpin\|archive\|restore\|move]]` (`POST memories` = `create_memory` e `PATCH memories/:memory` = `update_memory` com `expected_version`, OPE-109; `status` da listagem aceita vários separados por vírgula), `memories/search`, `status`, `jobs[/:job/retry]`, `llm-calls`, `usage`, `audit`, `whoami` |
 | `POST /api/engramind/memories/import` | Importação com a chave derivada |
+| `GET/PUT/DELETE /api/engramind/universe-layout` | Layout dos universos de memórias (OPE-142): em uso / gravar (schema da lib, 400 sem gravar) / voltar ao padrão |
 | `GET /api/engramind/events` | SSE da rede e dos universos (lib `@engramind/client`, OPE-116) |
 | `GET/POST /api/engramind/providers/from-opex` | IA do Opex: estado das seções / aplicar (`applyAiSourceSchema`) |
 | `POST /api/engramind/providers/from-opex/test` e `/resend` | Testar a proposta com a chave do Opex / reenviar a chave |
@@ -894,7 +937,7 @@ segredos) e logada (Pino, `feature: "engramind"`).
 ## Dados
 
 - `engramind_webhook_events` (`_id` = id do evento, TTL 24 h), `engramind_state` (singleton
-  `pendingApply`, `sources` da IA do Opex, `agentTokens` cifrados e `memoryContext`) e
+  `pendingApply`, `sources` da IA do Opex, `agentTokens` cifrados, `memoryContext` e o `universeLayout` da aba Visualização) e
   `engramind_context_cache` (último contexto por consumidor + canais, com `format`, `memoryIds` e
   `delivered`) — `server/models.ts`.
 - `engramind_memory_usage`: sem uso desde a OPE-116 (o modelo saiu do código). A coleção fica intacta até o
@@ -917,6 +960,13 @@ de cor fixa do pacote). No Opex ficam os testes da integração, com a lib real 
   vivo e eventos pelo SSE).
 - `__tests__/components/engramind/opex-engramind-provider.test.tsx`: o detalhe do canal com as Configurações
   do canal do Opex (`slots.channelDetail`), o link de volta, o "Configurar" e o `toLibError`.
+- `__tests__/components/engramind/universe-layout-tab.test.tsx`, `universe-layout-preview.test.tsx` e o bloco
+  "layout dos universos" de `opex-engramind-provider.test.tsx` (OPE-142): a aba Visualização (padrão, campos por
+  layout, validação, salvar, predefinições, exportar, importar, restaurar, sem `form` aninhado), a prévia com a
+  lib real e o layout gravado chegando aos universos e mudando ao vivo. Servidor:
+  `__tests__/features/engramind/universe-layout-service.test.ts`, `universe-layout-route.test.ts` e
+  `sample-universe.test.ts`. O padrão ser igual ao desenho original e todas as opções do layout são testadas na
+  lib (`__tests__/network/universe-layout.test.ts`, `__tests__/core/universe-layout.test.ts`).
 - `__tests__/components/engramind/engramind-page.test.tsx`: card "O que é o Engramind" depois da rede,
   Configurar e Saiba mais.
 - `__tests__/features/ai/memory-network-view.test.tsx`: universos de `/integracoes/ia` e o teste estático dos

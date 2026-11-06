@@ -10,6 +10,8 @@ export const ENGRAMIND_QUERY_KEY = "engramind"
 export const ENGRAMIND_UPDATED_EVENT = "engramind-updated"
 /** Consumo de memórias por um agente do Opex, em `private-app` (OPE-109; só ids e slugs). */
 export const ENGRAMIND_CONSUMPTION_EVENT = "engramind-consumption"
+/** Tipo do `engramind-updated` quando o layout dos universos muda (OPE-142). */
+export const UNIVERSE_LAYOUT_EVENT_TYPE = "universe-layout"
 /** Entidade da auditoria do Opex. */
 export const ENGRAMIND_AUDIT_ENTITY = "Engramind"
 /** App do próprio Opex na rede do Engramind (criado no bootstrap). */
@@ -26,7 +28,7 @@ export const WEBHOOK_TOLERANCE_SECONDS = 300
 export const ENGRAMIND_PAGE_HREF = "/engramind"
 export const ENGRAMIND_INTEGRATION_HREF = "/integracoes/engramind"
 
-export const ENGRAMIND_TABS = ["sobre", "conexao", "configuracoes", "provedores", "identidades", "operacao", "variaveis", "migracao"] as const
+export const ENGRAMIND_TABS = ["sobre", "conexao", "configuracoes", "visualizacao", "provedores", "identidades", "operacao", "variaveis", "migracao"] as const
 export type EngramindTab = (typeof ENGRAMIND_TABS)[number]
 
 
