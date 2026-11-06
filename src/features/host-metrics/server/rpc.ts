@@ -1,6 +1,6 @@
 import { getOpencodeClient } from "@/lib/ai/opencode-client"
 import { getOpencodeConnection } from "@/lib/ai/opencode"
-import { HTOP_PLUGIN_ID, HTOP_RPC_ID, HTOP_RPC_METHOD, HTOP_RPC_TIMEOUT_MS } from "../constants"
+import { HTOP_PLUGIN_ID, HTOP_PLUGIN_LIST_TIMEOUT_MS, HTOP_RPC_ID, HTOP_RPC_METHOD, HTOP_RPC_TIMEOUT_MS } from "../constants"
 
 /**
  * Plugin `opencode-htop` no `opencode serve`: detecção por `plugin.list()` (ativo e com RPC) e a
@@ -31,7 +31,7 @@ export function isHtopPluginActive(plugins: readonly PluginEntry[]): boolean {
 export const detectHtopPlugin: HtopPluginDetector = async () => {
     const connection = await getOpencodeConnection()
     const client = await getOpencodeClient(connection)
-    const result = await client.plugin.list(connection.directory ? { location: { directory: connection.directory } } : {})
+    const result = await client.plugin.list(connection.directory ? { location: { directory: connection.directory } } : {}, { signal: AbortSignal.timeout(HTOP_PLUGIN_LIST_TIMEOUT_MS) })
     return isHtopPluginActive(result.data)
 }
 

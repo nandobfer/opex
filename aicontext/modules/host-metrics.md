@@ -45,11 +45,19 @@ recursos do PC (Builder Machine), histórico/minigráfico, Prometheus/node_expor
   (última leitura boa), attemptedAt, staleAfterMs }`. Falha com leitura anterior mantém `metrics` e
   `checkedAt` da última boa. Sem URL do OpenCode → `unconfigured`, sem chamar nada.
 - **Tempo real**: `host-metrics-updated` em `private-app` com o **DTO inteiro** (números, estado,
-  `checkedAt`), publicado quando o hash muda **ou**, sem mudança, quando a última publicação tem 20 s ou
-  mais (heartbeat, para o "desatualizado" não aparecer com números estáveis).
+  `checkedAt`), publicado quando o hash muda **ou**, sem mudança, pelo heartbeat de cerca de 20 s (ver
+  "Folga do heartbeat"), para o "desatualizado" não aparecer com números estáveis.
 - **Rotina** `host-metrics-refresh` (Integrações › Crons, "Ler CPU, RAM, swap e disco do servidor
   (opencode-htop)"): nasce ligada, a cada **10 segundos** (intervalo em segundos — ver
   `modules/integrations.md`, "Crons e agendador interno"); o dono pode alterar.
+- **Prazos** (nenhuma chamada pendurada prende o single-flight): `plugin.list()` e o RPC levam
+  `AbortSignal.timeout` (5 s) e o serviço ainda corta cada etapa (detecção, RPC e shell) e a leitura
+  inteira (30 s) com `withDeadline`: estourou → a etapa conta como falha (detecção = plugin ausente, RPC →
+  shell, shell → `error`), o `pending` libera e a leitura seguinte roda normalmente.
+- **Folga do heartbeat** (`heartbeatThresholdMs`): sem mudança, publica quando passaram `20 s −
+  intervalo/2` desde a última publicação (15 s com a rotina de 10 s; no mínimo 0), porque as leituras
+  chegam a cada intervalo ± a duração da leitura — com `≥ 20 s` exatos, o heartbeat escapava por
+  milissegundos e o próximo saía só 30 s depois, no limite do "desatualizado".
 - Rotas (só o dono, `withRoute`, `runtime = "nodejs"`; não são públicas por token):
   `GET /api/host-metrics` (último resultado) e `POST /api/host-metrics/refresh` (lê na hora).
 
@@ -86,4 +94,5 @@ recursos do PC (Builder Machine), histórico/minigráfico, Prometheus/node_expor
 ## Testes
 
 `__tests__/features/host-metrics/{logic,service,host-metrics-routes}.test.ts` e
-`__tests__/features/host-metrics/server-quota-sidebar.test.tsx`.
+`__tests__/features/host-metrics/server-quota-sidebar.test.tsx` e
+`__tests__/features/layout/sidebar-hover-button-item.test.tsx` (hover, clique, Enter/Espaço, foco e Esc).

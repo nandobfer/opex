@@ -134,6 +134,6 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 
 ## Testes
 
-`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,app-shell-padding,sidebar-nav-group,sidebar-hover-nav-item,app-layout-shell}.test.*`,
+`__tests__/features/layout/{navigation,app-sidebar,app-shell-drawer,app-shell-padding,sidebar-nav-group,sidebar-hover-nav-item,sidebar-hover-button-item,app-layout-shell}.test.*`,
 `__tests__/features/integrations/integrations-sidebar-item.test.tsx` e
 `__tests__/app/in-development-pages.test.tsx`.
