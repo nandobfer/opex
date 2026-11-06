@@ -71,7 +71,7 @@ const agent = (id: string, extra: Partial<RoutineAgentDto> = {}): RoutineAgentDt
   triggers: [],
   schedule: [],
   status: 'active',
-  provisioning: { status: 'ok', error: null, at: null, channels: [], extras: [], warnings: [], steps: { agent: true, token: true, channels: true, extras: true, workdir: true } },
+  provisioning: { status: 'ok', error: null, at: null, channels: [], extras: [], blocked: [], warnings: [], steps: { agent: true, token: true, channels: true, extras: true, workdir: true } },
   webhookEnabled: false,
   workdir: null,
   engramindAgent: `opex/rotineiro-${id}`,
@@ -94,7 +94,7 @@ beforeEach(() => {
   window.history.replaceState(null, '', '/agentes-rotineiros')
   mocks.agentsLoading = false
   mocks.metricsParams = []
-  mocks.agents = [agent('Indexador'), agent('Vagas', { status: 'paused', engine: 'opencode' }), agent('Novo', { provisioning: { status: 'error', error: 'falhou', at: null, channels: [], extras: [], warnings: [], steps: { agent: false, token: false, channels: false, extras: false, workdir: false } } })]
+  mocks.agents = [agent('Indexador'), agent('Vagas', { status: 'paused', engine: 'opencode' }), agent('Novo', { provisioning: { status: 'error', error: 'falhou', at: null, channels: [], extras: [], blocked: [], warnings: [], steps: { agent: false, token: false, channels: false, extras: false, workdir: false } } })]
   mocks.metrics = { Indexador: metric(7, 2), Vagas: metric(0) }
 })
 afterEach(() => cleanup())

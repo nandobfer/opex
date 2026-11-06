@@ -22,6 +22,8 @@ export interface IRoutineProvisioning {
     steps: { identity?: boolean; agent: boolean; token: boolean; channels: boolean; extras: boolean; workdir: boolean }
     channels: string[]
     extras: { channel: string; name: string; reason: string; created: boolean }[]
+    /** Canais que o dono removeu/bloqueou (OPE-143): o provisionamento nunca os assina nem cria. Ausente = vazio. */
+    blocked?: { channel: string; name: string; at: Date }[]
     warnings: string[]
 }
 

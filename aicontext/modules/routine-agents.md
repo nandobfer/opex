@@ -36,6 +36,7 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D19 | No cabeçalho da página de agente, **"Configurar" e as ações ficam na linha do título**, sempre juntos (sem quebrar entre si); a descrição longa fica abaixo, na largura inteira, sem aumentar a distância entre título e descrição (escolha do dono na implementação, no lugar de cortar a descrição em 2 linhas). |
 | D20 | O "Configurar" da página do agente rotineiro **abre o editor ali mesmo** (`?configurar=1`), sem navegar para a integração. |
 | D21 | Na lista da aba Rotineiros da integração, o **nome do agente é um link** para `/agentes-rotineiros/[id]`. |
+| D22 (OPE-143) | O dono **remove** um canal extra pelo card Provisionamento: cancela só a assinatura do agente no Engramind (canal e memórias intactos) e **bloqueia** o canal naquele agente. O provisionamento nunca assina nem cria um bloqueado. Reversível (assinar de novo ou desbloquear). Ver "Canais extras e bloqueados". |
 | D17 | Configuração do Indexador ajustada nesta tarefa: gatilho a cada **30 min**, lote de até 5, e as seções "Ordem do trabalho", "Receita 1", "Onde gravar" e "Idempotência" reescritas (catálogo primeiro, todas as páginas, chave fixa, pulados numa entrada `catalogo-pulados`). |
 
 ## Configuração (Integrações › Inteligência Artificial › aba "Rotineiros")
@@ -73,8 +74,9 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
   - **Gatilhos** (vários): a cada N minutos/horas, diário em horário fixo, dias da semana com
     horário, único (data e hora) — sempre no horário de Brasília (UTC−3 fixo) — e **Webhook
     externo** (liga/desliga). O manual está sempre disponível.
-  - **Provisionamento** (só editando): status, agente no Engramind, canais base, extras com o motivo,
-    avisos, pasta no host, **"Tentar de novo"** e **"Reprovisionar"**.
+  - **Provisionamento** (só editando): status, agente no Engramind, canais base, extras com o motivo
+    (cada um com **"Remover"**), **canais bloqueados** (com **"Assinar de novo"** e **"Desbloquear"**) e o
+    campo **"Bloquear canal"**, avisos, pasta no host, **"Tentar de novo"** e **"Reprovisionar"**.
 - Não existe exclusão. **Pausar**: agendados não disparam (o vencido na pausa é descartado, sem
   acumular), webhook 409 `ROUTINE_AGENT_PAUSED`, execuções em andamento terminam normalmente.
   **Arquivar**: os efeitos da pausa + sai da lista padrão e de `/agentes-rotineiros`; desarquivar volta
@@ -122,13 +124,44 @@ Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo s
 Cada passo marca `provisioning.steps.*`. Falha → status **"Provisionamento com erro"** com a
 mensagem; o agente não executa. **"Tentar de novo"** retoma: os passos são idempotentes (agente,
 token válido, canais e assinaturas não duplicam) e os extras já avaliados não são reavaliados.
-**"Reprovisionar"** refaz só os extras e **acrescenta** — nunca remove os base nem os extras antigos.
+**"Reprovisionar"** refaz só os extras e **acrescenta** — nunca remove os base nem os extras antigos,
+e nunca traz de volta um canal **bloqueado** (ver abaixo).
 
 O provisionamento vivo fica num registro em processo (`server/provisioning-registry.ts`). Um
 "Provisionando"/pendente **sem** provisionamento vivo é obsoleto (o servidor reiniciou no meio): o tick
 o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \"Tentar de novo\"") e
 "Tentar de novo"/"Reprovisionar" o aceitam na hora; com o provisionamento vivo, a API responde 409
 `ROUTINE_AGENT_PROVISIONING`.
+
+## Canais extras e bloqueados (`server/provisioning-channels.ts`, OPE-143)
+
+- `provisioning.blocked` (`{ channel, name, at }[]`, ausente = vazio) é a lista de canais que o dono
+  removeu ou bloqueou **naquele agente**; `channels` e `extras` não mudam de forma. O bloqueio é por
+  agente: outro agente que assine o mesmo canal não é afetado.
+- **Remover** (extra) / **Bloquear canal** (qualquer canal elegível fora dos extras, escolhido entre os
+  canais ativos do Engramind): o Opex cancela a assinatura **exata** do agente (`DELETE
+  /v1/subscriptions/:id` do alvo exato, nunca por prefixo; sem assinatura = `absent`, sem erro), tira o
+  canal de `extras` e o registra em `blocked`. O canal, as memórias e os outros assinantes continuam.
+  Confirmação na tela (destrutivo).
+- **Assinar de novo**: assina o canal (`inject`), devolve-o aos extras (motivo "Assinado de novo pelo
+  dono") e o retira do bloqueio; recusa com 409 `ROUTINE_CHANNEL_LIMIT` acima de 8 extras e com 409
+  `ROUTINE_AGENT_NOT_PROVISIONED` se o agente ainda não foi cadastrado no Engramind. **Desbloquear**: só
+  retira do bloqueio (o canal volta apenas se um Reprovisionar o propuser).
+- O Engramind é acionado **antes** de gravar: se falhar, 502 `ROUTINE_CHANNEL_ENGRAMIND_FAILED` ("Nada foi
+  alterado") e o registro do agente fica como estava. Canais base (`opex`, o global e o próprio) → 400
+  `ROUTINE_CHANNEL_BASE`; slug não elegível (`agentes/...` de outros) → 400 `ROUTINE_CHANNEL_INVALID`; com o
+  provisionamento vivo → 409 `ROUTINE_AGENT_PROVISIONING` (o `save()` dele gravaria por cima).
+- No provisionamento o bloqueio vale em três pontos: o prompt do subagente tira o bloqueado da lista e
+  traz "Bloqueados pelo dono (não assine nem crie…)"; `parseExtraChannelPlan` descarta o bloqueado em
+  `subscribe` e em `create` (aviso "está bloqueado neste agente: ignorado"); e a assinatura final filtra
+  os bloqueados. "Tentar de novo" preserva a lista. Na execução, os canais assinados saem de `extras`, então
+  o bloqueado fica fora do contexto e da lista de memória.
+- API do dono: `POST /api/routine-agents/[id]/provisioning/channels` com `{ action: "block" | "unblock" |
+  "resubscribe", channel }` (devolve o DTO). Auditoria `ATUALIZAR` na entidade do agente, com
+  antes/depois de `extras` e `bloqueados` e `evento` ("remover canal extra", "bloquear canal", "desbloquear
+  canal", "assinar canal de novo"); tempo real `routine-agent-updated`.
+- Agente Opex: `block_routine_agent_channel` (destrutiva; exige `mcp:owner:destructive` por token) e
+  `unblock_routine_agent_channel` (`assinar=true` assina de novo).
 
 ## Memória e rede (`src/features/ai/agents.ts`)
 
@@ -277,7 +310,7 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
 
 - Dono (`requireAdminSession`): `GET/POST /api/routine-agents` (`?filtro=arquivados`),
   `GET/PATCH /api/routine-agents/[id]`, `POST .../status` (`pause|resume|archive|unarchive`),
-  `POST .../provisioning` (`reprovision|retry`), `GET/POST .../runs`, `GET .../metrics`,
+  `POST .../provisioning` (`reprovision|retry`), `POST .../provisioning/channels` (OPE-143), `GET/POST .../runs`, `GET .../metrics`,
   `GET /api/routine-agents/metrics` (todos os agentes não arquivados, lista `/agentes-rotineiros`),
   `GET/POST .../entries`, `.../memories`, `GET /api/routine-agents/runs/[runId]` e
   `POST .../confirm|reject|cancel`, `GET/PUT /api/routine-agents/settings`,
@@ -333,7 +366,7 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 ## Auditoria, logs e tempo real
 
 - `recordAudit` em `AgenteRotineiro` (criar, editar, pausar/retomar, arquivar/desarquivar,
-  provisionar/reprovisionar, entrada) e `ExecucaoAgenteRotineiro` (disparar, confirmar, recusar,
+  provisionar/reprovisionar, remover/bloquear/desbloquear canal, entrada) e `ExecucaoAgenteRotineiro` (disparar, confirmar, recusar,
   cancelar, concluir/erro/expirar). Logs Pino (`module: routine-agents`).
 - Pusher em `private-app`: `routine-agent-updated` (`{ id }`), `routine-run-updated`
   (`{ id, agentId, status }`) e `routine-run-attention` (`{ id, agentId, kind, status, agentName }`).

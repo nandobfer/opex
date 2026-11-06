@@ -100,7 +100,7 @@ export async function createRoutineAgent(input: RoutineAgentInput, actorId: stri
             limits: input.limits,
             triggers: buildTriggerStates(input.triggers, [], now),
             status: "active",
-            provisioning: { status: "pending", error: null, at: null, steps: { identity: false, agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], warnings: [] },
+            provisioning: { status: "pending", error: null, at: null, steps: { identity: false, agent: false, token: false, channels: false, extras: false, workdir: false }, channels: [], extras: [], blocked: [], warnings: [] },
             engramindToken: null,
             workdir: null,
         })

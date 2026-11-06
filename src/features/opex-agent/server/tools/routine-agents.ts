@@ -2,6 +2,7 @@ import { z } from "zod"
 import {
     DEFAULT_ROUTINE_AGENT_INPUT,
     routineAgentInputSchema,
+    routineChannelActionSchema,
     routineLimitsSchema,
     routineOpencodeEngineSchema,
     routineOpexEngineSchema,
@@ -14,7 +15,7 @@ import { defineTool, OpexToolError, type OpexTool, type OpexToolContext } from "
 
 /**
  * Agentes rotineiros (OPE-130), só no dono: chamam os serviços reais (sem HTTP). Nenhuma saída traz o
- * token do agente no Engramind (os DTOs não o têm). Destrutivas: arquivar e cancelar execução.
+ * token do agente no Engramind (os DTOs não o têm). Destrutivas: arquivar, remover/bloquear canal e cancelar execução.
  */
 
 const id = z.string().regex(/^[a-f0-9]{24}$/, "Id inválido")
@@ -81,6 +82,7 @@ export async function assertTokenRoutineReach(origin: OpexToolContext["origin"],
 }
 
 const service = () => import("@/features/routine-agents/server/service")
+const channels = () => import("@/features/routine-agents/server/provisioning-channels")
 const runs = () => import("@/features/routine-agents/server/runs")
 const actions = () => import("@/features/routine-agents/server/run-actions")
 
@@ -163,6 +165,27 @@ export const routineAgentTools: OpexTool[] = [
         input: z.object({ id, tentarDeNovo: z.boolean().optional() }),
         summarize: (input) => `${input.tentarDeNovo ? "Tentar de novo o provisionamento" : "Reprovisionar"} do agente rotineiro ${input.id}`,
         execute: async (input, ctx) => (await service()).reprovisionRoutineAgent(input.id, input.tentarDeNovo ? "retry" : "reprovision", ctx.actorId),
+    }),
+    defineTool({
+        name: "block_routine_agent_channel",
+        group: "routine-agents",
+        label: "Remover/bloquear canal do rotineiro",
+        risk: "destructive",
+        description:
+            "Remove um canal extra do agente rotineiro: cancela a assinatura dele no Engramind (o canal, as memórias e os outros assinantes continuam) e bloqueia o canal neste agente, para o provisionamento nunca mais assiná-lo nem criá-lo. Também bloqueia um canal que não está nos extras. Os canais base não podem ser removidos.",
+        input: z.object({ id, canal: routineChannelActionSchema.shape.channel }),
+        summarize: (input) => `Remover e bloquear o canal ${input.canal} do agente rotineiro ${input.id}`,
+        execute: async (input, ctx) => (await channels()).blockRoutineChannel(input.id, input.canal, ctx.actorId),
+    }),
+    defineTool({
+        name: "unblock_routine_agent_channel",
+        group: "routine-agents",
+        label: "Desbloquear canal do rotineiro",
+        risk: "write",
+        description: "Tira um canal da lista de bloqueados do agente rotineiro. Com assinar=true, assina o canal de novo no Engramind e o devolve aos extras; sem isso, só desbloqueia (o canal volta apenas se um Reprovisionar o propuser).",
+        input: z.object({ id, canal: routineChannelActionSchema.shape.channel, assinar: z.boolean().optional() }),
+        summarize: (input) => `${input.assinar ? "Assinar de novo" : "Desbloquear"} o canal ${input.canal} do agente rotineiro ${input.id}`,
+        execute: async (input, ctx) => (await channels()).unblockRoutineChannel(input.id, input.canal, { resubscribe: input.assinar === true }, ctx.actorId),
     }),
     defineTool({
         name: "run_routine_agent",

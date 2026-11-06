@@ -25,7 +25,7 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated
  *
  * Cada passo é idempotente e marca `steps.*`: "Tentar de novo" retoma o que faltou sem duplicar.
  * "Reprovisionar" refaz só os extras e **acrescenta** — nunca remove os canais base nem os extras já
- * assinados. Falha → `provisioning.status = "error"` com a mensagem (o agente não executa).
+ * assinados, e nunca assina nem cria um canal **bloqueado** pelo dono (OPE-143, `provisioning-channels.ts`). Falha → `provisioning.status = "error"` com a mensagem (o agente não executa).
  */
 
 /** `identity`: só o passo 0 (o dono esvaziou o nome ou o objetivo de um agente já provisionado). */
@@ -48,6 +48,17 @@ export function startProvisioning(agentId: string, mode: ProvisionMode, actorId:
 async function save(agentId: string, provisioning: IRoutineProvisioning, extra: Record<string, unknown> = {}): Promise<void> {
     await RoutineAgent.updateOne({ _id: agentId }, { $set: { provisioning, ...extra } })
     await publishAgentUpdated(agentId)
+}
+
+/** Alvos do Engramind: admin (canais) e app (agente e assinaturas, quando há token de app). */
+export async function routineEngramindTargets(actorId: string, warnings: string[] = []): Promise<{ admin: EngramindTarget; app: EngramindTarget }> {
+    let admin: EngramindTarget
+    try {
+        admin = await engramindTarget()
+    } catch (error) {
+        throw new Error(`Engramind indisponível: ${messageOf(error)}. Confira a integração Engramind e tente de novo.`)
+    }
+    return { admin, app: (await ensureAppToken(admin, actorId, warnings)) ?? admin }
 }
 
 /** Teto da chamada ao subagente: provedor que aceita a conexão e para de responder não prende o provisionamento. */
@@ -152,6 +163,7 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
         steps: { identity: false, ...(doc.provisioning?.steps ?? { agent: false, token: false, channels: false, extras: false, workdir: false }) },
         channels: doc.provisioning?.channels ?? [],
         extras: doc.provisioning?.extras ?? [],
+        blocked: doc.provisioning?.blocked ?? [],
         warnings: [],
     }
     await save(agentId, state)
@@ -166,13 +178,7 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
             await save(agentId, state)
             return
         }
-        let admin: EngramindTarget
-        try {
-            admin = await engramindTarget()
-        } catch (error) {
-            throw new Error(`Engramind indisponível: ${messageOf(error)}. Confira a integração Engramind e tente de novo.`)
-        }
-        const app = (await ensureAppToken(admin, actorId, state.warnings)) ?? admin
+        const { admin, app } = await routineEngramindTargets(actorId, state.warnings)
 
         await ensureRoutineEngramindAgent(doc.slug, routineAgentTitle(doc.name), doc.objective, app)
         state.steps.agent = true
@@ -191,8 +197,9 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
         if (!state.steps.extras || mode === "reprovision") {
             const channels = await listEngramindChannels(admin)
             const known = new Set(channels.map((channel) => channel.slug))
-            const answer = await askPlanner(doc, extraChannelPrompt(doc, channels, state.extras.map((item) => item.channel)))
-            const plan = parseExtraChannelPlan(answer, channels, state.extras.map((item) => item.channel))
+            const blocked = (state.blocked ?? []).map((item) => item.channel)
+            const answer = await askPlanner(doc, extraChannelPrompt(doc, channels, state.extras.map((item) => item.channel), blocked))
+            const plan = parseExtraChannelPlan(answer, channels, state.extras.map((item) => item.channel), blocked)
             state.warnings.push(...plan.warnings)
             for (const item of plan.items) {
                 // Slug que já existe (ou passou a existir) é assinatura, nunca recriação.
@@ -202,7 +209,7 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
             }
             await ensureRoutineSubscriptions(
                 doc.slug,
-                state.extras.map((item) => item.channel),
+                state.extras.map((item) => item.channel).filter((channel) => !blocked.includes(channel)),
                 app,
             )
             state.steps.extras = true
@@ -219,7 +226,7 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
         state.at = new Date()
         await save(agentId, state)
         await auditAgent(actorId, agentId, AcaoAuditoria.EXECUTAR, {
-            depois: { evento: mode === "reprovision" ? "reprovisionar" : "provisionar", canais: state.channels, extras: state.extras.map((item) => item.channel), criados: created, tokenPrefix: issued ? token.prefix : undefined },
+            depois: { evento: mode === "reprovision" ? "reprovisionar" : "provisionar", canais: state.channels, extras: state.extras.map((item) => item.channel), bloqueados: (state.blocked ?? []).map((item) => item.channel), criados: created, tokenPrefix: issued ? token.prefix : undefined },
         })
         routineLog.info({ agentId, mode, extras: state.extras.length, created }, "[routine-agents] agente provisionado")
     } catch (error) {
