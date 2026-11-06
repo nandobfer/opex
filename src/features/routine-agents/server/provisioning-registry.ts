@@ -14,3 +14,31 @@ export const PROVISIONING_INTERRUPTED_MESSAGE = 'O provisionamento foi interromp
 export function isProvisioningInFlight(agentId: string): boolean {
     return inFlight.has(agentId)
 }
+
+/**
+ * Ações do dono sobre os canais extras (OPE-143), uma de cada vez por agente. Cada ação lê o estado, aciona o
+ * Engramind (rede) e só então grava as listas inteiras: sem a fila, duas ações quase simultâneas leem o mesmo
+ * estado e a segunda grava por cima da primeira. O provisionamento também espera a fila esvaziar antes de ler o
+ * agente (`whenChannelActionsDone`), para o `save()` dele não apagar o bloqueio recém-gravado.
+ */
+const globalLocks = globalThis as unknown as { __routineChannelLocks?: Map<string, Promise<void>> }
+const channelLocks: Map<string, Promise<void>> = (globalLocks.__routineChannelLocks ??= new Map())
+
+export function withChannelLock<T>(agentId: string, task: () => Promise<T>): Promise<T> {
+    const previous = channelLocks.get(agentId) ?? Promise.resolve()
+    const run = previous.then(task)
+    const tail = run.then(
+        () => undefined,
+        () => undefined,
+    )
+    channelLocks.set(agentId, tail)
+    void tail.then(() => {
+        if (channelLocks.get(agentId) === tail) channelLocks.delete(agentId)
+    })
+    return run
+}
+
+/** Resolve quando as ações de canal já enfileiradas deste agente terminarem. */
+export function whenChannelActionsDone(agentId: string): Promise<void> {
+    return channelLocks.get(agentId) ?? Promise.resolve()
+}

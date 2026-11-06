@@ -151,6 +151,10 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   alterado") e o registro do agente fica como estava. Canais base (`opex`, o global e o próprio) → 400
   `ROUTINE_CHANNEL_BASE`; slug não elegível (`agentes/...` de outros) → 400 `ROUTINE_CHANNEL_INVALID`; com o
   provisionamento vivo → 409 `ROUTINE_AGENT_PROVISIONING` (o `save()` dele gravaria por cima).
+- As ações de canal de um agente correm **em fila** (`withChannelLock`, em `provisioning-registry.ts`): cada uma lê
+  o estado já com o resultado da anterior, então duas ações quase simultâneas em canais diferentes mantêm as
+  duas. Um provisionamento iniciado no meio de uma ação espera a fila esvaziar antes de ler o agente
+  (`whenChannelActionsDone` em `startProvisioning`), para o `save()` dele não apagar o bloqueio recém-gravado.
 - No provisionamento o bloqueio vale em três pontos: o prompt do subagente tira o bloqueado da lista e
   traz "Bloqueados pelo dono (não assine nem crie…)"; `parseExtraChannelPlan` descarta o bloqueado em
   `subscribe` e em `create` (aviso "está bloqueado neste agente: ignorado"); e a assinatura final filtra

@@ -4,7 +4,7 @@ import { MAX_EXTRA_CHANNELS, isEligibleExtraChannel } from "../provision-plan"
 import type { RoutineChannelAction } from "../schemas"
 import type { RoutineAgentDto } from "../types"
 import { baseRoutineChannels, ensureRoutineSubscriptions, removeRoutineSubscription } from "./engramind"
-import { isProvisioningInFlight } from "./provisioning-registry"
+import { isProvisioningInFlight, withChannelLock } from "./provisioning-registry"
 import { routineEngramindTargets } from "./provisioning"
 import { getRoutineAgent } from "./service"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated, routineLog, type RoutineAgentDoc } from "./shared"
@@ -17,7 +17,9 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated
  * aos extras e retira).
  *
  * O Engramind é acionado ANTES de gravar: se falhar, o registro do agente não muda. Com o provisionamento
- * vivo a ação é recusada (o `save()` dele gravaria por cima).
+ * vivo a ação é recusada (o `save()` dele gravaria por cima). As ações de um agente correm em fila
+ * (`withChannelLock`): cada uma lê o estado já com o resultado da anterior, e um provisionamento iniciado no
+ * meio dela espera a fila antes de ler o agente.
  */
 
 const BASE_CHANNEL = () => new DomainError(400, "Os canais base (opex, o global dos rotineiros e o canal próprio) não podem ser removidos", "ROUTINE_CHANNEL_BASE")
@@ -52,7 +54,9 @@ const view = (extras: Extra[], blocked: Blocked[]) => ({ extras: extras.map((ite
 const registered = (doc: RoutineAgentDoc) => doc.provisioning?.steps?.agent === true
 
 /** Remove o canal dos extras (cancelando a assinatura) e o bloqueia neste agente. */
-export async function blockRoutineChannel(id: string, channel: string, actorId: string): Promise<RoutineAgentDto> {
+export const blockRoutineChannel = (id: string, channel: string, actorId: string): Promise<RoutineAgentDto> => withChannelLock(id, () => block(id, channel, actorId))
+
+async function block(id: string, channel: string, actorId: string): Promise<RoutineAgentDto> {
     const { doc, extras, blocked } = await load(id, channel)
     if (blocked.some((item) => item.channel === channel)) return getRoutineAgent(id)
     let subscription: "removed" | "absent" = "absent"
@@ -76,7 +80,9 @@ export async function blockRoutineChannel(id: string, channel: string, actorId: 
 }
 
 /** Tira o canal do bloqueio; com `resubscribe`, assina de novo e o devolve aos extras. */
-export async function unblockRoutineChannel(id: string, channel: string, options: { resubscribe?: boolean }, actorId: string): Promise<RoutineAgentDto> {
+export const unblockRoutineChannel = (id: string, channel: string, options: { resubscribe?: boolean }, actorId: string): Promise<RoutineAgentDto> => withChannelLock(id, () => unblock(id, channel, options, actorId))
+
+async function unblock(id: string, channel: string, options: { resubscribe?: boolean }, actorId: string): Promise<RoutineAgentDto> {
     const { doc, extras, blocked } = await load(id, channel)
     const entry = blocked.find((item) => item.channel === channel)
     if (!entry) {

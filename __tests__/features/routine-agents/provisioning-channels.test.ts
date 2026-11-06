@@ -16,6 +16,9 @@ const holder = vi.hoisted(() => ({
   prompts: [] as string[],
   failDelete: false,
   failSubscribe: false,
+  /** Segura o DELETE até ser liberado (ação de canal lenta na rede). */
+  gate: null as null | Promise<void>,
+  deleteStarted: 0,
   audits: [] as { entidadeId: string; depois?: Record<string, unknown>; antes?: Record<string, unknown> }[],
   events: [] as string[],
 }))
@@ -37,6 +40,10 @@ vi.mock('@/lib/db/models/RoutineAgent', () => ({
 }))
 vi.mock('@/features/engramind/server/client', () => ({
   engramindCall: async (...args: Parameters<FakeEngramind['engramindCall']>) => {
+    if (args[0] === 'DELETE') {
+      holder.deleteStarted++
+      if (holder.gate) await holder.gate
+    }
     if (holder.failDelete && args[0] === 'DELETE') throw new Error('Engramind fora do ar')
     if (holder.failSubscribe && args[0] === 'POST' && args[1].path === '/v1/subscriptions') throw new Error('Engramind recusou a assinatura')
     return holder.fake.engramindCall(...args)
@@ -56,7 +63,7 @@ vi.mock('@/lib/ai/stream', () => ({
   },
 }))
 
-import { provisionRoutineAgent } from '@/features/routine-agents/server/provisioning'
+import { provisionRoutineAgent, startProvisioning } from '@/features/routine-agents/server/provisioning'
 import { inFlight } from '@/features/routine-agents/server/provisioning-registry'
 import { applyRoutineChannelAction, blockRoutineChannel, unblockRoutineChannel } from '@/features/routine-agents/server/provisioning-channels'
 
@@ -85,6 +92,8 @@ beforeEach(async () => {
   holder.prompts = []
   holder.failDelete = false
   holder.failSubscribe = false
+  holder.gate = null
+  holder.deleteStarted = 0
   holder.audits = []
   holder.events = []
   inFlight.clear()
@@ -172,6 +181,54 @@ describe('remover (bloquear) um canal extra', () => {
     await expect(blockRoutineChannel(agentId(), 'vagas/empresa-x', 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_AGENT_PROVISIONING' })
     expect(deletes()).toHaveLength(0)
     expect(blockedList()).toEqual([])
+  })
+})
+
+describe('ações simultâneas no mesmo agente (F1)', () => {
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 5))
+
+  it('duas remoções quase simultâneas de canais diferentes mantêm as duas (a segunda não sobrescreve a primeira)', async () => {
+    let release!: () => void
+    holder.gate = new Promise<void>((resolve) => (release = resolve))
+    const first = blockRoutineChannel(agentId(), 'vagas/empresa-x', 'local')
+    const second = blockRoutineChannel(agentId(), 'experiencia/desenvolvimento', 'local')
+    await tick()
+    // A segunda espera a primeira terminar: só um DELETE em andamento.
+    expect(holder.deleteStarted).toBe(1)
+    release()
+    await Promise.all([first, second])
+    expect(extras()).toEqual([])
+    expect(blockedList().sort()).toEqual(['experiencia/desenvolvimento', 'vagas/empresa-x'])
+    expect(subscribed()).not.toContain('vagas/empresa-x')
+    expect(subscribed()).not.toContain('experiencia/desenvolvimento')
+  })
+
+  it('Reprovisionar iniciado durante a chamada ao Engramind espera a ação e não apaga o bloqueio recém-gravado', async () => {
+    let release!: () => void
+    holder.gate = new Promise<void>((resolve) => (release = resolve))
+    holder.planner = '{"subscribe":[{"channel":"vagas/empresa-x","reason":"de novo"}],"create":[]}'
+    const action = blockRoutineChannel(agentId(), 'vagas/empresa-x', 'local')
+    await tick()
+    const promptsBefore = holder.prompts.length
+    const provisioningRun = startProvisioning(agentId(), 'reprovision', 'local')
+    await tick()
+    // Ainda não leu o agente nem chamou o subagente.
+    expect(holder.prompts).toHaveLength(promptsBefore)
+    release()
+    await Promise.all([action, provisioningRun])
+    expect(blockedList()).toEqual(['vagas/empresa-x'])
+    expect(extras()).toEqual(['experiencia/desenvolvimento'])
+    expect(subscribed()).not.toContain('vagas/empresa-x')
+    expect(holder.prompts.at(-1)).toContain('Bloqueados pelo dono')
+  })
+
+  it('uma ação que falha não trava a fila: a seguinte roda', async () => {
+    holder.failDelete = true
+    await expect(blockRoutineChannel(agentId(), 'vagas/empresa-x', 'local')).rejects.toMatchObject({ status: 502 })
+    holder.failDelete = false
+    await blockRoutineChannel(agentId(), 'experiencia/desenvolvimento', 'local')
+    expect(blockedList()).toEqual(['experiencia/desenvolvimento'])
+    expect(extras()).toEqual(['vagas/empresa-x'])
   })
 })
 

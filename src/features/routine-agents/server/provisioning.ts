@@ -7,7 +7,7 @@ import { EXTRA_CHANNELS_INSTRUCTIONS, extraChannelPrompt, parseExtraChannelPlan 
 import { IDENTITY_INSTRUCTIONS, identityNeeds, identityPrompt, parseGeneratedIdentity, routineAgentTitle } from "../identity-plan"
 import { isPendingRoutineSlug, routineNameKey, uniqueRoutineSlug } from "../slug"
 import { baseRoutineChannels, ensureRoutineEngramindAgent, ensureRoutineSubscriptions, ensureRoutineToken, listEngramindChannels } from "./engramind"
-import { inFlight } from "./provisioning-registry"
+import { inFlight, whenChannelActionsDone } from "./provisioning-registry"
 import { loadRoutineAgentSettings } from "./settings"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated, routineLog, type RoutineAgentDoc } from "./shared"
 
@@ -38,7 +38,9 @@ const NO_MODEL_MESSAGE = "Configure o modelo do provisionamento (Integrações �
 export function startProvisioning(agentId: string, mode: ProvisionMode, actorId: string): Promise<void> {
     const current = inFlight.get(agentId)
     if (current) return current
-    const run = provisionRoutineAgent(agentId, mode, actorId)
+    // Uma ação de canal em curso (OPE-143) termina antes: o provisionamento lê o agente já com o bloqueio gravado.
+    const run = whenChannelActionsDone(agentId)
+        .then(() => provisionRoutineAgent(agentId, mode, actorId))
         .catch((error: unknown) => routineLog.warn({ agentId, err: messageOf(error) }, "[routine-agents] provisionamento falhou fora do fluxo"))
         .finally(() => inFlight.delete(agentId))
     inFlight.set(agentId, run)
