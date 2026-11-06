@@ -95,8 +95,10 @@ OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal�
   **expandidos**, rotuladas "Provedor · janela" (`summaryLabel`; com várias contas,
   "Provedor (conta) · janela"). Provedores recolhidos ficam ocultos; sem dados `ok` ou com todos
   recolhidos, aparece só o título.
-- Cada janela (`QuotaWindowBar`): rótulo, "reinicia em 2 h 15 min" (`formatResetIn`, relógio de
-  30 s; dica com data/hora exata), % usado com `AnimatedNumber` e barra `role="progressbar"`.
+- Cada janela (`QuotaWindowBar`): rótulo, só o tempo restante até o reset ("2 h 15 min",
+  `formatResetIn`, relógio de 30 s), % usado com `AnimatedNumber` e barra `role="progressbar"`.
+  O texto visível não tem o prefixo "reinicia em"; a dica (`title`, "Reinicia em dd/MM às HH:mm")
+  e o `aria-label` da barra mantêm a explicação (", reinicia em 2 h 15 min").
 - **Cores por uso** (tokens): `< 60%` `success`, `60–84%` `warning`, `≥ 85%` `destructive`.
 - **Animações** (Framer Motion, respeitando movimento reduzido): a barra cresce de 0 ao carregar e
   do valor anterior ao atualizar; a cor transiciona; expandir/recolher (card e provedor) anima altura e opacidade;
