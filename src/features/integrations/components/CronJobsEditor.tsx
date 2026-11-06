@@ -268,7 +268,7 @@ export function CronJobsEditor({ value, onChange, states = [], disabled, savedJo
                                                     </div>
                                                 )}
 
-                                                <ScheduleEditor value={job.schedule} onChange={(schedule) => updateJob(job, { schedule })} disabled={disabled} />
+                                                <ScheduleEditor value={job.schedule} onChange={(schedule) => updateJob(job, { schedule })} disabled={disabled} allowSeconds />
                                                 <CronJobExtraFields job={job} onChange={(patch) => updateJob(job, patch)} disabled={disabled} />
 
                                                 {job.kind === "http" && (

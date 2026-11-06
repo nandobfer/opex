@@ -1,4 +1,4 @@
-import { zonedWallTimeToDate, type Schedule } from "@/lib/integrations/schedule"
+import { isSecondsSchedule, zonedWallTimeToDate, type Schedule } from "@/lib/integrations/schedule"
 
 /**
  * `consolidation.schedule` do Engramind (OPE-117; módulo PURO): o Engramind guarda uma expressão cron de
@@ -40,6 +40,7 @@ export function scheduleToUtcCron(schedule: Schedule, at = new Date()): CronConv
     const offset = utcOffsetMinutes(at)
     switch (schedule.type) {
         case "interval": {
+            if (isSecondsSchedule(schedule)) return { ok: false, error: "O Engramind não aceita intervalo em segundos: use minutos ou horas" }
             const minutes = schedule.minutes
             if (minutes >= 1 && minutes < 60 && 60 % minutes === 0) return { ok: true, cron: `*/${minutes} * * * *` }
             if (minutes === 60) return { ok: true, cron: "0 * * * *" }

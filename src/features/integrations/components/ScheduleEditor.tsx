@@ -7,6 +7,8 @@ import { TimePicker } from "@/components/ui/time-picker"
 import { cn } from "@/lib/utils"
 import {
     describeSchedule,
+    isSecondsSchedule,
+    MIN_INTERVAL_SECONDS,
     SCHEDULE_TYPE_LABELS,
     validateSchedule,
     WEEKDAY_SHORT_LABELS,
@@ -23,16 +25,38 @@ interface ScheduleEditorProps {
      * descrição, como os erros do próprio agendamento. As Rotinas não passam (sem restrição a mais).
      */
     validate?: (value: Schedule) => string | null
+    /** Oferece a unidade "segundos" no intervalo (só Integrações › Crons; mínimo de 10 s). */
+    allowSeconds?: boolean
 }
 
-type IntervalUnit = "minutes" | "hours"
+type IntervalUnit = "seconds" | "minutes" | "hours"
+
+/** Unidade em que o intervalo é exibido: segundos, horas (múltiplo de 60 min) ou minutos. */
+export function intervalUnitOf(value: Schedule): IntervalUnit {
+    if (isSecondsSchedule(value)) return "seconds"
+    return value.type === "interval" && value.minutes % 60 === 0 ? "hours" : "minutes"
+}
+
+/** Quantidade exibida no campo do intervalo, na unidade atual. */
+function intervalAmount(value: Schedule, unit: IntervalUnit): number {
+    if (value.type !== "interval") return 1
+    if (isSecondsSchedule(value)) return value.seconds
+    return unit === "hours" ? value.minutes / 60 : value.minutes
+}
+
+/** Monta o intervalo a partir da quantidade e da unidade (segundos com o mínimo do tick rápido). */
+export function buildInterval(amount: number, unit: IntervalUnit): Schedule {
+    const n = Math.max(1, Math.round(amount))
+    if (unit === "seconds") return { type: "interval", seconds: Math.max(MIN_INTERVAL_SECONDS, n) }
+    return { type: "interval", minutes: unit === "hours" ? n * 60 : n }
+}
 
 /** Troca de tipo preservando o horário já escolhido, quando houver. */
 export function switchScheduleType(current: Schedule, type: ScheduleType): Schedule {
     const time = "time" in current ? current.time : "08:00"
     switch (type) {
         case "interval":
-            return { type, minutes: current.type === "interval" ? current.minutes : 60 }
+            return current.type === "interval" ? current : { type, minutes: 60 }
         case "daily":
             return { type, time }
         case "weekly":
@@ -54,9 +78,9 @@ const fieldMotion = {
 } as const
 
 /** Editor amigável de agendamento — sem expressão cron. Horários em Brasília. */
-export function ScheduleEditor({ value, onChange, disabled, validate }: ScheduleEditorProps) {
+export function ScheduleEditor({ value, onChange, disabled, validate, allowSeconds = false }: ScheduleEditorProps) {
     const error = validateSchedule(value) ?? validate?.(value) ?? null
-    const intervalUnit: IntervalUnit = value.type === "interval" && value.minutes % 60 === 0 ? "hours" : "minutes"
+    const intervalUnit = intervalUnitOf(value)
 
     return (
         <div className="space-y-3">
@@ -79,28 +103,23 @@ export function ScheduleEditor({ value, onChange, disabled, validate }: Schedule
                     <>
                         <Input
                             type="number"
-                            min={1}
+                            min={intervalUnit === "seconds" ? MIN_INTERVAL_SECONDS : 1}
                             className={CONTROL}
                             aria-label="Intervalo"
-                            value={intervalUnit === "hours" ? value.minutes / 60 : value.minutes}
-                            onChange={(event) => {
-                                const n = Math.max(1, Math.floor(Number(event.target.value) || 1))
-                                onChange({ type: "interval", minutes: intervalUnit === "hours" ? n * 60 : n })
-                            }}
+                            value={intervalAmount(value, intervalUnit)}
+                            onChange={(event) => onChange(buildInterval(Math.floor(Number(event.target.value) || 1), intervalUnit))}
                             disabled={disabled}
                         />
                         <Select
                             value={intervalUnit}
-                            onValueChange={(unit) => {
-                                const amount = intervalUnit === "hours" ? value.minutes / 60 : value.minutes
-                                onChange({ type: "interval", minutes: unit === "hours" ? Math.max(1, Math.round(amount)) * 60 : Math.max(1, Math.round(amount)) })
-                            }}
+                            onValueChange={(unit) => onChange(buildInterval(intervalAmount(value, intervalUnit), unit as IntervalUnit))}
                             disabled={disabled}
                         >
                             <SelectTrigger className={CONTROL} aria-label="Unidade">
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
+                                {(allowSeconds || intervalUnit === "seconds") && <SelectItem value="seconds">segundos</SelectItem>}
                                 <SelectItem value="minutes">minutos</SelectItem>
                                 <SelectItem value="hours">horas</SelectItem>
                             </SelectContent>

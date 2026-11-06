@@ -10,11 +10,14 @@ export const NAV_GROUP_PANEL_OFFSET = 12
 export const NAV_GROUP_PANEL_DRAWER_OFFSET = 4
 export const NAV_GROUP_PANEL_COLLISION_PADDING = 12
 
-/** Setas ↑/↓ (e Home/End) percorrem os links do painel. */
-function moveFocus(event: KeyboardEvent<HTMLElement>) {
-    const links = Array.from(event.currentTarget.querySelectorAll<HTMLAnchorElement>("a[href]"))
+/** Itens percorridos pelas setas e focados ao abrir por clique/teclado (padrão: os links do painel). */
+export const SIDEBAR_PANEL_FOCUS_SELECTOR = "a[href]"
+
+/** Setas ↑/↓ (e Home/End) percorrem os itens focáveis do painel (`selector`). */
+function moveFocus(event: KeyboardEvent<HTMLElement>, selector: string) {
+    const links = Array.from(event.currentTarget.querySelectorAll<HTMLElement>(selector))
     if (!links.length) return
-    const index = links.indexOf(document.activeElement as HTMLAnchorElement)
+    const index = links.indexOf(document.activeElement as HTMLElement)
     const target = { ArrowDown: links[(index + 1) % links.length], ArrowUp: links[(index - 1 + links.length) % links.length], Home: links[0], End: links[links.length - 1] }[event.key]
     if (!target) return
     event.preventDefault()
@@ -46,6 +49,8 @@ interface SidebarHoverPanelProps {
      * `Popover.Anchor`: sem `Popover.Trigger`, o Radix não sabe para onde devolver o foco.
      */
     returnFocusRef?: RefObject<HTMLElement | null>
+    /** Itens focáveis (setas e foco inicial); padrão: links. Painéis com botões passam `"button, a[href]"`. */
+    focusSelector?: string
     children: ReactNode
 }
 
@@ -54,7 +59,7 @@ interface SidebarHoverPanelProps {
  * gatilho e limitado à janela, animado com Framer Motion, com título em caixa-alta e navegação por
  * setas entre os links. Deve ficar dentro do `Popover.Root` do gatilho.
  */
-export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, openedByHover, panelHandlers, widthClassName = "w-56", testId, id, returnFocusRef, children }: SidebarHoverPanelProps) {
+export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, openedByHover, panelHandlers, widthClassName = "w-56", testId, id, returnFocusRef, focusSelector = SIDEBAR_PANEL_FOCUS_SELECTOR, children }: SidebarHoverPanelProps) {
     return (
         <AnimatePresence>
             {open && (
@@ -70,7 +75,7 @@ export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, opened
                         onOpenAutoFocus={(event) => {
                             // O Radix pula links no foco inicial: por clique/teclado, o foco vai ao primeiro item.
                             event.preventDefault()
-                            if (!openedByHover.current) (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>("a[href]")?.focus()
+                            if (!openedByHover.current) (event.currentTarget as HTMLElement | null)?.querySelector<HTMLElement>(focusSelector)?.focus()
                         }}
                         onCloseAutoFocus={(event) => {
                             if (openedByHover.current) {
@@ -95,7 +100,7 @@ export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, opened
                                 "z-50 max-w-[var(--radix-popover-content-available-width)] rounded-lg border border-sidebar-border bg-popover p-1.5 text-popover-foreground shadow-2xl shadow-primary/10",
                                 widthClassName,
                             )}
-                            onKeyDown={moveFocus}
+                            onKeyDown={(event) => moveFocus(event, focusSelector)}
                             data-testid={testId}
                             id={id}
                             {...panelHandlers}

@@ -19,7 +19,7 @@ vi.mock("framer-motion", () => {
 
 import { SecretField } from "@/features/integrations/components/SecretField"
 import { IntegrationStatusDot } from "@/features/integrations/components/IntegrationBadges"
-import { switchScheduleType } from "@/features/integrations/components/ScheduleEditor"
+import { buildInterval, intervalUnitOf, switchScheduleType } from "@/features/integrations/components/ScheduleEditor"
 import { buildIntegrationPatch } from "@/features/integrations/components/IntegrationDetailPage"
 import { MANAGED_SWAGGER_DESCRIPTION, SwaggerDocsField } from "@/features/integrations/components/SwaggerDocsField"
 import { formatTestEvent } from "@/features/integrations/components/IntegrationTestDialog"
@@ -95,6 +95,18 @@ describe("SecretField (issue #604)", () => {
         render(<SecretHarness configured={false} onAction={vi.fn()} />)
         expect(screen.getByRole("button", { name: "Definir" })).toBeTruthy()
         expect(screen.queryByRole("button", { name: "Limpar" })).toBeNull()
+    })
+})
+
+describe("intervalo em segundos no editor (OPE-145)", () => {
+    it("segundos têm unidade própria e o mínimo de 10 s; minutos e horas seguem iguais", () => {
+        expect(intervalUnitOf({ type: "interval", seconds: 30 })).toBe("seconds")
+        expect(intervalUnitOf({ type: "interval", minutes: 120 })).toBe("hours")
+        expect(intervalUnitOf({ type: "interval", minutes: 5 })).toBe("minutes")
+        expect(buildInterval(3, "seconds")).toEqual({ type: "interval", seconds: 10 })
+        expect(buildInterval(15, "seconds")).toEqual({ type: "interval", seconds: 15 })
+        expect(buildInterval(2, "hours")).toEqual({ type: "interval", minutes: 120 })
+        expect(switchScheduleType({ type: "interval", seconds: 10 }, "interval")).toEqual({ type: "interval", seconds: 10 })
     })
 })
 

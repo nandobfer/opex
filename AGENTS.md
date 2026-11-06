@@ -206,6 +206,10 @@ sem pedido explícito.
   que já existem de cada agente (ver `aicontext/modules/agent-metrics.md`).
 - Cores favoritas (Configurações › Aparência): `color-palette-updated` (`{ color, action, previousColor? }`)
   em `private-app` ao adicionar, editar ou remover uma favorita (ver `aicontext/modules/settings.md`).
+- Recursos do servidor (OPE-145): `host-metrics-updated` em `private-app` com o DTO dos medidores
+  (`{ state, message, metrics, checkedAt, attemptedAt, staleAfterMs }`, só números), publicado pela rotina
+  `host-metrics-refresh` quando um percentual arredondado ou o estado muda e, sem mudança, a cada 20 s; o
+  cliente grava no cache sem nova consulta (ver `aicontext/modules/host-metrics.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Agentes rotineiros: `routine-agent-updated` (`{ id }`), `routine-run-updated` (`{ id, agentId, status }`) e

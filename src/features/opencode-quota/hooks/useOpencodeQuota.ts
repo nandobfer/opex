@@ -34,7 +34,9 @@ export function useOpencodeQuotaRealtime(): void {
         if (!isPusherClientAvailable()) return
         const name = appChannel()
         const channel = acquireChannel(name)
-        const handler = () => void queryClient.invalidateQueries({ queryKey: [OPENCODE_QUOTA_QUERY_KEY] })
+        // `cancelRefetch: false`: com o painel montado em mais de um lugar (barra lateral e
+        // /desenvolvimento), cada assinatura recebe o evento, mas só a primeira dispara a busca.
+        const handler = () => void queryClient.invalidateQueries({ queryKey: [OPENCODE_QUOTA_QUERY_KEY] }, { cancelRefetch: false })
         channel.bind(OPENCODE_QUOTA_UPDATED_EVENT, handler)
         return () => {
             channel.unbind(OPENCODE_QUOTA_UPDATED_EVENT, handler)

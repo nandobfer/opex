@@ -71,3 +71,10 @@ describe('marcador de agendamento inválido (OPE-117)', () => {
     expect(utcCronToSchedule(invalidScheduleMarker('x'))).toBeNull()
   })
 })
+
+describe('intervalo em segundos (OPE-145)', () => {
+  it('o Engramind recusa intervalo em segundos', () => {
+    const result = scheduleToUtcCron({ type: 'interval', seconds: 10 })
+    expect(result.ok).toBe(false)
+  })
+})

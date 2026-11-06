@@ -41,7 +41,8 @@ vi.mock("@/lib/pusher/client", () => ({
     releaseChannel: () => undefined,
 }))
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
-vi.mock("@/features/opex-agent/components/agents/AgentChatNavItem", () => ({ AgentChatNavItem: () => null }))
+vi.mock("@/features/opex-agent/components/agents/AgentChatNavItem", () => ({ AgentChatNavItem: () => <li data-testid="agent-nav-item-mock" /> }))
+vi.mock("@/features/host-metrics/components/ServerQuotaSidebarItem", () => ({ ServerQuotaSidebarItem: () => <li data-testid="server-quota-item-mock" /> }))
 vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn(), isRefetching: false }) }))
 vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
 vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({ IntegrationTestDialog: () => null }))

@@ -12,11 +12,18 @@ const TIME = z.string().regex(/^([01]\d|2[0-3]):([0-5]\d)$/, "Horário inválido
 
 export const scheduleSchema: z.ZodType<Schedule> = z
     .discriminatedUnion("type", [
-        z.object({ type: z.literal("interval"), minutes: z.number().int() }),
+        // Intervalo em minutos ou, só nas rotinas, em segundos (`seconds`, mínimo 10): exatamente um dos dois.
+        z
+            .object({ type: z.literal("interval"), minutes: z.number().int().optional(), seconds: z.number().int().optional() })
+            .refine((value) => (value.minutes === undefined) !== (value.seconds === undefined), "Informe o intervalo em minutos ou em segundos"),
         z.object({ type: z.literal("daily"), time: TIME }),
         z.object({ type: z.literal("weekly"), days: z.array(z.number().int()), time: TIME }),
         z.object({ type: z.literal("monthly"), day: z.number().int(), time: TIME }),
     ])
+    .transform((value): Schedule => {
+        if (value.type !== "interval") return value
+        return value.seconds !== undefined ? { type: "interval", seconds: value.seconds } : { type: "interval", minutes: value.minutes ?? 0 }
+    })
     .superRefine((schedule, ctx) => {
         const error = validateSchedule(schedule)
         if (error) ctx.addIssue({ code: "custom", message: error })

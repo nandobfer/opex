@@ -3,13 +3,14 @@
  *
  * Um tick do agendador de rotinas disparado de fora do processo (ex.: cron do sistema), com o
  * MESMO motor do `setInterval` do `instrumentation.ts`. Rotinas, horários e liga/desliga continuam
- * em Integrações › Crons, e o lease no Mongo garante no máximo uma execução.
+ * em Integrações › Crons, e o lease no Mongo garante no máximo uma execução. Inclui as rotinas com
+ * intervalo em segundos (tick rápido), que rodam uma vez por chamada.
  *
  * Autenticação: `Authorization: Bearer <CRON_SECRET do ambiente OU cron secret da integração>`.
  */
 
 import { NextResponse, type NextRequest } from "next/server"
-import { registerBuiltInJobs, runSchedulerTick } from "@/features/integrations/scheduler/cron-scheduler"
+import { registerBuiltInJobs, runFastSchedulerTick, runSchedulerTick } from "@/features/integrations/scheduler/cron-scheduler"
 import { verifySchedulerTickToken } from "@/features/routines/utils/cron-auth"
 import { logger } from "@/lib/logger"
 
@@ -23,9 +24,10 @@ async function handleTick(req: NextRequest) {
     try {
         registerBuiltInJobs()
         const tick = await runSchedulerTick()
+        const fast = tick.skipped ? { executed: [] } : await runFastSchedulerTick()
         return NextResponse.json({
             success: true,
-            executed: tick.executed,
+            executed: [...tick.executed, ...fast.executed],
             ...(tick.skipped ? { skipped: tick.skipped } : {}),
         })
     } catch (error) {
