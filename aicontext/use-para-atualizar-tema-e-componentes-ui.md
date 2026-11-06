@@ -32,7 +32,10 @@ O app tem **um único tema, escuro**. Não há tema claro nem tema por empresa.
   `dark:`.
 - Gráficos usam `--chart-1..10` (definidas no `globals.css`): `CHART_COLORS`/`colorAt` (1..6) nos
   Dashboards e `LINE_SERIES_COLORS`/`lineStyleAt` (`src/components/metrics/charts/palette.ts`) nas linhas
-  das métricas, uma cor (e, acima de 10 séries, um traço) por série.
+  das métricas sem significado, uma cor (e, acima de 10 séries, um traço) por série. As séries dos agentes
+  com significado usam os tokens `--chart-positive-1/2`, `--chart-info-1..3` e `--chart-negative-1..3`
+  (`SEMANTIC_COLORS`, mapa em `src/features/agent-metrics/series-style.ts`, OPE-141); barras de uma medida
+  só usam `SINGLE_MEASURE_COLOR` (roxo).
 
 ## Componentes UI (Shadcn/Radix)
 

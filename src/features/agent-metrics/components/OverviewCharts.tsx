@@ -2,6 +2,7 @@
 
 import { ChartCard } from "@/components/metrics/charts/ChartCard"
 import { EmptyChart } from "@/components/metrics/charts/EmptyChart"
+import { SINGLE_MEASURE_COLOR } from "@/components/metrics/charts/palette"
 import { RankedBarsCard } from "@/components/metrics/charts/RankedBarsCard"
 import { formatMetricValue } from "@/components/metrics/format"
 import { CHART_GRID, CHART_HEIGHT } from "@/components/metrics/layout"
@@ -41,13 +42,14 @@ export function OverviewCharts({ agent, data, showSpecific }: { agent: AgentId; 
                     <ChartCard key={chart.id} title={chart.title} description={chart.description}>
                         {chart.items.length ? (
                             <RankedBarsCard
-                                data={chart.items.map((item) => ({ label: item.detail ? `${item.label} (${item.detail})` : item.label, value: item.value }))}
+                                data={chart.items.map((item) => ({ label: item.detail ? `${item.label} (${item.detail})` : item.label, value: item.value, color: item.color ?? null }))}
                                 labelKey="label"
                                 valueKey="value"
-                                config={{ value: { label: chart.title, color: "var(--chart-2)" } }}
+                                config={{ value: { label: chart.title, color: SINGLE_MEASURE_COLOR } }}
                                 ariaLabel={chart.title}
                                 height={Math.max(CHART_HEIGHT, chart.items.length * 28)}
-                                color="var(--chart-2)"
+                                color={SINGLE_MEASURE_COLOR}
+                                colorKey="color"
                                 valueFormatter={(value) => formatMetricValue(value, chart.format)}
                                 table={{
                                     columns: [

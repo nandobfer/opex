@@ -184,8 +184,8 @@ function repoFilter(repo: string): string | { $regex: string } {
 }
 
 /** Tarefa do Opex vinculada a uma issue (`repo#N`). */
-export async function findIssueTask(repo: string, number: number): Promise<{ id: string } | null> {
+export async function findIssueTask(repo: string, number: number): Promise<{ id: string; code: string | null } | null> {
     await dbConnect()
-    const link = await GithubIssueLink.findOne({ repo: repoFilter(repo), number }).select({ taskId: 1 }).lean()
-    return link?.taskId ? { id: link.taskId } : null
+    const link = await GithubIssueLink.findOne({ repo: repoFilter(repo), number }).select({ taskId: 1, taskCode: 1 }).lean()
+    return link?.taskId ? { id: link.taskId, code: link.taskCode ?? null } : null
 }

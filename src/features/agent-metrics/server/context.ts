@@ -9,7 +9,7 @@ import { TaskBoardColumn } from "@/lib/db/models/TaskBoard"
 import { dayKey, type BucketMode } from "@/lib/time/buckets"
 import { agentDef, type AgentId } from "../catalog"
 import { METRICS_TIME_ZONE, type TrackingKey } from "../constants"
-import { usageSeries, type BucketContext } from "../logic/common"
+import { runTotals, usageSeries, type BucketContext, type RunTotals } from "../logic/common"
 import { metricsBucketMode, parseMargin, resolveMetricsRange, type AgentMetricsQuery, type MetricsRange } from "../period"
 import type { MetricKpiDto, MetricFormat, UsagePointDto } from "../types"
 
@@ -86,6 +86,14 @@ export async function usageOf(ctx: MetricsContext): Promise<UsagePointDto[]> {
         }
     }
     return usageSeries(rows, ctx.bucket)
+}
+
+/** Totais das execuções do período com os filtros (KPIs comuns das execuções, OPE-141). */
+export async function runTotalsOf(ctx: MetricsContext): Promise<RunTotals> {
+    const rows = await AgentRun.find({ agent: ctx.agent, finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to }, ...mongoFilters(ctx), ...COUNTED_RUN })
+        .select({ ok: 1, costUsd: 1, inputTokens: 1, outputTokens: 1, durationMs: 1 })
+        .lean()
+    return runTotals(rows)
 }
 
 /** Opções dos filtros (clientes e repositórios). */

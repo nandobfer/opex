@@ -153,6 +153,15 @@
     --chart-8: #60a5fa;
     --chart-9: #f87171;
     --chart-10: #a3e635;
+    /* Cores por significado das séries dos agentes (OPE-141, porte do MT-40; mapa em series-style.ts). */
+    --chart-positive-1: #34d399;
+    --chart-positive-2: #38bdf8;
+    --chart-info-1: #8000ff;
+    --chart-info-2: #f472b6;
+    --chart-info-3: #e4e4e7;
+    --chart-negative-1: #f87171;
+    --chart-negative-2: #fb923c;
+    --chart-negative-3: #facc15;
     /* Markdown e stream dos agentes: títulos lilás, negrito/marcadores âmbar, código verde, citação e ferramentas ciano. */
     --md-heading: #b366ff;
     --md-strong: #fbbf24;

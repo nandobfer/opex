@@ -1,9 +1,12 @@
-import { lineStyleAt } from "./charts/palette"
+import { dashPattern, lineStyleAt, type SeriesDash } from "./charts/palette"
 import type { MetricValueFormat } from "./format"
 
 /**
  * Modelo puro do gráfico de várias linhas das métricas (`MultiLineChart`, OPE-122):
- * - cor e traço fixos por série, pela posição na lista completa (marcar/desmarcar não troca cores);
+ * - cor e traço fixos por série: a série com significado traz a própria cor e o próprio traço (OPE-141,
+ *   decisão do dono: cores por significado, porte do MT-40 do my-tasks; ver
+ *   `features/agent-metrics/series-style.ts`); sem significado, vale a posição na lista completa
+ *   (marcar/desmarcar não troca cores);
  * - eixo de porcentagem de 0 a 100 (só cresce quando um valor passa de 100 de verdade);
  * - amostra (n) por bucket e ponto pouco representativo (n abaixo do mínimo).
  * Decisão do dono (revisão do plano da OPE-122): nos buckets sem dados a linha é contínua e liga os
@@ -14,6 +17,9 @@ export interface LineSeriesInput {
     key: string
     label: string
     defaultSelected: boolean
+    /** Cor por significado (token `var(--chart-…)`); sem ela, a cor vem da posição. */
+    color?: string
+    dash?: SeriesDash
 }
 
 export interface LineSeriesItem {
@@ -30,7 +36,7 @@ export interface LineSample {
 }
 
 export function lineSeriesItems(series: readonly LineSeriesInput[]): LineSeriesItem[] {
-    return series.map((item, index) => ({ key: item.key, label: item.label, ...lineStyleAt(index) }))
+    return series.map((item, index) => ({ key: item.key, label: item.label, ...(item.color ? { color: item.color, dash: dashPattern(item.dash) } : lineStyleAt(index)) }))
 }
 
 const PERCENT_TICKS = [0, 25, 50, 75, 100] as const

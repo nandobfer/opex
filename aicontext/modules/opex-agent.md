@@ -259,7 +259,7 @@ risco (os catálogos são distintos).
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
 | Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `complete_workbench`* (concluir sem PR, com motivo) e `set_workbench_stage` (definir etapa de espera, confirmação por padrão; ambas pela mesma `setWorkbenchStage` da tela — `get_workbench` traz `settableStages`), `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
 | Centrais | `list_centrals`, `get_central`, `create_central`, `update_central`, `test_central`, `delete_central`*, `get_agentic_settings`, `update_agentic_settings` |
-| Issues e dependências | `get_issue`, `list_issues`, `get_issue_dependencies`, `rank_ready_tasks` (qual tarefa começar), `add_issue_dependency`†, `add_sub_issue`†, `remove_issue_dependency`*, `remove_sub_issue`* — detalhes abaixo |
+| Issues e dependências | `get_issue`, `list_issues`, `get_issue_dependencies`, `rank_ready_tasks` (qual tarefa começar), `add_issue_dependency`†, `add_sub_issue`†, `update_issue`†, `remove_issue_dependency`*, `remove_sub_issue`* — detalhes abaixo |
 | Repositórios GitHub | `list_repositories`, `get_repo_tree`, `read_repo_file`, `search_repo_code`, `list_branches`, `list_commits`, `get_commit`, `compare_refs`, `create_branch`†, `write_repo_file`†, `delete_repo_file`*, `delete_branch`* — detalhes abaixo |
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
@@ -420,6 +420,22 @@ integração GitHub (Issues: leitura; escrita para registrar relações). Só no
   (`confirmByDefault`; `replaceParent` troca o épico), `remove_issue_dependency` e `remove_sub_issue`
   (destrutivas). Usam o `id` numérico da issue (REST `dependencies/blocked_by` e `sub_issues`); recusam
   PR e bloqueio de si mesma.
+- **`update_issue`** (OPE-141, porte do MT-28 do my-tasks; `risk: "write"`, `confirmByDefault`, por token
+  exige `mcp:owner:destructive`): edita o **título** (1–256), o **corpo** (Markdown até 65.536
+  caracteres, substitui o atual; o Opex não tem rodapé de tarefa no corpo) e as **labels** de qualquer
+  issue (`addLabels`/`removeLabels`, até 20 cada). `addLabels` só aceita labels que já existem no
+  repositório (lista paginada, sem diferenciar maiúsculas; grava o nome exato de lá): uma inexistente
+  recusa **sem gravar** com a lista das válidas. Título e corpo vão por `PATCH` (sem `labels`); as labels
+  vão pelos endpoints próprios, atômicos por label (`POST /issues/{n}/labels` para adicionar e
+  `DELETE /issues/{n}/labels/{nome}` para remover), para não regravar o conjunto lido antes e desfazer uma
+  mudança feita no meio (ex.: pela sincronização); label a remover que a issue não tem (404) vira
+  `warning`. A resposta relê a issue no fim.
+  Recusa sem nenhum campo e PR no lugar de issue. Auditoria `RepositorioGithub` com os campos, título
+  antes/depois, labels adicionadas/removidas e antes/depois (o corpo só como "alterado"); o card mostra o corpo cortado
+  (`redact`, 2 mil caracteres). Com tarefa vinculada, devolve `linkedTask` (código) e a nota de que a
+  tarefa recebe a mudança pela **sincronização tarefa ↔ issue** (decisão do dono: sem aviso de
+  divergência nem `update_task`; vale a edição mais recente, então uma edição posterior da tarefa pode
+  reenviar título, corpo e labels de tipo/prioridade para a issue).
 - **Tarefa pela issue**: `resolveTask` aceita `nome#N`/`dono/nome#N` (`findIssueTask`: vínculo issue ↔
   tarefa); sem vínculo, erro acionável indicando `get_issue`.
 - As instruções padrão orientam o agente a usar `rank_ready_tasks` para "qual tarefa começar".

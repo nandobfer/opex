@@ -29,6 +29,7 @@ vi.mock('@/components/ui/chart', async (importOriginal) => ({
 import { MultiLineChart } from '@/components/metrics/MultiLineChart'
 import { LineChartTooltip } from '@/components/metrics/LineChartTooltip'
 import { lineSeriesItems } from '@/components/metrics/line-chart-model'
+import { styleLineChart } from '@/features/agent-metrics/series-style'
 
 const LABELS = ['% de regressão', '% de bloqueio pelo Adversário', '% de one shot', '% de lições do Mentor', '% de conflito de merge', 'Regressão: % reabertas', 'Regressão: % com achado de regressão', 'Regressão: % com correção de prévia', '% de CI com falha', '% de CI corrigido automaticamente', '% interrompidas', '% retomadas', '% com nova tentativa']
 const KEYS = ['regression', 'blocked', 'oneShot', 'lesson', 'conflict', 'reopened', 'regressionFinding', 'previewCorrection', 'ciFailed', 'ciFixed', 'interrupted', 'resumed', 'retried']
@@ -65,6 +66,17 @@ describe('linhas do gráfico de métricas', () => {
     const color = (key: string) => items.find((item) => item.key === key)!.color
     expect(color('blocked')).not.toBe(color('interrupted'))
     expect(color('lesson')).not.toBe(color('resumed'))
+  })
+
+  it('critério aprovado (OPE-141, cor por significado): regressão vermelha cheia, reabertas vermelha tracejada e one shot verde', () => {
+    const styled = styleLineChart({ id: 'percentages', title: 'Métricas', description: '', format: 'percent', series: SERIES, points: [], sampleLabel: 'mesas concluídas' }).series
+    render(<MultiLineChart persistKey="desenvolvedor:semantic" series={styled} points={POINTS} samples={SAMPLES} sampleLabel="mesas concluídas" minSample={3} format="percent" ariaLabel="Métricas" />)
+    fireEvent.click(checkbox('Regressão: % reabertas'))
+    const byKey = lastLines()
+    expect(byKey.get('regression')).toMatchObject({ stroke: 'var(--chart-negative-1)', strokeDasharray: undefined })
+    expect(byKey.get('reopened')).toMatchObject({ stroke: 'var(--chart-negative-1)', strokeDasharray: '6 3' })
+    expect(byKey.get('oneShot')).toMatchObject({ stroke: 'var(--chart-positive-1)' })
+    expect(byKey.get('blocked')).toMatchObject({ stroke: 'var(--chart-negative-2)' })
   })
 
   it('só as séries marcadas viram linha; marcar e desmarcar adiciona e remove a linha', () => {

@@ -30,6 +30,10 @@ const data = (overrides: Partial<AgentMetricsDto> = {}): AgentMetricsDto => ({
     { id: 'regression', label: '% de regressão', hint: 'Reaberta, achado de regressão ou correção de prévia', value: 25, format: 'percent', since: null },
     { id: 'interrupted', label: '% interrompidas', hint: 'Interrupção pedida por você', value: null, format: 'percent', since: '2026-11-03T12:00:00.000Z' },
   ],
+  runKpis: [
+    { id: 'runs', label: 'Execuções', hint: 'No período', value: 7, format: 'count', since: null },
+    { id: 'run-cost', label: 'Custo', hint: 'Soma das execuções com custo registrado', value: null, format: 'usd', since: null },
+  ],
   lines: [{ id: 'percentages', title: 'Métricas ao longo do tempo', description: 'x', format: 'percent', series: [{ key: 'regression', label: '% de regressão', defaultSelected: true }], points: [{ bucket: '2026-11-02', regression: 25 }], sampleLabel: 'mesas concluídas', samples: [{ bucket: '2026-11-02', base: 4, bySeries: { regression: 4 } }], minSample: 3 }],
   bars: [],
   baseCount: 4,
@@ -79,6 +83,18 @@ describe('página de um agente (OPE-122)', () => {
     expect(screen.getByText('Nenhuma mesa foi concluída no período com estes filtros.')).toBeTruthy()
     expect(screen.queryByText('% de regressão')).toBeNull()
     expect(screen.getByText('Último uso')).toBeTruthy()
+  })
+
+  it('KPIs das execuções (OPE-141): aparecem junto dos do agente e continuam sem base no período', () => {
+    render(<DesenvolvedorAgentPage />)
+    expect(screen.getByText('Execuções')).toBeTruthy()
+    expect(screen.getByText('Custo')).toBeTruthy()
+    cleanup()
+    mocks.metrics.mockReturnValue(ok(data({ baseCount: 0 })))
+    render(<DesenvolvedorAgentPage />)
+    expect(screen.getByText('Sem dados no período')).toBeTruthy()
+    expect(screen.getByText('Execuções')).toBeTruthy()
+    expect(screen.getByText('Custo')).toBeTruthy()
   })
 
   it('erro mostra Tentar novamente; agente desligado mostra o aviso', () => {
