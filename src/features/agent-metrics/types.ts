@@ -1,3 +1,4 @@
+import type { SeriesDash } from "@/components/metrics/charts/palette"
 import type { BucketMode } from "@/lib/time/buckets"
 import type { AgentId } from "./catalog"
 
@@ -22,6 +23,9 @@ export interface MetricSeriesDto {
     key: string
     label: string
     defaultSelected: boolean
+    /** Cor e traço por significado (`series-style.ts`, OPE-141); ausentes = cor pela posição. */
+    color?: string
+    dash?: SeriesDash
 }
 
 /** Ponto do gráfico: `bucket` (`YYYY-MM-DD` ou `YYYY-MM`) e um valor por série (`null` = sem base). */
@@ -62,6 +66,8 @@ export interface MetricBarItemDto {
     value: number
     /** Texto extra no tooltip (ex.: "12% de falha"). */
     detail?: string | null
+    /** Cor da barra quando o ranking é por série (ex.: Destino das lições); ausente = cor única. */
+    color?: string | null
 }
 
 export interface MetricBarChartDto {
@@ -94,6 +100,8 @@ export interface AgentMetricsDto {
     usageUnit: string
     usage: UsagePointDto[]
     kpis: MetricKpiDto[]
+    /** KPIs comuns das execuções do período (aparecem mesmo sem base; OPE-141). */
+    runKpis: MetricKpiDto[]
     lines: MetricLineChartDto[]
     bars: MetricBarChartDto[]
     /** Base das métricas do agente no período (ex.: mesas concluídas). 0 = estado vazio. */

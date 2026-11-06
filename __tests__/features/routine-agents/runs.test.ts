@@ -75,6 +75,18 @@ const call = (input: Parameters<typeof holder.engine>[0], name: string, args: un
 const flush = async () => {
   for (let i = 0; i < 30; i++) await new Promise((resolve) => setTimeout(resolve, 0))
 }
+/**
+ * Espera a condição com teto de tempo, em vez de contar voltas fixas do event loop: a ativação é
+ * lançada sem await (`launch`), e no runner do CI (mais lento e carregado) ela pode não ter chegado ao
+ * motor dentro das voltas do `flush`, o que derrubava o teste do MCP da Chamada HTTP (OPE-141).
+ */
+const waitFor = async (condition: () => boolean, timeoutMs = 10_000) => {
+  const deadline = Date.now() + timeoutMs
+  while (!condition()) {
+    if (Date.now() > deadline) throw new Error('Tempo esgotado esperando a condição do teste')
+    await new Promise((resolve) => setTimeout(resolve, 5))
+  }
+}
 
 function seedAgent(overrides: Record<string, unknown> = {}) {
   return holder.agents.insert({
@@ -591,9 +603,9 @@ describe('segredos e Chamada HTTP na ativação (critério aprovado OPE-130, D5)
     const off = seedAgent({ slug: 'off', engine: 'opencode', opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [] } })
     const on = seedAgent({ slug: 'on', engine: 'opencode', opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [], httpRequests: true } })
     await triggerRoutineRun(String(off._id), { origin: 'manual' }, 'local')
-    await flush()
+    await waitFor(() => names.length >= 1)
     await triggerRoutineRun(String(on._id), { origin: 'manual' }, 'local')
-    await flush()
+    await waitFor(() => names.length >= 2)
     expect(names[0]).not.toContain('http_request')
     expect(names[1]).toContain('http_request')
   })

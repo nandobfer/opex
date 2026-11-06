@@ -326,7 +326,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   (mapa mental radial) — só posições, a animação continua com Framer Motion — e exportação em PNG com
   `html-to-image` (`aicontext/modules/architect-agent.md`)
 - Gráficos: recharts pelo componente Chart do shadcn/ui (`src/components/ui/chart.tsx`), com
-  tooltip padronizado e cores por variáveis `--chart-1..10` (linhas das métricas com uma cor por série, ordem em `LINE_SERIES_COLORS`); gráficos, KPIs e filtros de métricas
+  tooltip padronizado e cores por variáveis `--chart-1..10` (linhas das métricas dos agentes com cor e traço por significado — `--chart-positive-*`, `--chart-info-*`, `--chart-negative-*`, mapa em `src/features/agent-metrics/series-style.ts`; série sem significado pela ordem de `LINE_SERIES_COLORS`); gráficos, KPIs e filtros de métricas
   compartilhados em `src/components/metrics/` (Dashboards e páginas dos agentes)
 - Utilitários de estilo: `clsx` + `tailwind-merge` (`cn()`), `class-variance-authority`
 - Logging: Pino

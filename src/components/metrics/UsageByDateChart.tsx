@@ -5,9 +5,12 @@ import { EmptyChart } from "./charts/EmptyChart"
 import { formatBucketLabel } from "./format"
 import { CHART_HEIGHT } from "./layout"
 
+import { SEMANTIC_COLORS, SINGLE_MEASURE_COLOR } from "./charts/palette"
+
+/** Execuções em roxo (medida única) e falhas em vermelho (cores por significado, OPE-141). */
 const CONFIG = {
-    runs: { label: "Execuções", color: "var(--chart-1)" },
-    failures: { label: "Falhas", color: "var(--chart-4)" },
+    runs: { label: "Execuções", color: SINGLE_MEASURE_COLOR },
+    failures: { label: "Falhas", color: SEMANTIC_COLORS.red },
 }
 
 /** Gráfico **Uso por data**: execuções (e falhas) do agente por dia, semana ou mês. */

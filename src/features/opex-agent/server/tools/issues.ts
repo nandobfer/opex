@@ -22,7 +22,7 @@ import {
     type LinkedTaskLite,
     type Verdict,
 } from "../../issue-readiness"
-import { linkedTasksByIssue, loadIssueGraph, loadTaskSituation, type IssueGraph, type TaskSituation } from "../issue-graph"
+import { findIssueTask, linkedTasksByIssue, loadIssueGraph, loadTaskSituation, type IssueGraph, type TaskSituation } from "../issue-graph"
 import { parseRepo } from "../repo-snapshot"
 import { defineTool, OpexToolError } from "./define"
 import { withContext } from "./github"
@@ -492,7 +492,102 @@ const subIssueInput = z.object({
     subIssueRepo: z.string().trim().min(3).max(200).optional().describe("Repositório da sub-issue (padrão: o mesmo)"),
 })
 
+const labelNamesOf = (issue: RestIssue) => (issue.labels ?? []).map((label) => (typeof label === "string" ? label : (label.name ?? ""))).filter(Boolean)
+const sameLabel = (a: string, b: string) => a.toLowerCase() === b.toLowerCase()
+
+/** Labels pedidas que existem no repositório (com o nome exato de lá); uma inexistente recusa com a lista válida. */
+async function existingLabels(repoName: string, wanted: readonly string[], signal?: AbortSignal): Promise<string[]> {
+    const all = await withContext(`Labels de ${repoName}`, () => githubPaginate<{ name: string }>(`/repos/${repoName}/labels?per_page=100`, { signal, label: "opex: labels" }))
+    const names = all.map((label) => label.name)
+    const missing = wanted.filter((name) => !names.some((label) => sameLabel(label, name)))
+    if (missing.length) throw new OpexToolError(`Labels inexistentes em ${repoName}: ${missing.join(", ")}. Labels válidas: ${names.length ? names.join(", ") : "(nenhuma)"}.`)
+    return wanted.map((name) => names.find((label) => sameLabel(label, name))!)
+}
+
+const labelList = z.array(z.string().trim().min(1).max(100)).max(20)
+
 const writeTools = [
+    defineTool({
+        name: "update_issue",
+        group: "issues",
+        label: "Editar issue",
+        risk: "write",
+        confirmByDefault: true,
+        description:
+            "Edita o título, o corpo (Markdown, substitui o atual) e as labels (addLabels/removeLabels; só labels que já existem no repositório) de uma issue do GitHub. Se a issue tem tarefa vinculada no Opex, a tarefa recebe a mudança pela sincronização tarefa ↔ issue (vale a edição mais recente): não é preciso chamar update_task.",
+        input: z.object({
+            repo,
+            number: issueNumber,
+            title: z.string().trim().min(1).max(256).optional().describe("Novo título"),
+            body: z.string().max(65_536).optional().describe("Corpo completo em Markdown (substitui o atual)"),
+            addLabels: labelList.optional().describe("Labels a adicionar (precisam existir no repositório)"),
+            removeLabels: labelList.optional().describe("Labels a remover"),
+        }),
+        summarize: (input) =>
+            `Editar a issue ${input.repo}#${input.number}: ${[
+                input.title !== undefined ? `título "${input.title.slice(0, 80)}"` : null,
+                input.body !== undefined ? "corpo" : null,
+                input.addLabels?.length ? `adicionar labels ${input.addLabels.join(", ")}` : null,
+                input.removeLabels?.length ? `remover labels ${input.removeLabels.join(", ")}` : null,
+            ]
+                .filter(Boolean)
+                .join("; ")}`,
+        redact: (input) => (input.body !== undefined ? { ...input, body: clipText(input.body, 2000) } : input),
+        execute: async ({ repo: rawRepo, number, title, body, addLabels = [], removeLabels = [] }, context) => {
+            const repoName = parseRepo(rawRepo)
+            if (title === undefined && body === undefined && !addLabels.length && !removeLabels.length) throw new OpexToolError("Informe title, body, addLabels e/ou removeLabels.")
+            const where = `Issue ${repoName}#${number}`
+            const path = `/repos/${repoName}/issues/${number}`
+            const current = await withContext(where, () => githubRequest<RestIssue>(path, { signal: context.signal, label: "opex: issue" }))
+            if (current.pull_request) throw new OpexToolError(`${repoName}#${number} é um pull request, não uma issue.`)
+
+            const patch: { title?: string; body?: string } = {}
+            if (title !== undefined) patch.title = title
+            if (body !== undefined) patch.body = body
+            // Labels pelos endpoints próprios (POST adiciona, DELETE remove uma por vez): atômicos por label,
+            // não regravam o conjunto lido antes e não desfazem uma mudança feita no meio (ex.: a sincronização).
+            const toAdd = addLabels.length ? await existingLabels(repoName, addLabels, context.signal) : []
+            const removing = [...new Map(removeLabels.map((name) => [name.toLowerCase(), name])).values()].filter((name) => !toAdd.some((label) => sameLabel(label, name)))
+
+            if (Object.keys(patch).length) {
+                await withContext(where, () => githubRequest<RestIssue>(path, { method: "PATCH", body: patch, signal: context.signal, label: "opex: editar issue" })).catch(rejected("Edição da issue"))
+            }
+            if (toAdd.length) {
+                await withContext(where, () => githubRequest(`${path}/labels`, { method: "POST", body: { labels: toAdd }, signal: context.signal, label: "opex: adicionar labels" })).catch(rejected("Labels"))
+            }
+            const removed: string[] = []
+            const notPresent: string[] = []
+            for (const name of removing) {
+                try {
+                    await githubRequest(`${path}/labels/${encodeURIComponent(name)}`, { method: "DELETE", signal: context.signal, label: "opex: remover label" })
+                    removed.push(name)
+                } catch (error) {
+                    // 404 = a issue não tinha a label (ou ela não existe no repositório): vira aviso, não erro.
+                    if (error instanceof GithubError && error.status === 404) notPresent.push(name)
+                    else throw error
+                }
+            }
+
+            const updated = await withContext(where, () => githubRequest<RestIssue>(path, { signal: context.signal, label: "opex: issue" }))
+            await auditRelation(context.actorId, repoName, AcaoAuditoria.ATUALIZAR, {
+                issue: number,
+                campos: [...Object.keys(patch), ...(toAdd.length || removed.length ? ["labels"] : [])],
+                ...(patch.title !== undefined ? { tituloAntes: current.title, titulo: patch.title } : {}),
+                ...(patch.body !== undefined ? { corpo: "alterado" } : {}),
+                ...(toAdd.length ? { labelsAdicionadas: toAdd } : {}),
+                ...(removed.length ? { labelsRemovidas: removed } : {}),
+                ...(toAdd.length || removed.length ? { labelsAntes: labelNamesOf(current), labels: labelNamesOf(updated) } : {}),
+            })
+            const task = await findIssueTask(repoName, number).catch(() => null)
+            return {
+                ok: true,
+                issue: { ...slimRestIssue(updated), body: clipText(updated.body ?? "", 4000) },
+                ...(notPresent.length ? { warning: `A issue não tinha estas labels: ${notPresent.join(", ")}.` } : {}),
+                ...(task ? { linkedTask: task.code ?? task.id, taskSync: "A tarefa vinculada recebe a mudança pela sincronização tarefa ↔ issue." } : {}),
+            }
+        },
+    }),
+
     defineTool({
         name: "add_issue_dependency",
         group: "issues",

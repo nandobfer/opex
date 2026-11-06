@@ -35,3 +35,31 @@ export function lineStyleAt(index: number): LineSeriesStyle {
     const colors = LINE_SERIES_COLORS.length
     return { color: LINE_SERIES_COLORS[index % colors]!, dash: LINE_SERIES_DASHES[Math.floor(index / colors) % LINE_SERIES_DASHES.length] }
 }
+
+/** Traço de uma série com cor por significado (OPE-141, porte do MT-40 do my-tasks). */
+export type SeriesDash = "solid" | "dashed" | "dotted"
+
+const DASH_PATTERNS: Record<SeriesDash, string | undefined> = { solid: undefined, dashed: "6 3", dotted: "2 3" }
+
+export function dashPattern(dash: SeriesDash | null | undefined): string | undefined {
+    return DASH_PATTERNS[dash ?? "solid"]
+}
+
+/**
+ * Tons por significado (tokens de `globals.css`): positivo (verde, azul), informativo (roxo da
+ * primária, rosa, branco/cinza-claro) e negativo por criticidade (vermelho, laranja, amarelo).
+ */
+export const SEMANTIC_COLORS = {
+    green: "var(--chart-positive-1)",
+    blue: "var(--chart-positive-2)",
+    purple: "var(--chart-info-1)",
+    pink: "var(--chart-info-2)",
+    white: "var(--chart-info-3)",
+    red: "var(--chart-negative-1)",
+    orange: "var(--chart-negative-2)",
+    yellow: "var(--chart-negative-3)",
+} as const
+export type SemanticTone = keyof typeof SEMANTIC_COLORS
+
+/** Barras e somas de uma medida só (uso, ferramentas, tags, etapas, tokens): roxo contínuo. */
+export const SINGLE_MEASURE_COLOR = SEMANTIC_COLORS.purple

@@ -18,6 +18,9 @@ abas **Skills**, **Agentes**, **Comandos**, **Plugins** e **MCPs** cuidam dos re
   comandos fixos (`opencode service start|stop|restart`, `opencode upgrade <versão> && service restart`,
   `pgrep`, `ps`, `tail` do log). A chave do host **sempre** é conferida pela impressão digital
   confiada (`sshHostFingerprint`); chave diferente → 409 `OPENCODE_SSH_HOST_KEY_MISMATCH`.
+  Chave privada que o `ssh2` não consegue ler (mal formatada ou protegida por senha) → 422
+  `OPENCODE_SSH_KEY_INVALID` ("Chave privada SSH inválida ou protegida por senha: … Use uma chave sem
+  senha na integração OpenCode"; OPE-141, porte do my-tasks), em vez de uma falha sem explicação.
 
 ## Configuração (aba Configuração do OpenCode)
 
