@@ -85,9 +85,9 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} role="tabpanel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
                     {view === "description" ? (
-                        <TaskTextView taskId={workbench.taskId} query={task} field="description" emptyTitle="Sem descrição." emptyIcon={FileText} />
+                        <TaskTextView query={task} field="description" emptyTitle="Sem descrição." emptyIcon={FileText} />
                     ) : view === "spec" ? (
-                        <TaskTextView taskId={workbench.taskId} query={task} field="technicalSpec" emptyTitle="Sem especificação técnica." emptyIcon={FileCode2} />
+                        <TaskTextView query={task} field="technicalSpec" emptyTitle="Sem especificação técnica." emptyIcon={FileCode2} />
                     ) : view === "output" ? (
                         <Timeline timeline={timeline} running={workbench.runState === "running"} prWatch={prWatch} />
                     ) : view === "plan" ? (

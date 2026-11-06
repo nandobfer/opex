@@ -28,7 +28,8 @@ export const clienteDashboardPath = () => `${ORCAMENTOS_BASE_PATH}/dashboard`
 export const clienteTarefasPath = () => `${ORCAMENTOS_BASE_PATH}/tarefas`
 export const clienteNovaPath = () => `${ORCAMENTOS_BASE_PATH}/nova`
 export const clienteRevisaoPath = (draftId: string) => `${ORCAMENTOS_BASE_PATH}/revisao/${draftId}`
-export const clienteTarefaPath = (taskId: string) => `${ORCAMENTOS_BASE_PATH}/tarefa/${taskId}`
+/** Página da tarefa no portal pelo código em minúsculas (`/cliente/tarefa/ope-145`); o id redireciona (OPE-146). */
+export const clienteTarefaPath = (task: { code: string }) => `${ORCAMENTOS_BASE_PATH}/tarefa/${task.code.trim().toLowerCase()}`
 export const clienteFinanceiroPath = () => `${ORCAMENTOS_BASE_PATH}/financeiro`
 export const clienteUsuariosPath = () => `${ORCAMENTOS_BASE_PATH}/usuarios`
 export const clienteAmbientesPath = () => `${ORCAMENTOS_BASE_PATH}/ambientes`

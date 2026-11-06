@@ -143,7 +143,7 @@ describe("revisão da prévia do dono", () => {
         render(<OwnerPreviewReviewPage draftId="d1" />)
         expect(screen.getByText("Corrigir o rodapé")).toBeTruthy()
         fireEvent.click(screen.getByRole("button", { name: /Aprovar tarefa/ }))
-        await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/tarefas/t1"))
+        await waitFor(() => expect(mocks.push).toHaveBeenCalledWith("/tarefas/por-1"))
     })
 
     it("solicitar correção registra o texto e regenera a prévia", async () => {

@@ -6,7 +6,7 @@ import { ChevronDown, ListChecks } from "lucide-react"
 import { listContainer, listItem } from "@/components/motion/presets"
 import type { GithubRepoLabelData } from "@/features/github/types"
 import { formatBillingBrl, formatHours } from "@/features/finance/format"
-import type { ClienteCostGroupDto } from "../../types"
+import type { ClienteCostGroupDto, ClienteCostTaskDto } from "../../types"
 import { ClienteCostTaskRow } from "./ClienteCostTaskRow"
 
 interface ClienteCostGroupProps {
@@ -15,7 +15,7 @@ interface ClienteCostGroupProps {
     onToggle: () => void
     /** Índice de repositórios do cliente (avatar/descrição do GitHub) e rota da tarefa. */
     repoIndex?: ReadonlyMap<string, GithubRepoLabelData>
-    hrefFor: (taskId: string) => string
+    hrefFor: (task: ClienteCostTaskDto) => string
 }
 
 /**
@@ -71,7 +71,7 @@ export function ClienteCostGroup({ group, open, onToggle, repoIndex, hrefFor }: 
                     >
                         <motion.ul variants={listContainer} initial="hidden" animate="visible" className="space-y-2 border-t p-2">
                             {group.tasks.map((task) => (
-                                <ClienteCostTaskRow key={task.id} task={task} repoIndex={repoIndex} href={hrefFor(task.id)} />
+                                <ClienteCostTaskRow key={task.id} task={task} repoIndex={repoIndex} href={hrefFor(task)} />
                             ))}
                         </motion.ul>
                     </motion.div>

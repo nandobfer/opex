@@ -18,7 +18,7 @@ import { useClienteOptions, useClienteRealtime, useClienteTask, useSetClienteTas
 import { ClienteTaskSidebar } from "./components/ClienteTaskSidebar"
 import { ClienteTaskTabs, type ClienteTaskTabId } from "./components/ClienteTaskTabs"
 
-/** Página da tarefa do cliente (`/cliente/tarefa/[id]`): detalhes equivalentes, somente leitura. */
+/** Página da tarefa do cliente (`/cliente/tarefa/[código]`; a rota resolve o código e entrega o id): detalhes equivalentes, somente leitura. */
 export function ClienteTaskDetailPage({ id }: { id: string }) {
     const reduceMotion = useReducedMotion()
     const query = useClienteTask(id)

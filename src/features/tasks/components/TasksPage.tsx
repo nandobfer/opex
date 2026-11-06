@@ -136,7 +136,7 @@ export function TasksPage() {
 
     const refreshing = list.isFetching || options.isFetching
     const refresh = useCallback(() => void queryClient.invalidateQueries({ queryKey: [TASKS_QUERY_KEY] }), [queryClient])
-    const open = useCallback((task: TaskDto) => router.push(taskPath(task.id)), [router])
+    const open = useCallback((task: TaskDto) => router.push(taskPath(task)), [router])
     const clearFilters = () => setFilters((prev) => ({ ...prev, ...Object.fromEntries(TASK_FILTER_KEYS.map((key) => [key, DEFAULT_TASK_FILTERS[key]])) }) as TaskFilters)
 
     const projects = options.data?.projects ?? []

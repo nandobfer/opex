@@ -29,7 +29,7 @@ export function TimeLogItem({ log }: { log: TimeLogDto }) {
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                         {log.taskId && log.taskCode ? (
-                            <Link href={taskPath(log.taskId)} className="font-mono text-xs font-semibold text-primary hover:underline">
+                            <Link href={taskPath({ code: log.taskCode })} className="font-mono text-xs font-semibold text-primary hover:underline">
                                 {log.taskCode}
                             </Link>
                         ) : null}

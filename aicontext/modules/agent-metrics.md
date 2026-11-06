@@ -124,10 +124,10 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
   | Agente | Lista | Link |
   |---|---|---|
   | Desenvolvedor | mesas com atividade no período | `/desenvolvimento/<tarefa>` |
-  | Refinador | refinamentos iniciados | `/tarefas/<tarefa>` |
+  | Refinador | refinamentos iniciados | `/tarefas/<código>` |
   | Arquiteto | versões de diagrama | `/desenvolvimento/<tarefa>` |
   | Opex e Maddox | conversas (registro durável) | `/agente-<opex|maddox>/conversas/<id>` |
-  | Orçamentista e Catalogador | execuções | `/tarefas/<tarefa>` (sem tarefa: sem link) |
+  | Orçamentista e Catalogador | execuções | `/tarefas/<código>` (sem código gravado: pelo id, que redireciona; sem tarefa: sem link) |
 
   A conversa abre **só para leitura** para o dono, inclusive a do portal (`ConversationViewer`,
   `GET /api/agents/conversations/[id]`, sem reconciliar nem alterar a sessão). Conversa apagada pela

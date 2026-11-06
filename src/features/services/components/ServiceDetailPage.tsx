@@ -156,7 +156,7 @@ export function ServiceDetailPage({ id }: { id: string }) {
                                             <Row label="Tarefa">
                                                 {service.task ? (
                                                     service.task.exists ? (
-                                                        <Link href={taskPath(service.task.id)} className="text-primary hover:underline">
+                                                        <Link href={taskPath(service.task)} className="text-primary hover:underline">
                                                             {service.task.code}
                                                         </Link>
                                                     ) : (

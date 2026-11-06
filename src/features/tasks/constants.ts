@@ -105,5 +105,8 @@ export const TASKS_PATH = "/tarefas"
 export const TASK_NEW_PATH = "/tarefas/nova"
 /** Prévia de tarefa do dono (mesmo fluxo do portal do cliente: rascunho → IA → revisão → aprovar). */
 export const TASK_PREVIEW_PATH = "/tarefas/previa"
-export const taskPath = (id: string) => `${TASKS_PATH}/${id}`
+/** Página da tarefa pelo código em minúsculas (`/tarefas/ope-145`, OPE-146). Único construtor do link. */
+export const taskPath = (task: { code: string }) => `${TASKS_PATH}/${task.code.trim().toLowerCase()}`
+/** Link da tarefa quando o código pode faltar: sem código, vai pelo id (a página redireciona para o código). */
+export const taskPathOrId = (code: string | null | undefined, id: string) => (code?.trim() ? taskPath({ code }) : `${TASKS_PATH}/${id}`)
 export const taskPreviewPath = (id: string) => `${TASK_PREVIEW_PATH}/${id}`

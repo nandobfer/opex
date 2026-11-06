@@ -20,7 +20,6 @@ interface TaskTextQuery {
 }
 
 interface TaskTextViewProps {
-    taskId: string
     query: TaskTextQuery
     /** Campo da tarefa exibido (Markdown do Go! Sipal ou da tarefa avulsa). */
     field: "description" | "technicalSpec"
@@ -32,7 +31,7 @@ interface TaskTextViewProps {
  * Abas "Descrição" e "Spec." da mesa: o texto da tarefa só para leitura (a edição fica na página
  * da tarefa). Herda o "Citar no campo de resposta" do `ReplyTargetProvider` da mesa.
  */
-export function TaskTextView({ taskId, query, field, emptyTitle, emptyIcon }: TaskTextViewProps) {
+export function TaskTextView({ query, field, emptyTitle, emptyIcon }: TaskTextViewProps) {
     if (query.isLoading) {
         return (
             <div className="space-y-2 p-4">
@@ -50,7 +49,7 @@ export function TaskTextView({ taskId, query, field, emptyTitle, emptyIcon }: Ta
         return (
             <EmptyState icon={emptyIcon} title={emptyTitle} description="Edite o texto na página da tarefa.">
                 <Button asChild size="sm" variant="outline">
-                    <Link href={taskPath(taskId)}>Abrir a tarefa</Link>
+                    <Link href={taskPath(query.data)}>Abrir a tarefa</Link>
                 </Button>
             </EmptyState>
         )
