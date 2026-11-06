@@ -1,21 +1,19 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ChevronDown, Clock, Gauge, RefreshCw } from "lucide-react"
+import { ChevronDown, Gauge, RefreshCw } from "lucide-react"
+import { StaleBadge } from "@/components/metrics/StaleBadge"
 import { useNow } from "@/hooks/useNow"
-import { usePersistentState } from "@/hooks/usePersistentState"
 import { apiErrorMessage } from "@/lib/api"
-import { OPENCODE_QUOTA_PANEL_KEY } from "../constants"
 import { useOpencodeQuota, useOpencodeQuotaRealtime, useRefreshOpencodeQuota } from "../hooks/useOpencodeQuota"
 import { isQuotaStale } from "../logic"
-import { quotaPanelPrefsSchema, type QuotaPanelPrefs } from "../schemas"
+import { useQuotaPanelPrefs } from "../hooks/useQuotaPanelPrefs"
 import { QuotaCompactList } from "./QuotaCompactList"
 import { QuotaPanelBody } from "./QuotaPanelBody"
 
-const DEFAULT_PREFS: QuotaPanelPrefs = { collapsed: false, collapsedProviders: [] }
-
 /**
- * Quota do OpenCode (plugin opencode-quota) na coluna Tarefas de /desenvolvimento. Expandido, todos
+ * Quota do OpenCode (plugin opencode-quota) na coluna Tarefas de /desenvolvimento e no painel
+ * "Servidor e quota" da barra lateral (mesma query, preferência e evento). Expandido, todos
  * os provedores (cada um recolhível); recolhido, a primeira janela de cada provedor expandido.
  * Atualiza pelo tempo real.
  */
@@ -23,7 +21,7 @@ export function OpencodeQuotaPanel() {
     const query = useOpencodeQuota()
     useOpencodeQuotaRealtime()
     const refresh = useRefreshOpencodeQuota()
-    const { value: prefs, setValue: setPrefs } = usePersistentState(OPENCODE_QUOTA_PANEL_KEY, quotaPanelPrefsSchema, DEFAULT_PREFS)
+    const { value: prefs, setValue: setPrefs } = useQuotaPanelPrefs()
     const now = useNow(30_000)
     const reduceMotion = useReducedMotion()
     const data = query.data
@@ -52,12 +50,7 @@ export function OpencodeQuotaPanel() {
                     <Gauge className="h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />
                     <span className="shrink-0">Quota do OpenCode</span>
                 </button>
-                {stale && (
-                    <span className="flex shrink-0 items-center gap-0.5 rounded-sm bg-warning/15 px-1 text-[10px] text-warning" title="O opencode-quota não consulta nenhum provedor há mais de 30 min. Confira se o OpenCode está rodando com o plugin atualizado.">
-                        <Clock className="h-2.5 w-2.5" aria-hidden />
-                        Desatualizado
-                    </span>
-                )}
+                {stale && <StaleBadge title="O opencode-quota não consulta nenhum provedor há mais de 30 min. Confira se o OpenCode está rodando com o plugin atualizado." />}
                 <button
                     type="button"
                     onClick={() => refresh.mutate()}

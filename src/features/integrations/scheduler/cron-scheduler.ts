@@ -9,6 +9,7 @@ import {
     ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID,
     GITHUB_ISSUE_SYNC_JOB_ID,
     HEALTH_CHECK_JOB_ID,
+    HOST_METRICS_JOB_ID,
     MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPENCODE_QUOTA_JOB_ID,
     OPENCODE_SESSIONS_CLEANUP_JOB_ID,
@@ -23,7 +24,7 @@ import {
 } from "@/lib/integrations/catalog"
 import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
-import { nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
+import { isSecondsSchedule, nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
 import { logger } from "@/lib/logger"
 
 /**
@@ -33,11 +34,22 @@ import { logger } from "@/lib/logger"
  * reivindicar atomicamente o lease no Mongo (`nextRunAt <= agora` e sem lease vigente);
  * somente quem vence executa. O `nextRunAt` já é avançado na reivindicação, então uma
  * execução lenta ou que falha não dispara de novo no minuto seguinte.
+ *
+ * Rotinas com intervalo em **segundos** (`{ type: "interval", seconds }`, ex.: recursos do servidor)
+ * ficam fora desse tick: rodam no **tick rápido** (`runFastSchedulerTick`, a cada 10 s), com o mesmo
+ * lease no Mongo, porém curto, e sem os ganchos pesados do tick de minuto.
  */
 
 export const SCHEDULER_TICK_MS = 60_000
+/** Tick rápido das rotinas em segundos (o menor intervalo aceito é igual a ele). */
+export const FAST_SCHEDULER_TICK_MS = 10_000
 /** Lease máximo de uma execução. Passado o prazo, outra instância pode assumir. */
 export const JOB_LEASE_MS = 15 * 60_000
+/** Lease das rotinas em segundos: uma leitura travada não segura a rotina por 15 min. */
+export const FAST_JOB_LEASE_MS = 60_000
+
+const leaseMsFor = (job: CronJobConfig) => (isSecondsSchedule(job.schedule) ? FAST_JOB_LEASE_MS : JOB_LEASE_MS)
+const tickStepFor = (job: CronJobConfig) => (isSecondsSchedule(job.schedule) ? FAST_SCHEDULER_TICK_MS : SCHEDULER_TICK_MS)
 const HTTP_JOB_TIMEOUT_MS = 10 * 60_000
 
 const INSTANCE = `${hostname()}#${process.env.NODE_APP_INSTANCE ?? process.pid}`
@@ -83,8 +95,8 @@ async function executeJob(job: CronJobConfig, cronSecret: string | undefined): P
  * o próprio minuto (edição para 08:51 processada às 08:51:01 cairia em amanhã). Não há
  * execução dupla: quem reivindica já avança `nextRunAt` a partir do instante real.
  */
-export function tickReference(now: Date): Date {
-    return new Date(Math.floor(now.getTime() / SCHEDULER_TICK_MS) * SCHEDULER_TICK_MS - 1)
+export function tickReference(now: Date, step: number = SCHEDULER_TICK_MS): Date {
+    return new Date(Math.floor(now.getTime() / step) * step - 1)
 }
 
 /**
@@ -98,7 +110,7 @@ export function tickReference(now: Date): Date {
  */
 export async function syncJobState(job: CronJobConfig, now: Date): Promise<void> {
     const signature = scheduleSignature(job.schedule)
-    const reference = tickReference(now)
+    const reference = tickReference(now, tickStepFor(job))
     try {
         await CronJobState.updateOne(
             { jobId: job.id },
@@ -151,7 +163,7 @@ async function claimJob(job: CronJobConfig, now: Date): Promise<boolean> {
         },
         {
             $set: {
-                lockedUntil: new Date(now.getTime() + JOB_LEASE_MS),
+                lockedUntil: new Date(now.getTime() + leaseMsFor(job)),
                 lockedBy: INSTANCE,
                 lastRunAt: now,
                 nextRunAt: nextRunAt(job.schedule, now),
@@ -227,7 +239,7 @@ export async function runJobNow(jobId: string, now: Date = new Date()): Promise<
 
     const claimed = await CronJobState.findOneAndUpdate(
         { jobId: job.id, $or: [{ lockedUntil: null }, { lockedUntil: { $lte: now } }] },
-        { $set: { lockedUntil: new Date(now.getTime() + JOB_LEASE_MS), lockedBy: INSTANCE, lastRunAt: now } },
+        { $set: { lockedUntil: new Date(now.getTime() + leaseMsFor(job)), lockedBy: INSTANCE, lastRunAt: now } },
         { new: true },
     )
     if (!claimed) throw new CronJobRunError(`A rotina "${job.label}" já está em execução.`, 409)
@@ -248,6 +260,27 @@ export async function runJobNow(jobId: string, now: Date = new Date()): Promise<
     }
 }
 
+/** Sincroniza o estado, reivindica e executa a rotina vencida; `true` quando esta instância executou. */
+async function runDueJob(job: CronJobConfig, now: Date, cronSecret: string | undefined): Promise<boolean> {
+    await syncJobState(job, now)
+    if (!(await claimJob(job, now))) return false
+    const startedAt = Date.now()
+    // Rotinas em segundos não poluem o debug a cada execução: só as falhas aparecem.
+    const quiet = isSecondsSchedule(job.schedule)
+    if (!quiet) dbg.step(`Executando "${job.label}"`, { jobId: job.id, instance: INSTANCE })
+    try {
+        const message = await executeJob(job, cronSecret)
+        await finishJob(job.id, "ok", startedAt)
+        if (!quiet) dbg.success(`"${job.label}" concluída em ${Date.now() - startedAt} ms`, { message })
+    } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        await finishJob(job.id, "error", startedAt, message)
+        dbg.error(`"${job.label}" falhou`, error)
+        logger.error({ err: error, jobId: job.id }, "[scheduler] Rotina agendada falhou")
+    }
+    return true
+}
+
 export interface TickResult {
     skipped?: "disabled"
     executed: string[]
@@ -261,23 +294,9 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
     const executed: string[] = []
 
     for (const job of config.jobs) {
-        if (!job.enabled || validateSchedule(job.schedule)) continue
-        await syncJobState(job, now)
-        if (!(await claimJob(job, now))) continue
-
-        executed.push(job.id)
-        const startedAt = Date.now()
-        dbg.step(`Executando "${job.label}"`, { jobId: job.id, instance: INSTANCE })
-        try {
-            const message = await executeJob(job, config.cronSecret)
-            await finishJob(job.id, "ok", startedAt)
-            dbg.success(`"${job.label}" concluída em ${Date.now() - startedAt} ms`, { message })
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error)
-            await finishJob(job.id, "error", startedAt, message)
-            dbg.error(`"${job.label}" falhou`, error)
-            logger.error({ err: error, jobId: job.id }, "[scheduler] Rotina agendada falhou")
-        }
+        // Rotinas em segundos rodam no tick rápido.
+        if (!job.enabled || validateSchedule(job.schedule) || isSecondsSchedule(job.schedule)) continue
+        if (await runDueJob(job, now, config.cronSecret)) executed.push(job.id)
     }
 
     // Agente Opex: jobs (prompts agendados) vencidos — ver aicontext/modules/opex-agent.md.
@@ -312,6 +331,21 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
         logger.error({ err: error }, "[scheduler] Falha no tick dos agentes rotineiros")
     }
 
+    return { executed }
+}
+
+/**
+ * Tick rápido (a cada `FAST_SCHEDULER_TICK_MS`): só as rotinas ativas com intervalo em segundos. Mesmo
+ * lease do tick de minuto (no máximo uma execução entre instâncias), sem os ganchos do tick de minuto.
+ */
+export async function runFastSchedulerTick(now: Date = new Date()): Promise<TickResult> {
+    const config = await getIntegrationConfig("crons")
+    if (!config.schedulerEnabled) return { skipped: "disabled", executed: [] }
+    const jobs = config.jobs.filter((job) => job.enabled && isSecondsSchedule(job.schedule) && !validateSchedule(job.schedule))
+    if (!jobs.length) return { executed: [] }
+    await dbConnect()
+    const executed: string[] = []
+    for (const job of jobs) if (await runDueJob(job, now, config.cronSecret)) executed.push(job.id)
     return { executed }
 }
 
@@ -391,6 +425,10 @@ export function registerBuiltInJobs(): void {
         const { runOpencodeQuotaRefresh } = await import("@/features/opencode-quota/server/service")
         return runOpencodeQuotaRefresh()
     })
+    registerInternalJob(HOST_METRICS_JOB_ID, async () => {
+        const { runHostMetricsRefresh } = await import("@/features/host-metrics/server/service")
+        return runHostMetricsRefresh()
+    })
     registerInternalJob(BUILDER_MACHINE_CLEANUP_JOB_ID, async () => {
         const { runBuilderMachineCleanup } = await import("@/features/local-docker/server/cleanup")
         return runBuilderMachineCleanup()
@@ -431,4 +469,23 @@ export function startCronScheduler(): void {
         interval.unref?.()
     }, delay)
     first.unref?.()
+
+    // Tick rápido das rotinas em segundos; um tick lento não empilha outro por cima.
+    let fastRunning = false
+    const fastTick = () => {
+        if (fastRunning) return
+        fastRunning = true
+        runFastSchedulerTick()
+            .catch((error) => logger.error({ err: error }, "[scheduler] Falha no tick rápido do agendador"))
+            .finally(() => {
+                fastRunning = false
+            })
+    }
+    const fastDelay = FAST_SCHEDULER_TICK_MS - (Date.now() % FAST_SCHEDULER_TICK_MS) + 1000
+    const fastFirst = setTimeout(() => {
+        fastTick()
+        const interval = setInterval(fastTick, FAST_SCHEDULER_TICK_MS)
+        interval.unref?.()
+    }, fastDelay)
+    fastFirst.unref?.()
 }

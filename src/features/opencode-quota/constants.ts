@@ -45,9 +45,8 @@ export const QUOTA_RPC_MESSAGES = {
 /** Sem nenhum provedor consultado há mais que isso, o painel avisa "Desatualizado". */
 export const OPENCODE_QUOTA_STALE_MS = 30 * 60_000
 
-/** Faixas de cor pelo percentual usado. */
-export const QUOTA_WARNING_PERCENT = 60
-export const QUOTA_CRITICAL_PERCENT = 85
+/** Faixas de cor pelo percentual usado (as mesmas de todas as barras de consumo). */
+export { USAGE_CRITICAL_PERCENT as QUOTA_CRITICAL_PERCENT, USAGE_WARNING_PERCENT as QUOTA_WARNING_PERCENT } from "@/components/metrics/usage-level"
 
 /** Preferência do painel (recolhido/expandido) no navegador. */
 export const OPENCODE_QUOTA_PANEL_KEY = "opex:opencode-quota-panel:v1"

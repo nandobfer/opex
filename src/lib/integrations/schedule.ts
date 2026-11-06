@@ -11,6 +11,8 @@ export const SCHEDULE_TIMEZONE = "America/Sao_Paulo"
 
 export type Schedule =
     | { type: "interval"; minutes: number }
+    /** Intervalo em segundos (só Integrações › Crons, mínimo `MIN_INTERVAL_SECONDS`); rodado pelo tick rápido. */
+    | { type: "interval"; seconds: number }
     | { type: "daily"; time: string }
     | { type: "weekly"; days: number[]; time: string }
     | { type: "monthly"; day: number; time: string }
@@ -29,7 +31,24 @@ export const WEEKDAY_LABELS = ["Domingo", "Segunda", "Terça", "Quarta", "Quinta
 export const WEEKDAY_SHORT_LABELS = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"] as const
 
 const TIME_RE = /^([01]\d|2[0-3]):([0-5]\d)$/
+const SECOND_MS = 1000
 const MINUTE_MS = 60_000
+
+/** Limites do intervalo em segundos (o tick rápido do agendador roda a cada 10 s). */
+export const MIN_INTERVAL_SECONDS = 10
+export const MAX_INTERVAL_SECONDS = 3600
+
+/** O agendamento é um intervalo em segundos (`{ type: "interval", seconds }`). */
+export function isSecondsSchedule(schedule: Schedule): schedule is { type: "interval"; seconds: number } {
+    return schedule.type === "interval" && "seconds" in schedule && typeof schedule.seconds === "number"
+}
+
+/** Duração do intervalo em ms; `null` quando o agendamento não é um intervalo. */
+export function intervalMs(schedule: Schedule): number | null {
+    if (schedule.type !== "interval") return null
+    if (isSecondsSchedule(schedule)) return Math.max(1, Math.floor(schedule.seconds)) * SECOND_MS
+    return Math.max(1, Math.floor((schedule as { minutes: number }).minutes)) * MINUTE_MS
+}
 const DAY_MS = 24 * 60 * MINUTE_MS
 
 export function isValidTime(time: string): boolean {
@@ -40,6 +59,12 @@ export function isValidTime(time: string): boolean {
 export function validateSchedule(schedule: Schedule): string | null {
     switch (schedule.type) {
         case "interval":
+            if (isSecondsSchedule(schedule)) {
+                if (!Number.isInteger(schedule.seconds) || schedule.seconds < MIN_INTERVAL_SECONDS || schedule.seconds > MAX_INTERVAL_SECONDS) {
+                    return `O intervalo deve ser um número inteiro de segundos entre ${MIN_INTERVAL_SECONDS} e ${MAX_INTERVAL_SECONDS}`
+                }
+                return null
+            }
             if (!Number.isInteger(schedule.minutes) || schedule.minutes < 1 || schedule.minutes > 7 * 24 * 60) {
                 return "O intervalo deve ser um número inteiro de minutos entre 1 e 10080"
             }
@@ -139,7 +164,7 @@ export function nextRunAt(schedule: Schedule, from: Date): Date {
     const fromMs = from.getTime()
 
     if (schedule.type === "interval") {
-        const step = Math.max(1, Math.floor(schedule.minutes)) * MINUTE_MS
+        const step = intervalMs(schedule) ?? MINUTE_MS
         return new Date((Math.floor(fromMs / step) + 1) * step)
     }
 
@@ -179,6 +204,11 @@ export function nextRunAt(schedule: Schedule, from: Date): Date {
 // Descrição legível
 // ---------------------------------------------------------------------------
 
+function describeSeconds(seconds: number): string {
+    if (seconds % 60 === 0) return describeInterval(seconds / 60)
+    return `A cada ${seconds} segundos`
+}
+
 function describeInterval(minutes: number): string {
     if (minutes % (24 * 60) === 0) {
         const days = minutes / (24 * 60)
@@ -199,7 +229,7 @@ function joinPt(items: string[]): string {
 export function describeSchedule(schedule: Schedule): string {
     switch (schedule.type) {
         case "interval":
-            return describeInterval(schedule.minutes)
+            return isSecondsSchedule(schedule) ? describeSeconds(schedule.seconds) : describeInterval(schedule.minutes)
         case "daily":
             return `Todos os dias às ${schedule.time}`
         case "weekly": {
@@ -217,7 +247,7 @@ export function describeSchedule(schedule: Schedule): string {
 export function scheduleSignature(schedule: Schedule): string {
     switch (schedule.type) {
         case "interval":
-            return `interval:${schedule.minutes}`
+            return isSecondsSchedule(schedule) ? `interval:${schedule.seconds}s` : `interval:${schedule.minutes}`
         case "daily":
             return `daily:${schedule.time}`
         case "weekly":

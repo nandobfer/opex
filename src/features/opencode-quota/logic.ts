@@ -1,6 +1,7 @@
 import { SCHEDULE_TIMEZONE } from "@/lib/integrations/schedule"
-import { OPENCODE_QUOTA_STALE_MS, QUOTA_CRITICAL_PERCENT, QUOTA_ERROR_MESSAGES, QUOTA_PROVIDER_NAMES, QUOTA_WARNING_PERCENT } from "./constants"
-import type { QuotaAmount, QuotaSnapshot, QuotaSnapshotError, QuotaSnapshotProvider, QuotaSnapshotRow } from "./schemas"
+import { usageLevel, worstUsageLevel } from "@/components/metrics/usage-level"
+import { OPENCODE_QUOTA_STALE_MS, QUOTA_ERROR_MESSAGES, QUOTA_PROVIDER_NAMES } from "./constants"
+import type { QuotaAmount, QuotaPanelPrefs, QuotaSnapshot, QuotaSnapshotError, QuotaSnapshotProvider, QuotaSnapshotRow } from "./schemas"
 import type { OpencodeQuotaDto, QuotaLevel, QuotaProviderDto, QuotaProviderStatus, QuotaWindowDto } from "./types"
 
 /** Regras puras da quota do OpenCode (normalização do snapshot v6, cores, contagem do reset). */
@@ -17,9 +18,7 @@ export function usedPercent(percentRemaining: number): number {
 }
 
 export function quotaLevel(used: number): QuotaLevel {
-    if (used >= QUOTA_CRITICAL_PERCENT) return "critical"
-    if (used >= QUOTA_WARNING_PERCENT) return "warning"
-    return "ok"
+    return usageLevel(used)
 }
 
 /** Janelas comuns em pt-BR; as demais ficam como o plugin escreve. */
@@ -190,4 +189,28 @@ export function isQuotaStale(exportedAt: string | null, now: number): boolean {
 /** Assinatura do que a tela mostra (sem os instantes de leitura): muda → evento em tempo real. */
 export function quotaHash(dto: OpencodeQuotaDto): string {
     return JSON.stringify([dto.state, dto.message, dto.providers])
+}
+
+/**
+ * Janelas que o painel da quota mostra com a preferência salva: bloco expandido, todas as janelas dos
+ * provedores expandidos e as barras-resumo dos recolhidos; bloco recolhido, as barras-resumo dos
+ * provedores não recolhidos. Só leitura `ok`.
+ */
+export function visibleQuotaWindows(dto: OpencodeQuotaDto, prefs: QuotaPanelPrefs): QuotaWindowDto[] {
+    if (dto.state !== "ok") return []
+    return dto.providers.flatMap((provider) => {
+        const collapsed = prefs.collapsedProviders.includes(provider.id)
+        if (prefs.collapsed) return collapsed ? [] : summaryWindows(provider)
+        return collapsed ? summaryWindows(provider) : provider.windows
+    })
+}
+
+/**
+ * Pior faixa entre as barras com % visíveis (bolinha da quota na barra lateral); `null` (cinza) sem
+ * dado confiável: sem leitura, estado diferente de `ok`, quota desatualizada ou nenhuma barra com %.
+ */
+export function visibleQuotaLevel(dto: OpencodeQuotaDto | undefined | null, prefs: QuotaPanelPrefs, now: number): QuotaLevel | null {
+    if (!dto || dto.state !== "ok" || isQuotaStale(dto.exportedAt, now)) return null
+    const percents = visibleQuotaWindows(dto, prefs).flatMap((window) => (window.usedPercent === null ? [] : [window.usedPercent]))
+    return worstUsageLevel(percents.map(usageLevel))
 }

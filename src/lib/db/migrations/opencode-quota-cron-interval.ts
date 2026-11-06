@@ -17,9 +17,9 @@ const MARKER_KEY = "migration:opencode-quota-cron-1min"
 export function quotaJobsToOneMinute(jobs: CronJobConfig[]): CronJobConfig[] | null {
     let changed = false
     const next = jobs.map((job) => {
-        if (job.id !== OPENCODE_QUOTA_JOB_ID || job.schedule.type !== "interval" || job.schedule.minutes !== 5) return job
+        if (job.id !== OPENCODE_QUOTA_JOB_ID || job.schedule.type !== "interval" || !("minutes" in job.schedule) || job.schedule.minutes !== 5) return job
         changed = true
-        return { ...job, schedule: { ...job.schedule, minutes: 1 } }
+        return { ...job, schedule: { type: "interval" as const, minutes: 1 } }
     })
     return changed ? next : null
 }
