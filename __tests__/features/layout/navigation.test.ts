@@ -34,6 +34,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
                     ["Adversário", "/agente-adversario"],
                     ["Revisor", "/agente-revisor"],
                     ["Mentor", "/agente-mentor"],
+                    ["Rotineiros", "/agentes-rotineiros"],
                 ],
             ],
             [
@@ -71,6 +72,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             "/agente-adversario",
             "/agente-revisor",
             "/agente-mentor",
+            "/agentes-rotineiros",
             "/tarefas/horas",
             "/financeiro",
             "/integracoes",
@@ -168,11 +170,11 @@ describe("contadores do menu", () => {
 describe("categoria Agentes (OPE-122)", () => {
     const agentes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "agentes")!
 
-    it("lista os 10 agentes do catálogo, na ordem do fluxo, sem a palavra Agente no rótulo", () => {
+    it("lista os 11 itens do catálogo (os 10 agentes e os Rotineiros, OPE-130), na ordem do fluxo, sem a palavra Agente no rótulo", () => {
         expect(agentes.items.map((item) => item.href)).toEqual(AGENT_CATALOG.map((agent) => agent.href))
-        expect(agentes.items).toHaveLength(10)
+        expect(agentes.items).toHaveLength(11)
         for (const item of agentes.items) expect(item.label).not.toMatch(/agente/i)
-        for (const item of agentes.items) expect(item.title).toMatch(/^Agente /)
+        for (const item of agentes.items) expect(item.title).toMatch(/^Agentes? /)
     })
 
     it("nome e ícone de cada item são os mesmos da aba de configuração em Integrações › Inteligência Artificial", () => {

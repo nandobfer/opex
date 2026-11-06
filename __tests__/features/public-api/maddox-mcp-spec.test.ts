@@ -130,7 +130,7 @@ describe('seção MCP da especificação', () => {
 
   it('sem catálogo, a especificação continua só com as rotas por token', () => {
     const raw = buildPublicApiSpec() as unknown as Raw
-    expect(Object.keys(raw.paths)).toEqual(['/api/v1/whoami'])
+    expect(Object.keys(raw.paths)).toEqual(['/api/v1/whoami', '/api/v1/routine-agents/{id}/runs'])
     expect(raw.components.securitySchemes).not.toHaveProperty(MADDOX_MCP_SECURITY_SCHEME)
   })
 })
@@ -139,7 +139,7 @@ describe('GET /api/openapi.json', () => {
   it('inclui o MCP do Agente Maddox', async () => {
     const { GET } = await import('@/app/api/openapi.json/route')
     const body = (await (await GET()).json()) as Raw
-    expect(Object.keys(body.paths)).toEqual(['/api/v1/whoami', '/api/maddox/mcp/owner', '/api/maddox/mcp/portal'])
+    expect(Object.keys(body.paths)).toEqual(['/api/v1/whoami', '/api/v1/routine-agents/{id}/runs', '/api/maddox/mcp/owner', '/api/maddox/mcp/portal'])
   })
 
   it('catálogo indisponível: responde a especificação sem o MCP', async () => {
@@ -148,7 +148,7 @@ describe('GET /api/openapi.json', () => {
     const { GET } = await import('@/app/api/openapi.json/route')
     const res = await GET()
     expect(res.status).toBe(200)
-    expect(Object.keys(((await res.json()) as Raw).paths)).toEqual(['/api/v1/whoami'])
+    expect(Object.keys(((await res.json()) as Raw).paths)).toEqual(['/api/v1/whoami', '/api/v1/routine-agents/{id}/runs'])
     vi.doUnmock('@/features/maddox-agent/server/mcp-catalog')
   })
 

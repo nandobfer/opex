@@ -24,6 +24,7 @@ import { AdversarialAgentTab } from "@/features/adversarial-agent/components/set
 import { MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
 import { ArchitectAgentTab } from "@/features/architect-agent/components/settings/ArchitectAgentTab"
 import { AI_EDITOR_TABS } from "../tabs"
+import { RoutineAgentsTab } from "@/features/routine-agents/components/settings/RoutineAgentsTab"
 
 interface AiEditorFormProps {
     def: IntegrationDef
@@ -90,6 +91,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "agente-adversario" && <AdversarialAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-mentor" && <MentorAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-arquiteto" && <ArchitectAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
+                {tab === "rotineiros" && <RoutineAgentsTab key={resetKey} />}
             </IntegrationTabs>
         </motion.form>
     )

@@ -28,6 +28,9 @@ export const agentMemoriesSource = (agentId: AiAgentId, enabled = true): MemoryS
 /** Memórias do agente desenvolvedor de uma central (`developer-central`). */
 export const centralMemoriesSource = (centralId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "developer-central", centralId], basePath: memoryListBasePath("developer-central", { centralId }), enabled })
 
+/** Memórias de um agente rotineiro (`routine-specific`, OPE-130). */
+export const routineMemoriesSource = (agentId: string, slug: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "routine-specific", slug], basePath: `/routine-agents/${agentId}/memories`, enabled })
+
 /** Memórias de um cliente específico (`*-client-specific`). */
 export const clientMemoriesSource = (agentId: AiAgentId, clientId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId, clientId], basePath: memoryListBasePath(agentId, { clientId }), enabled })
 
@@ -111,8 +114,8 @@ export function useMemoriesRealtime(enabled: boolean): void {
         const app = appChannel()
         const channel = acquireChannel(name)
         const appEvents = acquireChannel(app)
-        const handler = (payload: { agentId?: string; centralId?: string; clientId?: string }) => {
-            const scope = payload?.centralId ?? payload?.clientId
+        const handler = (payload: { agentId?: string; centralId?: string; clientId?: string; routineSlug?: string }) => {
+            const scope = payload?.centralId ?? payload?.clientId ?? payload?.routineSlug
             const queryKey = payload?.agentId ? ["ai", "memories", payload.agentId, ...(scope ? [scope] : [])] : ["ai", "memories"]
             void queryClient.invalidateQueries({ queryKey })
         }

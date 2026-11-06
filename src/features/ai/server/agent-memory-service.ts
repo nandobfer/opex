@@ -43,10 +43,15 @@ export function assertAgentId(agentId: string): AiAgentId {
 
 /** Agente que grava sozinho (aprendizado autônomo). */
 export interface MemoryAgentActor {
-    /** Consumidor (aprendizado autônomo) ou o Agente Mentor, cada um com o próprio token. */
-    consumer: MemoryIdentity
+    /**
+     * Consumidor (aprendizado autônomo), o Agente Mentor ou um agente rotineiro (`rotineiro`, OPE-130),
+     * cada um com o próprio token.
+     */
+    consumer: MemoryIdentity | "rotineiro"
     /** Rótulo da origem ("Agente desenvolvedor · OPE-12"). */
     label: string
+    /** Alvo explícito com o token do agente (agentes rotineiros guardam o próprio token). */
+    target?: EngramindTarget
 }
 
 /** Opções de quem grava a memória (Mentor, agente sozinho) e da lista (central/cliente). */
@@ -76,6 +81,8 @@ export interface ResolvedList {
     agent: AiAgentId
     centralId: string | null
     clientId: string | null
+    /** Slug do agente rotineiro (`routine-specific`). */
+    routineSlug?: string | null
     channel: string
     /** Nome da central/cliente (nome do canal criado sob demanda). */
     scopeName: string | null
@@ -89,6 +96,18 @@ export async function resolveList(agentId: string, rawScope?: string | MemoryLis
     const def = AI_AGENTS[agent]
     const central = scope.centralId?.trim() || null
     const client = scope.clientId?.trim() || null
+    const routine = scope.routineSlug?.trim() || null
+    if (def.scope !== "routine" && routine) throw new DomainError(400, `A lista "${def.title}" não é de um agente rotineiro`, "ROUTINE_NOT_ALLOWED")
+    if (def.scope === "routine") {
+        if (!routine) throw new DomainError(400, `Informe o agente rotineiro da lista "${def.title}"`, "ROUTINE_REQUIRED")
+        const channel = memoryChannelOf(agent, { routineSlug: routine })
+        if (!channel) throw new DomainError(404, "Agente rotineiro não encontrado", "ROUTINE_AGENT_NOT_FOUND")
+        await dbConnect()
+        const { RoutineAgent } = await import("@/lib/db/models/RoutineAgent")
+        const doc = await RoutineAgent.findOne({ slug: routine }).select({ name: 1 }).lean<{ name?: string } | null>()
+        if (!doc) throw new DomainError(404, "Agente rotineiro não encontrado", "ROUTINE_AGENT_NOT_FOUND")
+        return { agent, centralId: null, clientId: null, routineSlug: routine, channel, scopeName: doc.name ?? null }
+    }
     if (def.scope !== "central" && central) throw new DomainError(400, `A lista "${def.title}" não é de uma central`, "CENTRAL_NOT_ALLOWED")
     if (def.scope !== "client" && client) throw new DomainError(400, `A lista "${def.title}" não é de um cliente`, "CLIENT_NOT_ALLOWED")
     if (def.scope === "central") {
@@ -152,8 +171,13 @@ export function toMemoryDto(memory: EngramindMemory, list: Pick<ResolvedList, "c
 
 export { sortMemories } from "../memory-list"
 
-async function publish(list: Pick<ResolvedList, "agent" | "centralId" | "clientId">) {
-    await publishToChannels([integrationChannel("ai")], AI_MEMORIES_UPDATED_EVENT, { agentId: list.agent, ...(list.centralId ? { centralId: list.centralId } : {}), ...(list.clientId ? { clientId: list.clientId } : {}) }).catch(() => undefined)
+async function publish(list: Pick<ResolvedList, "agent" | "centralId" | "clientId" | "routineSlug">) {
+    await publishToChannels([integrationChannel("ai")], AI_MEMORIES_UPDATED_EVENT, {
+        agentId: list.agent,
+        ...(list.centralId ? { centralId: list.centralId } : {}),
+        ...(list.clientId ? { clientId: list.clientId } : {}),
+        ...(list.routineSlug ? { routineSlug: list.routineSlug } : {}),
+    }).catch(() => undefined)
 }
 
 /** Memórias brutas de um canal (todas as páginas, inclusive as arquivadas). Canal inexistente → vazio. */
@@ -196,14 +220,14 @@ export async function getAgentMemory(agentId: string, id: string, scope?: string
     return toMemoryDto(await findMemory(list, id), list)
 }
 
-async function parseText(texto: string, channel: string): Promise<string> {
+export async function parseText(texto: string, channel: string): Promise<string> {
     const parsed = memoryTextSchema(await memoryLimitsFor(channel)).safeParse(texto)
     if (!parsed.success) throw new DomainError(400, parsed.error.issues[0]?.message ?? "Memória inválida", "VALIDATION_ERROR")
     return parsed.data
 }
 
 /** Categoria da lista `categories.list` (sem ela, a primeira). Fora da lista → 400 com as válidas. */
-async function resolveCategory(categoria: string | null | undefined): Promise<string | undefined> {
+export async function resolveCategory(categoria: string | null | undefined): Promise<string | undefined> {
     const { categories } = await memorySettings()
     if (!categoria) return categories[0]?.key
     if (categories.length && !categories.some((item) => item.key === categoria)) {
@@ -214,6 +238,8 @@ async function resolveCategory(categoria: string | null | undefined): Promise<st
 
 async function targetFor(agent: MemoryAgentActor | undefined): Promise<{ target?: EngramindTarget }> {
     if (!agent) return {}
+    if (agent.target) return { target: agent.target }
+    if (agent.consumer === "rotineiro") throw new DomainError(503, "Token do agente rotineiro indisponível: reprovisione o agente", "ROUTINE_AGENT_TOKEN_MISSING")
     const { agentTarget } = await import("@/features/engramind/server/memory-network")
     const target = await agentTarget(agent.consumer).catch(() => null)
     return target ? { target } : {}
@@ -224,7 +250,7 @@ function originOf(options: Pick<AgentMemoryWriteOptions, "origin" | "agent">): A
     return options.origin ?? OWNER_MEMORY_ORIGIN
 }
 
-const scopeAudit = (list: ResolvedList) => ({ agente: list.agent, ...(list.centralId ? { central: list.centralId } : {}), ...(list.clientId ? { cliente: list.clientId } : {}) })
+const scopeAudit = (list: ResolvedList) => ({ agente: list.agent, ...(list.centralId ? { central: list.centralId } : {}), ...(list.clientId ? { cliente: list.clientId } : {}), ...(list.routineSlug ? { rotineiro: list.routineSlug } : {}) })
 const actorAudit = (options: Pick<AgentMemoryWriteOptions, "agent">) => (options.agent ? { ator: `agente:${options.agent.consumer}` } : {})
 
 async function ensureListChannel(list: ResolvedList): Promise<void> {

@@ -5,6 +5,7 @@ import type { OpexToolGroup } from "../../constants"
 import type { OpexClientToolGroup } from "../../client-tools"
 import type { OPEX_MCP_TOOL_GROUP } from "../../mcp"
 import type { OpexServerScope } from "../scope"
+import type { HttpSecretVault } from "@/features/http-request/schemas"
 
 /**
  * Ferramenta do Agente Opex: descreve para o modelo o que faz, valida a entrada com Zod e chama a
@@ -22,7 +23,9 @@ export interface OpexToolContext {
     /** Escopo do turno (dono ou portal do cliente); ausente = dono (compatibilidade das ferramentas). */
     scope?: OpexServerScope
     /** Quem chamou fora de uma conversa: token de sistema no MCP do dono (`mcp:owner`). */
-    origin?: { kind: "api-token"; tokenId: string; nome: string; prefixo: string }
+    origin?: { kind: "api-token"; tokenId: string; nome: string; prefixo: string; /** Escopos do token (o que ele pode conceder adiante). */ scopes?: readonly string[] }
+    /** Segredos do agente rotineiro da execução (Chamada HTTP, OPE-130); ausente fora dos rotineiros. */
+    secrets?: HttpSecretVault
 }
 
 /** Sessão do agente da chamada, ou `null` sem conversa (token de sistema). */

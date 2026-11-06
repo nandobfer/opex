@@ -17,6 +17,7 @@ import { backfillOpexSessionAgent } from "./backfill-opex-session-agent"
 import { normalizeServiceDates } from "./normalize-service-dates"
 import { removeUnderstandTaskFeature } from "./remove-understand-task-feature"
 import { startAgentMetricsTracking } from "./agent-metrics-tracking-start"
+import { ensureRoutineAgentIndexes } from "./ensure-routine-agent-indexes"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -33,4 +34,5 @@ registerMigrations(
     { name: "normalize-service-dates", run: () => normalizeServiceDates() },
     { name: "remove-understand-task-feature", run: () => removeUnderstandTaskFeature() },
     { name: "agent-metrics-tracking-start", run: () => startAgentMetricsTracking() },
+    { name: "ensure-routine-agent-indexes", run: () => ensureRoutineAgentIndexes() },
 )

@@ -538,3 +538,43 @@ export async function conversationMetrics(ctx: MetricsContext, agent: "opex" | "
         notices: since ? [{ label: "Conversas apagadas pela retenção antes desta data não entram", since: iso(since)! }] : [],
     }
 }
+
+// ── Agentes rotineiros (OPE-130) ─────────────────────────────────────────────
+
+/** Todas as execuções dos agentes rotineiros no período (a página de cada agente tem a própria Visão geral). */
+export async function routineMetrics(ctx: MetricsContext): Promise<Partial_> {
+    const { RoutineRun } = await import("@/lib/db/models/RoutineAgent")
+    const docs = await RoutineRun.find({ createdAt: { $gte: ctx.range.from, $lte: ctx.range.to } })
+        .select({ status: 1, createdAt: 1, finishedAt: 1, activeMs: 1 })
+        .lean()
+    const finished = docs.filter((doc) => ["completed", "error", "expired", "canceled"].includes(doc.status))
+    const at = (doc: { finishedAt?: Date | null; createdAt: Date }) => new Date(doc.finishedAt ?? doc.createdAt).getTime()
+    const completed = finished.filter((doc) => doc.status === "completed").length
+    const errors = finished.filter((doc) => doc.status === "error").length
+    return {
+        baseCount: docs.length,
+        baseLabel: plural(docs.length, "execução", "execuções"),
+        emptyReason: "Nenhum agente rotineiro executou no período.",
+        kpis: [
+            kpi("runs", "Execuções", docs.length, "count", "Disparadas no período"),
+            kpi("completed", "% concluídas", pct(completed, finished.length), "percent", "Das execuções que terminaram"),
+            kpi("errors", "% com erro", pct(errors, finished.length), "percent", "Das execuções que terminaram"),
+        ],
+        lines: [
+            {
+                id: "percentages",
+                title: "Métricas ao longo do tempo",
+                description: "Pela data em que a execução terminou.",
+                format: "percent",
+                sampleLabel: "execuções",
+                series: [
+                    { key: "completed", label: "% concluídas", defaultSelected: true },
+                    { key: "errors", label: "% com erro", defaultSelected: true },
+                ],
+                points: percentSeries(finished.map((doc) => ({ at: at(doc), flags: { completed: doc.status === "completed", errors: doc.status === "error" } })), ["completed", "errors"] as const, ctx.bucket),
+            },
+        ],
+        bars: [],
+        notices: [],
+    }
+}

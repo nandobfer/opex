@@ -234,6 +234,19 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `@engramind/client@<versão>` em `minimumReleaseAgeExclude` (`pnpm-workspace.yaml`). Sem essa entrada,
   o `pnpm install --frozen-lockfile` do `Dockerfile` recusa uma versão recém-publicada. A edição de canal
   pelo token de app (lib 0.2.0 com Engramind 0.13.0) não muda nada no Opex, que roda no modo gestor.
+- **Universo do agente fora da rede** (lib 0.3.0, OPE-130): `AgentUniverse` (`agent="app/agente"`,
+  `defaultCreateChannel`, `allowCreate`) — o mesmo `AgentUniverseView` da rede no `?universo=agente:…`. Usado
+  na aba Memórias dos agentes rotineiros. **"Nova memória"** no universo do agente escolhe o canal entre os
+  assinados e não arquivados (`MemoryEditorTarget.channels`).
+- **Agentes rotineiros e chaves** (OPE-130): as ferramentas de memória do rotineiro usam `key` +
+  `upsert`, `title` (travado) e `tags` do `POST /v1/memories`, `expected_version` no `PATCH` e os filtros
+  `key`/`fields=title` do `GET /v1/memories`, sempre com o token do agente e só nos canais que ele assina
+  (`src/features/routine-agents/server/memory-channels.ts`).
+- **Nome no hover da partícula** (lib 0.3.0): sem hover, o nome curto cortado; com o cursor, o **nome
+  completo destacado** (borda na cor da partícula, fonte maior) no `MemoryHoverLabelLayer`, uma camada fora
+  da área com zoom como o card (`clampLabelRect` o mantém inteiro no quadro; sem eventos de ponteiro). No
+  toque e com o card aberto, não há rótulo. Vale em todos os universos (rede, listas de `/integracoes/ia`,
+  rotineiros).
 - **Testes**: o `vitest.config.ts` coloca a lib em `server.deps.inline` (os `vi.mock` de `@xyflow/react`,
   `framer-motion` e `next/*` valem dentro dela). O SSE é simulado por um `EventSource` falso
   (`__tests__/helpers/engramind-live.ts`). As funções puras e os componentes que saíram do Opex (rede,
@@ -593,6 +606,8 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 | `architect` | `agentes/arquiteto` | `arquiteto` |
 | `developer-global` | `agentes/desenvolvedor/global` | `desenvolvedor` |
 | `developer-central` (por central) | `agentes/desenvolvedor/central/<centralId>` | `desenvolvedor` |
+| `routine-global` (Memórias dos rotineiros) | `agentes/rotineiros/global` | todos os agentes rotineiros (e o dono) |
+| `routine-specific` (por agente rotineiro, `scope: "routine"`) | `agentes/rotineiros/<slug>` | o agente rotineiro `opex/rotineiro-<slug>` |
 
 - `memoryChannelOf(agentId, scope)` e `listOfChannel(slug)` (canal desconhecido → `null`).
 - `contextChannelsFor(consumer, turn)`: sempre `opex` primeiro; Opex/Maddox com o dono → global e dono;
@@ -601,6 +616,14 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 - `writableListsFor(consumer, turn)`: com o dono, todas as listas do agente (e `app-global`); **no
   portal, só `*-client-specific` do cliente da sessão** (o cliente é forçado pelo servidor). O dono
   cria memórias globais, só dele, de todos os clientes ou de um cliente específico.
+
+- **Agentes rotineiros (OPE-130)**: cada rotineiro é uma identidade dinâmica `opex/rotineiro-<slug>`
+  (fora de `MEMORY_IDENTITIES` e do bootstrap), provisionada pela feature `routine-agents` com o token
+  de app; o token `agent` (`read`, `write`) fica cifrado no documento do agente. Assina `opex`, o
+  global dos rotineiros, o canal próprio e os extras que o subagente de provisionamento escolher.
+  `getAgentMemoryContext` e `createAgentMemory` aceitam o alvo explícito (`target`) com o token do
+  rotineiro; `isOpexMemoryAgent` e o ícone da rede reconhecem `rotineiro-*`. O fake dos testes ganhou
+  `GET /v1/channels` (lista). Ver `modules/routine-agents.md`.
 
 ### Rede (`server/memory-network.ts`)
 

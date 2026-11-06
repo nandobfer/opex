@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/ai/hooks/useAi', () => ({
+  AI_QUERY_KEY: 'ai',
   useAiFeatureRealtime: vi.fn(),
   // Como o hook real: o JEV (decisão estruturada) só entra com `includeAll`.
   useAiProviderStatuses: (includeAll = false) => ({
@@ -171,13 +172,13 @@ describe('página Inteligência Artificial (AiEditorForm)', () => {
     <AiEditorForm def={{} as never} data={{} as never} draft={{} as never} setDraft={vi.fn()} dirty={false} pending={false} onSave={vi.fn(async () => true)} onUndo={vi.fn()} />
   )
 
-  it('?aba=agente-mentor monta a aba com a configuração salva, por último, logo depois do Revisor (OPE-122)', () => {
+  it('?aba=agente-mentor monta a aba com a configuração salva, logo depois do Revisor (OPE-122) e antes dos Rotineiros (OPE-130)', () => {
     window.history.replaceState(null, '', '/integracoes/ia?aba=agente-mentor')
     render(page())
     expect(screen.getByRole('tab', { name: /^Mentor/ })).toBeTruthy()
     const names = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())
     expect(names.indexOf('Mentor')).toBe(names.indexOf('Revisor') + 1)
-    expect(names.at(-1)).toBe('Mentor')
+    expect(names.at(-1)).toBe('Rotineiros')
     expectSavedValuesShown()
   })
 

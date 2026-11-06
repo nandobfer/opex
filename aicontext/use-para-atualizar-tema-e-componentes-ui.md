@@ -287,7 +287,8 @@ repassar ao elemento DOM.)
   `src/components/metrics/charts/` (usados pelos Dashboards, pelo portal e pelas páginas dos agentes),
   sobre a base acima, e novos gráficos devem reusar esses componentes — junto com os de
   `src/components/metrics/` (`KpiCard`/`KpiGrid`, `LastUsedKpi`, `MultiLineChart` com legenda de caixas
-  de seleção salva no navegador, `UsageByDateChart`, `MetricsFiltersBar` e `MetricsOverviewSkeleton`,
+  de seleção salva no navegador, `UsageByDateChart` (com `height` para versões compactas), `MetricsFiltersBar`,
+  `MetricsPeriodFilter` (abas de período + intervalo personalizado, para qualquer `ListFilters`) e `MetricsOverviewSkeleton`,
   com as classes de `layout.ts`) — (copiando/adaptando de `~/code/crm-marketing-campanhas` quando ele estiver acessível).
 - Número sobreposto ao centro (rosca, medidor, anel) fica atrás do tooltip: `wrapperStyle=
   {TOOLTIP_ON_TOP}` no tooltip e `z-0` no número.

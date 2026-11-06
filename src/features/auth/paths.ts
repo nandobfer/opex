@@ -45,7 +45,7 @@ export const PUBLIC_ROUTES: readonly string[] = [
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */
-export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/maddox/mcp", "/api/agent-memory/mcp"]
+export const PUBLIC_PREFIXES: readonly string[] = ["/api/v1", "/api/routines", "/api/maddox/mcp", "/api/agent-memory/mcp", "/api/routine-agents/mcp"]
 
 /**
  * Caminho sem o subcaminho público (`BASE_PATH`), com barra inicial e sem barra final.

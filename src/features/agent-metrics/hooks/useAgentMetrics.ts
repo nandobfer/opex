@@ -1,5 +1,6 @@
 "use client"
 
+import { ROUTINE_RUN_UPDATED_EVENT } from "@/features/routine-agents/constants"
 import { useEffect } from "react"
 import { useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query"
 import { api, unwrapApi } from "@/lib/api"
@@ -61,6 +62,7 @@ export const AGENT_REALTIME_EVENTS: Record<AgentId, readonly string[]> = {
     adversario: [ADVERSARIAL_UPDATED_EVENT, AGENTIC_UPDATED_EVENT],
     revisor: [PR_REVIEW_UPDATED_EVENT, AGENTIC_UPDATED_EVENT],
     mentor: [MENTOR_UPDATED_EVENT],
+    rotineiros: [ROUTINE_RUN_UPDATED_EVENT],
 }
 
 const DEBOUNCE_MS = 1000

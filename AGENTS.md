@@ -208,6 +208,9 @@ sem pedido explícito.
   em `private-app` ao adicionar, editar ou remover uma favorita (ver `aicontext/modules/settings.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
+- Agentes rotineiros: `routine-agent-updated` (`{ id }`), `routine-run-updated` (`{ id, agentId, status }`) e
+  `routine-run-attention` (`{ id, agentId, kind: "confirmation" | "finished", status, agentName }`, que alimenta o
+  toast "Abrir execução" em qualquer tela) em `private-app` (ver `aicontext/modules/routine-agents.md`).
 - Payloads mínimos (ids e o que mudou), sem dados sensíveis. O cliente reage invalidando ou
   atualizando o cache do TanStack Query, em hooks da feature (`use*Realtime`) com assinatura em
   `useEffect` e cancelamento na desmontagem.
@@ -400,15 +403,15 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - `vitest.config.ts` fixa `maxWorkers: "100%"`: o default antigo (`numCPUs - 1`) virava 1 worker
   no runner de 2 vCPU do GitHub e a suíte rodava em série.
 - O CI roda a suíte em **4 shards paralelos** (`pnpm test --shard=i/4`, matriz em
-  `.github/workflows/ci-cd.yml`); o grupo de `concurrency` inclui o shard para um não cancelar o
-  outro, e o build/deploy (`needs: vitest`) espera todos os shards. Para mudar a quantidade, edite
-  só a lista `matrix.shard`. Os checks aparecem como "Vitest (1/4)"…"Vitest (4/4)": a proteção da
-  `main` deve exigir esses nomes.
+  `.github/workflows/ci-cd.yml`) **apenas em pull request**; o grupo de `concurrency` inclui o shard
+  para um não cancelar o outro. Na `main` o CD não repete a suíte: vai direto para build + deploy.
+  Para mudar a quantidade, edite só a lista `matrix.shard`. Os checks aparecem como "Vitest (1/4)" a
+  "Vitest (4/4)": a proteção da `main` deve exigir esses nomes.
 
 ### Rodando os testes
 
 - **Nunca rode a suíte completa** (`pnpm test`, `npx vitest run` sem arquivos) sem pedido
-  explícito do usuário: ela é lenta e roda no CI do GitHub em todo pull request e push na `main`.
+  explícito do usuário: ela é lenta e roda no CI do GitHub em todo pull request (não no push na `main`).
 - Rode só o que as mudanças afetam:
   - testes criados ou alterados: `npx vitest run <arquivos de teste>`;
   - testes que dependem do código alterado: `npx vitest related --run <arquivos de src alterados>`;

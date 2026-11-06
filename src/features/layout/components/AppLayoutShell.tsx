@@ -3,6 +3,7 @@
 import type { ReactNode } from "react"
 import { AgentChatNavItem } from "@/features/opex-agent/components/agents/AgentChatNavItem"
 import { IntegrationsSidebarItem } from "@/features/integrations/components/sidebar/IntegrationsSidebarItem"
+import { useRoutineAttentionToasts } from "@/features/routine-agents/hooks/useRoutineRealtime"
 import { AppShell } from "./AppShell"
 import type { AppSidebarItemPanels } from "./AppSidebar"
 import { APP_NAV, EVEN_PADDING_PAGE_HREFS, HOME_HREF, PERSISTENT_PAGE_HREFS } from "../navigation"
@@ -21,6 +22,8 @@ const ownerItemPanels: AppSidebarItemPanels = { integrations: IntegrationsSideba
 
 /** Casca do app: marca, menu e dono (uso pessoal; acesso protegido por login). */
 export function AppLayoutShell({ ownerName, version, children }: AppLayoutShellProps) {
+    // Agentes rotineiros (OPE-130): confirmação pendente e fim de execução viram toast em qualquer tela.
+    useRoutineAttentionToasts()
     return (
         <AppShell
             brand={{ name: "Opex", subtitle: "Tarefas e integrações", homeHref: HOME_HREF }}

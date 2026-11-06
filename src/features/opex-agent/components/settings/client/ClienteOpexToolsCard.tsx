@@ -15,6 +15,8 @@ interface ClienteOpexToolsCardProps {
     /** Árvore (padrão: o catálogo do portal do Agente Opex; o Maddox passa o dele, sem jobs). */
     tree?: CheckBranch[]
     description?: string
+    /** Título do card (padrão: "Ferramentas do cliente"; os agentes rotineiros usam o do dono). */
+    title?: string
 }
 
 const DEFAULT_DESCRIPTION =
@@ -49,7 +51,7 @@ function OptInBadge() {
  * seleção do dono (`CheckTree`). Contexto fica sempre ligado; as de admin só chegam ao admin do
  * cliente, mesmo marcadas. Destrutivas sempre pedem confirmação no portal.
  */
-export function ClienteOpexToolsCard({ value, onChange, tree: customTree, description = DEFAULT_DESCRIPTION }: ClienteOpexToolsCardProps) {
+export function ClienteOpexToolsCard({ value, onChange, tree: customTree, description = DEFAULT_DESCRIPTION, title = "Ferramentas do cliente" }: ClienteOpexToolsCardProps) {
     const tree = useMemo(() => customTree ?? buildOpexClientToolTree(), [customTree])
     const selected = useMemo(() => new Set([...value, OPEX_CLIENT_CONTEXT_TOOL]), [value])
 
@@ -70,7 +72,7 @@ export function ClienteOpexToolsCard({ value, onChange, tree: customTree, descri
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="text-base">Ferramentas do cliente</CardTitle>
+                <CardTitle className="text-base">{title}</CardTitle>
                 <CardDescription>{description}</CardDescription>
             </CardHeader>
             <CardContent>

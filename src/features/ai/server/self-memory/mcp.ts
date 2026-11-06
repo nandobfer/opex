@@ -232,6 +232,10 @@ export async function handleAgentMemoryMcpRequest(req: Request): Promise<Respons
 }
 
 /** URL que o OpenCode alcança: a pública do Opex da integração Engramind (ou a do MCP do Maddox). */
+export async function opexPublicBaseUrl(): Promise<string | null> {
+    return mcpBaseUrl()
+}
+
 async function mcpBaseUrl(): Promise<string | null> {
     const config = await getIntegrationConfig("engramind").catch(() => null)
     if (config?.opexPublicUrl) return config.opexPublicUrl.replace(/\/+$/, "")

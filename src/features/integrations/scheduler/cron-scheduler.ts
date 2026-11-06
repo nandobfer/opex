@@ -304,6 +304,14 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
         logger.error({ err: error }, "[scheduler] Falha no tick dos ambientes")
     }
 
+    // Agentes rotineiros: disparos agendados, retomadas das hibernadas, fila e limites. Ver aicontext/modules/routine-agents.md.
+    try {
+        const { runDueRoutineAgents } = await import("@/features/routine-agents/server/tick")
+        await runDueRoutineAgents(now)
+    } catch (error) {
+        logger.error({ err: error }, "[scheduler] Falha no tick dos agentes rotineiros")
+    }
+
     return { executed }
 }
 
