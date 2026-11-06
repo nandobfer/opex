@@ -24,7 +24,7 @@ export function FinanceTaskRow({ task }: { task: FinanceTaskDto }) {
             <div className="flex flex-wrap items-start gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-                        <Link href={taskPath(task.id)} className="font-mono text-xs font-semibold text-primary hover:underline">
+                        <Link href={taskPath(task)} className="font-mono text-xs font-semibold text-primary hover:underline">
                             {task.code}
                         </Link>
                         <span className="truncate text-sm font-medium" title={task.title}>

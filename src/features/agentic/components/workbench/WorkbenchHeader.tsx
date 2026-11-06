@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
+import { taskPathOrId } from "@/features/tasks/constants"
 import { useDeleteWorkbench } from "../../hooks/useAgentic"
 import type { CentralDto, WorkbenchDto } from "../../types"
 import { QueueBadge } from "../QueueBadge"
@@ -39,7 +40,7 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
             <div className="flex items-start gap-3">
                 <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                        <Link href={`/tarefas/${workbench.taskId}`} className="font-mono text-sm font-semibold text-primary hover:underline">
+                        <Link href={taskPathOrId(workbench.taskCode, workbench.taskId)} className="font-mono text-sm font-semibold text-primary hover:underline">
                             {workbench.taskCode}
                         </Link>
                         {workbench.forksDonePrompt && <ForksOpenBadge />}

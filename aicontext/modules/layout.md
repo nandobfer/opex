@@ -17,7 +17,8 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/dashboard/page.tsx`: **Dashboards** — página inicial do app, **sem item no menu**:
   a logo no topo da barra leva a ela (ver `modules/dashboard.md`).
-- `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa; o item "Tarefas" do menu continua ativo.
+- `src/app/(app)/tarefas/[id]/page.tsx`: página da tarefa pelo código (`/tarefas/ope-145`; o id redireciona,
+  ver `modules/tasks.md`); o item "Tarefas" do menu continua ativo.
 - `src/app/(app)/tarefas/horas/page.tsx`: Horas agênticas (no grupo **Contábil** do menu).
 - `src/app/(app)/financeiro/page.tsx`: Financeiro — faturamento das tarefas concluídas por cliente
   (no grupo **Contábil** do menu; ver `modules/finance.md`), envolto no `RepoIndexProvider`.

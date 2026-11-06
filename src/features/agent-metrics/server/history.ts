@@ -2,6 +2,7 @@ import { AgentConversation, AgentMetricEvent, AgentRun } from "@/lib/db/models/A
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { TaskRefinement } from "@/lib/db/models/Refinement"
 import { WORKBENCH_STAGE_LABELS } from "@/features/agentic/constants"
+import { taskPathOrId } from "@/features/tasks/constants"
 import { DomainError } from "@/lib/api/route"
 import { agentDef, type AgentId } from "../catalog"
 import { METRIC_EVENT } from "../constants"
@@ -10,7 +11,7 @@ import type { AgentHistoryItemDto, AgentHistoryPageDto } from "../types"
 import { createMetricsContext, loadTasks, matchesFilters, mongoFilters, type MetricsContext } from "./context"
 import { COUNTED_RUN } from "./exclusions"
 
-const taskHref = (taskId: string | null | undefined) => (taskId ? `/tarefas/${taskId}` : null)
+const taskHref = (taskId: string | null | undefined, code?: string | null) => (taskId ? taskPathOrId(code, taskId) : null)
 const workbenchHref = (taskId: string | null | undefined) => (taskId ? `/desenvolvimento/${taskId}` : null)
 const usd = (value: number | null | undefined) => (typeof value === "number" && value > 0 ? `US$ ${value.toFixed(2)}` : null)
 
@@ -74,7 +75,7 @@ async function refinerHistory(ctx: MetricsContext, query: AgentHistoryQuery) {
             title: task ? `${task.code} · ${task.title}` : String((event.data as { taskTitle?: string } | null)?.taskTitle ?? "Tarefa removida"),
             subtitle: null,
             status,
-            href: task ? taskHref(event.taskId) : null,
+            href: task ? taskHref(event.taskId, task.code) : null,
             unavailable: task ? null : "Tarefa removida",
             chips: [],
         }
@@ -162,7 +163,7 @@ async function runHistory(ctx: MetricsContext, query: AgentHistoryQuery, agent: 
         title: doc.taskCode && doc.title ? `${doc.taskCode} · ${doc.title}` : (doc.title ?? KIND_LABELS[doc.kind] ?? doc.kind),
         subtitle: KIND_LABELS[doc.kind] ?? doc.kind,
         status: doc.ok ? { label: "Concluída", tone: "success" } : { label: "Falhou", tone: "danger" },
-        href: taskHref(doc.taskId),
+        href: taskHref(doc.taskId, doc.taskCode),
         unavailable: doc.taskId ? null : "Sem tarefa vinculada",
         chips: [usd(doc.costUsd), doc.error ? doc.error.slice(0, 80) : null].filter((chip): chip is string => Boolean(chip)),
     }))

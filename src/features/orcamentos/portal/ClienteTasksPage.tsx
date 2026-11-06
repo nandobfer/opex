@@ -72,9 +72,9 @@ export function ClienteTasksPage() {
                     {shown.length === 0 ? (
                         <EmptyState icon={ListTodo} title="Nenhuma tarefa" description="As tarefas que você solicitar aparecerão aqui." actionLabel="Nova tarefa" onAction={() => router.push(clienteNovaPath())} />
                     ) : filters.view === "kanban" ? (
-                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(task.id)} />
+                        <ClienteTaskBoard tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={clienteTarefaPath} />
                     ) : (
-                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={(task) => clienteTarefaPath(task.id)} onUpdate={(task, change) => priority.mutate({ task, priority: change.priority })} updating={priority.isPending} />
+                        <ClienteTaskTable tasks={visible} columns={columns} repoIndex={repoIndex} hrefFor={clienteTarefaPath} onUpdate={(task, change) => priority.mutate({ task, priority: change.priority })} updating={priority.isPending} />
                     )}
                 </>
             )}

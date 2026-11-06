@@ -99,7 +99,7 @@ describe("ClienteFinanceiroPage", () => {
 
         expect(screen.getByText("Portal interno")).toBeTruthy()
         expect(screen.getByText("OPX-1")).toBeTruthy()
-        expect(screen.getByText("OPX-1").getAttribute("href")).toBe(`/cliente/tarefa/${TASK}`)
+        expect(screen.getByText("OPX-1").getAttribute("href")).toBe("/cliente/tarefa/opx-1")
         expect(document.querySelector('[title="Horas no período"]')).toBeTruthy()
         expect(document.querySelector('[title="Horas reais (H)"]')).toBeNull()
     })

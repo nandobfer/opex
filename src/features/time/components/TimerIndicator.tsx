@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ChevronRight, Timer, TriangleAlert } from "lucide-react"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { workbenchPath } from "@/features/agentic/constants"
+import { taskPathOrId } from "@/features/tasks/constants"
 import { useWorkbenchProgress } from "@/features/agentic/components/WorkbenchProgressProvider"
 import { cn } from "@/lib/utils"
 import type { TimeLogDto } from "../types"
@@ -25,7 +26,7 @@ interface WorkRow {
     href: string
 }
 
-const hrefForLog = (log: TimeLogDto) => `/tarefas/${log.taskId}`
+const hrefForLog = (log: TimeLogDto) => taskPathOrId(log.taskCode, log.taskId)
 
 /**
  * Indicador de trabalho em andamento (topo das telas): ícone girando + cronômetro quando algum

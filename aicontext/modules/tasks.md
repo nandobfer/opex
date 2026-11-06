@@ -266,7 +266,28 @@ compartilhados de `server/drafts.ts`. No cliente: `src/features/tasks/preview/` 
 `PreviewEstimateCard`) reusa a revisão compartilhada (`src/features/orcamentos/review.ts` +
 `hooks/useDraftReview.ts`) e os cards de `src/features/orcamentos/components/preview/`.
 
-## Página da tarefa `/tarefas/[id]` (`components/detail/`)
+## Página da tarefa `/tarefas/[código]` (`components/detail/`)
+
+### Endereço da página (OPE-146)
+
+- A URL canônica usa o **código da tarefa em minúsculas**: `/tarefas/ope-145` (e, no portal,
+  `/cliente/tarefa/ope-145`). Todo link interno sai de `taskPath({ code })` (`constants.ts`) ou
+  `clienteTarefaPath({ code })` (`orcamentos/constants.ts`); quando o código pode faltar (apontamentos e
+  execuções antigas, mesa), `taskPathOrId(code, id)` cai no id.
+- A rota (Server Component) resolve o segmento com `resolveTaskRoute` (`server/resolve-route.ts`; classificação
+  pura em `route-ref.ts`):
+  - **id do MongoDB** existente → redireciona (307) para o código (fallback da URL antiga);
+  - **código** fora da forma canônica (ex.: `OPE-145`) → redireciona para a forma em minúsculas;
+  - **código** canônico existente → renderiza a página com o **id** resolvido (consulta, anexos, tempo real
+    e mutações seguem por id; a API `/api/tasks/[id]` não muda);
+  - inexistente, valor inválido ou falha do banco (log `warn`) → renderiza com o próprio valor e a tela
+    mostra o "Tarefa não encontrada" (ou o erro) de sempre.
+  - O redirecionamento preserva a query string.
+- No portal, `resolveClienteTaskRoute` (`orcamentos/server/task-route.ts`) aplica a mesma regra no escopo do
+  cliente da sessão (ou da pré-visualização do dono): tarefa de outro cliente segue como "não encontrada",
+  sem revelar o código.
+
+### Conteúdo
 
 - Voltar, Atualizar, código, tipo, "Arquivada", título, **coluna com "Mover para…"** (`TaskColumnMenu`),
   **Refinar tarefa**, **Mesa de trabalho**, **Abrir issue**, **Editar** e

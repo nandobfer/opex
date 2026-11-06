@@ -10,6 +10,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
     push: vi.fn(),
+    boardHrefFor: null as null | ((task: { code: string }) => string),
     options: {} as { data?: { projects: unknown[]; board?: unknown }; isLoading: boolean; error: unknown; refetch: () => void },
     tasks: {} as { data?: { tasks: unknown[] }; isLoading: boolean; isFetching: boolean; error: unknown; refetch: () => void },
 }))
@@ -24,7 +25,12 @@ vi.mock("@/features/orcamentos/portal/hooks", () => ({
 }))
 // Blocos pesados da tela que não interessam ao atalho de criação.
 vi.mock("@/features/orcamentos/portal/components/ClienteFiltersBar", () => ({ ClienteFiltersBar: () => null }))
-vi.mock("@/features/orcamentos/portal/components/ClienteTaskBoard", () => ({ ClienteTaskBoard: () => null }))
+vi.mock("@/features/orcamentos/portal/components/ClienteTaskBoard", () => ({
+    ClienteTaskBoard: ({ hrefFor }: { hrefFor: (task: { code: string }) => string }) => {
+        mocks.boardHrefFor = hrefFor
+        return null
+    },
+}))
 vi.mock("@/features/orcamentos/portal/components/ClienteTaskTable", () => ({ ClienteTaskTable: () => null }))
 vi.mock("@/components/feedback/EmptyState", () => ({ EmptyState: () => null }))
 
@@ -32,6 +38,7 @@ import { ClienteTasksPage } from "@/features/orcamentos/portal/ClienteTasksPage"
 
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.boardHrefFor = null
     mocks.options = { data: { projects: [] }, isLoading: false, error: null, refetch: vi.fn() }
     mocks.tasks = { data: { tasks: [] }, isLoading: false, isFetching: false, error: null, refetch: vi.fn() }
 })
@@ -51,5 +58,18 @@ describe("ClienteTasksPage", () => {
 
         const button = screen.getByRole("button", { name: /Nova tarefa/ }) as HTMLButtonElement
         expect(button.disabled).toBe(false)
+    })
+
+    it("os cards levam à tarefa pelo código em minúsculas (OPE-146)", () => {
+        mocks.options = {
+            data: { projects: [], board: { columns: [{ key: "todo", name: "A fazer", color: null }], layout: ["todo"] } },
+            isLoading: false,
+            error: null,
+            refetch: vi.fn(),
+        }
+        mocks.tasks = { data: { tasks: [{ id: "a".repeat(24), code: "OPX-9", title: "Rodapé", columnId: "todo", projectId: "p1", priority: "medium", archived: false, tags: [] }] }, isLoading: false, isFetching: false, error: null, refetch: vi.fn() }
+        render(<ClienteTasksPage />)
+
+        expect(mocks.boardHrefFor?.({ code: "OPX-9" })).toBe("/cliente/tarefa/opx-9")
     })
 })

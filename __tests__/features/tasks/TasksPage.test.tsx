@@ -108,7 +108,7 @@ describe('TasksPage', () => {
     for (const name of ['A Fazer', 'Aguardando']) expect(screen.getByRole('region', { name })).toBeTruthy()
     const todo = screen.getByRole('region', { name: 'A Fazer' })
     fireEvent.click(within(todo).getByRole('button', { name: /OPX-1/ }))
-    expect(mocks.push).toHaveBeenCalledWith(`/tarefas/${'a'.repeat(24)}`)
+    expect(mocks.push).toHaveBeenCalledWith('/tarefas/opx-1')
   })
 
   it('todas as colunas arrastam pela alça e há "Nova coluna"', () => {
