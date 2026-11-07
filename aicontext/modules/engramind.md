@@ -257,8 +257,21 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `framer-motion` e `next/*` valem dentro dela). O SSE é simulado por um `EventSource` falso
   (`__tests__/helpers/engramind-live.ts`). As funções puras e os componentes que saíram do Opex (rede,
   partículas, filtros, layout, Assinantes, Importar) têm os testes no repositório da lib.
-- **Universos de `/integracoes/ia`** (`MemoryNetworkView`): o `MemoryUniverse` da lib por props, dentro do
-  `OpexEngramindProvider` (rótulos das centrais só no canal de central).
+- **Universos dos agentes** (OPE-148, `AgentUniverseCard` de `src/features/ai/components/memories/`): **um
+  card só por página de memórias** — o `AgentUniverse` da lib com o agente `opex/<consumidor>` no centro e
+  todas as memórias que ele alcança, por canal (como a aba Memórias dos rotineiros, que usa o mesmo card).
+  Na aba Memórias da central, o universo do desenvolvedor passa `includeChannel` só com `opex`,
+  `agentes/desenvolvedor/global` e o canal da central (`memoryUniverseOf`, `src/features/ai/memory-universe.ts`).
+  Rótulos no `OpexEngramindProvider`: siglas das centrais (`centralChannelLabels`) e nomes dos clientes nos
+  canais `agentes/{opex|maddox}/clientes/<id>` (`clientChannelLabels`, `useOrcamentoClients`).
+- **Altura (OPE-148, lib ≥ 0.7.0):** a rede de `/engramind` (`EngramindNetwork fill`, inclusive o
+  `NetworkSkeleton` do `PageSkeleton`) e os universos dos cards (`AgentUniverse fill`) **preenchem a altura
+  que sobra da página**: a lib mede a sobra abaixo do conteúdo da área que rola (`<main>` do `AppShell`) e
+  ajusta o canvas antes da pintura (`useFillAvailableHeight`, conta pura `nextFillHeight`), de novo a cada
+  mudança de tamanho da área ou do conteúdo (avisos que aparecem, janela redimensionada). Quando a página já
+  transborda, o canvas fica no mínimo `NETWORK_FILL_MIN_HEIGHT` (320 px). A visão reenquadra só na primeira
+  medida (redimensionar não desfaz o pan). A limitação vinha da lib (`h-[min(72dvh,44rem)]` e `h-[28rem]`
+  fixos, sem `className` no `EngramindNetwork`); o ajuste por prop no Opex não bastava.
 - **Pendências no Engramind** (para o modo app da lib, não para o Opex): o prazo de desuso e os pesos da
   busca em `get_consumer_settings`, o estado do webhook do próprio app para o token de app e a edição dos
   canais criados pelo app. A tarefa está em `docs/engramind-consumer-settings.md` do repositório da lib.
@@ -487,7 +500,7 @@ todos os agentes, inclusive desligados —, e o `app/agente` na dica; agente des
 `app/agente`; memória gravada por um app sem agente: "App `<app>`"; com a origem do Opex, o selo
 "Gravada por …" de sempre; sem autor, nada), idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
-`MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
+`MemoryEditorDialog` da lib; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
 enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
 (com Reverter) e **Excluir** (confirmação). O card só abre a partir do zoom 0,6 (`CARD_MIN_ZOOM`); com
 zoom afastado os rótulos somem. Memória aberta que some por outra origem: o card fecha com toast e a
@@ -596,8 +609,8 @@ As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela 
 - **Card limitado ao quadro** (vale em qualquer tela, `memoryCardSize`): largura e altura cabem no quadro
   menos 8 px de cada lado; texto longo rola dentro do card.
 - **Link:** no toque, o modo da assinatura aparece por 1,5 s (`LINK_TOUCH_LABEL_MS`).
-- **Quadro e botões:** altura dinâmica da tela (`70dvh` na rede, `60dvh` nos cards de `/integracoes/ia`),
-  sobrando margem para rolar a página fora do quadro; Centralizar, Nova memória e o menu "⋯" do canal
+- **Quadro e botões:** a altura preenche o que sobra da página (modo `fill`, ver "Altura"), com o mínimo de
+  320 px quando o cabeçalho empurra o conteúdo; Centralizar, Nova memória e o menu "⋯" do canal
   com área de toque de 40 px; a trilha mostra só Voltar e o nome atual. O skeleton acompanha (card
   recolhido no canto).
 

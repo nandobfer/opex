@@ -443,24 +443,24 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   do Engramind em `format=tagged` (desde a OPE-109: `<memories>`/`<channel slug>`/`<CATEGORIA>` com uma
   linha `#<id>: <texto>` por memória, para o Opex saber quais foram entregues), que entra sem alteração depois do cabeçalho de `memoriesSection`
   (`memories-prompt.ts`); com o Engramind fora do ar, o cache de reserva e o aviso do turno.
-- **Tela** (OPE-109: **sempre em rede**, sem lista nem seletor Lista | Rede): `AgentMemoriesCard` +
-  `MemoryNetworkView` mostra o **universo do canal da lista** (`memoryChannelOf`: Memórias do Opex →
-  `opex`, Memórias do dono do Maddox → `agentes/maddox/dono`, listas por cliente/central → o canal
-  daquele cliente/central), com o componente compartilhado `MemoryUniverse` da rede do Engramind
-  (`aicontext/modules/engramind.md`, "Rede"): uma partícula por memória (ativas, fixadas e inativas),
-  card no hover/toque com título, texto, idade, relevância, última vez usada, **Ativa** (otimista com
-  reversão e toast), Fixar/Desafixar, Editar (diálogo com o `MemoryEditor`; conflito de versão mantém
-  o rascunho com "Esta memória mudou enquanto você editava. Confira a versão atual.") e Excluir
-  (`ConfirmDialog`); selos "Memória do dono" e a origem de quem gravou (Mentor/agente, `origin.label`,
-  com "Gravada por …"). O contador de ativas/inativas fica no card de estatísticas do universo. As ações passam pelo `useMemories` (mesmas rotas e
-  proteções: a memória do dono continua protegida contra o agente; o dono pode tudo). Lista vazia (ou
-  canal ainda não criado): "Nenhuma memória nesta lista ainda" + **Nova memória**; com memórias, o
-  botão Nova memória fica no canto do canvas. Skeleton com a altura do canvas compacto
-  (`NETWORK_CANVAS_COMPACT_CLASS`). `MemoryEditor`: contador até `textMax`, Categoria (`Select` do
-  projeto), Ctrl+Enter/Esc. `MemoriesNotices` (sempre montado, oculto por estilo): migração
-  pendente, Engramind indisponível e memórias fora do contexto. Tempo real por `useMemoriesRealtime`
-  (`ai-memories-updated` por lista/central/cliente; `engramind-updated` `migration.updated` relê os
-  metadados). "Memórias do Opex" aparece nas abas dos quatro agentes.
+- **Tela** (OPE-109: **sempre em rede**; OPE-148: **um card só por agente**): a seção de memórias de cada
+  agente (`OpexMemoriesSection` do Agente Opex e do Maddox, `MemoriesSection` do Adversário e do Arquiteto,
+  `DeveloperMemoriesSection` do desenvolvedor e da central) mostra a chave do aprendizado autônomo e o
+  **universo do agente** (`MemoryUniverseSection` → `AgentUniverseCard`, o `AgentUniverse` da lib, igual à
+  aba Memórias dos rotineiros): o agente `opex/<consumidor>` no centro e todas as memórias que ele alcança,
+  cada canal com a sua cor — Memórias do Opex, globais, do dono, do portal e as de **cada cliente** (rotuladas
+  pelo nome do cliente; não há mais seletor de cliente). Na **central**, só o que vale nela: `opex`, as
+  globais do desenvolvedor e o canal da central. O mapa fica em `memoryUniverseOf`
+  (`src/features/ai/memory-universe.ts`, puro): agente, canal inicial de **Nova memória** (a global do
+  agente; na central, o canal da central) e os canais permitidos. "Nova memória" escolhe o canal entre os do
+  universo. As ações do card (ativar, fixar, editar, excluir, criar) são as da lib pelo proxy
+  `/api/engramind/**` (catálogo e auditoria do proxy), e o tempo real vem pelo SSE da lib. A rede preenche a
+  altura disponível da página (`fill`; ver `aicontext/modules/engramind.md`, "Altura"). Acima dela,
+  `MemoriesNotices` com `universe` (`outsideForUniverse`: as combinações de canais do próprio consumidor; na
+  central, só as que cabem nos canais dela): migração pendente, Engramind indisponível e memórias fora do
+  contexto. `useMemoriesRealtime` continua relendo os metadados. O hook otimista antigo das listas
+  (`useMemories`), o `MemoryEditor` e `aiAgentsOfTab` foram removidos com os cards por lista; as rotas
+  `/api/ai/agents/...` seguem para o Agente Opex, os MCPs e o aprendizado autônomo.
 - **Ferramentas de gestão do Agente Opex** (só o dono): `list/get/create/update/delete_agent_memory`,
   com `categoria`, `fixada`, `ativa`, `version`, `centralId`/`clientId`; `list_agent_memories` sem
   `agent` devolve só contagens das listas sem escopo (nas por central/cliente o id é obrigatório, sem

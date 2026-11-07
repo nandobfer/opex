@@ -40,29 +40,62 @@ const META = {
   autonomy: { desenvolvedor: true },
 }
 
+const now = new Date().toISOString()
+const channel = (slug: string) => ({ id: `ch_${slug}`, slug, name: slug, description: null, priority: 0, version: 1, created_at: now, archived_at: null, created_by: null })
+const memory = (id: string, slug: string) => ({
+  id, channel: slug, channel_id: `ch_${slug}`, title: `Título ${id}`, title_state: 'ready', text: `Texto ${id}`, category: 'PROJECT_RULES', status: 'active', version: 1,
+  author: { app: 'opex', app_id: 'app_opex', agent: 'opex/desenvolvedor', agent_id: 'ag_dev' }, embedding_state: 'ready', retrieval_count: 1, injected_count: 0, last_retrieved_at: null, verified_at: null, stale_candidate: false,
+  created_at: now, updated_at: now, archived_at: null,
+})
+const OTHER = 'c0000000000000000000000b'
+const SLUGS = ['opex', 'agentes/desenvolvedor/global', `agentes/desenvolvedor/central/${CENTRAL}`, `agentes/desenvolvedor/central/${OTHER}`]
+/** Respostas do proxy `/api/engramind/**` (o mesmo formato da API do Engramind). */
+const ENGRAMIND: Record<string, unknown> = {
+  whoami: { token_id: 'tk_admin', kind: 'admin', scopes: ['read', 'write', 'delete'], app: null, agent: null, operations: [] },
+  channels: { channels: SLUGS.map(channel), next_cursor: null },
+  agents: { agents: [{ id: 'ag_dev', slug: 'desenvolvedor', qualified_slug: 'opex/desenvolvedor', name: 'Agente desenvolvedor', description: null, app: { id: 'app_opex', slug: 'opex' }, created_at: now, disabled_at: null }], next_cursor: null },
+  subscriptions: {
+    subscriptions: [
+      { id: 's1', agent: { id: 'ag_dev', slug: 'desenvolvedor', qualified_slug: 'opex/desenvolvedor' }, target: 'opex', is_prefix: false, mode: 'inject', access: null, priority: null, reaches: ['opex'], created_at: now },
+      { id: 's2', agent: { id: 'ag_dev', slug: 'desenvolvedor', qualified_slug: 'opex/desenvolvedor' }, target: 'agentes/desenvolvedor/*', is_prefix: true, mode: 'inject', access: null, priority: null, reaches: SLUGS.slice(1), created_at: now },
+    ],
+    next_cursor: null,
+  },
+  memories: { memories: [memory('m_opex', SLUGS[0]), memory('m_global', SLUGS[1]), memory('m_central', SLUGS[2]), memory('m_other', SLUGS[3])], next_cursor: null },
+  apps: { apps: [], next_cursor: null },
+  settings: { settings: [] },
+  categories: { categories: [{ key: 'PROJECT_RULES', label: 'Regras', priority: 1 }] },
+  'agent-activity': [],
+  'universe-layout': null,
+}
+
 beforeEach(() => {
   vi.clearAllMocks()
-  net.get.mockImplementation(async (url: string) => ({ data: { data: url === '/ai/memories/meta' ? META : [] } }))
+  net.get.mockImplementation(async (url: string) => {
+    if (url === '/ai/memories/meta') return { data: { data: META } }
+    if (url.startsWith('/engramind/')) return { data: { data: ENGRAMIND[url.slice('/engramind/'.length)] ?? null } }
+    return { data: { data: [] } }
+  })
 })
 afterEach(cleanup)
 
-describe('memórias do agente desenvolvedor (tela)', () => {
-  it('na central: o card da central (rota da central) e, abaixo, o das globais', async () => {
+describe('memórias do agente desenvolvedor (tela, critério aprovado OPE-148: um card só)', () => {
+  it('na central: o universo do desenvolvedor só com Memórias do Opex, globais e as da central', async () => {
     mount(CENTRAL)
-    const titles = screen.getAllByText(/^Memórias (da central|globais do agente desenvolvedor)$/).map((node) => node.textContent)
-    expect(titles).toEqual(['Memórias da central', 'Memórias globais do agente desenvolvedor'])
-    // Três cards desde a OPE-104 (as da central, as globais e as Memórias do Opex), em rede desde a OPE-109.
-    await waitFor(() => expect(screen.getAllByText('Nenhuma memória nesta lista ainda')).toHaveLength(3))
-    expect(screen.getByText('Memórias do Opex')).toBeTruthy()
-    expect(net.get.mock.calls.map((call) => call[0])).toEqual(expect.arrayContaining([`/agentic/centrals/${CENTRAL}/memories`, '/ai/agents/developer-global/memories', '/ai/agents/app-global/memories']))
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_central')).toBeTruthy())
+    expect(screen.getAllByTestId('agent-universe-card')).toHaveLength(1)
+    expect(screen.getByTestId('memory-node-m_opex')).toBeTruthy()
+    expect(screen.getByTestId('memory-node-m_global')).toBeTruthy()
+    expect(screen.queryByTestId('memory-node-m_other')).toBeNull()
+    // A rede preenche a altura disponível da página.
+    expect(screen.getByTestId('network-canvas').getAttribute('data-fill')).toBe('true')
   })
 
-  it('sem central (aba Desenvolvimento agêntico): só as globais', async () => {
+  it('sem central (aba Desenvolvimento agêntico): todas as memórias do agente, inclusive as das centrais', async () => {
     mount()
-    expect(screen.getByText('Memórias globais do agente desenvolvedor')).toBeTruthy()
-    expect(screen.getByText('Memórias do Opex')).toBeTruthy()
-    expect(screen.queryByText('Memórias da central')).toBeNull()
-    await waitFor(() => expect(net.get).toHaveBeenCalledWith('/ai/agents/developer-global/memories'))
-    expect(net.get.mock.calls.some((call) => String(call[0]).startsWith('/agentic/'))).toBe(false)
+    await waitFor(() => expect(screen.getByTestId('memory-node-m_other')).toBeTruthy())
+    expect(screen.getAllByTestId('agent-universe-card')).toHaveLength(1)
+    expect(screen.getByTestId('memory-node-m_central')).toBeTruthy()
+    expect(net.get.mock.calls.some((call) => String(call[0]).startsWith('/ai/agents/'))).toBe(false)
   })
 })

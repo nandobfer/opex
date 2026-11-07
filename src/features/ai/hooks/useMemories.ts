@@ -1,21 +1,20 @@
 "use client"
 
 import { useEffect } from "react"
-import { useMutation, useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query"
-import { toast } from "sonner"
-import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
+import { useQuery, useQueryClient, type QueryKey } from "@tanstack/react-query"
+import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel, integrationChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import type { AiAgentId } from "../agents"
 import { AI_MEMORIES_UPDATED_EVENT } from "../constants"
 import { memoryListBasePath } from "../memory-notice"
-import { PENDING_PREFIX, optimisticMemories, sortMemories, type MemoryAction } from "../memory-list"
-import type { MemoriesMetaDto, MemoryDto, MemoryMutationResult } from "../types"
+import type { MemoriesMetaDto } from "../types"
 
-export { PENDING_PREFIX, type MemoryAction } from "../memory-list"
-
-/** Origem das memórias de uma lista: chave do cache e rota base (sem `/api`). */
+/**
+ * Chave do cache e rota base (sem `/api`) de uma lista. Desde a OPE-148 as telas mostram o universo do agente
+ * pela lib (`AgentUniverseCard`); as chaves continuam como o alvo da invalidação de `useMemoriesRealtime`.
+ */
 export interface MemorySource {
     queryKey: QueryKey
     basePath: string
@@ -28,9 +27,6 @@ export const agentMemoriesSource = (agentId: AiAgentId, enabled = true): MemoryS
 /** Memórias do agente desenvolvedor de uma central (`developer-central`). */
 export const centralMemoriesSource = (centralId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "developer-central", centralId], basePath: memoryListBasePath("developer-central", { centralId }), enabled })
 
-/** Memórias de um agente rotineiro (`routine-specific`, OPE-130). */
-export const routineMemoriesSource = (agentId: string, slug: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", "routine-specific", slug], basePath: `/routine-agents/${agentId}/memories`, enabled })
-
 /** Memórias de um cliente específico (`*-client-specific`). */
 export const clientMemoriesSource = (agentId: AiAgentId, clientId: string, enabled = true): MemorySource => ({ queryKey: ["ai", "memories", agentId, clientId], basePath: memoryListBasePath(agentId, { clientId }), enabled })
 
@@ -39,70 +35,6 @@ export const MEMORIES_META_KEY: QueryKey = ["ai", "memories-meta"]
 /** Limites e categorias do Engramind, migração pendente e saúde do contexto. */
 export function useMemoriesMeta() {
     return useQuery({ queryKey: MEMORIES_META_KEY, queryFn: async () => unwrapApi((await api.get<ApiResponse<MemoriesMetaDto>>("/ai/memories/meta")).data), staleTime: 30_000 })
-}
-
-async function send(source: MemorySource, action: MemoryAction): Promise<MemoryMutationResult | null> {
-    switch (action.type) {
-        case "create":
-            return unwrapApi((await api.post<ApiResponse<MemoryMutationResult>>(source.basePath, { texto: action.texto, categoria: action.categoria })).data)
-        case "update":
-            return unwrapApi((await api.patch<ApiResponse<MemoryMutationResult>>(`${source.basePath}/${action.id}`, { texto: action.texto, categoria: action.categoria, versao: action.versao })).data)
-        case "pin":
-            return unwrapApi((await api.patch<ApiResponse<MemoryMutationResult>>(`${source.basePath}/${action.id}`, { fixada: action.fixada })).data)
-        case "active":
-            return unwrapApi((await api.patch<ApiResponse<MemoryMutationResult>>(`${source.basePath}/${action.id}`, { ativa: action.ativa })).data)
-        case "delete":
-            await api.delete(`${source.basePath}/${action.id}`)
-            return null
-    }
-}
-
-const SUCCESS: Record<MemoryAction["type"], (action: MemoryAction) => string> = {
-    create: () => "Memória adicionada",
-    update: () => "Memória atualizada",
-    pin: (action) => (action.type === "pin" && action.fixada ? "Memória fixada" : "Memória desafixada"),
-    active: (action) => (action.type === "active" && action.ativa ? "Memória ativada" : "Memória inativada"),
-    delete: () => "Memória excluída",
-}
-
-/**
- * Lista de memórias (Engramind) com criar, editar, fixar, ativar/inativar e excluir otimistas: a
- * linha muda na hora e, ao responder, mostra o que o Engramind gravou. Falha → volta ao estado
- * anterior com toast (conflito de versão: "Esta memória mudou enquanto você editava…" e a lista relê).
- */
-export function useMemories(source: MemorySource) {
-    const queryClient = useQueryClient()
-    const query = useQuery({
-        queryKey: source.queryKey,
-        queryFn: async () => unwrapApi((await api.get<ApiResponse<MemoryDto[]>>(source.basePath)).data),
-        enabled: source.enabled !== false,
-    })
-    const mutation = useMutation({
-        mutationFn: (action: MemoryAction) => send(source, action),
-        onMutate: async (action) => {
-            await queryClient.cancelQueries({ queryKey: source.queryKey })
-            const previous = queryClient.getQueryData<MemoryDto[]>(source.queryKey)
-            if (previous) queryClient.setQueryData<MemoryDto[]>(source.queryKey, optimisticMemories(previous, action))
-            return { previous }
-        },
-        onError: (error, _action, context) => {
-            if (context?.previous) queryClient.setQueryData(source.queryKey, context.previous)
-            toast.error(apiErrorMessage(error, "Não foi possível salvar a memória"))
-        },
-        onSuccess: (result, action) => {
-            if (result) {
-                queryClient.setQueryData<MemoryDto[]>(source.queryKey, (current) => {
-                    const list = (current ?? []).filter((item) => !item.id.startsWith(PENDING_PREFIX) || action.type !== "create")
-                    const others = list.filter((item) => item.id !== result.memoria.id)
-                    return sortMemories([...others, result.memoria])
-                })
-            }
-            if (result?.duplicada) toast.info("Já existe uma memória igual nesta lista: nada foi gravado.")
-            else toast.success(SUCCESS[action.type](action))
-        },
-        onSettled: () => void queryClient.invalidateQueries({ queryKey: source.queryKey }),
-    })
-    return { query, memories: query.data ?? [], mutate: mutation.mutate, pending: mutation.isPending }
 }
 
 /** Memórias alteradas em outra aba, pelo Agente Opex, por um agente sozinho ou no Engramind: só invalida e relê. */

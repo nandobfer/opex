@@ -7,17 +7,18 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 const push = vi.fn()
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push }), usePathname: () => '/engramind', useSearchParams: () => new URLSearchParams() }))
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
-vi.mock('@/features/engramind/hooks/useEngramindConnection', () => ({ useEngramindConnection: () => ({ isLoading: false, isError: false, data: { configured: true } }) }))
+const connection = vi.hoisted(() => ({ isLoading: false }))
+vi.mock('@/features/engramind/hooks/useEngramindConnection', () => ({ useEngramindConnection: () => ({ isLoading: connection.isLoading, isError: false, data: { configured: true } }) }))
 // A rede de verdade é coberta em network.test.tsx: aqui só a ordem e o card.
 // OPE-116: a rede vem de `@engramind/client` dentro do `OpexEngramindProvider` (coberto em network.test.tsx).
 vi.mock('@/features/engramind/components/OpexEngramindProvider', () => ({ OpexEngramindProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 const holder = vi.hoisted(() => ({ About: null as null | ((props: { onConfigure: () => void }) => React.ReactNode) }))
 vi.mock('@engramind/client/react', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  EngramindNetwork: ({ onConfigure }: { onConfigure: () => void }) => {
+  EngramindNetwork: ({ onConfigure, fill }: { onConfigure: () => void; fill?: boolean }) => {
     const About = holder.About!
     return (
-      <div>
+      <div data-testid="engramind-network" data-fill={String(fill)}>
         <div data-testid="network-area" />
         <About onConfigure={onConfigure} />
       </div>
@@ -33,6 +34,7 @@ holder.About = AboutCard
 afterEach(() => {
   cleanup()
   push.mockReset()
+  connection.isLoading = false
 })
 
 describe('EngramindPage', () => {
@@ -48,5 +50,18 @@ describe('EngramindPage', () => {
     render(<EngramindPage />)
     fireEvent.click(screen.getByRole('button', { name: /Saiba mais/ }))
     expect(await screen.findByText('Sobre o Engramind')).toBeTruthy()
+  })
+
+  // Critério aprovado OPE-148: a rede de /engramind (e o skeleton dela) ocupa toda a altura disponível.
+  it('a rede preenche a altura disponível (fill)', () => {
+    render(<EngramindPage />)
+    expect(screen.getByTestId('engramind-network').getAttribute('data-fill')).toBe('true')
+  })
+
+  it('o skeleton da página também preenche a altura disponível (fill)', () => {
+    connection.isLoading = true
+    render(<EngramindPage />)
+    expect(screen.getByTestId('engramind-page-skeleton')).toBeTruthy()
+    expect(screen.getByTestId('network-skeleton').getAttribute('data-fill')).toBe('true')
   })
 })

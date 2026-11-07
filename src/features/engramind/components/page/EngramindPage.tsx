@@ -20,7 +20,7 @@ function PageSkeleton() {
         <div className="flex flex-col gap-3" aria-busy="true" data-testid="engramind-page-skeleton">
             <Skeleton className="h-8 w-full" />
             <Skeleton className="h-9 w-full" />
-            <NetworkSkeleton />
+            <NetworkSkeleton fill />
             <Skeleton className="h-28 w-full rounded-xl" data-testid="about-card-skeleton" />
         </div>
     )
@@ -28,7 +28,8 @@ function PageSkeleton() {
 
 /**
  * `/engramind`: a rede de agentes, canais e memórias (OPE-109), com a gestão dentro dela. A rede vem de
- * `@engramind/client` no modo gestor (OPE-116), pelo `OpexEngramindProvider`.
+ * `@engramind/client` no modo gestor (OPE-116), pelo `OpexEngramindProvider`, e preenche a altura que sobra
+ * da página (`fill`, OPE-148), como o skeleton.
  */
 export function EngramindPage() {
     const router = useRouter()
@@ -47,7 +48,7 @@ export function EngramindPage() {
                 <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="flex flex-col gap-6">
                     <Suspense fallback={<PageSkeleton />}>
                         <OpexEngramindProvider>
-                            <EngramindNetwork onConfigure={configure} />
+                            <EngramindNetwork onConfigure={configure} fill />
                         </OpexEngramindProvider>
                     </Suspense>
                 </motion.div>

@@ -214,11 +214,6 @@ export const AI_AGENTS: Record<AiAgentId, AiAgentDef> = {
     },
 }
 
-/** Listas sem escopo exibidas numa aba de `/integracoes/ia` (as por central/cliente têm card próprio). */
-export function aiAgentsOfTab(tab: string): AiAgentId[] {
-    return AI_AGENT_IDS.filter((id) => AI_AGENTS[id].tab === tab && !AI_AGENTS[id].scope)
-}
-
 /** Lista com uma coleção por central (a memória exige `centralId`). */
 export function isCentralScopedAgent(agentId: AiAgentId): boolean {
     return AI_AGENTS[agentId].scope === "central"

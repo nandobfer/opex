@@ -23,8 +23,7 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
   useAiModels: () => ({ data: [{ id: 'anthropic/claude', name: 'Claude', variants: ['high'], group: 'anthropic', contextWindow: null, free: false }], isLoading: false, isError: false, error: null }),
 }))
 vi.mock('@/features/ai/hooks/useMemories', () => ({ useMemoriesRealtime: () => {} }))
-vi.mock('@/features/ai/components/memories/AgentMemoriesCard', () => ({ AgentMemoriesCard: ({ agentId }: { agentId: string }) => <div data-testid={`memories-${agentId}`} /> }))
-vi.mock('@/features/ai/components/memories/ClientMemoriesCard', () => ({ ClientMemoriesCard: ({ agentId }: { agentId: string }) => <div data-testid={`memories-${agentId}`} /> }))
+vi.mock('@/features/ai/components/memories/MemoryUniverseSection', () => ({ MemoryUniverseSection: ({ consumer }: { consumer: string }) => <div data-testid={`memory-universe-${consumer}`} /> }))
 vi.mock('@/features/ai/components/memories/SelfMemorySwitch', () => ({ SelfMemorySwitch: ({ consumer }: { consumer: string }) => <div data-testid={`self-memory-${consumer}`} /> }))
 vi.mock('@/features/maddox-agent/hooks/useMaddoxSettings', () => ({
   useMaddoxSettings: () => ({ data: mocks.settings, isLoading: false, isError: false, refetch: vi.fn() }),
@@ -64,19 +63,15 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('aba "Agente Maddox" da integração de IA', () => {
-  it('seções Geral, Ferramentas e Memórias; memórias são as três listas próprias do Maddox', () => {
+  it('seções Geral, Ferramentas e Memórias; memórias são o universo único do Maddox (OPE-148)', () => {
     render(<MaddoxAgentTab onDirtyChange={() => {}} />)
     expect(screen.getByRole('tab', { name: /Geral/ })).toBeTruthy()
     expect(screen.getByRole('tab', { name: /Ferramentas/ })).toBeTruthy()
     expect(screen.queryByRole('tab', { name: /MCPs/ })).toBeNull()
     fireEvent.click(screen.getByRole('tab', { name: /Memórias/ }))
-    expect(screen.getByTestId('memories-maddox-global')).toBeTruthy()
-    expect(screen.getByTestId('memories-maddox-owner')).toBeTruthy()
-    expect(screen.getByTestId('memories-maddox-client')).toBeTruthy()
-    expect(screen.queryByTestId('memories-opex-global')).toBeNull()
-    // OPE-104: Memórias do Opex (todos os agentes), memórias de um cliente específico e o aprendizado autônomo do Maddox.
-    expect(screen.getByTestId('memories-app-global')).toBeTruthy()
-    expect(screen.getByTestId('memories-maddox-client-specific')).toBeTruthy()
+    // OPE-148: um card só, o universo do agente (Memórias do Opex, globais, dono, portal e cada cliente).
+    expect(screen.getAllByTestId(/^memory-universe-/)).toHaveLength(1)
+    expect(screen.getByTestId('memory-universe-maddox')).toBeTruthy()
     expect(screen.getByTestId('self-memory-maddox')).toBeTruthy()
   })
 

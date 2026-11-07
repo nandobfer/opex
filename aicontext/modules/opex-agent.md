@@ -226,11 +226,10 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   - **MCPs** (`OpexMcpSection`, `?secao=mcps`): lista, cadastra, edita, habilita/desabilita e exclui
     os servidores MCP do agente; salva sozinha (cada ação grava na hora). Detalhes em "MCPs".
   - **Memórias** (`OpexMemoriesSection`): chave **Aprendizado autônomo** do Agente Opex
-    (`SelfMemorySwitch`), **Memórias do Opex** (`app-global`, de todos os agentes) e os cards
-    (`AgentMemoriesCard`) **Memórias globais**, **Memórias do dono** e **Memórias do cliente** (só as
-    listas com `tab: "agente-opex"`, `aiAgentsOfTab`), mais **Memórias de um cliente**
-    (`ClientMemoriesCard`, seletor de cliente, lista `opex-client-specific`); salvam sozinhos (ver
-    `aicontext/modules/ai.md`, "Memórias dos agentes").
+    (`SelfMemorySwitch`) e **um card só** com o universo do agente `opex/opex` (OPE-148,
+    `MemoryUniverseSection`): Memórias do Opex, globais, do dono, do portal e as de cada cliente (canal
+    rotulado pelo nome do cliente, sem seletor); salvam sozinhos (ver `aicontext/modules/ai.md`, "Memórias
+    dos agentes"). O Agente Maddox usa a mesma seção com o agente `opex/maddox`.
 - Configuração salva: `disabledTools` (as **desligadas**; ferramenta nova nasce ligada; Contexto
   nunca fica desligado) e `confirmationOverrides` (`{ [ferramenta]: boolean }`; ausente = padrão pelo
   risco). Nomes fora do registro dão 400 `OPEX_TOOL_NOT_FOUND`. A configuração antiga é convertida

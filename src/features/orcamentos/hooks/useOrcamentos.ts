@@ -16,9 +16,10 @@ import type { ClienteOrcamentoDto, ClienteUserDto, CreatedClienteOrcamentoDto, C
 export const ORCAMENTOS_QUERY_KEY = "orcamentos"
 export const orcamentoClientsKey = [ORCAMENTOS_QUERY_KEY, "clients"] as const
 
-export function useOrcamentoClients() {
+export function useOrcamentoClients(options: { enabled?: boolean } = {}) {
     return useQuery({
         queryKey: orcamentoClientsKey,
+        enabled: options.enabled ?? true,
         queryFn: async () => unwrapApi((await api.get<ApiResponse<ClienteOrcamentoDto[]>>("/integrations/orcamentos/clients")).data),
     })
 }
