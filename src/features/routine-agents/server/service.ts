@@ -7,7 +7,7 @@ import { identityNeeds } from "../identity-plan"
 import type { RoutineAgentStatus } from "../status"
 import type { RoutineAgentDto } from "../types"
 import { startProvisioning } from "./provisioning"
-import { isProvisioningInFlight } from "./provisioning-registry"
+import { isProvisioningLive } from "./provisioning-registry"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, notFoundAgent, publishAgentUpdated, routineDb, toAgentDto, type RoutineAgentDoc } from "./shared"
 
 /**
@@ -145,7 +145,7 @@ export async function updateRoutineAgent(id: string, input: RoutineAgentInput, a
     await auditAgent(actorId, id, AcaoAuditoria.ATUALIZAR, { antes: auditView(before), depois: auditView(after) })
     const needs = identityNeeds(after)
     // Campo esvaziado: o subagente gera de novo só ele (o provisionamento em andamento já trata o vazio).
-    if ((needs.name || needs.objective) && !isProvisioningInFlight(id)) {
+    if ((needs.name || needs.objective) && !isProvisioningLive(after)) {
         const mode = after.provisioning?.status === "ok" ? "identity" : "retry"
         await RoutineAgent.updateOne({ _id: id }, { $set: { "provisioning.status": "running", "provisioning.error": null, "provisioning.at": new Date() } })
         void startProvisioning(id, mode, actorId)
@@ -186,8 +186,8 @@ export async function setRoutineAgentStatus(id: string, action: keyof typeof STA
 /** "Reprovisionar" (reavalia os extras, só acrescenta) e "Tentar de novo" (retoma o que faltou). */
 export async function reprovisionRoutineAgent(id: string, mode: "reprovision" | "retry", actorId: string): Promise<RoutineAgentDto> {
     const doc = await loadAgentDoc(id)
-    // "running" sem provisionamento vivo neste processo é obsoleto (reinício): a nova tentativa segue.
-    if (doc.provisioning?.status === "running" && isProvisioningInFlight(id)) throw new DomainError(409, "O provisionamento deste agente já está em andamento", "ROUTINE_AGENT_PROVISIONING")
+    // "running" sem provisionamento vivo (neste processo ou com batimento de outra instância) é obsoleto: a nova tentativa segue.
+    if (doc.provisioning?.status === "running" && isProvisioningLive(doc)) throw new DomainError(409, "O provisionamento deste agente já está em andamento", "ROUTINE_AGENT_PROVISIONING")
     await RoutineAgent.updateOne({ _id: id }, { $set: { "provisioning.status": "running", "provisioning.error": null, "provisioning.at": new Date() } })
     await publishAgentUpdated(id)
     void startProvisioning(id, mode, actorId)

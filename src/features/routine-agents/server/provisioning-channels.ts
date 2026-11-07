@@ -4,7 +4,7 @@ import { MAX_EXTRA_CHANNELS, isEligibleExtraChannel } from "../provision-plan"
 import type { RoutineChannelAction } from "../schemas"
 import type { RoutineAgentDto } from "../types"
 import { baseRoutineChannels, ensureRoutineSubscriptions, removeRoutineSubscription } from "./engramind"
-import { isProvisioningInFlight, withChannelLock } from "./provisioning-registry"
+import { isProvisioningLive, withChannelLock } from "./provisioning-registry"
 import { routineEngramindTargets } from "./provisioning"
 import { getRoutineAgent } from "./service"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated, routineLog, type RoutineAgentDoc } from "./shared"
@@ -40,7 +40,7 @@ async function load(id: string, channel: string): Promise<Context> {
     const doc = await loadAgentDoc(id)
     if (baseRoutineChannels(doc.slug).includes(channel)) throw BASE_CHANNEL()
     if (!isEligibleExtraChannel(channel)) throw INVALID_CHANNEL()
-    if (isProvisioningInFlight(id)) throw BUSY()
+    if (isProvisioningLive(doc)) throw BUSY()
     return { doc, extras: doc.provisioning?.extras ?? [], blocked: doc.provisioning?.blocked ?? [] }
 }
 

@@ -124,9 +124,13 @@ async function commandFor(settings: LocalDockerSettings, item: Classified, actio
     }
     // Prévia.
     if (action === "delete") return previewDeleteCommand(settings, preview!.composeProject)
-    const workbench = await AgenticWorkbench.findById(preview!.workbenchId, { worktreePath: 1, port: 1 }).lean<{ worktreePath: string | null; port: number | null }>()
+    const workbench = await AgenticWorkbench.findById(preview!.workbenchId, { worktreePath: 1, port: 1, centralId: 1 }).lean<{ worktreePath: string | null; port: number | null; centralId?: string | null }>()
     if (!workbench?.worktreePath || !container.composeService) throw new DomainError(409, "Não foi possível recriar: a mesa da prévia não tem mais o worktree", "LOCAL_DOCKER_PREVIEW_UNKNOWN")
-    return previewRecreateCommand(settings, { worktreePath: workbench.worktreePath, composeProject: preview!.composeProject, service: container.composeService, port: workbench.port ?? preview!.port, files: preview!.composeFiles })
+    // Host da prévia na central (endereço da marcação de prévia, OPE-147); sem a central vai só a marcação.
+    const previewHost = workbench.centralId
+        ? await import("@/features/agentic/server/centrals").then(({ loadCentral }) => loadCentral(String(workbench.centralId)).then(({ config }) => config.environment.previewHost)).catch(() => null)
+        : null
+    return previewRecreateCommand(settings, { worktreePath: workbench.worktreePath, composeProject: preview!.composeProject, service: container.composeService, port: workbench.port ?? preview!.port, files: preview!.composeFiles, previewHost })
 }
 
 /** Ação num container do PC. Apagar (com o ambiente) exige `confirm`. */

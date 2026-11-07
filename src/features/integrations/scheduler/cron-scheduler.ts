@@ -1,4 +1,3 @@
-import { hostname } from "os"
 import { dbConnect } from "@/lib/db"
 import { CronJobState } from "@/lib/db/models/CronJobState"
 import {
@@ -26,6 +25,7 @@ import { getIntegrationConfig, getInternalBaseUrl } from "@/lib/integrations/con
 import { integrationDebug } from "@/lib/integrations/debug"
 import { isSecondsSchedule, nextRunAt, scheduleSignature, validateSchedule } from "@/lib/integrations/schedule"
 import { logger } from "@/lib/logger"
+import { INSTANCE_ID, isPreviewInstance } from "@/lib/instance"
 
 /**
  * Agendador interno dos crons.
@@ -38,6 +38,10 @@ import { logger } from "@/lib/logger"
  * Rotinas com intervalo em **segundos** (`{ type: "interval", seconds }`, ex.: recursos do servidor)
  * ficam fora desse tick: rodam no **tick rápido** (`runFastSchedulerTick`, a cada 10 s), com o mesmo
  * lease no Mongo, porém curto, e sem os ganchos pesados do tick de minuto.
+ *
+ * Numa **prévia** do Opex (`OPEX_PREVIEW=1`, OPE-147) o agendador automático fica desligado: o tick
+ * periódico não inicia e os ticks (inclusive o sob demanda) devolvem `skipped: "preview"`. O banco é o
+ * do Opex original; só o disparo manual ("Executar agora", `runJobNow`) roda na prévia.
  */
 
 export const SCHEDULER_TICK_MS = 60_000
@@ -52,7 +56,7 @@ const leaseMsFor = (job: CronJobConfig) => (isSecondsSchedule(job.schedule) ? FA
 const tickStepFor = (job: CronJobConfig) => (isSecondsSchedule(job.schedule) ? FAST_SCHEDULER_TICK_MS : SCHEDULER_TICK_MS)
 const HTTP_JOB_TIMEOUT_MS = 10 * 60_000
 
-const INSTANCE = `${hostname()}#${process.env.NODE_APP_INSTANCE ?? process.pid}`
+const INSTANCE = INSTANCE_ID
 const dbg = integrationDebug("crons")
 
 export type InternalJobRunner = (job: CronJobConfig) => Promise<string | void>
@@ -282,11 +286,12 @@ async function runDueJob(job: CronJobConfig, now: Date, cronSecret: string | und
 }
 
 export interface TickResult {
-    skipped?: "disabled"
+    skipped?: "disabled" | "preview"
     executed: string[]
 }
 
 export async function runSchedulerTick(now: Date = new Date()): Promise<TickResult> {
+    if (isPreviewInstance()) return { skipped: "preview", executed: [] }
     const config = await getIntegrationConfig("crons")
     if (!config.schedulerEnabled) return { skipped: "disabled", executed: [] }
 
@@ -339,6 +344,7 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
  * lease do tick de minuto (no máximo uma execução entre instâncias), sem os ganchos do tick de minuto.
  */
 export async function runFastSchedulerTick(now: Date = new Date()): Promise<TickResult> {
+    if (isPreviewInstance()) return { skipped: "preview", executed: [] }
     const config = await getIntegrationConfig("crons")
     if (!config.schedulerEnabled) return { skipped: "disabled", executed: [] }
     const jobs = config.jobs.filter((job) => job.enabled && isSecondsSchedule(job.schedule) && !validateSchedule(job.schedule))
@@ -454,6 +460,10 @@ let started = false
 export function startCronScheduler(): void {
     if (started) return
     started = true
+    if (isPreviewInstance()) {
+        logger.info({ instance: INSTANCE }, "[scheduler] Agendador automático desligado: instância de prévia (OPEX_PREVIEW). As rotinas rodam só no Opex original")
+        return
+    }
     logger.info({ instance: INSTANCE }, "[scheduler] Agendador interno iniciado (liga/desliga em Integrações › Crons)")
 
     registerBuiltInJobs()

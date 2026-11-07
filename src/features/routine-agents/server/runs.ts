@@ -17,6 +17,8 @@ import { freeSlots } from "../slots"
 import { ROUTINE_SLOT_STATUSES, isFinalRunStatus, type RoutineRunStatus, type RoutineTriggerOrigin } from "../status"
 import { activeRoutineChannels, baseRoutineChannels, routineAgentTarget } from "./engramind"
 import { addUsage, beginActivation, endActivation, stopActivation, type Activation } from "./hub"
+import { ensureHeartbeat } from "./heartbeat"
+import { INSTANCE_ID } from "@/lib/instance"
 import { forgetRunStepThrottle, pruneRunSteps, recordRunStep } from "./steps"
 import { routineControlTools } from "./tools/internal"
 import { routineMemoryTools } from "./tools/memory"
@@ -40,7 +42,15 @@ import {
  * Execuções dos agentes rotineiros (OPE-130): disparo, fila (FIFO, só Executando/Esperando ocupam
  * vaga), ativação no motor, e o fecho de cada turno (concluir, hibernar, aguardar confirmação, erro).
  * Cada execução e cada retomada recebem o contexto do Engramind lido com o **token do agente**.
+ *
+ * Cada turno grava o id da ativação (`activationId`), a instância e o batimento (OPE-147): só a
+ * ativação dona grava a fase e o fecho, então uma instância que volta depois de travada não conclui
+ * por cima de uma execução já retomada noutra.
  */
+
+/** Nota da retomada depois de um turno interrompido (sem batimento: deploy, container parado). */
+export const INTERRUPTED_RESUME_NOTE =
+    "(O turno anterior desta execução foi interrompido: o servidor reiniciou ou a instância parou de responder. Retome do último ponto salvo e confira o estado antes de repetir uma ação que possa já ter sido feita.)"
 
 export interface TriggerInput {
     origin: RoutineTriggerOrigin
@@ -113,7 +123,7 @@ export async function pumpAgent(agentId: string): Promise<void> {
             const now = new Date()
             const claimed = await RoutineRun.findOneAndUpdate(
                 { _id: candidate._id, status: "queued" },
-                { $set: { status: "running", activationStartedAt: now, startedAt: candidate.startedAt ?? now } },
+                { $set: { status: "running", activationStartedAt: now, startedAt: candidate.startedAt ?? now, activationId: randomUUID(), instance: INSTANCE_ID, heartbeatAt: now } },
                 { new: true },
             ).lean<RoutineRunDoc | null>()
             if (!claimed) continue
@@ -123,7 +133,8 @@ export async function pumpAgent(agentId: string): Promise<void> {
 }
 
 function launch(run: RoutineRunDoc): void {
-    const activation = beginActivation({ runId: String(run._id), agentId: String(run.agentId), baseTokens: run.tokens ?? 0, baseActiveMs: run.activeMs ?? 0 })
+    const activation = beginActivation({ runId: String(run._id), agentId: String(run.agentId), activationId: run.activationId ?? undefined, baseTokens: run.tokens ?? 0, baseActiveMs: run.activeMs ?? 0 })
+    ensureHeartbeat()
     void emitRunChange(run, "running").catch(() => undefined)
     void executeActivation(run, activation).catch((error: unknown) => {
         routineLog.error({ runId: String(run._id), err: messageOf(error) }, "[routine-agents] falha ao fechar a ativação")
@@ -132,7 +143,7 @@ function launch(run: RoutineRunDoc): void {
 }
 
 async function setPhase(run: RoutineRunDoc, phase: "running" | "waiting"): Promise<void> {
-    const updated = await RoutineRun.updateOne({ _id: run._id, status: { $in: ROUTINE_SLOT_STATUSES } }, { $set: { status: phase } })
+    const updated = await RoutineRun.updateOne({ _id: run._id, status: { $in: ROUTINE_SLOT_STATUSES }, activationId: run.activationId ?? null }, { $set: { status: phase } })
     if (updated.modifiedCount) await emitRunChange(run, phase)
 }
 
@@ -193,11 +204,19 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                 ? setTimeout(() => stopActivation(runId, "active"), Math.max(1_000, remaining))
                 : setTimeout(() => stopActivation(runId, "turn_timeout"), ROUTINE_TURN_TIMEOUT_MS)
         let activationStep = 0
+        const messageInput = { origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote }
+        // Turno interrompido antes de salvar o histórico (motor Opex sem `messages`, OpenCode sem sessão):
+        // a retomada leva também a mensagem do disparo, senão o modelo perde a solicitação.
+        const noHistory = run.snapshot.engine === "opex" ? !run.messages : !run.opencodeSessionId
+        const message =
+            resume && noHistory && (run.interruptions ?? 0) > 0
+                ? [activationMessage({ kind: "start", ...messageInput }), "", activationMessage({ kind: "resume", ...messageInput })].join("\n")
+                : activationMessage({ kind: resume ? "resume" : "start", ...messageInput })
         const input: EngineInput = {
             agent,
             run,
             activation,
-            message: activationMessage({ kind: resume ? "resume" : "start", origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote }),
+            message,
             instructions: (toolPrefix) =>
                 routineInstructions({
                     name: routineAgentTitle(agent.name),
@@ -307,6 +326,7 @@ async function settleActivation(run: RoutineRunDoc, activation: Activation, resu
     const set: Partial<IRoutineRun> & Record<string, unknown> = {
         status: verdict.status,
         activationStartedAt: null,
+        heartbeatAt: null,
         warnings,
         resumeNote: null,
         costPartial: run.costPartial || usage.costPartial,
@@ -342,13 +362,18 @@ async function settleActivation(run: RoutineRunDoc, activation: Activation, resu
     }
     if (isFinalRunStatus(verdict.status)) set.finishedAt = now
     const updated = await RoutineRun.findOneAndUpdate(
-        { _id: run._id, status: { $in: ROUTINE_SLOT_STATUSES } },
+        { _id: run._id, status: { $in: ROUTINE_SLOT_STATUSES }, activationId: activation.activationId },
         { $set: set, $inc: { activeMs: Date.now() - activation.startedAt, tokens: usage.tokens, liveWaitMs: activation.liveWaitMs } },
         { new: true },
     ).lean<RoutineRunDoc | null>()
     if (!updated) {
-        // Cancelada (ou recuperada pelo tick) enquanto o turno fechava: só soma o uso.
-        await RoutineRun.updateOne({ _id: run._id }, { $inc: { activeMs: Date.now() - activation.startedAt, tokens: usage.tokens } })
+        // Cancelada enquanto o turno fechava (o fecho mantém o id da ativação): soma o uso. Retomada
+        // noutra ativação (turno interrompido, OPE-147): o tempo até o último batimento já entrou; só os tokens.
+        const own = await RoutineRun.updateOne({ _id: run._id, activationId: activation.activationId }, { $inc: { activeMs: Date.now() - activation.startedAt, tokens: usage.tokens } })
+        if (!own.modifiedCount) {
+            await RoutineRun.updateOne({ _id: run._id }, { $inc: { tokens: usage.tokens } })
+            routineLog.warn({ runId, activationId: activation.activationId }, "[routine-agents] turno encerrado depois de a execução ser retomada noutra ativação: o fecho foi descartado")
+        }
     } else await afterSettle(updated, "local")
     await pumpAgent(String(run.agentId)).catch((error: unknown) => routineLog.warn({ err: messageOf(error) }, "[routine-agents] fila não andou"))
 }
@@ -374,7 +399,7 @@ export async function closeParkedRun(run: RoutineRunDoc, status: "canceled" | "e
     const parkedMs = run.parkedAt ? now.getTime() - new Date(run.parkedAt).getTime() : 0
     const updated = await RoutineRun.findOneAndUpdate(
         { _id: run._id, status: { $in: input.from } },
-        { $set: { status, finishedAt: now, parkedAt: null, activationStartedAt: null, ...(input.error ? { error: input.error } : {}) }, $inc: { waitingMs: Math.max(0, parkedMs) } },
+        { $set: { status, finishedAt: now, parkedAt: null, activationStartedAt: null, heartbeatAt: null, ...(input.error ? { error: input.error } : {}) }, $inc: { waitingMs: Math.max(0, parkedMs) } },
         { new: true },
     ).lean<RoutineRunDoc | null>()
     if (updated) {
@@ -394,6 +419,32 @@ export async function requeueParkedRun(run: RoutineRunDoc, from: RoutineRunStatu
         { new: true },
     ).lean<RoutineRunDoc | null>()
     if (!updated) return false
+    await emitRunChange(updated, "queued")
+    await pumpAgent(String(run.agentId))
+    return true
+}
+
+/**
+ * Turno interrompido (OPE-147: 90 s sem batimento — deploy, container parado, processo travado): a
+ * execução volta para a fila UMA vez e retoma do último ponto salvo. O tempo ativo vai até o último
+ * batimento; dali até agora entra como espera. Só pega a ativação que foi lida (`activationId`).
+ */
+export async function requeueInterruptedRun(run: RoutineRunDoc, now = new Date()): Promise<boolean> {
+    const startedAt = run.activationStartedAt ? new Date(run.activationStartedAt).getTime() : now.getTime()
+    const lastBeat = run.heartbeatAt ? new Date(run.heartbeatAt).getTime() : startedAt
+    const activeMs = Math.max(0, lastBeat - startedAt)
+    const stoppedMs = Math.max(0, now.getTime() - Math.max(lastBeat, startedAt))
+    const updated = await RoutineRun.findOneAndUpdate(
+        { _id: run._id, status: { $in: ["running", "waiting"] }, activationId: run.activationId ?? null },
+        {
+            $set: { status: "queued", queuedAt: now, activationStartedAt: null, activationId: null, heartbeatAt: null, resumeNote: run.resumeNote ? `${run.resumeNote}\n${INTERRUPTED_RESUME_NOTE}` : INTERRUPTED_RESUME_NOTE },
+            $inc: { interruptions: 1, waitingMs: stoppedMs, activeMs },
+        },
+        { new: true },
+    ).lean<RoutineRunDoc | null>()
+    if (!updated) return false
+    routineLog.warn({ runId: String(run._id), instance: run.instance ?? null, stoppedMs }, "[routine-agents] turno interrompido (sem batimento): execução de volta à fila")
+    recordRunStep(updated, { kind: "notice", label: "Turno interrompido: de volta à fila", detail: "Sem batimento da instância que rodava o turno (reinício, deploy ou prévia derrubada).", toolName: null, durationMs: null, error: false }, "queued")
     await emitRunChange(updated, "queued")
     await pumpAgent(String(run.agentId))
     return true

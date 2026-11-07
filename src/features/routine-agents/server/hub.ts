@@ -1,9 +1,12 @@
+import { randomUUID } from "node:crypto"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { HttpSecretVault } from "@/features/http-request/schemas"
 
 /**
  * Turnos vivos das execuções (OPE-130), em memória do processo: o controle de cada ativação
- * (Executando/Esperando). Reinício do servidor perde o turno — o tick marca a execução como **Erro**
+ * (Executando/Esperando). O mapa só vale para ESTE processo: quem diz se o turno está vivo para as
+ * outras instâncias (prévia e Opex original no mesmo banco, OPE-147) é o batimento gravado no banco
+ * (`heartbeat.ts`). Turno sem batimento há 90 s volta para a fila uma vez; na segunda, vira **Erro**
  * "O turno da execução foi perdido".
  */
 
@@ -36,6 +39,8 @@ export interface ActivationUsage {
 
 export interface Activation {
     runId: string
+    /** Id desta ativação, gravado na execução: só ela grava o fecho do turno (OPE-147). */
+    activationId: string
     agentId: string
     controller: AbortController
     /** O agente pediu para encerrar o turno (concluir, hibernar, confirmar) — o loop para no fim do passo. */
@@ -59,9 +64,10 @@ export interface Activation {
 const globalRegistry = globalThis as unknown as { __routineActivations?: Map<string, Activation> }
 const activations = (globalRegistry.__routineActivations ??= new Map())
 
-export function beginActivation(input: { runId: string; agentId: string; baseTokens: number; baseActiveMs: number; warnings?: string[] }): Activation {
+export function beginActivation(input: { runId: string; agentId: string; activationId?: string; baseTokens: number; baseActiveMs: number; warnings?: string[] }): Activation {
     const activation: Activation = {
         runId: input.runId,
+        activationId: input.activationId ?? randomUUID(),
         agentId: input.agentId,
         controller: new AbortController(),
         outcome: null,
@@ -80,6 +86,16 @@ export function beginActivation(input: { runId: string; agentId: string; baseTok
 
 export const activationOf = (runId: string) => activations.get(runId) ?? null
 export const isActivationAlive = (runId: string) => activations.has(runId)
+/** Ativações vivas neste processo (o batimento grava cada uma). */
+export const liveActivations = (): Activation[] => [...activations.values()]
+
+/** Respostas do dono a uma confirmação em andamento neste processo (a ação confirmada pode estar rodando). */
+const globalResolving = globalThis as unknown as { __routineResolving?: Set<string> }
+const resolving = (globalResolving.__routineResolving ??= new Set())
+export const isRoutineActionResolving = (runId: string): boolean => resolving.has(runId)
+export const beginResolving = (runId: string) => void resolving.add(runId)
+export const endResolving = (runId: string) => void resolving.delete(runId)
+export const liveResolutions = (): string[] => [...resolving]
 
 export function endActivation(runId: string): void {
     activations.delete(runId)
@@ -107,4 +123,5 @@ export function addUsage(activation: Activation, step: { tokens: number; costUsd
 /** Testes: limpa os turnos vivos. */
 export function resetActivationsForTests(): void {
     activations.clear()
+    resolving.clear()
 }

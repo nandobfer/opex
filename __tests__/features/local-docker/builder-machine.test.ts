@@ -31,6 +31,7 @@ vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn() }))
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: mocks.active, assertBuilderMachineActive: vi.fn() }))
 vi.mock('@/features/integrations/services/integration-service', () => ({ updateIntegration: mocks.updateIntegration }))
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.integrationConfig }))
+vi.mock('@/features/agentic/server/centrals', () => ({ loadCentral: async (id: string) => ({ config: { environment: { previewHost: id === 'c1' ? '192.168.0.64' : 'localhost' } } }) }))
 vi.mock('@/features/agentic/server/ports', () => ({ isPortInUse: vi.fn(async () => false) }))
 
 import { DEFAULT_LOCAL_DOCKER_SETTINGS } from '@/features/local-docker/schemas'
@@ -150,7 +151,7 @@ describe('preparo: certificados do PC (inspeção TLS)', () => {
 describe('containers do PC', () => {
   beforeEach(async () => {
     await configured()
-    const wb = await workbenches().create({ taskCode: 'GO-DEV-717', worktreePath: '/w/go-dev-717', port: 5003 })
+    const wb = await workbenches().create({ taskCode: 'GO-DEV-717', centralId: 'c1', worktreePath: '/w/go-dev-717', port: 5003 })
     await previews().create({ workbenchId: String(wb._id), centralId: 'c1', composeProject: 'go-sipal-go-dev-717', port: 5003, pendingTeardown: false })
   })
 
@@ -189,14 +190,15 @@ describe('containers do PC', () => {
   it('recriar a prévia usa o compose do worktree no Docker do PC, sem build', async () => {
     const host = fakeHost({ containers: [PREVIEW] })
     await runContainerAction('gosipal-GO-DEV-717', 'recreate', false, 'local', host.run)
-    expect(host.calls).toContain("cd '/w/go-dev-717' && PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' up -d --force-recreate --no-build 'app'")
+    // A recriação mantém a marcação de prévia com o host da prévia da central (OPE-147).
+    expect(host.calls).toContain("cd '/w/go-dev-717' && OPEX_PREVIEW=1 OPEX_PREVIEW_URL='http://192.168.0.64:5003' PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' up -d --force-recreate --no-build 'app'")
   })
 
   it('recriar a prévia usa os mesmos arquivos do compose do build (com o override das CAs)', async () => {
     previews().docs[0]!.composeFiles = ['docker-compose.yml', '/home/srv/.opex-local/compose/go-sipal-go-dev-717.ca.yml']
     const host = fakeHost({ containers: [PREVIEW] })
     await runContainerAction('gosipal-GO-DEV-717', 'recreate', false, 'local', host.run)
-    expect(host.calls).toContain("cd '/w/go-dev-717' && PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' -f 'docker-compose.yml' -f '/home/srv/.opex-local/compose/go-sipal-go-dev-717.ca.yml' up -d --force-recreate --no-build 'app'")
+    expect(host.calls).toContain("cd '/w/go-dev-717' && OPEX_PREVIEW=1 OPEX_PREVIEW_URL='http://192.168.0.64:5003' PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' -f 'docker-compose.yml' -f '/home/srv/.opex-local/compose/go-sipal-go-dev-717.ca.yml' up -d --force-recreate --no-build 'app'")
   })
 
   it('derrubar o builder usa o buildx; apagar o builder esquece os limites aplicados', async () => {

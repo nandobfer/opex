@@ -10,6 +10,7 @@ import { AgentPageHeader } from "@/components/list/AgentPageHeader"
 import { VIRTUALIZE_AFTER, VirtualStack } from "@/components/list/VirtualStack"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
+import { PreviewSchedulerNotice } from "@/components/feedback/PreviewSchedulerNotice"
 import { APP_SCROLL_CONTAINER_ID } from "@/hooks/usePageVirtualizer"
 import { useUrlFilters } from "@/hooks/useUrlFilters"
 import { apiErrorMessage } from "@/lib/api"
@@ -76,6 +77,7 @@ export function RoutineAgentsPage() {
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
             <AgentPageHeader icon={def.icon} title={def.title} description={def.description} settingsHref={routineSettingsHref()} />
+            <PreviewSchedulerNotice />
             {query.isError ? (
                 <ErrorState title="Não foi possível carregar os agentes rotineiros" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
             ) : !query.isLoading && agents.length === 0 ? (

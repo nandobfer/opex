@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }))
 
+vi.mock('@/hooks/useInstanceInfo', () => ({ useInstanceInfo: () => ({ data: undefined }) }))
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }), useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }))
 vi.mock('@/components/metrics/UsageByDateChart', () => ({ UsageByDateChart: ({ points }: { points: { runs: number }[] }) => <div data-testid="usage-chart">{points.reduce((sum, point) => sum + point.runs, 0)}</div> }))

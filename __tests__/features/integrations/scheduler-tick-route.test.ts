@@ -62,6 +62,17 @@ describe('GET/POST /api/routines/scheduler-tick (tick externo)', () => {
     expect((await GET(tickRequest('segredo-banco'))).status).toBe(200)
   })
 
+  it('OPE-147: numa prévia do Opex não processa nada e responde que o agendador está desligado', async () => {
+    vi.stubEnv('OPEX_PREVIEW', '1')
+    const res = await GET(tickRequest('segredo-env'))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, executed: [], skipped: 'preview', message: 'Agendador desligado nesta prévia: as rotinas rodam só no Opex original.' })
+    expect(mocks.runSchedulerTick).not.toHaveBeenCalled()
+    expect(mocks.runFastSchedulerTick).not.toHaveBeenCalled()
+    // Sem token continua recusado.
+    expect((await GET(tickRequest())).status).toBe(401)
+  })
+
   it('agendador desligado: devolve skipped', async () => {
     mocks.runSchedulerTick.mockResolvedValue({ skipped: 'disabled', executed: [] })
     const body = await (await GET(tickRequest('segredo-env'))).json()

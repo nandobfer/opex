@@ -3,7 +3,9 @@ import { isRoutineForbiddenToolGroup } from "../constants"
 import { decryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
 import { RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { canCancelRun, isFinalRunStatus } from "../status"
-import { stopActivation } from "./hub"
+import { beginResolving, endResolving, stopActivation } from "./hub"
+import { ensureHeartbeat } from "./heartbeat"
+import { INSTANCE_ID } from "@/lib/instance"
 import { closeParkedRun, loadRunDoc, requeueParkedRun } from "./runs"
 import { AcaoAuditoria, auditRun, messageOf, routineLog, type RoutineRunDoc } from "./shared"
 
@@ -73,9 +75,11 @@ async function executeConfirmedTool(run: RoutineRunDoc): Promise<string> {
     }
 }
 
-/** Respostas em andamento neste processo (o tick não retoma uma confirmação que ainda executa a ação). */
-const resolving = new Set<string>()
-export const isRoutineActionResolving = (runId: string): boolean => resolving.has(runId)
+/**
+ * Respostas em andamento neste processo (o tick não retoma uma confirmação que ainda executa a ação).
+ * Para as outras instâncias, a resposta grava quem a resolve e bate a cada 15 s (OPE-147).
+ */
+export { isRoutineActionResolving } from "./hub"
 
 /** Aviso entregue quando a retomada sai pelo tick (o servidor reiniciou entre a resposta e a fila). */
 export const RESOLUTION_INTERRUPTED_NOTE =
@@ -98,11 +102,12 @@ export async function resolveRoutineAction(runId: string, decision: "confirmed" 
     if (run.status !== "awaiting_confirmation" || !run.pendingAction || run.pendingAction.resolvedAt) throw ALREADY()
     const now = new Date()
     const base = resolutionNote(run.pendingAction, decision, note)
-    resolving.add(runId)
+    beginResolving(runId)
+    ensureHeartbeat()
     try {
         const claimed = await RoutineRun.findOneAndUpdate(
             { _id: run._id, status: "awaiting_confirmation", "pendingAction.id": run.pendingAction.id, "pendingAction.resolvedAt": null },
-            { $set: { "pendingAction.resolvedAt": now, "pendingAction.resolution": decision, "pendingAction.note": note?.trim() || null, resumeNote: `${base}\n${RESOLUTION_INTERRUPTED_NOTE}` } },
+            { $set: { "pendingAction.resolvedAt": now, "pendingAction.resolution": decision, "pendingAction.note": note?.trim() || null, resumeNote: `${base}\n${RESOLUTION_INTERRUPTED_NOTE}`, "pendingAction.resolvingBy": INSTANCE_ID, "pendingAction.resolvingBeatAt": now } },
             { new: true },
         ).lean<RoutineRunDoc | null>()
         if (!claimed) throw ALREADY()
@@ -114,6 +119,6 @@ export async function resolveRoutineAction(runId: string, decision: "confirmed" 
         if (!requeued) routineLog.warn({ runId }, "[routine-agents] execução não voltou para a fila depois da confirmação (cancelada ou expirada no meio)")
         return { status: requeued ? "queued" : (await loadRunDoc(runId)).status }
     } finally {
-        resolving.delete(runId)
+        endResolving(runId)
     }
 }

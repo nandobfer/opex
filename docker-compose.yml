@@ -22,6 +22,9 @@ services:
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/opex}
       NODE_ENV: production
       PORT: ${PORT:?defina PORT no .env}
+      # Prévia do Opex (OPE-147): a publicação da mesa injeta a marcação; vazio = Opex original.
+      OPEX_PREVIEW: ${OPEX_PREVIEW:-}
+      OPEX_PREVIEW_URL: ${OPEX_PREVIEW_URL:-}
     networks:
       - mongodb-network
       - soketi-network
@@ -49,6 +52,8 @@ services:
       MONGODB_URI: ${MONGODB_URI:-mongodb://mongodb:27017/opex}
       NODE_ENV: development
       PORT: ${PORT:?defina PORT no .env}
+      OPEX_PREVIEW: ${OPEX_PREVIEW:-}
+      OPEX_PREVIEW_URL: ${OPEX_PREVIEW_URL:-}
     deploy:
       resources:
         limits:
