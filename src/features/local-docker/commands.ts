@@ -1,4 +1,5 @@
 import { LOCAL_DOCKER_ALIAS_IMAGE, LOCAL_DOCKER_CA_ENV, LOCAL_DOCKER_CA_TARGET, LOCAL_DOCKER_CONTROL_SERVICE, LOCAL_DOCKER_LABELS, LOCAL_DOCKER_PATHS } from "./constants"
+import { previewMarkerEnv } from "@/lib/preview-marker"
 import type { LocalDockerAlias, LocalDockerSettings } from "./schemas"
 import type { LocalDockerMachineInfo } from "./types"
 
@@ -432,11 +433,13 @@ export function aliasDeleteCommand(settings: LocalDockerSettings, name: string):
 /**
  * Recria um serviço da prévia pelo compose do worktree no servidor, mandando para o Docker do PC
  * (sem build: usa a imagem que já está no PC). `files` = os mesmos arquivos do build (com o override
- * das CAs do PC); vazio = o padrão do compose.
+ * das CAs do PC); vazio = o padrão do compose. `previewHost` (o host da prévia na central) entra no
+ * endereço da marcação de prévia.
  */
-export function previewRecreateCommand(settings: LocalDockerSettings, input: { worktreePath: string; composeProject: string; service: string; port: number; files?: string[] }): string {
+export function previewRecreateCommand(settings: LocalDockerSettings, input: { worktreePath: string; composeProject: string; service: string; port: number; files?: string[]; previewHost?: string | null }): string {
     const files = (input.files ?? []).map((file) => ` -f ${quote(file)}`).join("")
-    return `cd ${quote(input.worktreePath)} && PORT=${input.port} DOCKER_CONTEXT=${settings.contextName} docker compose -p ${quote(input.composeProject)}${files} up -d --force-recreate --no-build ${quote(input.service)}`
+    // A recriação mantém a marcação de prévia (OPE-147): sem ela o container voltaria com o agendador ligado.
+    return `cd ${quote(input.worktreePath)} && ${previewMarkerEnv(input.previewHost ?? null, input.port)} PORT=${input.port} DOCKER_CONTEXT=${settings.contextName} docker compose -p ${quote(input.composeProject)}${files} up -d --force-recreate --no-build ${quote(input.service)}`
 }
 
 // ---------------------------------------------------------------------------

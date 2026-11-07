@@ -1,7 +1,10 @@
+import { isBeatStale } from "../heartbeat-rules"
+
 /**
  * Provisionamentos vivos neste processo (OPE-130), num módulo leve para o tick e o serviço consultarem
  * sem carregar o subagente. O estado "running"/"pending" no banco sem entrada aqui é obsoleto
- * (o servidor reiniciou no meio do provisionamento).
+ * (o servidor reiniciou no meio do provisionamento) quando também não há batimento recente de outra
+ * instância (`isProvisioningLive`).
  */
 
 const globalRegistry = globalThis as unknown as { __routineProvisioning?: Map<string, Promise<void>> }
@@ -13,6 +16,22 @@ export const PROVISIONING_INTERRUPTED_MESSAGE = 'O provisionamento foi interromp
 /** Há um provisionamento vivo deste agente neste processo? */
 export function isProvisioningInFlight(agentId: string): boolean {
     return inFlight.has(agentId)
+}
+
+/**
+ * Há um provisionamento vivo deste agente em QUALQUER instância (OPE-147)? Neste processo pela
+ * memória; noutra (prévia ou Opex original, mesmo banco) pelo batimento gravado no agente, contando
+ * do mais recente entre o batimento e o início do provisionamento.
+ */
+export function isProvisioningLive(agent: { _id: unknown; provisioning?: { status?: string; at?: Date | string | null } | null; provisioningBeatAt?: Date | string | null; updatedAt?: Date | string | null }, now = new Date()): boolean {
+    if (inFlight.has(String(agent._id))) return true
+    const status = agent.provisioning?.status
+    if (status !== "running" && status !== "pending") return false
+    // Vale o mais recente entre o batimento e o início: um batimento antigo (de um provisionamento já
+    // terminado) não derruba um "Reprovisionar" recém-iniciado antes do primeiro batimento dele.
+    const times = [agent.provisioningBeatAt, agent.provisioning?.at].filter((value): value is Date | string => Boolean(value)).map((value) => new Date(value).getTime())
+    const latest = times.length ? new Date(Math.max(...times)) : agent.updatedAt
+    return !isBeatStale(latest, now)
 }
 
 /**

@@ -11,6 +11,7 @@ import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
 import { DetailActions } from "./DetailActions"
 import { DetailHeader } from "./DetailHeader"
+import { PreviewSchedulerNotice } from "@/components/feedback/PreviewSchedulerNotice"
 import type { Draft } from "./draft"
 import { GeneralCard } from "./GeneralCard"
 import { PublicFieldsCard } from "./PublicFieldsCard"
@@ -74,6 +75,7 @@ export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, on
             }}
         >
             <DetailHeader def={def} data={data} hasAnySecret={def.secretFields.length > 0} />
+            <PreviewSchedulerNotice />
             <IntegrationTabs tabs={TABS} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções da integração Crons">
                 {tab === "geral" && (
                     <>

@@ -55,6 +55,9 @@ export interface IRoutineAgent {
     workdir: string | null
     runSeq: number
     lastRunAt: Date | null
+    /** Instância (processo) que roda o provisionamento em andamento e o último batimento dela (OPE-147). */
+    provisioningInstance: string | null
+    provisioningBeatAt: Date | null
     createdAt: Date
     updatedAt: Date
 }
@@ -79,6 +82,8 @@ const RoutineAgentSchema = new Schema<IRoutineAgent>(
         workdir: { type: String, default: null },
         runSeq: { type: Number, default: 0 },
         lastRunAt: { type: Date, default: null },
+        provisioningInstance: { type: String, default: null },
+        provisioningBeatAt: { type: Date, default: null },
     },
     { collection: "routine_agents", versionKey: false, timestamps: true, minimize: false },
 )
@@ -100,6 +105,9 @@ export interface IRoutinePendingAction {
     resolvedAt: Date | null
     resolution: "confirmed" | "rejected" | null
     note: string | null
+    /** Instância que executa a resposta do dono (ação confirmada) e o último batimento dela (OPE-147). */
+    resolvingBy?: string | null
+    resolvingBeatAt?: Date | null
 }
 
 export interface IRoutineRunSnapshot {
@@ -126,6 +134,12 @@ export interface IRoutineRun {
     waitingMs: number
     liveWaitMs: number
     activationStartedAt: Date | null
+    /** Turno vivo (OPE-147): id da ativação, instância (processo) que a roda e o último batimento. */
+    activationId: string | null
+    instance: string | null
+    heartbeatAt: Date | null
+    /** Interrupções do turno (sem batimento): a primeira volta para a fila, a segunda vira Erro. */
+    interruptions: number
     parkedAt: Date | null
     tokens: number
     costUsd: number | null
@@ -162,6 +176,10 @@ const RoutineRunSchema = new Schema<IRoutineRun>(
         waitingMs: { type: Number, default: 0 },
         liveWaitMs: { type: Number, default: 0 },
         activationStartedAt: { type: Date, default: null },
+        activationId: { type: String, default: null },
+        instance: { type: String, default: null },
+        heartbeatAt: { type: Date, default: null },
+        interruptions: { type: Number, default: 0 },
         parkedAt: { type: Date, default: null },
         tokens: { type: Number, default: 0 },
         costUsd: { type: Number, default: null },
@@ -231,6 +249,8 @@ const RoutineEntrySchema = new Schema<IRoutineEntry>(
     { collection: "routine_entries", versionKey: false, timestamps: { createdAt: true, updatedAt: false } },
 )
 RoutineEntrySchema.index({ agentId: 1, createdAt: -1 })
+// Ramo global da listagem de entradas (OPE-149): `target: "global"` de qualquer agente, mais recentes primeiro.
+RoutineEntrySchema.index({ target: 1, createdAt: -1 })
 
 /** Segredo do agente rotineiro (OPE-130, D5): o valor só entra (cifrado) e nunca sai pela API. */
 export interface IRoutineAgentSecret {

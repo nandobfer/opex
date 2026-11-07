@@ -56,7 +56,7 @@ vi.mock('@/features/routine-agents/server/provisioning', () => ({ startProvision
 vi.mock('@/features/routine-agents/server/engines/opex', () => ({ runOpexEngine: (input: Parameters<typeof holder.engine>[0]) => holder.engine(input) }))
 vi.mock('@/features/routine-agents/server/engines/opencode', async (importOriginal) => ({ ...(await importOriginal<object>()), runOpencodeEngine: (input: Parameters<typeof holder.engine>[0]) => holder.engine(input) }))
 
-import { triggerRoutineRun } from '@/features/routine-agents/server/runs'
+import { INTERRUPTED_RESUME_NOTE, triggerRoutineRun } from '@/features/routine-agents/server/runs'
 import { cancelRoutineRun, resolveRoutineAction } from '@/features/routine-agents/server/run-actions'
 import { LOST_TURN_MESSAGE, runDueRoutineAgents } from '@/features/routine-agents/server/tick'
 import { resetActivationsForTests } from '@/features/routine-agents/server/hub'
@@ -244,11 +244,73 @@ describe('hibernação e confirmação', () => {
 })
 
 describe('tick do agendador', () => {
-  it('Executando sem turno vivo (reinício) vira Erro "O turno da execução foi perdido"', async () => {
+  const liveRun = (agentId: unknown, overrides: Record<string, unknown> = {}) =>
+    holder.runs.insert({ agentId, seq: 1, origin: 'manual', request: 'Ler as vagas', status: 'running', snapshot: { engine: 'opex', confirmIrreversible: true, limits: EMPTY_ROUTINE_LIMITS, opex: {}, opencode: {} }, queuedAt: new Date(), activationStartedAt: new Date(Date.now() - 10 * 60_000), ...overrides })
+
+  it('regressão OPE-147: execução com batimento recente de outra instância (prévia ou original) não é derrubada', async () => {
     const agent = seedAgent()
-    const lost = holder.runs.insert({ agentId: agent._id, seq: 1, origin: 'manual', status: 'running', snapshot: { engine: 'opex', limits: EMPTY_ROUTINE_LIMITS }, queuedAt: new Date(), activationStartedAt: new Date(Date.now() - 120_000) })
+    const elsewhere = liveRun(agent._id, { activationId: 'ativacao-da-previa', instance: 'previa#1#abc', heartbeatAt: new Date(Date.now() - 20_000) })
     await runDueRoutineAgents(new Date())
-    expect(run(String(lost._id))).toMatchObject({ status: 'error', error: LOST_TURN_MESSAGE })
+    expect(run(String(elsewhere._id))).toMatchObject({ status: 'running', activationId: 'ativacao-da-previa' })
+  })
+
+  it('registro antigo sem batimento conta a partir do início do turno (90 s)', async () => {
+    const agent = seedAgent()
+    const recent = liveRun(agent._id, { activationStartedAt: new Date(Date.now() - 60_000) })
+    await runDueRoutineAgents(new Date())
+    expect(run(String(recent._id)).status).toBe('running')
+  })
+
+  it('sem batimento há mais de 90 s: volta para a fila uma vez e retoma do último ponto; na segunda interrupção vira Erro', async () => {
+    const agent = seedAgent()
+    const messages: string[] = []
+    holder.engine = async (input) => {
+      messages.push((input as unknown as { message: string }).message)
+      await new Promise(() => undefined)
+      return { error: null, text: '' }
+    }
+    const now = Date.now()
+    const stale = liveRun(agent._id, { activationId: 'velha', instance: 'opex#1#aaa', activationStartedAt: new Date(now - 5 * 60_000), heartbeatAt: new Date(now - 2 * 60_000), waitingMs: 1_000, activeMs: 500 })
+    const summary = await runDueRoutineAgents(new Date(now))
+    expect(summary.requeued).toBe(1)
+    await waitFor(() => messages.length === 1)
+    const resumed = run(String(stale._id))
+    // Retomou na hora (fila andou): nova ativação deste processo, com a interrupção contada.
+    expect(resumed).toMatchObject({ status: 'running', interruptions: 1 })
+    expect(resumed.activationId).not.toBe('velha')
+    // Ativo até o último batimento (3 min); parado depois dele (2 min) entra como espera.
+    expect(resumed.activeMs).toBe(500 + 3 * 60_000)
+    expect(resumed.waitingMs).toBeGreaterThanOrEqual(1_000 + 2 * 60_000)
+    // Sem histórico salvo (motor Opex): a retomada leva também o disparo, com a nota de interrupção.
+    expect(messages[0]).toContain('Ler as vagas')
+    expect(messages[0]).toContain(INTERRUPTED_RESUME_NOTE)
+
+    // Segunda interrupção da mesma execução: o turno vivo some (processo morto) e o batimento envelhece.
+    resetActivationsForTests()
+    holder.runs.docs.find((doc) => doc._id === stale._id)!.heartbeatAt = new Date(now - 2 * 60_000)
+    const next = liveRun(agent._id, { seq: 2, status: 'queued', activationStartedAt: null })
+    await runDueRoutineAgents(new Date(now))
+    expect(run(String(stale._id))).toMatchObject({ status: 'error', error: LOST_TURN_MESSAGE })
+    // A fila e a simultaneidade voltam a andar.
+    await waitFor(() => run(String(next._id)).status === 'running')
+  })
+
+  it('turno antigo que fecha depois de a execução ser retomada noutra ativação não sobrescreve o fecho', async () => {
+    const agent = seedAgent()
+    let release: () => void = () => undefined
+    holder.engine = async (input) => {
+      await new Promise<void>((resolve) => (release = resolve))
+      await call(input, 'finish', { report: 'Fecho velho' })
+      return { error: null, text: '' }
+    }
+    const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await waitFor(() => run(runId).status === 'running')
+    // Outra instância retomou a execução (nova ativação) enquanto este processo estava travado.
+    Object.assign(holder.runs.docs.find((doc) => String(doc._id) === runId)!, { activationId: 'outra', instance: 'previa#2#bbb', heartbeatAt: new Date() })
+    release()
+    await flush()
+    expect(run(runId)).toMatchObject({ status: 'running', activationId: 'outra' })
+    expect(run(runId).report ?? null).toBeNull()
   })
 
   it('hibernada além do tempo total de espera expira', async () => {
@@ -403,6 +465,16 @@ describe('provisionamento interrompido por reinício', () => {
     expect(agentDoc(alive._id).provisioning.status).toBe('running')
   })
 
+  it('OPE-147: provisionamento com batimento recente de outra instância não vai para erro; sem batimento há mais de 90 s, vai', async () => {
+    const elsewhere = stale({ provisioningInstance: 'previa#1#abc', provisioningBeatAt: new Date(Date.now() - 30_000) })
+    const silent = stale({ provisioningInstance: 'previa#1#abc', provisioningBeatAt: new Date(Date.now() - 100_000) })
+    await runDueRoutineAgents(new Date())
+    expect(agentDoc(elsewhere._id).provisioning.status).toBe('running')
+    expect(agentDoc(silent._id).provisioning).toMatchObject({ status: 'error', error: PROVISIONING_INTERRUPTED_MESSAGE })
+    // "Tentar de novo" também respeita o batimento da outra instância.
+    await expect(reprovisionRoutineAgent(String(elsewhere._id), 'retry', 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_AGENT_PROVISIONING' })
+  })
+
   it('"Tentar de novo" aceita um "running" obsoleto e recusa com 409 quando o provisionamento está vivo', async () => {
     Object.assign(holder.runs, { aggregate: async () => [] })
     const old = stale()
@@ -479,6 +551,40 @@ describe('confirmação respondida que não voltou para a fila', () => {
     expect(run(String(recent._id)).status).toBe('awaiting_confirmation')
   })
 
+  it('OPE-147: resposta em andamento noutra instância (batimento recente) não volta para a fila; sem batimento há 90 s, volta', async () => {
+    const agent = seedAgent()
+    holder.engine = async (input) => {
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const resolving = resolvedRun(agent._id, new Date(Date.now() - 10 * 60_000), 'Confirmado')
+    const doc = holder.runs.docs.find((item) => item._id === resolving._id)! as { pendingAction: Record<string, unknown> }
+    doc.pendingAction.resolvingBy = 'previa#1#abc'
+    doc.pendingAction.resolvingBeatAt = new Date(Date.now() - 20_000)
+    await runDueRoutineAgents(new Date())
+    await flush()
+    expect(run(String(resolving._id)).status).toBe('awaiting_confirmation')
+    doc.pendingAction.resolvingBeatAt = new Date(Date.now() - 100_000)
+    await runDueRoutineAgents(new Date())
+    await waitFor(() => run(String(resolving._id)).status === 'completed')
+  })
+
+  it('a resposta grava quem a resolve e o batimento', async () => {
+    holder.engine = async (input) => {
+      ;(input.activation as unknown as { outcome: unknown }).outcome = { kind: 'confirmation', action: { summary: 'Publicar', kind: 'request', toolName: null, toolLabel: null, input: null, displayInput: null } }
+      return { error: null, text: '' }
+    }
+    const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
+    await waitFor(() => run(runId).status === 'awaiting_confirmation')
+    holder.engine = async (input) => {
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    await resolveRoutineAction(runId, 'confirmed', 'local')
+    await waitFor(() => run(runId).status === 'completed')
+    expect((run(runId).pendingAction as { resolvingBy: string; resolvingBeatAt: Date })).toMatchObject({ resolvingBy: expect.stringContaining('#'), resolvingBeatAt: expect.any(Date) })
+  })
+
   it('o claim já grava o texto da retomada: uma falha antes da fila deixa a execução recuperável', async () => {
     const notes: string[] = []
     holder.engine = async (input) => {
@@ -489,7 +595,7 @@ describe('confirmação respondida que não voltou para a fila', () => {
       return { error: null, text: '' }
     }
     const { runId } = await triggerRoutineRun(String(seedAgent()._id), { origin: 'manual' }, 'local')
-    await flush()
+    await waitFor(() => run(runId).status === 'awaiting_confirmation')
     const original = holder.runs.findOneAndUpdate
     let calls = 0
     // A fila (segunda gravação) falha: simula o processo caindo entre a resposta e a fila.

@@ -217,9 +217,19 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   o app roda só em processo Node persistente (local ou Docker); **não há variante Vercel**.
 - No fim de cada tick, depois dos jobs do Agente Opex, da saúde do Docker local e dos ambientes, roda
   `runDueRoutineAgents` (agentes rotineiros: disparos agendados, retomadas das hibernadas, fila, turnos
-  perdidos e expirações — `modules/routine-agents.md`).
+  interrompidos e expirações — `modules/routine-agents.md`).
 - `GET/POST /api/routines/scheduler-tick` executa o mesmo motor sob demanda (ex.: cron do
   sistema), com `Bearer` igual ao `CRON_SECRET` do ambiente **ou** ao cron secret da integração.
+- **Guarda de prévia (OPE-147)**: a prévia do Opex (mesa publicada pelo `/desenvolvimento`) usa o banco
+  do Opex original. Com a marcação `OPEX_PREVIEW=1` (`src/lib/instance.ts`, `isPreviewInstance`),
+  `startCronScheduler` não liga o tick periódico (registra no log "Agendador automático desligado:
+  instância de prévia"), `runSchedulerTick`/`runFastSchedulerTick` devolvem `skipped: "preview"` sem
+  reivindicar lease, e o tick sob demanda responde `{ success: true, executed: [], skipped: "preview",
+  message }`. Nada roda sozinho na prévia (crons, fila agêntica, PRs, limpezas, rotineiros). O
+  **disparo manual** continua: "Executar agora" (`runJobNow`, com o mesmo lease) e o disparo de um
+  agente rotineiro rodam no container da prévia. Sem a marcação (`pnpm dev`, produção) o agendador liga
+  como sempre. A tela mostra, só na prévia, "Agendador desligado nesta prévia: as rotinas rodam só no
+  Opex original." (`PreviewSchedulerNotice`, `GET /api/instance`).
 - **Rotinas internas são do código** (`DEFAULT_CRON_JOBS`; `withBuiltInJobs` completa a lista
   salva). Hoje: `integrations-health-check` (a cada 5 min, testa todas as integrações; uma falha é
   repetida uma vez após 5 s — `runIntegrationTest` com `retries: 1` — e só a última tentativa grava o

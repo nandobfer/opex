@@ -67,6 +67,9 @@ describe('prévia remota', () => {
     const up = mocks.exec.mock.calls.find(([name]) => name === 'flock')!
     expect(JSON.parse(up[1].at(-1))).toEqual(expect.arrayContaining(['--no-build', '--pull', 'never']))
     expect(up[2].env.PORT).toBe('4010')
+    // Marcação de prévia (OPE-147): o container sabe que é uma prévia e o endereço da prévia.
+    expect(up[2].env.OPEX_PREVIEW).toBe('1')
+    expect(up[2].env.OPEX_PREVIEW_URL).toBe('http://localhost:4010')
   })
 
   it('testes falhando impedem download e publicação', async () => {

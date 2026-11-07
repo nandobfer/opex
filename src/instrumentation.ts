@@ -3,7 +3,8 @@
  *
  * O app roda só em processo Node persistente (local ou Docker, `output: "standalone"`): inicia o
  * agendador interno das rotinas (Integrações › Crons) com tick a cada minuto. A rota
- * `/api/routines/scheduler-tick` executa o MESMO motor sob demanda.
+ * `/api/routines/scheduler-tick` executa o MESMO motor sob demanda. Numa prévia do Opex
+ * (`OPEX_PREVIEW=1`, OPE-147) o `startCronScheduler` não liga o tick (banco compartilhado).
  */
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return

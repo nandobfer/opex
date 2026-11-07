@@ -8,6 +8,8 @@ import { IDENTITY_INSTRUCTIONS, identityNeeds, identityPrompt, parseGeneratedIde
 import { isPendingRoutineSlug, routineNameKey, uniqueRoutineSlug } from "../slug"
 import { baseRoutineChannels, ensureRoutineEngramindAgent, ensureRoutineSubscriptions, ensureRoutineToken, listEngramindChannels } from "./engramind"
 import { inFlight, whenChannelActionsDone } from "./provisioning-registry"
+import { ensureHeartbeat } from "./heartbeat"
+import { INSTANCE_ID } from "@/lib/instance"
 import { loadRoutineAgentSettings } from "./settings"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated, routineLog, type RoutineAgentDoc } from "./shared"
 
@@ -39,11 +41,16 @@ export function startProvisioning(agentId: string, mode: ProvisionMode, actorId:
     const current = inFlight.get(agentId)
     if (current) return current
     // Uma ação de canal em curso (OPE-143) termina antes: o provisionamento lê o agente já com o bloqueio gravado.
-    const run = whenChannelActionsDone(agentId)
+    // Batimento (OPE-147): outra instância no mesmo banco não dá este provisionamento por interrompido.
+    const claim = RoutineAgent.updateOne({ _id: agentId }, { $set: { provisioningInstance: INSTANCE_ID, provisioningBeatAt: new Date() } }, { timestamps: false }).catch((error: unknown) =>
+        routineLog.warn({ agentId, err: messageOf(error) }, "[routine-agents] batimento inicial do provisionamento não gravado"),
+    )
+    const run = Promise.all([claim, whenChannelActionsDone(agentId)])
         .then(() => provisionRoutineAgent(agentId, mode, actorId))
         .catch((error: unknown) => routineLog.warn({ agentId, err: messageOf(error) }, "[routine-agents] provisionamento falhou fora do fluxo"))
         .finally(() => inFlight.delete(agentId))
     inFlight.set(agentId, run)
+    ensureHeartbeat()
     return run
 }
 

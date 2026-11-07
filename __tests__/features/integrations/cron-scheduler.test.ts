@@ -75,6 +75,20 @@ describe('runSchedulerTick (issue #604)', () => {
     expect(mocks.runDueOpexJobs).not.toHaveBeenCalled()
   })
 
+  it('OPE-147: numa prévia os ticks não reivindicam lease nem executam; "Executar agora" roda na prévia', async () => {
+    vi.stubEnv('OPEX_PREVIEW', '1')
+    mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: true, jobs: [httpJob, { ...httpJob, id: 'rapida', schedule: { type: 'interval', seconds: 20 } }], cronSecret: 'segredo' })
+    expect(await runSchedulerTick()).toEqual({ skipped: 'preview', executed: [] })
+    expect(await runFastSchedulerTick()).toEqual({ skipped: 'preview', executed: [] })
+    expect(mocks.findOneAndUpdate).not.toHaveBeenCalled()
+    expect(mocks.runDueOpexJobs).not.toHaveBeenCalled()
+    mocks.findOneAndUpdate.mockResolvedValue({ jobId: 'cancel' })
+    fetchMock.mockResolvedValue(new Response('{}', { status: 200 }))
+    expect(await runJobNow('cancel')).toMatchObject({ ok: true })
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    vi.unstubAllEnvs()
+  })
+
   it('executa a rotina HTTP somente quando vence o lease, com Bearer do cron secret', async () => {
     mocks.getIntegrationConfig.mockResolvedValue({ schedulerEnabled: true, jobs: [httpJob], cronSecret: 'segredo' })
     mocks.findOneAndUpdate.mockResolvedValue({ jobId: 'cancel' })
