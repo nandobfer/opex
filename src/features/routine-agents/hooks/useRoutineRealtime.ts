@@ -25,6 +25,8 @@ export function useRoutineRealtime(enabled = true): void {
             void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "list"] })
             if (payload?.id) void queryClient.invalidateQueries({ queryKey: routineKeys.agent(payload.id) })
             if (payload?.id) void queryClient.invalidateQueries({ queryKey: routineKeys.secrets(payload.id) })
+            // Uma entrada global gravada num agente muda a lista de todos os outros (OPE-149).
+            void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "entries"] })
             if (payload?.id === "settings") void queryClient.invalidateQueries({ queryKey: routineKeys.settings })
         }
         const onRun = (payload: RoutineRunUpdatedPayload) => {
