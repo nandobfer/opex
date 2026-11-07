@@ -125,7 +125,8 @@ export async function runPreview(statePath: string, attempt: string): Promise<vo
     const override = resolve(dirname(statePath), `compose-${attempt}.json`)
     writeFileSync(override, JSON.stringify({ services: { [s.service]: { image, pull_policy: "never" } } }))
     check()
-    const env = { ...process.env, [s.portEnvVar]: String(s.port) }
+    // Marcação de prévia (OPE-147): o docker-compose.yml a repassa ao container (agendador desligado).
+    const env = { ...process.env, [s.portEnvVar]: String(s.port), OPEX_PREVIEW: "1", OPEX_PREVIEW_URL: `http://${s.previewHost}:${s.port}` }
     // Same lock as Opex's reservation/invalidation: a stale attempt cannot overwrite
     // a newer deployment between validation and Compose's container recreation.
     const publish = `const fs=require('fs'); const s=JSON.parse(fs.readFileSync(process.argv[1],'utf8')); if(!s.active||s.attempt!==process.argv[2]||fs.readFileSync(s.currentPath,'utf8')!==s.attempt) throw Error('Tentativa invalidada'); require('child_process').execFileSync('docker',JSON.parse(process.argv[3]),{stdio:'inherit'});`

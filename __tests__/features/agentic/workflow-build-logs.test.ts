@@ -179,7 +179,8 @@ describe('workflow — build da prévia rodado pelo app', () => {
     expect(mocks.startBuild).toHaveBeenCalledWith(id, { port: 4015, local: false, method: 'local' })
     expect(mocks.beginSection).toHaveBeenCalledWith(id, UP)
     const input = mocks.runBuild.mock.calls[0]![0] as { run: string; jobId: string }
-    expect(input.run).toBe(`cd '/home/u/app/worktrees/ope-88' && BUILDKIT_PROGRESS=plain ${UP}`)
+    // Marcação de prévia (OPE-147) no comando que o app executa.
+    expect(input.run).toBe(`cd '/home/u/app/worktrees/ope-88' && BUILDKIT_PROGRESS=plain OPEX_PREVIEW=1 OPEX_PREVIEW_URL='http://localhost:4015' ${UP}`)
     expect(input.jobId).toMatch(/^build-/)
     expect(appended()).toContain('#1 [internal] load build definition')
     expect(appended()).toContain('exit 0')

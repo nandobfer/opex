@@ -6,6 +6,8 @@
  * em Integrações › Crons, e o lease no Mongo garante no máximo uma execução. Inclui as rotinas com
  * intervalo em segundos (tick rápido), que rodam uma vez por chamada.
  *
+ * Numa prévia do Opex (OPE-147) não processa nada: responde `skipped: "preview"` com a mensagem.
+ *
  * Autenticação: `Authorization: Bearer <CRON_SECRET do ambiente OU cron secret da integração>`.
  */
 
@@ -13,12 +15,18 @@ import { NextResponse, type NextRequest } from "next/server"
 import { registerBuiltInJobs, runFastSchedulerTick, runSchedulerTick } from "@/features/integrations/scheduler/cron-scheduler"
 import { verifySchedulerTickToken } from "@/features/routines/utils/cron-auth"
 import { logger } from "@/lib/logger"
+import { isPreviewInstance, PREVIEW_SCHEDULER_MESSAGE } from "@/lib/instance"
 
 export const dynamic = "force-dynamic"
 
 async function handleTick(req: NextRequest) {
     if (!(await verifySchedulerTickToken(req))) {
         return NextResponse.json({ success: false, error: "Não autorizado" }, { status: 401 })
+    }
+
+    if (isPreviewInstance()) {
+        logger.info("[scheduler-tick] Tick ignorado: agendador desligado nesta prévia")
+        return NextResponse.json({ success: true, executed: [], skipped: "preview", message: PREVIEW_SCHEDULER_MESSAGE })
     }
 
     try {

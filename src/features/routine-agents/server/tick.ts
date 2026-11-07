@@ -1,46 +1,45 @@
 import { RoutineAgent, RoutineRun } from "@/lib/db/models/RoutineAgent"
 import { dueFire } from "../recurrence"
 import { checkRunLimits } from "../limits"
-import { isActivationAlive } from "./hub"
-import { isProvisioningInFlight, PROVISIONING_INTERRUPTED_MESSAGE } from "./provisioning-registry"
-import { closeParkedRun, pumpAgent, requeueParkedRun, triggerRoutineRun } from "./runs"
-import { isRoutineActionResolving, RESOLUTION_INTERRUPTED_NOTE, resolutionNote } from "./run-actions"
+import { activationOf, isRoutineActionResolving } from "./hub"
+import { isBeatStale } from "../heartbeat-rules"
+import { isProvisioningLive, PROVISIONING_INTERRUPTED_MESSAGE } from "./provisioning-registry"
+import { closeParkedRun, pumpAgent, requeueInterruptedRun, requeueParkedRun, triggerRoutineRun } from "./runs"
+import { RESOLUTION_INTERRUPTED_NOTE, resolutionNote } from "./run-actions"
 import { messageOf, publishAgentUpdated, routineDb, routineLog, type RoutineAgentDoc, type RoutineRunDoc } from "./shared"
 
 /**
  * Rotina do agendador interno para os agentes rotineiros (OPE-130), chamada no fim de
  * `runSchedulerTick` (a cada minuto). Em ordem:
- * 0. provisionamento "Provisionando"/pendente sem processo vivo (reinício) → **com erro**, para o
+ * 0. provisionamento "Provisionando"/pendente sem batimento há 90 s (reinício) → **com erro**, para o
  *    dono usar "Tentar de novo";
- * 1. turnos perdidos (Executando/Esperando sem turno vivo, ex.: reinício) → **Erro**;
- * 2. confirmação já respondida que não voltou para a fila (reinício ou falha entre a resposta e a
- *    fila) → volta para a fila com o texto gravado na resposta;
+ * 1. turnos interrompidos (Executando/Esperando sem batimento há 90 s: deploy, container parado) →
+ *    voltam para a fila uma vez; na segunda interrupção da mesma execução → **Erro**;
+ * 2. confirmação já respondida que não voltou para a fila (sem batimento de quem resolvia há 90 s,
+ *    ou falha entre a resposta e a fila) → volta para a fila com o texto gravado na resposta;
  *    hibernadas/aguardando confirmação além do tempo total de espera → **Expirada**;
  * 3. hibernadas vencidas voltam para a fila (com o atraso registrado);
  * 4. disparos agendados vencidos: um só por gatilho, mesmo com várias janelas perdidas; agente
  *    pausado/arquivado descarta o disparo (sem acumular);
  * 5. a fila de cada agente anda.
+ *
+ * Quem está vivo é decidido pelo **batimento no banco** (`heartbeat.ts`, OPE-147), não pela memória
+ * deste processo: a prévia do Opex e o Opex original usam o mesmo banco, e um nunca derruba o que
+ * roda no outro. (Na prévia o agendador fica desligado; esta rotina roda só no Opex original.)
  */
 
 export const LOST_TURN_MESSAGE = "O turno da execução foi perdido"
-/** Folga entre reservar a vaga e registrar o turno vivo. */
-const LOST_GRACE_MS = 30_000
-/** Folga entre gravar "running"/"pending" e registrar o provisionamento vivo. */
-const PROVISIONING_GRACE_MS = 120_000
-/** Folga entre a resposta do dono e a volta para a fila (a ação confirmada pode estar rodando). */
-const RESOLVED_GRACE_MS = 60_000
 const BATCH = 100
 
-export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: number; expired: number; resumed: number; fired: number }> {
+export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: number; requeued: number; expired: number; resumed: number; fired: number }> {
     await routineDb()
-    const summary = { lost: 0, expired: 0, resumed: 0, fired: 0 }
+    const summary = { lost: 0, requeued: 0, expired: 0, resumed: 0, fired: 0 }
     const touched = new Set<string>()
 
     const provisioning = await RoutineAgent.find({ "provisioning.status": { $in: ["running", "pending"] } }).limit(BATCH).lean<RoutineAgentDoc[]>()
     for (const agent of provisioning) {
         const agentId = String(agent._id)
-        const since = agent.provisioning?.at ?? agent.updatedAt
-        if (isProvisioningInFlight(agentId) || (since && now.getTime() - new Date(since).getTime() < PROVISIONING_GRACE_MS)) continue
+        if (isProvisioningLive(agent, now)) continue
         const status = agent.provisioning!.status
         const updated = await RoutineAgent.updateOne({ _id: agentId, "provisioning.status": status }, { $set: { "provisioning.status": "error", "provisioning.error": PROVISIONING_INTERRUPTED_MESSAGE } })
         if (updated.modifiedCount) {
@@ -49,19 +48,27 @@ export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: num
         }
     }
 
-    const live = await RoutineRun.find({ status: { $in: ["running", "waiting"] }, activationStartedAt: { $lte: new Date(now.getTime() - LOST_GRACE_MS) } })
-        .limit(BATCH)
+    const live = await RoutineRun.find({ status: { $in: ["running", "waiting"] } })
+        .limit(BATCH * 5)
         .lean<RoutineRunDoc[]>()
     for (const run of live) {
-        if (isActivationAlive(String(run._id))) continue
-        if (await closeParkedRun(run, "error", { error: LOST_TURN_MESSAGE, actorId: "local", from: ["running", "waiting"] })) summary.lost++
+        const local = activationOf(String(run._id))
+        if (local && local.activationId === (run.activationId ?? local.activationId)) continue
+        // Registros anteriores ao batimento contam a partir do início do turno.
+        if (!isBeatStale(run.heartbeatAt ?? run.activationStartedAt, now)) continue
+        if ((run.interruptions ?? 0) >= 1) {
+            if (await closeParkedRun(run, "error", { error: LOST_TURN_MESSAGE, actorId: "local", from: ["running", "waiting"] })) summary.lost++
+        } else if (await requeueInterruptedRun(run, now)) {
+            summary.requeued++
+            touched.add(String(run.agentId))
+        }
     }
 
     const parked = await RoutineRun.find({ status: { $in: ["hibernating", "awaiting_confirmation"] } }).limit(BATCH * 5).lean<RoutineRunDoc[]>()
     for (const run of parked) {
         const resolvedAt = run.status === "awaiting_confirmation" ? run.pendingAction?.resolvedAt : null
         if (resolvedAt) {
-            if (isRoutineActionResolving(String(run._id)) || now.getTime() - new Date(resolvedAt).getTime() < RESOLVED_GRACE_MS) continue
+            if (isRoutineActionResolving(String(run._id)) || !isBeatStale(run.pendingAction?.resolvingBeatAt ?? resolvedAt, now)) continue
             const action = run.pendingAction!
             const resumeNote = run.resumeNote ?? `${resolutionNote(action, action.resolution === "rejected" ? "rejected" : "confirmed", action.note)}\n${RESOLUTION_INTERRUPTED_NOTE}`
             if (await requeueParkedRun(run, "awaiting_confirmation", { resumeNote })) {

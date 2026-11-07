@@ -16,9 +16,18 @@ const holder = vi.hoisted(() => ({
   turnOutcome: { outcome: 'done' as string, message: null as string | null },
   listError: false,
   updateError: false,
+  runFilters: [] as unknown[],
+  ownCount: 1,
+  active: {} as Record<string, boolean>,
+  interrupted: [] as string[],
 }))
 
-vi.mock('@/lib/db/models/RoutineAgent', () => ({ RoutineRun: { updateOne: async (_filter: unknown, update: unknown) => void holder.runUpdates.push(update) } }))
+vi.mock('@/lib/db/models/RoutineAgent', () => ({
+  RoutineRun: {
+    updateOne: async (filter: unknown, update: unknown) => void (holder.runFilters.push(filter), holder.runUpdates.push(update)),
+    countDocuments: async () => holder.ownCount,
+  },
+}))
 vi.mock('@/features/routine-agents/server/workdir', () => ({ ensureRoutineWorkdir: async (slug: string) => `/home/burgos/opex-rotineiros/${slug}` }))
 vi.mock('@/features/ai/server/self-memory/mcp', () => ({ opexPublicBaseUrl: async () => holder.base }))
 vi.mock('@/lib/ai/opencode-client', () => ({
@@ -43,6 +52,11 @@ vi.mock('@/lib/ai/opencode-client', () => ({
           holder.calls.update.push(args)
         },
         create: async (args: unknown) => (holder.calls.create.push(args), { id: 'ses_nova' }),
+        active: async () => ({ ...holder.active }),
+        interrupt: async ({ sessionID }: { sessionID: string }) => {
+          holder.interrupted.push(sessionID)
+          delete holder.active[sessionID]
+        },
         instructions: { entry: { put: async () => undefined } },
       },
     }
@@ -69,7 +83,7 @@ function engineInput(opencodeSessionId: string | null = null) {
   const usage: unknown[] = []
   const input = {
     agent: { name: 'Vagas', slug: 'vagas' },
-    run: { _id: RUN_ID, seq: 1, opencodeSessionId, snapshot: { limits: EMPTY_ROUTINE_LIMITS, opencode: { agent: 'build', model: 'anthropic/claude', variant: null, enabledMcps: ['playwright', 'sumiu'] } } },
+    run: { _id: RUN_ID, seq: 1, activationId: 'ativ-1', opencodeSessionId, snapshot: { limits: EMPTY_ROUTINE_LIMITS, opencode: { agent: 'build', model: 'anthropic/claude', variant: null, enabledMcps: ['playwright', 'sumiu'] } } },
     activation,
     instructions: (prefix: string) => `use ${prefix}finish`,
     message: 'comece',
@@ -90,6 +104,12 @@ beforeEach(() => {
   holder.turnOutcome = { outcome: 'done', message: null }
   holder.listError = false
   holder.updateError = false
+  holder.runFilters = []
+  holder.ownCount = 1
+  holder.active = {}
+  holder.interrupted = []
+  delete process.env.OPEX_PREVIEW
+  delete process.env.OPEX_PREVIEW_URL
 })
 
 describe('routineSessionPermissions', () => {
@@ -145,6 +165,36 @@ describe('runOpencodeEngine', () => {
     expect((await runOpencodeEngine(alive.input)).sessionId).toBe('ses_viva')
     expect(holder.calls.create).toEqual([])
     expect(holder.calls.update).toEqual([expect.objectContaining({ sessionID: 'ses_viva' })])
+  })
+
+  it('OPE-147: retomada com o turno antigo ainda ativo no host interrompe-o e continua na mesma sessão', async () => {
+    holder.existing.add('ses_viva')
+    holder.active = { ses_viva: true }
+    const { input } = engineInput('ses_viva')
+    expect((await runOpencodeEngine(input)).sessionId).toBe('ses_viva')
+    expect(holder.interrupted).toEqual(['ses_viva'])
+    expect(holder.calls.create).toEqual([])
+    expect((holder.calls.turns[0] as { sessionId: string }).sessionId).toBe('ses_viva')
+  })
+
+  it('OPE-147: sessão ociosa não é interrompida; as gravações conferem a ativação dona', async () => {
+    holder.existing.add('ses_viva')
+    await runOpencodeEngine(engineInput('ses_viva').input)
+    expect(holder.interrupted).toEqual([])
+    expect(holder.runFilters).toEqual([{ _id: RUN_ID, activationId: 'ativ-1' }])
+  })
+
+  it('OPE-147: execução já retomada noutra ativação: o turno antigo não remove o MCP dela', async () => {
+    holder.ownCount = 0
+    await runOpencodeEngine(engineInput().input)
+    expect(holder.calls.remove).toEqual([])
+  })
+
+  it('OPE-147: numa prévia, o MCP da execução aponta para a própria prévia', async () => {
+    process.env.OPEX_PREVIEW = '1'
+    process.env.OPEX_PREVIEW_URL = 'http://192.168.0.64:4021/'
+    await runOpencodeEngine(engineInput().input)
+    expect((holder.calls.add[0] as { config: { url: string } }).config.url).toBe(`http://192.168.0.64:4021/api/routine-agents/mcp/${RUN_ID}`)
   })
 
   it('falha fechada: sem a lista de MCPs do host, a execução vira Erro sem abrir sessão nem registrar o MCP', async () => {

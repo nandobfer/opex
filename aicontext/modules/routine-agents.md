@@ -252,14 +252,45 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   esse texto (a auditoria que falha só vira aviso no log).
 - **Cancelar** existe em todo status não final (confirmação na tela; ferramenta destrutiva no Agente
   Opex).
+- **Batimento da instância (OPE-147, `server/heartbeat.ts`)**: o turno vive na memória de um processo,
+  mas a prévia do Opex e o Opex original usam o **mesmo banco**. Por isso quem diz se algo está vivo é
+  o banco: a reserva `queued → running` grava `activationId`, `instance` e `heartbeatAt`, e um laço por
+  processo (`ensureHeartbeat`, a cada **15 s**) bate por cada turno, provisionamento
+  (`provisioningInstance`/`provisioningBeatAt` no agente) e resposta a uma confirmação
+  (`pendingAction.resolvingBy`/`resolvingBeatAt`) que rodam nele. Algo só é dado como interrompido
+  depois de **90 s sem batimento** (`isBeatStale`, `heartbeat-rules.ts`; a folga cobre diferença pequena
+  de relógio entre containers); registros anteriores ao batimento contam do início
+  (`activationStartedAt`, `provisioning.at`, `resolvedAt`). Uma instância nunca derruba o que bate
+  noutra; "Tentar de novo" e as ações de canal também recusam com 409 enquanto outra instância bate.
+- **Só a ativação dona grava** (`activationId` no filtro): a fase (`running`/`waiting`), o fecho do turno,
+  o MCP e a sessão do motor OpenCode. Um processo que volta depois de travado não conclui por cima de uma
+  execução já retomada (o fecho dele é descartado, só os tokens somam), e o batimento dele interrompe o
+  turno quando a execução não é mais sua (cancelada ou retomada noutra instância).
+- **Retomada única depois de interrupção** (deploy, container parado, prévia derrubada no meio de um
+  disparo manual): na **primeira** interrupção a execução volta para a fila (`requeueInterruptedRun`,
+  `interruptions` 1), com o tempo ativo até o último batimento em `activeMs`, o tempo parado em
+  `waitingMs`, um passo "Turno interrompido" e a nota `INTERRUPTED_RESUME_NOTE` na retomada (que leva
+  também o disparo quando o turno caiu antes de salvar o histórico). No motor OpenCode a retomada usa a
+  **mesma sessão** (`opencodeSessionId`) e, se o turno antigo ainda estiver ativo no host, ele é
+  interrompido antes (`interruptStaleTurn`). Na **segunda** interrupção da mesma execução → **Erro** "O
+  turno da execução foi perdido", e a fila segue.
+- **Prévia do Opex**: o agendador automático fica desligado nela (ver `modules/integrations.md`, "Crons
+  e agendador interno"), então disparos agendados, retomadas, turnos interrompidos e expirações rodam
+  **só no Opex original**. O disparo manual em `/agentes-rotineiros` funciona na prévia, roda no
+  container dela com as mesmas regras de fila e simultaneidade (a fila do agente anda inteira, como em
+  produção) e, no motor OpenCode, o MCP da execução aponta para a própria prévia (`OPEX_PREVIEW_URL`).
+  A tela mostra o aviso "Agendador desligado nesta prévia: as rotinas rodam só no Opex original."
+  (`PreviewSchedulerNotice`, lido de `GET /api/instance`).
 
 ### Agendador (`runDueRoutineAgents`, fim de `runSchedulerTick`)
 
-0. Provisionamento "Provisionando"/pendente sem processo vivo há mais de 2 min → **com erro**.
-1. Executando/Esperando sem turno vivo há mais de 30 s (reinício) → **Erro** "O turno da execução foi
-   perdido" (limitação conhecida: o turno vive no processo).
-2. Confirmação já respondida que não voltou para a fila há mais de 1 min (e sem resposta em andamento
-   no processo) → volta para a fila com o texto gravado na resposta. Hibernada/aguardando além do
+Roda só no Opex original (na prévia o agendador fica desligado).
+
+0. Provisionamento "Provisionando"/pendente sem batimento há mais de 90 s → **com erro**.
+1. Executando/Esperando sem batimento há mais de 90 s → volta para a fila na primeira interrupção;
+   na segunda → **Erro** "O turno da execução foi perdido".
+2. Confirmação já respondida que não voltou para a fila, sem batimento de quem a resolvia há mais de
+   90 s → volta para a fila com o texto gravado na resposta. Hibernada/aguardando além do
    tempo total de espera → **Expirada**.
 3. Hibernada vencida → volta para a fila na mesma sessão, com o motivo e o atraso.
 4. Gatilho vencido: **um** disparo mesmo com várias janelas perdidas (atraso em `delayMs`); o
@@ -378,7 +409,11 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 
 ## Limitações conhecidas
 
-- O turno vive no processo do servidor: reinício durante Executando/Esperando vira Erro.
+- O turno vive no processo do servidor: reinício durante Executando/Esperando retoma a execução uma
+  vez (do último ponto salvo); a segunda interrupção vira Erro. Efeitos externos do turno interrompido
+  não são desfeitos (a nota da retomada pede para conferir o estado).
+- Prévia publicada na Builder Machine (PC): o endereço da prévia não é conhecido, então o MCP da
+  execução do motor OpenCode num disparo manual nela usa a URL pública do Opex (aponta para o original).
 - O navegador do motor Opex depende de um MCP de navegador cadastrado no Opex (o container não tem
   navegador); no OpenCode, do MCP de navegador do host.
 - No OpenCode, a confirmação depende de o agente chamar a ferramenta (cliques no navegador não são

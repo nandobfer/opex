@@ -65,7 +65,8 @@ describe('mensagens das etapas', () => {
     const cmd = previewBuildCommands({ ...config, environment: { ...config.environment, portEnvVar: 'APP_PORT', composeFile: 'docker/compose.yml' } }, ctx, 4015)
     expect(cmd.command).toBe('APP_PORT=4015 docker compose -p portal-go-dev-12 -f docker/compose.yml up -d --build')
     // O app roda no worktree e força a saída do BuildKit linha a linha (log da aba Build).
-    expect(cmd.run).toBe(`cd '/home/u/app/worktrees/go-dev-12' && BUILDKIT_PROGRESS=plain ${cmd.command}`)
+    // Marcação de prévia (OPE-147): o container sabe que é uma prévia e o endereço em que o host o alcança.
+    expect(cmd.run).toBe(`cd '/home/u/app/worktrees/go-dev-12' && BUILDKIT_PROGRESS=plain OPEX_PREVIEW=1 OPEX_PREVIEW_URL='http://localhost:4015' ${cmd.command}`)
   })
 
   it('build com serviços do compose na central sobe só eles (vazio = o compose inteiro), também na Builder Machine', () => {
@@ -75,6 +76,9 @@ describe('mensagens das etapas', () => {
     const remote = previewBuildCommands(scoped, ctx, 4015, { prefix, files: ['docker-compose.yml', '/srv/ca.yml'] })
     expect(remote.command).toBe(`${prefix} PORT=4015 docker compose -p portal-go-dev-12 -f docker-compose.yml -f /srv/ca.yml up -d --build app worker`)
     expect(remote.logs).toBe(`${prefix} docker compose -p portal-go-dev-12 -f docker-compose.yml -f /srv/ca.yml logs --tail 100`)
+    // Builder Machine (prévia no PC): o endereço não é conhecido, vai só a marcação (OPE-147).
+    expect(remote.run).toContain('BUILDKIT_PROGRESS=plain OPEX_PREVIEW=1 DOCKER_CONTEXT=')
+    expect(remote.run).not.toContain('OPEX_PREVIEW_URL')
     const text = buildFixPrompt(scoped, ctx, 4015, { exitCode: 1, tail: '', round: 1, command: previewBuildCommands(scoped, ctx, 4015).command })
     expect(text).toContain('`PORT=4015 docker compose -p portal-go-dev-12 up -d --build app worker`')
     expect(text).toContain('A central sobe só os serviços `app`, `worker` do compose (e as dependências deles): serviços fora dessa lista não entram no build e não precisam ser corrigidos.')

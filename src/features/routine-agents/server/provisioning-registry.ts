@@ -1,7 +1,10 @@
+import { isBeatStale } from "../heartbeat-rules"
+
 /**
  * Provisionamentos vivos neste processo (OPE-130), num módulo leve para o tick e o serviço consultarem
  * sem carregar o subagente. O estado "running"/"pending" no banco sem entrada aqui é obsoleto
- * (o servidor reiniciou no meio do provisionamento).
+ * (o servidor reiniciou no meio do provisionamento) quando também não há batimento recente de outra
+ * instância (`isProvisioningLive`).
  */
 
 const globalRegistry = globalThis as unknown as { __routineProvisioning?: Map<string, Promise<void>> }
@@ -13,6 +16,18 @@ export const PROVISIONING_INTERRUPTED_MESSAGE = 'O provisionamento foi interromp
 /** Há um provisionamento vivo deste agente neste processo? */
 export function isProvisioningInFlight(agentId: string): boolean {
     return inFlight.has(agentId)
+}
+
+/**
+ * Há um provisionamento vivo deste agente em QUALQUER instância (OPE-147)? Neste processo pela
+ * memória; noutra (prévia ou Opex original, mesmo banco) pelo batimento gravado no agente. Registros
+ * sem batimento contam a partir do início do provisionamento.
+ */
+export function isProvisioningLive(agent: { _id: unknown; provisioning?: { status?: string; at?: Date | string | null } | null; provisioningBeatAt?: Date | string | null; updatedAt?: Date | string | null }, now = new Date()): boolean {
+    if (inFlight.has(String(agent._id))) return true
+    const status = agent.provisioning?.status
+    if (status !== "running" && status !== "pending") return false
+    return !isBeatStale(agent.provisioningBeatAt ?? agent.provisioning?.at ?? agent.updatedAt, now)
 }
 
 /**
