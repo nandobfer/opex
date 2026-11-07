@@ -112,7 +112,8 @@ mesmo na tela e na API; `withDefaults` completa campos novos).
   (`AgentConfigFields`: agente, modelo, variante, fallbacks; tempo máximo; instruções adicionais);
   **Centrais** (todas ou escolhidas).
 - **Contexto**: as chaves acima e a lista "Seções enviadas" (`plannedSectionTitles`).
-- **Memórias**: a lista `adversarial` do módulo de memórias dos agentes (`AgentMemoriesCard`,
+- **Memórias**: a lista `adversarial` do módulo de memórias dos agentes, no universo único do agente
+  `opex/adversario` (OPE-148, `MemoryUniverseSection`, com as Memórias do Opex;
   coleção `agent_memories`, sem limite de quantidade; as gravadas pelo Agente Mentor mostram o selo
   "Mentor · <tarefa>", campo `origin`; ver `ai.md`, "Memórias"). A lista é o canal
   `agentes/adversario` do Engramind (o título é do Redator do Engramind); com o aprendizado autônomo o

@@ -19,13 +19,30 @@ export function outsideFor(meta: MemoriesMetaDto | undefined, channel: string | 
     return Math.max(0, ...meta.outside.filter((row) => row.channels.includes(channel)).map((row) => row.outside))
 }
 
+/** Escopo do universo de um agente: o consumidor e, na central, os canais que valem nela (`null` = todos). */
+export interface NoticesUniverse {
+    consumer: string
+    channels: readonly string[] | null
+}
+
+/**
+ * Memórias fora do texto completo nos turnos do agente (OPE-148, universo único): as combinações de canais
+ * do próprio consumidor; com `channels`, só as que cabem nesses canais (a central).
+ */
+export function outsideForUniverse(meta: MemoriesMetaDto | undefined, universe: NoticesUniverse): number {
+    if (!meta) return 0
+    const allowed = universe.channels ? new Set(universe.channels) : null
+    const rows = meta.outside.filter((row) => row.consumer === universe.consumer && (!allowed || row.channels.every((channel) => allowed.has(channel))))
+    return Math.max(0, ...rows.map((row) => row.outside))
+}
+
 /**
  * Avisos dos cards de memórias (e da aba Engramind): migração pendente, Engramind indisponível (os
  * agentes usam o contexto em cache) e memórias fora do contexto. Fica sempre montado e reage ao tempo
  * real (os avisos aparecem e somem sem recarregar).
  */
-export function MemoriesNotices({ meta, channel }: { meta: MemoriesMetaDto | undefined; channel?: string | null }) {
-    const outside = outsideFor(meta, channel ?? null)
+export function MemoriesNotices({ meta, channel, universe }: { meta: MemoriesMetaDto | undefined; channel?: string | null; universe?: NoticesUniverse }) {
+    const outside = universe ? outsideForUniverse(meta, universe) : outsideFor(meta, channel ?? null)
     const unavailable = meta?.availability.unavailable === true
     return (
         <div className="flex flex-col gap-2" data-testid="memories-notices">

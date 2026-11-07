@@ -15,7 +15,6 @@ vi.mock('@engramind/client/react', () => ({
   },
 }))
 vi.mock('@/features/engramind/components/OpexEngramindProvider', () => ({ OpexEngramindProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
-vi.mock('@/features/ai/components/memories/AgentMemoriesCard', () => ({ AgentMemoriesCard: () => <div data-testid="agent-memories-card" /> }))
 
 import { RoutineMemoriesTab } from '@/features/routine-agents/components/page/RoutineMemoriesTab'
 
@@ -26,7 +25,8 @@ describe('aba Memórias do agente rotineiro', () => {
     render(<RoutineMemoriesTab slug="vagas" />)
     expect(screen.getAllByTestId('agent-universe')).toHaveLength(1)
     expect(screen.getByText('Rede de memórias')).toBeTruthy()
-    expect(screen.queryByTestId('agent-memories-card')).toBeNull()
-    expect(seen.props.at(-1)).toMatchObject({ agent: 'opex/rotineiro-vagas', defaultCreateChannel: 'agentes/rotineiros/vagas', className: 'compact' })
+    // OPE-148: card compartilhado, rede preenchendo a altura disponível, sem filtro de canais nem avisos.
+    expect(seen.props.at(-1)).toMatchObject({ agent: 'opex/rotineiro-vagas', defaultCreateChannel: 'agentes/rotineiros/vagas', className: 'compact', fill: true, includeChannel: null })
+    expect(screen.queryByTestId('memories-notices')).toBeNull()
   })
 })

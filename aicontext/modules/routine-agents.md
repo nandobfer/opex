@@ -195,8 +195,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
     erros sobem sem repetir. Auditoria na entidade das memórias (`canal`, `chave`, `execucao`, sem texto).
   - As instruções da execução listam os canais graváveis e mandam consultar o canal (formato `titulos`)
     antes de trabalhar e usar chave fixa por item.
-- Aba **Memórias** da página: `AgentMemoriesCard` de `routine-specific` (rotas
-  `/api/routine-agents/[id]/memories`) e de `routine-global`.
+- Aba **Memórias** da página: um card só (`AgentUniverseCard`, compartilhado com os demais agentes desde a
+  OPE-148) com o universo do agente `opex/rotineiro-<slug>`; "Nova memória" começa no canal próprio. A rede
+  preenche a altura disponível da página (`fill`).
 
 ## Execução
 

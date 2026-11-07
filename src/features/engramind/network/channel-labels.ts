@@ -27,4 +27,22 @@ export function centralChannelLabels(centrals: readonly { id: string; sigla?: st
     return labels
 }
 
+/** Prefixos dos canais por cliente do Agente Opex e do Agente Maddox (`…/clientes/<clientId>`). */
+export const CLIENT_CHANNEL_PREFIXES = [`${AI_AGENTS["opex-client-specific"].channel}/`, `${AI_AGENTS["maddox-client-specific"].channel}/`] as const
+
+/**
+ * Rótulos dos canais por cliente (OPE-148): no universo único do Agente Opex e do Maddox, cada canal de
+ * cliente aparece com o nome do cliente (a dica diz de qual agente é). Cliente desconhecido fica de fora.
+ */
+export function clientChannelLabels(clients: readonly { id: string; name?: string | null }[]): Map<string, ChannelLabel> {
+    const labels = new Map<string, ChannelLabel>()
+    for (const client of clients) {
+        const title = client.name?.trim()
+        if (!title) continue
+        labels.set(`${CLIENT_CHANNEL_PREFIXES[0]}${client.id}`, { title, hint: `Memórias do cliente ${title} · Agente Opex` })
+        labels.set(`${CLIENT_CHANNEL_PREFIXES[1]}${client.id}`, { title, hint: `Memórias do cliente ${title} · Agente Maddox` })
+    }
+    return labels
+}
+
 export type { ChannelLabel }

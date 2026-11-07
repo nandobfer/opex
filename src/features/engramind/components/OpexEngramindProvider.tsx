@@ -17,7 +17,8 @@ import { useCentrals } from "@/features/agentic/hooks/useAgentic"
 import { ENGRAMIND_INTEGRATION_HREF, ENGRAMIND_PAGE_HREF, OPEX_APP_SLUG } from "../constants"
 import { useAgentActivity } from "../hooks/useAgentActivity"
 import { useUniverseLayout } from "../hooks/useUniverseLayout"
-import { centralChannelLabels } from "../network/channel-labels"
+import { useOrcamentoClients } from "@/features/orcamentos/hooks/useOrcamentos"
+import { centralChannelLabels, clientChannelLabels } from "../network/channel-labels"
 import { agentIcon } from "./network/agent-icons"
 import { AboutCard } from "./page/AboutCard"
 import { ChannelSettingsCard } from "./page/channels/ChannelSettingsCard"
@@ -69,12 +70,17 @@ const hrefs = { network: ENGRAMIND_PAGE_HREF, channel: (slug: string) => `${ENGR
  * `EngramindProvider` do Opex (OPE-116): a lib `@engramind/client` no **modo gestor** (Apps x canais,
  * token admin pelo proxy do Opex), com o tempo real pelo SSE da lib, os rótulos das centrais, os ícones
  * e as gravações dos agentes do Opex, o card "O que é o Engramind" no fim da rede e as configurações do
- * canal no painel e no detalhe. `channelLabels = false` não busca as centrais.
+ * canal no painel e no detalhe. `channelLabels = false` não busca as centrais nem os clientes.
  */
 export function OpexEngramindProvider({ children, channelLabels = true }: { children: ReactNode; channelLabels?: boolean }) {
     const router = useRouter()
     const centrals = useCentrals(channelLabels)
-    const labels = useMemo(() => centralChannelLabels(Array.isArray(centrals.data) ? centrals.data : []), [centrals.data])
+    const clients = useOrcamentoClients({ enabled: channelLabels })
+    // Siglas das centrais e nomes dos clientes no lugar do id do canal (OPE-148: canais de cliente no universo único).
+    const labels = useMemo(
+        () => new Map([...centralChannelLabels(Array.isArray(centrals.data) ? centrals.data : []), ...clientChannelLabels(Array.isArray(clients.data) ? clients.data : [])]),
+        [centrals.data, clients.data],
+    )
     const activity = useAgentActivity()
     // Layout dos universos (aba Visualização): vale para a rede, os universos de IA e os dos rotineiros; muda ao vivo.
     const universeLayout = useUniverseLayout({ realtime: true })
