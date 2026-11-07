@@ -412,8 +412,6 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 - O turno vive no processo do servidor: reinício durante Executando/Esperando retoma a execução uma
   vez (do último ponto salvo); a segunda interrupção vira Erro. Efeitos externos do turno interrompido
   não são desfeitos (a nota da retomada pede para conferir o estado).
-- Prévia publicada na Builder Machine (PC): o endereço da prévia não é conhecido, então o MCP da
-  execução do motor OpenCode num disparo manual nela usa a URL pública do Opex (aponta para o original).
 - O navegador do motor Opex depende de um MCP de navegador cadastrado no Opex (o container não tem
   navegador); no OpenCode, do MCP de navegador do host.
 - No OpenCode, a confirmação depende de o agente chamar a ferramenta (cliques no navegador não são

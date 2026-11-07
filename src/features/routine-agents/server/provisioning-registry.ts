@@ -20,14 +20,18 @@ export function isProvisioningInFlight(agentId: string): boolean {
 
 /**
  * Há um provisionamento vivo deste agente em QUALQUER instância (OPE-147)? Neste processo pela
- * memória; noutra (prévia ou Opex original, mesmo banco) pelo batimento gravado no agente. Registros
- * sem batimento contam a partir do início do provisionamento.
+ * memória; noutra (prévia ou Opex original, mesmo banco) pelo batimento gravado no agente, contando
+ * do mais recente entre o batimento e o início do provisionamento.
  */
 export function isProvisioningLive(agent: { _id: unknown; provisioning?: { status?: string; at?: Date | string | null } | null; provisioningBeatAt?: Date | string | null; updatedAt?: Date | string | null }, now = new Date()): boolean {
     if (inFlight.has(String(agent._id))) return true
     const status = agent.provisioning?.status
     if (status !== "running" && status !== "pending") return false
-    return !isBeatStale(agent.provisioningBeatAt ?? agent.provisioning?.at ?? agent.updatedAt, now)
+    // Vale o mais recente entre o batimento e o início: um batimento antigo (de um provisionamento já
+    // terminado) não derruba um "Reprovisionar" recém-iniciado antes do primeiro batimento dele.
+    const times = [agent.provisioningBeatAt, agent.provisioning?.at].filter((value): value is Date | string => Boolean(value)).map((value) => new Date(value).getTime())
+    const latest = times.length ? new Date(Math.max(...times)) : agent.updatedAt
+    return !isBeatStale(latest, now)
 }
 
 /**

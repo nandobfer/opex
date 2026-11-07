@@ -102,6 +102,8 @@ describe('isProvisioningLive', () => {
     expect(isProvisioningLive(running({}), now)).toBe(false)
     expect(isProvisioningLive({ _id: 'ag1', provisioning: { status: 'running', at: new Date(now.getTime() - 60_000) } }, now)).toBe(true)
     expect(isProvisioningLive({ _id: 'ag1', provisioning: { status: 'ok', at: null }, provisioningBeatAt: now }, now)).toBe(false)
+    // Batimento antigo de um provisionamento já terminado não derruba um "Reprovisionar" recém-iniciado.
+    expect(isProvisioningLive({ _id: 'ag1', provisioning: { status: 'running', at: new Date(now.getTime() - 5_000) }, provisioningBeatAt: new Date(now.getTime() - 3 * 86_400_000) }, now)).toBe(true)
     inFlight.set('ag1', new Promise(() => undefined))
     expect(isProvisioningLive(running({}), now)).toBe(true)
   })

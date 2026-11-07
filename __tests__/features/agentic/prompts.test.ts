@@ -76,9 +76,8 @@ describe('mensagens das etapas', () => {
     const remote = previewBuildCommands(scoped, ctx, 4015, { prefix, files: ['docker-compose.yml', '/srv/ca.yml'] })
     expect(remote.command).toBe(`${prefix} PORT=4015 docker compose -p portal-go-dev-12 -f docker-compose.yml -f /srv/ca.yml up -d --build app worker`)
     expect(remote.logs).toBe(`${prefix} docker compose -p portal-go-dev-12 -f docker-compose.yml -f /srv/ca.yml logs --tail 100`)
-    // Builder Machine (prévia no PC): o endereço não é conhecido, vai só a marcação (OPE-147).
-    expect(remote.run).toContain('BUILDKIT_PROGRESS=plain OPEX_PREVIEW=1 DOCKER_CONTEXT=')
-    expect(remote.run).not.toContain('OPEX_PREVIEW_URL')
+    // Builder Machine (prévia no PC): a marcação leva o mesmo endereço que a mesa usa para a prévia (OPE-147).
+    expect(remote.run).toContain("BUILDKIT_PROGRESS=plain OPEX_PREVIEW=1 OPEX_PREVIEW_URL='http://localhost:4015' DOCKER_CONTEXT=")
     const text = buildFixPrompt(scoped, ctx, 4015, { exitCode: 1, tail: '', round: 1, command: previewBuildCommands(scoped, ctx, 4015).command })
     expect(text).toContain('`PORT=4015 docker compose -p portal-go-dev-12 up -d --build app worker`')
     expect(text).toContain('A central sobe só os serviços `app`, `worker` do compose (e as dependências deles): serviços fora dessa lista não entram no build e não precisam ser corrigidos.')

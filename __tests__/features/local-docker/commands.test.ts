@@ -217,7 +217,7 @@ describe('containers e limpeza', () => {
     for (const part of ['rm -f -v $ids', 'volume rm $vols', 'network rm $nets', 'image rm $imgs']) expect(command).toContain(part)
     expect(command).toContain("--filter 'label=com.docker.compose.project=go-sipal-go-dev-717'")
     expect(previewRecreateCommand(settings, { worktreePath: '/w/go-dev-717', composeProject: 'go-sipal-go-dev-717', service: 'app', port: 5003 })).toBe(
-      "cd '/w/go-dev-717' && PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' up -d --force-recreate --no-build 'app'",
+      "cd '/w/go-dev-717' && OPEX_PREVIEW=1 PORT=5003 DOCKER_CONTEXT=opex-local docker compose -p 'go-sipal-go-dev-717' up -d --force-recreate --no-build 'app'",
     )
   })
 
@@ -315,7 +315,9 @@ describe('certificados do PC: override do compose', () => {
   })
 
   it('recriar com os arquivos do build repete os -f; sem a lista, o comando antigo', () => {
-    expect(previewRecreateCommand(settings, { worktreePath: '/w', composeProject: 'p', service: 'app', port: 4001, files: ['compose.yaml', '/h/p.ca.yml'] })).toBe("cd '/w' && PORT=4001 DOCKER_CONTEXT=opex-local docker compose -p 'p' -f 'compose.yaml' -f '/h/p.ca.yml' up -d --force-recreate --no-build 'app'")
+    expect(previewRecreateCommand(settings, { worktreePath: '/w', composeProject: 'p', service: 'app', port: 4001, files: ['compose.yaml', '/h/p.ca.yml'] })).toBe("cd '/w' && OPEX_PREVIEW=1 PORT=4001 DOCKER_CONTEXT=opex-local docker compose -p 'p' -f 'compose.yaml' -f '/h/p.ca.yml' up -d --force-recreate --no-build 'app'")
+    // Recriar mantém a marcação de prévia, com o endereço da prévia quando o host é conhecido (OPE-147).
+    expect(previewRecreateCommand(settings, { worktreePath: '/w', composeProject: 'p', service: 'app', port: 4001, previewHost: '192.168.0.64' })).toContain("&& OPEX_PREVIEW=1 OPEX_PREVIEW_URL='http://192.168.0.64:4001' PORT=4001 DOCKER_CONTEXT=")
     expect(previewRecreateCommand(settings, { worktreePath: '/w', composeProject: 'p', service: 'app', port: 4001, files: [] })).not.toContain(' -f ')
   })
 

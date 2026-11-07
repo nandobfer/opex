@@ -1,6 +1,7 @@
 import type { CiFailure } from "./ci"
 import type { AgentRole } from "./constants"
 import { backupExistsCommand, shellQuote } from "./preview-backup"
+import { previewMarkerEnv } from "@/lib/preview-marker"
 import type { CentralConfig } from "./schemas"
 
 /**
@@ -164,15 +165,7 @@ export interface PreviewBuildCommands {
     logs: string
 }
 
-/**
- * Marcação de prévia (OPE-147) passada ao `docker compose` (que a repassa ao container): o app
- * publicado sabe que é uma prévia (agendador automático desligado, banco compartilhado com o original)
- * e o endereço em que o host o alcança. Na Builder Machine (prévia no PC) o endereço não é conhecido:
- * vai só a marcação. Em projetos que não leem essas variáveis ela não tem efeito.
- */
-export function previewMarkerEnv(host: string | null, port: number): string {
-    return host ? `OPEX_PREVIEW=1 OPEX_PREVIEW_URL=${shellQuote(`http://${host}:${port}`)}` : "OPEX_PREVIEW=1"
-}
+export { previewMarkerEnv } from "@/lib/preview-marker"
 
 /**
  * Comandos do build da prévia Local. `docker.prefix` (Builder Machine) manda todo comando docker para
@@ -191,7 +184,7 @@ export function previewBuildCommands(config: CentralConfig, ctx: WorkbenchContex
     const command = `${prefix}${env.portEnvVar}=${port} docker compose -p ${ctx.composeProject}${file} up -d --build${services}`
     return {
         command,
-        run: `cd ${shellQuote(ctx.worktreePath)} && BUILDKIT_PROGRESS=plain ${previewMarkerEnv(docker ? null : env.previewHost, port)} ${command}`,
+        run: `cd ${shellQuote(ctx.worktreePath)} && BUILDKIT_PROGRESS=plain ${previewMarkerEnv(env.previewHost, port)} ${command}`,
         logs: `${docker ? `${docker.prefix} ` : ""}docker compose -p ${ctx.composeProject}${files ? file : ""} logs --tail 100`,
     }
 }

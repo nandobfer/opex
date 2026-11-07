@@ -198,10 +198,11 @@ ele roda a fila das mesas não inicia, e ao terminar a fila é acionada.
 ### Método da prévia: Local ou GitHub Action
 
 **Marcação de prévia (OPE-147).** Os dois métodos injetam no `docker compose` da publicação
-`OPEX_PREVIEW=1` e `OPEX_PREVIEW_URL=http://<previewHost>:<porta>` (Local: `previewMarkerEnv` no `run`
-de `previewBuildCommands`; na Builder Machine vai só `OPEX_PREVIEW=1`, porque o endereço do PC não é
-conhecido. GitHub Action: o `env` do `compose up` em `scripts/preview-github.ts`). O
-`docker-compose.yml` do Opex repassa as duas ao container (vazias = Opex original). Com a marcação, a
+`OPEX_PREVIEW=1` e `OPEX_PREVIEW_URL=http://<previewHost>:<porta>` — o mesmo endereço que a mesa usa
+para a prévia, inclusive na Builder Machine (`previewMarkerEnv`, `src/lib/preview-marker.ts`; Local: no
+`run` de `previewBuildCommands`; GitHub Action: o `env` do `compose up` em `scripts/preview-github.ts`).
+"Recriar" uma prévia do PC (`previewRecreateCommand`) mantém a marcação, com o host da prévia da central.
+O `docker-compose.yml` do Opex repassa as duas ao container (vazias = Opex original). Com a marcação, a
 prévia do Opex não liga o agendador automático (banco compartilhado com o original; ver
 `modules/integrations.md`, "Crons e agendador interno") e o MCP da execução de um rotineiro aponta para
 ela. Em projetos que não leem essas variáveis a marcação não tem efeito. Prévias de branches antigas,
