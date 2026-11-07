@@ -458,7 +458,9 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   altura disponível da página (`fill`; ver `aicontext/modules/engramind.md`, "Altura"). Acima dela,
   `MemoriesNotices` com `universe` (`outsideForUniverse`: as combinações de canais do próprio consumidor; na
   central, só as que cabem nos canais dela): migração pendente, Engramind indisponível e memórias fora do
-  contexto. `useMemoriesRealtime` continua relendo os metadados.
+  contexto. `useMemoriesRealtime` continua relendo os metadados. O hook otimista antigo das listas
+  (`useMemories`), o `MemoryEditor` e `aiAgentsOfTab` foram removidos com os cards por lista; as rotas
+  `/api/ai/agents/...` seguem para o Agente Opex, os MCPs e o aprendizado autônomo.
 - **Ferramentas de gestão do Agente Opex** (só o dono): `list/get/create/update/delete_agent_memory`,
   com `categoria`, `fixada`, `ativa`, `version`, `centralId`/`clientId`; `list_agent_memories` sem
   `agent` devolve só contagens das listas sem escopo (nas por central/cliente o id é obrigatório, sem

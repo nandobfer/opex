@@ -500,7 +500,7 @@ todos os agentes, inclusive desligados —, e o `app/agente` na dica; agente des
 `app/agente`; memória gravada por um app sem agente: "App `<app>`"; com a origem do Opex, o selo
 "Gravada por …" de sempre; sem autor, nada), idade, relevância (consultas +
 injeções), última vez usada ("nunca usada"), switch **Ativa**, **Fixar/Desafixar**, **Editar** (o
-`MemoryEditor` num diálogo; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
+`MemoryEditorDialog` da lib; `update_memory` com `expected_version`: conflito mostra "Esta memória mudou
 enquanto você editava. Confira a versão atual.", mantém o rascunho e relê a memória: o próximo Salvar usa a versão atual), **Mover de canal**, **Histórico**
 (com Reverter) e **Excluir** (confirmação). O card só abre a partir do zoom 0,6 (`CARD_MIN_ZOOM`); com
 zoom afastado os rótulos somem. Memória aberta que some por outra origem: o card fecha com toast e a
