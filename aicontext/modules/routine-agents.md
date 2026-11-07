@@ -306,7 +306,11 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   desativado com o motivo; uma execução já na fila com esse snapshot termina em Erro sem chamar o modelo.
 - **Entradas do dono** (não é chat): texto + destino "Este agente"/"Todos os rotineiros"; cada entrada
   grava uma memória (`routine_entries` guarda o histórico); vazio é recusado e, com o Engramind fora
-  do ar, o toast de erro mantém o texto no campo.
+  do ar, o toast de erro mantém o texto no campo. A aba Entradas de um agente lista as entradas dele
+  **e** as de destino "Todos os rotineiros" gravadas em qualquer agente (OPE-149; `agentId` só registra
+  quem criou, sem duplicatas, mais recentes primeiro, até 200); a global aparece com o rótulo em destaque
+  e o canal `agentes/rotineiros/global`, e "Este agente" só aparece no agente dono. O evento
+  `routine-agent-updated` refaz as listas de entradas montadas.
 - Toast em qualquer tela (`useRoutineAttentionToasts`, no `AppLayoutShell`): confirmação pendente e
   fim da execução, com **"Abrir execução"**.
 

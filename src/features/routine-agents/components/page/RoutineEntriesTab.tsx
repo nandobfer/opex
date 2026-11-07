@@ -61,7 +61,7 @@ export function RoutineEntriesTab({ agentId }: { agentId: string }) {
             ) : entries.isError ? (
                 <ErrorState title="Não foi possível carregar as entradas" description={apiErrorMessage(entries.error, "Tente novamente.")} onRetry={() => void entries.refetch()} />
             ) : !entries.data?.length ? (
-                <EmptyState icon={NotebookPen} title="Nenhuma entrada" description="As entradas gravadas aparecem aqui, as mais recentes primeiro." />
+                <EmptyState icon={NotebookPen} title="Nenhuma entrada" description="As entradas deste agente e as de “Todos os rotineiros” aparecem aqui, as mais recentes primeiro." />
             ) : (
                 <ul className="space-y-2" aria-label="Entradas gravadas">
                     <AnimatePresence initial={false}>
@@ -69,7 +69,7 @@ export function RoutineEntriesTab({ agentId }: { agentId: string }) {
                             <motion.li key={entry.id} initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }} className="rounded-lg border bg-card p-3">
                                 <p className="whitespace-pre-wrap text-sm">{entry.text}</p>
                                 <p className="mt-1 text-[11px] text-muted-foreground">
-                                    {ROUTINE_ENTRY_TARGET_LABELS[entry.target]} · <code>{entry.channel}</code> · {formatDateTime(entry.createdAt)}
+                                    <span className={entry.target === "global" ? "font-medium text-primary" : undefined}>{ROUTINE_ENTRY_TARGET_LABELS[entry.target]}</span> · <code>{entry.channel}</code> · {formatDateTime(entry.createdAt)}
                                 </p>
                             </motion.li>
                         ))}

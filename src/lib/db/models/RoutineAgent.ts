@@ -231,6 +231,8 @@ const RoutineEntrySchema = new Schema<IRoutineEntry>(
     { collection: "routine_entries", versionKey: false, timestamps: { createdAt: true, updatedAt: false } },
 )
 RoutineEntrySchema.index({ agentId: 1, createdAt: -1 })
+// Ramo global da listagem de entradas (OPE-149): `target: "global"` de qualquer agente, mais recentes primeiro.
+RoutineEntrySchema.index({ target: 1, createdAt: -1 })
 
 /** Segredo do agente rotineiro (OPE-130, D5): o valor só entra (cifrado) e nunca sai pela API. */
 export interface IRoutineAgentSecret {

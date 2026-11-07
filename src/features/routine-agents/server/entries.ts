@@ -9,11 +9,14 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated
  * Entradas do dono (OPE-130, não é chat): cada entrada grava **uma memória** no canal escolhido — "Este
  * agente" (`agentes/rotineiros/<slug>`) ou "Todos os rotineiros" (`agentes/rotineiros/global`) — e as
  * próximas execuções passam a considerá-la. Editar ou arquivar é na aba Memórias.
+ *
+ * A listagem de um agente traz as entradas dele **e** as globais de qualquer agente (OPE-149): o `agentId`
+ * do documento só registra quem criou, e a entrada global vale para todos os rotineiros.
  */
 
 export async function listRoutineEntries(agentId: string): Promise<RoutineEntryDto[]> {
     const agent = await loadAgentDoc(agentId)
-    const rows = await RoutineEntry.find({ agentId: agent._id }).sort({ createdAt: -1 }).limit(200).lean()
+    const rows = await RoutineEntry.find({ $or: [{ agentId: agent._id }, { target: "global" }] }).sort({ createdAt: -1 }).limit(200).lean()
     return rows.map((row) => ({ id: String(row._id), target: row.target, channel: row.channel, text: row.text, memoryId: row.memoryId ?? null, createdAt: new Date(row.createdAt).toISOString() }))
 }
 

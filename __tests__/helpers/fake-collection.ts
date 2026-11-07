@@ -1,6 +1,6 @@
 /**
  * Coleção Mongoose em memória para testes de serviço (só o que os serviços usam): filtros com
- * igualdade, caminho com ponto, `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`; `deleteOne`/`deleteMany`/`updateMany`; cadeias
+ * igualdade, caminho com ponto, `$or`/`$and` (no nível de cima do filtro), `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`; `deleteOne`/`deleteMany`/`updateMany`; cadeias
  * `select/sort/skip/limit/lean`. Ids são strings de 24 hex (o `_id` vira objeto com `toString`).
  */
 
@@ -51,7 +51,12 @@ function matchValue(actual: unknown, cond: unknown): boolean {
     return eq(actual, cond)
 }
 
-export const matches = (doc: Record<string, unknown>, filter: Record<string, unknown> = {}) => Object.entries(filter).every(([path, cond]) => matchValue(get(doc, path), cond))
+export const matches = (doc: Record<string, unknown>, filter: Record<string, unknown> = {}): boolean =>
+    Object.entries(filter).every(([path, cond]) => {
+        if (path === '$or') return (cond as Record<string, unknown>[]).some((part) => matches(doc, part))
+        if (path === '$and') return (cond as Record<string, unknown>[]).every((part) => matches(doc, part))
+        return matchValue(get(doc, path), cond)
+    })
 
 function set(doc: Record<string, unknown>, path: string, value: unknown) {
     const keys = path.split('.')
