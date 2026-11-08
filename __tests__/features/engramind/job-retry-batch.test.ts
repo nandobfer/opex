@@ -42,6 +42,16 @@ describe("collectFailedJobIds", () => {
         expect(fetchPage.mock.calls[0][0]).not.toHaveProperty("kind")
     })
 
+    it("sinal abortado encerra a coleta sem novas páginas", async () => {
+        const controller = new AbortController()
+        const fetchPage = vi.fn<FetchJobsPage>(async () => {
+            controller.abort()
+            return { jobs: [{ id: 1 }], next_cursor: "c1" }
+        })
+        await collectFailedJobIds(fetchPage, { signal: controller.signal })
+        expect(fetchPage).toHaveBeenCalledTimes(1)
+    })
+
     it("cursor repetido encerra a coleta (sem loop infinito)", async () => {
         const fetchPage = vi.fn<FetchJobsPage>(async () => ({ jobs: [{ id: 7 }], next_cursor: "same" }))
         const result = await collectFailedJobIds(fetchPage)
@@ -58,6 +68,12 @@ describe("isBatchFatalError", () => {
         expect(isBatchFatalError(apiError(409, "ENGRAMIND_AUTH_INVALID"))).toBe(true)
         expect(isBatchFatalError(apiError(429, "ENGRAMIND_RATE_LIMITED"))).toBe(true)
         expect(isBatchFatalError(apiError(409, "ENGRAMIND_JOB_NOT_RETRYABLE"))).toBe(false)
+    })
+
+    it("sessão do Opex expirada (401/403 sem código) e 429 sem código interrompem", () => {
+        expect(isBatchFatalError(apiError(401))).toBe(true)
+        expect(isBatchFatalError(apiError(403))).toBe(true)
+        expect(isBatchFatalError(apiError(429))).toBe(true)
         expect(isBatchFatalError(apiError(404, "ENGRAMIND_NOT_FOUND"))).toBe(false)
     })
 })
@@ -85,6 +101,17 @@ describe("runRetryBatch", () => {
         expect(result).toMatchObject({ total: 4, succeeded: 1, failed: [], aborted: { message: "Engramind fora do ar" } })
     })
 
+    it("cancelado pelo sinal: para de puxar ids e marca cancelled", async () => {
+        const controller = new AbortController()
+        const retry = vi.fn(async (id: string) => {
+            if (id === "2") controller.abort()
+        })
+        const result = await runRetryBatch(["1", "2", "3", "4"], retry, { concurrency: 1, signal: controller.signal })
+        expect(retry).toHaveBeenCalledTimes(2)
+        expect(result).toMatchObject({ succeeded: 2, cancelled: true, aborted: null })
+        expect(summarizeRetryBatch(result)).toMatchObject({ tone: "warning", title: "Lote interrompido após 2 de 4" })
+    })
+
     it("respeita a concorrência máxima", async () => {
         let active = 0
         let peak = 0
@@ -102,14 +129,14 @@ describe("runRetryBatch", () => {
 
 describe("summarizeRetryBatch", () => {
     it("sucesso total", () => {
-        expect(summarizeRetryBatch({ total: 12, succeeded: 12, failed: [], aborted: null })).toEqual({ tone: "success", title: "12 de 12 jobs recolocados na fila" })
+        expect(summarizeRetryBatch({ total: 12, succeeded: 12, failed: [], aborted: null, cancelled: false })).toEqual({ tone: "success", title: "12 de 12 jobs recolocados na fila" })
     })
     it("parcial agrupa os motivos", () => {
-        const summary = summarizeRetryBatch({ total: 37, succeeded: 35, failed: [{ id: "a", message: "Só jobs failed voltam para a fila." }, { id: "b", message: "Só jobs failed voltam para a fila." }], aborted: null })
+        const summary = summarizeRetryBatch({ total: 37, succeeded: 35, failed: [{ id: "a", message: "Só jobs failed voltam para a fila." }, { id: "b", message: "Só jobs failed voltam para a fila." }], aborted: null, cancelled: false })
         expect(summary).toEqual({ tone: "warning", title: "35 de 37 jobs recolocados na fila", description: "2 falharam: Só jobs failed voltam para a fila. (2)" })
     })
     it("interrompido traz a mensagem da API", () => {
-        const summary = summarizeRetryBatch({ total: 37, succeeded: 10, failed: [], aborted: { message: "Engramind fora do ar" } })
+        const summary = summarizeRetryBatch({ total: 37, succeeded: 10, failed: [], aborted: { message: "Engramind fora do ar" }, cancelled: false })
         expect(summary.tone).toBe("error")
         expect(summary.title).toBe("Lote interrompido após 10 de 37")
         expect(summary.description).toContain("Engramind fora do ar")

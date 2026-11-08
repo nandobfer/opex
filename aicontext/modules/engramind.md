@@ -100,7 +100,13 @@ individual (`/api/engramind/jobs/:job/retry`).
   individual das linhas fica bloqueado durante o lote.
 - **Resumo** em toast: "12 de 12 jobs recolocados na fila" (sucesso), parcial com os motivos agrupados
   (aviso) ou "Lote interrompido após N de M" (erro). No fim, invalida `jobs` e `status`.
-- Sair da tela no meio do lote o interrompe; os já retentados continuam na fila.
+- Sair da tela no meio do lote (o card desmonta) o interrompe de fato: um `AbortController` do hook,
+  acionado na limpeza do `useEffect`, faz a coleta e os workers pararem de puxar ids (os em andamento
+  terminam). Os já retentados continuam na fila e o toast avisa "Lote interrompido após N de M". Ao voltar,
+  não há lote em segundo plano concorrendo com um novo.
+- Sessão do Opex expirada ou sem acesso (401/403) e 429 também interrompem o lote.
+- Se a consulta leve dos falhos falhar, o botão **não** afirma que não há falhos: fica liberado e o clique
+  mostra o erro real da listagem.
 - **Sem ferramenta em lote no Agente Opex**: o catálogo `operations.ts` liga uma operação a uma única
   requisição ao Engramind (rota proxy, ferramenta e serviço). O agente faz o mesmo com
   `list_engramind_jobs` (`state: failed`) + `retry_engramind_job`.

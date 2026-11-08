@@ -26,12 +26,13 @@ export interface JobsPage {
 export type FetchJobsPage = (params: { state: "failed"; kind?: string; limit: number; cursor?: string }) => Promise<JobsPage>
 
 /** Todos os ids `failed` do escopo, página a página, com limite defensivo e trava contra cursor repetido. */
-export async function collectFailedJobIds(fetchPage: FetchJobsPage, options: { kind?: string; max?: number } = {}): Promise<{ ids: string[]; truncated: boolean }> {
+export async function collectFailedJobIds(fetchPage: FetchJobsPage, options: { kind?: string; max?: number; signal?: AbortSignal } = {}): Promise<{ ids: string[]; truncated: boolean }> {
     const max = options.max ?? RETRY_BATCH_MAX
     const ids = new Set<string>()
     const seen = new Set<string>()
     let cursor: string | undefined
     for (;;) {
+        if (options.signal?.aborted) return { ids: [...ids], truncated: false }
         const page = await fetchPage({ state: "failed", ...(options.kind ? { kind: options.kind } : {}), limit: RETRY_BATCH_PAGE_SIZE, ...(cursor ? { cursor } : {}) })
         for (const job of page.jobs ?? []) {
             if (ids.size >= max) return { ids: [...ids], truncated: true }
@@ -55,11 +56,15 @@ const FATAL_CODES = new Set([
     "ENGRAMIND_RATE_LIMITED",
 ])
 
-/** Erro que interrompe o lote (rede, 5xx, conexão/token, limite de requisições); o resto é falha do job. */
+/**
+ * Erro que interrompe o lote (rede, 5xx, sessão do Opex expirada ou sem acesso — 401/403 —, limite de
+ * requisições — 429 —, conexão/token do Engramind); o resto é falha do job.
+ */
 export function isBatchFatalError(error: unknown): boolean {
     if (!axios.isAxiosError(error)) return true
     if (!error.response) return true
-    if (error.response.status >= 500) return true
+    const { status } = error.response
+    if (status >= 500 || status === 401 || status === 403 || status === 429) return true
     const code = (error.response.data as { code?: string } | undefined)?.code
     return Boolean(code && FATAL_CODES.has(code))
 }
@@ -79,6 +84,8 @@ export interface RetryBatchResult {
     succeeded: number
     failed: { id: string; message: string }[]
     aborted: { message: string } | null
+    /** O lote foi cancelado (ex.: o card saiu da tela) antes de retentar todos os ids. */
+    cancelled: boolean
 }
 
 export interface RunRetryBatchOptions {
@@ -86,16 +93,22 @@ export interface RunRetryBatchOptions {
     onProgress?: (done: number, total: number) => void
     isFatal?: (error: unknown) => boolean
     messageOf?: (error: unknown) => string
+    /** Cancela o lote: nenhum id novo é puxado (os em andamento terminam). */
+    signal?: AbortSignal
 }
 
 /** Retenta os ids com concorrência baixa; falha de job segue, erro fatal para de puxar ids novos. */
 export async function runRetryBatch(ids: readonly string[], retryOne: (id: string) => Promise<unknown>, options: RunRetryBatchOptions = {}): Promise<RetryBatchResult> {
-    const { concurrency = RETRY_BATCH_CONCURRENCY, onProgress, isFatal = isBatchFatalError, messageOf = retryErrorMessage } = options
-    const result: RetryBatchResult = { total: ids.length, succeeded: 0, failed: [], aborted: null }
+    const { concurrency = RETRY_BATCH_CONCURRENCY, onProgress, isFatal = isBatchFatalError, messageOf = retryErrorMessage, signal } = options
+    const result: RetryBatchResult = { total: ids.length, succeeded: 0, failed: [], aborted: null, cancelled: false }
     let next = 0
     let done = 0
     const worker = async () => {
         while (!result.aborted && next < ids.length) {
+            if (signal?.aborted) {
+                result.cancelled = true
+                return
+            }
             const id = ids[next++]
             try {
                 await retryOne(id)
@@ -132,6 +145,9 @@ export function summarizeRetryBatch(result: RetryBatchResult): RetryBatchSummary
     const recolocados = `${result.succeeded} de ${plural(result.total, "job recolocado", "jobs recolocados")} na fila`
     if (result.aborted) {
         return { tone: "error", title: `Lote interrompido após ${result.succeeded + result.failed.length} de ${result.total}`, description: [result.aborted.message, result.succeeded ? `${recolocados}.` : null].filter(Boolean).join(" ") }
+    }
+    if (result.cancelled) {
+        return { tone: "warning", title: `Lote interrompido após ${result.succeeded + result.failed.length} de ${result.total}`, description: `O card Jobs saiu da tela. ${recolocados}.` }
     }
     if (result.failed.length === 0) return { tone: "success", title: recolocados }
     return { tone: result.succeeded ? "warning" : "error", title: recolocados, description: `${plural(result.failed.length, "falhou", "falharam")}: ${reasonText}` }
