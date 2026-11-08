@@ -41,6 +41,9 @@ vi.mock('@/features/engramind/hooks/useEngramind', async (original) => ({
     isPending: false,
   }),
 }))
+vi.mock('@/features/engramind/hooks/useRetryFailedJobs', () => ({
+  useRetryFailedJobs: () => ({ blockedReason: 'Não há jobs falhos com esses filtros.', phase: 'idle', progress: { done: 0, total: 0 }, targets: { ids: [], truncated: false }, running: false, start: vi.fn(), confirm: vi.fn(), cancel: vi.fn() }),
+}))
 vi.mock('@/features/engramind/hooks/useEngramindConnection', () => ({
   useEngramindConnection: () => ({ data: mocks.connection, isLoading: false, isError: false, error: null, refetch: vi.fn() }),
   useEngramindEnvironmentOptions: () => ({ data: [] }),

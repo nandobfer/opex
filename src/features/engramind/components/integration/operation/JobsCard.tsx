@@ -16,15 +16,18 @@ import { LoadMore } from "../../shared/LoadMore"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { ListSkeleton } from "../../shared/ListSkeleton"
 import { Section } from "../../shared/Section"
+import { useRetryFailedJobs } from "../../../hooks/useRetryFailedJobs"
+import { RetryFailedJobsButton } from "./RetryFailedJobsButton"
 
-/** Jobs da fila (redact, embed, webhook) com filtro por tipo e estado e "Retentar" nos falhos. */
+/** Jobs da fila (redact, embed, webhook) com filtro por tipo e estado, "Retentar" nos falhos e "Retentar todos" (lote). */
 export function JobsCard() {
     const [kind, setKind] = useState<string | undefined>(undefined)
     const [state, setState] = useState<string | undefined>(undefined)
     const jobs = useEngramindList<EngramindJob>("jobs", "jobs", { kind, state })
     const retry = useEngramindMutation((id: string) => engramindSend("post", route("jobs", id, "retry"), {}), { invalidate: ["jobs", "status"], success: "Job recolocado na fila" })
+    const batch = useRetryFailedJobs({ kind, state })
     return (
-        <Section title="Jobs" info="Trabalho assíncrono do Engramind, numa fila em tabela (sem broker).">
+        <Section title="Jobs" info="Trabalho assíncrono do Engramind, numa fila em tabela (sem broker)." actions={<RetryFailedJobsButton batch={batch} />}>
             <div className="grid gap-2 sm:grid-cols-2">
                 <FilterSelect id="jobs-kind" label="Tipo" value={kind} options={JOB_KINDS} onChange={setKind} help={JOB_KIND_HELP} />
                 <FilterSelect id="jobs-state" label="Estado" value={state} options={JOB_STATES} onChange={setState} help={JOB_STATE_HELP} />
@@ -48,7 +51,7 @@ export function JobsCard() {
                                     <span className="text-muted-foreground">{job.attempts} tentativa(s) · {formatDateTime(job.created_at)}</span>
                                     {job.last_error && <span className="w-full text-destructive">{job.last_error}</span>}
                                     {job.state === "failed" && (
-                                        <TooltipIconButton label="Retentar job" tooltip="Recoloca na fila com as tentativas zeradas" onClick={() => retry.mutate(String(job.id))} className="ml-auto">
+                                        <TooltipIconButton label="Retentar job" tooltip="Recoloca na fila com as tentativas zeradas" disabledReason={batch.running ? "Aguarde o fim do lote." : null} onClick={() => retry.mutate(String(job.id))} className="ml-auto">
                                             <RotateCw aria-hidden />
                                         </TooltipIconButton>
                                     )}

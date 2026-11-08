@@ -75,8 +75,35 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Visualização | Layout dos universos de memórias (OPE-142; ver "Aba Visualização"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
 | Identidades | Apps (criar, editar com webhook, desativar/reativar, excluir), Agentes (idem, com as assinaturas só para leitura) e Tokens (prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso; Emitir com o segredo **uma única vez** + Copiar; Editar; Revogar com confirmação). O token e o app do próprio Opex aparecem marcados ("Este Opex"). A proteção vale também no servidor (proxy e agente, `guardOwnToken` com o `whoami` atual): o token não é revogado, rebaixado nem ganha validade (`expires_at`), e o app não é desativado nem excluído (`409 ENGRAMIND_OWN_TOKEN`). |
-| Operação | Status (versão, banco, backup, identidades, fila, Redator, embeddings, webhooks, retenção), Jobs (filtro por tipo/estado, Retentar nos `failed`), Chamadas ao LLM (finalidade, desde), Consumo (agrupamento e período) e Auditoria (entidade, ação e período). Listas paginadas por cursor ("Carregar mais") e virtualizadas acima de 50. |
+| Operação | Status (versão, banco, backup, identidades, fila, Redator, embeddings, webhooks, retenção), Jobs (filtro por tipo/estado, Retentar nos `failed` e **Retentar todos** em lote — ver "Retentar todos os jobs falhos"), Chamadas ao LLM (finalidade, desde), Consumo (agrupamento e período) e Auditoria (entidade, ação e período). Listas paginadas por cursor ("Carregar mais") e virtualizadas acima de 50. |
 | Variáveis de ambiente | Ver abaixo. |
+
+### Retentar todos os jobs falhos (OPE-150)
+
+O card Jobs da aba Operação tem, à direita do título, o botão **Retentar todos** (`RetryFailedJobsButton`,
+estado em `hooks/useRetryFailedJobs.ts`, regras puras em `job-retry-batch.ts`). O Engramind só tem retry por
+job (`POST /v1/jobs/{job}/retry`), então o lote é orquestrado no navegador pelo mesmo endpoint do retry
+individual (`/api/engramind/jobs/:job/retry`).
+
+- **Escopo**: respeita os filtros da tela. Estado vazio ou `failed` → todos os `failed` do tipo filtrado
+  (`kind`, quando houver); estado `queued`/`running`/`done` → botão bloqueado com o motivo na dica. Sem
+  nenhum `failed` no escopo (consulta leve `jobs?state=failed&limit=1`), bloqueado com "Não há jobs falhos
+  com esses filtros.". O tempo real (`jobs.updated`) atualiza o estado do botão.
+- **Coleta**: o clique lê a listagem inteira (`state=failed`, 200 por página, `next_cursor` até acabar),
+  sem duplicar ids, com limite defensivo de 5.000 (`RETRY_BATCH_MAX`, avisado na confirmação: "serão
+  retentados os 5.000 mais recentes") e parada se o cursor se repetir.
+- **Confirmação** com a contagem exata ("Recolocar 37 jobs falhos na fila?").
+- **Execução** com concorrência 4, progresso no botão e no diálogo ("Retentando 12/37…"). Falha de um job
+  (ex.: `JOB_NOT_RETRYABLE`, 404) é registrada e o lote segue; rede, 5xx, `UNREACHABLE`, `NOT_CONFIGURED`,
+  `AUTH_INVALID`/`SCOPE_REQUIRED`/`TOKEN_INSUFFICIENT`, `PROXY_MASKED` e `RATE_LIMITED` interrompem o lote
+  (os em andamento terminam) com a mensagem da API. Uma ref impede dois lotes por clique duplo, e o retry
+  individual das linhas fica bloqueado durante o lote.
+- **Resumo** em toast: "12 de 12 jobs recolocados na fila" (sucesso), parcial com os motivos agrupados
+  (aviso) ou "Lote interrompido após N de M" (erro). No fim, invalida `jobs` e `status`.
+- Sair da tela no meio do lote o interrompe; os já retentados continuam na fila.
+- **Sem ferramenta em lote no Agente Opex**: o catálogo `operations.ts` liga uma operação a uma única
+  requisição ao Engramind (rota proxy, ferramenta e serviço). O agente faz o mesmo com
+  `list_engramind_jobs` (`state: failed`) + `retry_engramind_job`.
 
 ### IA do Opex (aba Provedores)
 
