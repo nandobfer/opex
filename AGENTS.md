@@ -430,15 +430,16 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 
 - Copie `.env.example` para `.env` e preencha (`INTEGRATIONS_ENCRYPTION_KEY`: `openssl rand -base64 32`).
 - O `.env` é escrito para o **Docker rootless** desta máquina: o Mongo é o container `mongodb`
-  (rede `mongodb-network`) e o Soketi é o container `soketi` (rede `soketi-network`). Para
+  (rede `mongodb-network`), o Soketi é o container `soketi` (rede `soketi-network`) e o MinIO
+  (Storage S3) é o container `minio` (rede `minio-network`, Endpoint `http://minio:9000`). Para
   `pnpm dev` fora do Docker, troque esses hosts por `localhost`. A URL pública do Pusher
   (`NEXT_PUBLIC_PUSHER_URL` / "URL pública do cliente") é o endereço que o **navegador** alcança:
   abrindo o app de outra máquina, use o IP do servidor (ex.: `ws://192.168.0.64:6001`), nunca
   `localhost`.
 - Local: `pnpm dev` (porta `PORT`, padrão 3100) com um MongoDB acessível em `MONGODB_URI`.
 - Docker (rootless): `docker compose --profile dev up app-dev --watch` (desenvolvimento) ou
-  `docker compose up -d app` (imagem standalone). As redes externas são `mongodb-network` e
-  `soketi-network` (o build sai pela rede do host); a porta é publicada no host.
+  `docker compose up -d app` (imagem standalone). As redes externas são `mongodb-network`,
+  `soketi-network` e `minio-network` (o build sai pela rede do host); a porta é publicada no host.
 - Ao criar um `git worktree`: copie o `.env` do repositório principal; **nunca** crie symlink do
   `node_modules` (rode `pnpm install` no worktree).
 
