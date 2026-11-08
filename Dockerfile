@@ -48,6 +48,8 @@ ENV NEXT_PUBLIC_PUSHER_URL=$NEXT_PUBLIC_PUSHER_URL
 # Placeholders de build: evitam exigir segredos reais na imagem.
 ENV MONGODB_URI="mongodb://localhost:27017/dummy"
 ENV NEXT_TELEMETRY_DISABLED=1
+# O type check do next build passa do heap padrão do Node (~2 GB) e morre por falta de memória.
+ENV NODE_OPTIONS=--max-old-space-size=4096
 
 RUN pnpm run build
 
