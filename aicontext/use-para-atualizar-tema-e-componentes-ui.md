@@ -91,6 +91,18 @@ fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hoo
 `useDialogPresence` e `useCreateDialogAction` (`src/hooks/`). Animações de diálogo e abas:
 `src/components/motion/dialog-panel-motion.ts` e `tab-motion.ts`.
 
+### Recursos instaláveis (`src/components/resources/`) e listas de liberação
+
+Extraídos da aba de recursos do OpenCode (OPE-153) e usados também pelas Skills do Agente Opex:
+`ResourceListCard` (cabeçalho com contador e ações, busca por nome com fuse.js, filtro de situação em
+`OptionTabs`, lista virtualizada acima de 50 e os estados carregando/vazio com ações/erro com Tentar
+novamente; campo extra ao lado da busca pelo `toolbar`), `ResourceListSkeleton`, `ResourceRowFrame` +
+`ResourceVersionText` (nome, selos, descrição, switch e menu de ações; destrutivas depois de um
+separador), `MarkdownResourceFields` (nome, descrição e corpo em Markdown dentro de um formulário RHF de
+quem chama) e `ResourceSourceField` (origem da instalação). Liberar itens a um agente (skills, MCPs do
+host) usa `SearchableCheckList` (`src/components/ui/check-list/`): switches com busca, virtualização e
+as chaves salvas que sumiram da origem marcadas, sem bloquear o salvamento.
+
 ### Anexos em campos de mensagem (`src/components/chat-attachments/`)
 
 Kit compartilhado pelo chat do Agente Opex e pelos campos da mesa de trabalho: `AttachButton` (clipe +

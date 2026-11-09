@@ -182,7 +182,8 @@ sem pedido explícito.
 - Agente Opex: `opex-session-updated` / `opex-session-deleted` em `private-app` (dono) ou no canal
   `private-opex-{clientId}-{userId}` (payload `{ id }`); a resposta ao vivo do chat vai por NDJSON
   (`GET /api/opex/sessions/[id]/stream`), não pelo Pusher. MCPs do agente: `opex-mcp-updated`
-  (`{ id }`) em `private-app`.
+  (`{ id }`) em `private-app`. Skills do agente (OPE-153): `opex-skills-updated` (`{ id, action }`) em
+  `private-app`.
 - Agente Maddox: `maddox-session-updated` / `maddox-session-deleted` nos mesmos canais das sessões do
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
