@@ -7,7 +7,7 @@ export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
 /**
- * GET /api/ai/providers/[provider]/usage — consumo medido de Gemini, Anthropic, OpenAI e DeepSeek
+ * GET /api/ai/providers/[provider]/usage — consumo medido de Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go
  * por recurso (feature ou agente), com `from`/`to` ISO opcionais. Sessão interna; não é endpoint
  * público por token. OpenCode e JEV têm rotas próprias, com o painel completo de cada um.
  */

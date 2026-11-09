@@ -23,15 +23,33 @@ const PROVIDER_KINDS: Record<OpexProviderId, ReadonlySet<OpexFileKind>> = {
     anthropic: new Set(["image", "pdf"]),
     openai: new Set(["image", "pdf"]),
     deepseek: new Set(),
+    // Por modelo: os tipos aceitos vêm do catálogo do Go (`opencodeGoFileKinds`); sem catálogo, só texto.
+    "opencode-go": new Set(),
 }
 
 /**
- * Entrega do arquivo ao modelo. Arquivos acima do teto (`OPEX_FILE_CONTENT_MAX_BYTES` para conteúdo,
+ * Tipos que um modelo do OpenCode Go lê como conteúdo, pelos tipos de entrada do catálogo
+ * (`image/png`, `application/pdf`, `audio/*`, `video/*` ou só a família). Texto vai sempre inline.
+ */
+export function opencodeGoFileKinds(inputModalities: readonly string[] | null | undefined): ReadonlySet<OpexFileKind> {
+    const kinds = new Set<OpexFileKind>()
+    for (const raw of inputModalities ?? []) {
+        const modality = raw.trim().toLowerCase()
+        if (modality === "image" || modality.startsWith("image/")) kinds.add("image")
+        else if (modality === "pdf" || modality === "application/pdf") kinds.add("pdf")
+        else if (modality === "audio" || modality.startsWith("audio/")) kinds.add("audio")
+        else if (modality === "video" || modality.startsWith("video/")) kinds.add("video")
+    }
+    return kinds
+}
+
+/**
+ * Entrega do arquivo ao modelo (`accepted` troca os tipos do provedor pelos do modelo, no OpenCode Go). Arquivos acima do teto (`OPEX_FILE_CONTENT_MAX_BYTES` para conteúdo,
  * `OPEX_FILE_TEXT_MAX_BYTES` para texto) não são baixados do storage no turno: vão só como referência.
  */
-export function opexFileDelivery(provider: OpexProviderId, kind: OpexFileKind, size = 0): OpexFileDelivery {
+export function opexFileDelivery(provider: OpexProviderId, kind: OpexFileKind, size = 0, accepted?: ReadonlySet<OpexFileKind>): OpexFileDelivery {
     if (kind === "text") return size > OPEX_FILE_TEXT_MAX_BYTES ? "reference" : "inline-text"
-    if (!PROVIDER_KINDS[provider].has(kind)) return "reference"
+    if (!(accepted ?? PROVIDER_KINDS[provider]).has(kind)) return "reference"
     return size > OPEX_FILE_CONTENT_MAX_BYTES ? "reference" : "content"
 }
 

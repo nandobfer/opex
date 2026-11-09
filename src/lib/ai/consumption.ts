@@ -3,6 +3,7 @@ import { AiConsumption } from "@/lib/db/models/AiConsumption"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_CONSUMPTION_UPDATED_EVENT } from "./consumption-events"
+import type { AiBilling } from "./provider-cost"
 
 /**
  * Registro do **consumo de IA prospectivo** (painel de consumo dos provedores). Uma linha por etapa/
@@ -25,6 +26,8 @@ export interface AiConsumptionInput {
     costUsd: number | null
     /** Chave de API usada (provedores diretos, OPE-155); `null`/ausente = sem chave identificada. */
     apiKeyId?: string | null
+    /** Detalhe da cobrança do OpenCode Go (cota, preço de tabela e origem). */
+    billing?: AiBilling | null
 }
 
 export async function recordAiConsumption(input: AiConsumptionInput): Promise<void> {
@@ -43,6 +46,7 @@ export async function recordAiConsumption(input: AiConsumptionInput): Promise<vo
                     totalTokens: input.totalTokens,
                     costUsd: input.costUsd,
                     apiKeyId: input.apiKeyId ?? null,
+                    billing: input.billing ?? null,
                     createdAt: new Date(),
                 },
             },

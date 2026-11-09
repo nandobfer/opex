@@ -3,11 +3,14 @@ import { randomUUID } from "node:crypto"
 import { loggerFor } from "@/lib/logger"
 import { getAiProvider, isAiReasoningLevel, type AiProviderId } from "./providers"
 import { AiProviderError } from "./errors"
+import { opencodeGoStatusMessage } from "./opencode-go-errors"
 import { recordAiConsumption } from "./consumption"
+import { addStepCost, opencodeSessionStepCost, type AiStepCost } from "./provider-cost"
+import { isOpencodeGoReasoningLevel } from "./opencode-go-models"
 
 /**
  * Geração em streaming pela Vercel AI SDK — SOMENTE servidor. Ponto único das features: nenhuma
- * feature fala com OpenCode, Gemini, Anthropic, OpenAI ou DeepSeek diretamente.
+ * feature fala com OpenCode, Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go diretamente.
  */
 
 export interface AiStreamRequest {
@@ -15,7 +18,7 @@ export interface AiStreamRequest {
     model: string
     instructions: string
     prompt: string
-    /** OpenCode: variante do modelo; Gemini: nível de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio. */
+    /** OpenCode: variante do modelo; Gemini: nível de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio; OpenCode Go: esforço do modelo. */
     variant?: string | null
     /** Só OpenCode. */
     agent?: string | null
@@ -24,6 +27,8 @@ export interface AiStreamRequest {
     maxOutputTokens?: number | null
     /** Título da sessão criada no OpenCode. */
     title?: string
+    /** OpenCode Go: id estável da conversa (`x-opencode-session`); ausente = um id novo por geração. */
+    session?: string | null
     signal?: AbortSignal
     /** Contexto do painel de consumo: origem (feature) e referência. Ausente = não medir. */
     consumption?: { origin: string; subject?: string | null }
@@ -33,7 +38,7 @@ export interface AiUsage {
     inputTokens: number | null
     outputTokens: number | null
     totalTokens: number | null
-    /** Custo em USD informado pelo provedor (OpenCode). */
+    /** Custo em USD informado pelo provedor (OpenCode; OpenCode Go = cobrado + cota). */
     costUsd: number | null
 }
 
@@ -57,10 +62,13 @@ export interface PreparedModel {
     reasoning?: StreamTextOptions["reasoning"]
     /** Chave de API usada (provedores diretos, OPE-155); `null` no OpenCode. O consumo é atribuído a ela. */
     apiKeyId: string | null
+    /** Custo do passo informado pelo provedor; lê e zera o que foi medido desde a última leitura. */
+    takeStepCost: (providerMetadata: unknown) => AiStepCost | null
     dispose: () => Promise<void>
 }
 
 const noDispose = async () => {}
+const noCost = () => null
 
 /**
  * Provedores diretos por API key: a AI SDK traduz o `reasoning` para cada um. Os clientes entram
@@ -74,7 +82,7 @@ const DIRECT_PROVIDERS = {
 } as const satisfies Partial<Record<AiProviderId, () => Promise<{ provider: (modelId: string) => LanguageModel; apiKeyId: string }>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
-export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title">): Promise<PreparedModel> {
+export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "session" | "signal">): Promise<PreparedModel> {
     if (request.provider === "opencode") {
         const { createOpencodeProvider } = await import("./opencode")
         const { provider, directory } = await createOpencodeProvider()
@@ -88,7 +96,7 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
             formPolicy: "cancel",
             logger: false,
         })
-        return { model, apiKeyId: null, dispose: () => provider.dispose() }
+        return { model, apiKeyId: null, takeStepCost: opencodeSessionStepCost, dispose: () => provider.dispose() }
     }
     if (request.provider === "gemini") {
         const { createGeminiProvider } = await import("./gemini")
@@ -97,6 +105,20 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
             model: google(request.model),
             apiKeyId,
             providerOptions: request.variant ? { google: { thinkingConfig: { thinkingLevel: request.variant, includeThoughts: false } } } : undefined,
+            takeStepCost: noCost,
+            dispose: noDispose,
+        }
+    }
+    if (request.provider === "opencode-go") {
+        const { createOpencodeGoModel } = await import("./opencode-go")
+        const { model, meter } = await createOpencodeGoModel(request.model, { session: request.session, signal: request.signal })
+        return {
+            model,
+            // O Go usa uma única chave da assinatura: o consumo não é atribuído a uma chave do chaveiro.
+            apiKeyId: null,
+            // O esforço vem da lista do próprio modelo (inclui `none` e `max`); a AI SDK traduz para cada API.
+            reasoning: request.variant && isOpencodeGoReasoningLevel(request.variant) ? request.variant : undefined,
+            takeStepCost: () => meter.take(),
             dispose: noDispose,
         }
     }
@@ -106,6 +128,7 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
         model: provider(request.model),
         apiKeyId,
         reasoning: request.variant && isAiReasoningLevel(request.variant) ? request.variant : undefined,
+        takeStepCost: noCost,
         dispose: noDispose,
     }
 }
@@ -125,8 +148,19 @@ function numberOrNull(value: unknown): number | null {
     return typeof value === "number" && Number.isFinite(value) ? value : null
 }
 
-export function describeAiError(error: unknown): string {
+/** Status HTTP de um erro da AI SDK (`APICallError.statusCode`), sem depender do texto. */
+function statusCodeOf(error: unknown): number | null {
+    const status = (error as { statusCode?: unknown } | null)?.statusCode
+    return typeof status === "number" ? status : null
+}
+
+export function describeAiError(error: unknown, provider?: AiProviderId, model?: string | null): string {
     if (error instanceof AiProviderError) return error.message
+    if (provider === "opencode-go") {
+        const status = statusCodeOf(error)
+        const known = status === null ? null : opencodeGoStatusMessage(status, model)
+        if (known) return known
+    }
     const message = error instanceof Error ? error.message : String(error)
     if (/401|unauthori[sz]ed|api key/i.test(message)) return `Credencial recusada pelo provedor: ${message}`
     if (/ECONNREFUSED|fetch failed|ENOTFOUND/i.test(message)) return `Provedor inacessível: ${message}`
@@ -142,12 +176,12 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     try {
         prepared = await prepareModel(request)
     } catch (error) {
-        yield { type: "error", message: describeAiError(error) }
+        yield { type: "error", message: describeAiError(error, request.provider, request.model) }
         return
     }
     let reasoningAnnounced = false
     let failed = false
-    let costUsd: number | null = null
+    let cost: AiStepCost | null = null
     // OpenCode informa falhas do modelo só nos metadados do passo (`outcome: failed`), sem parte `error`.
     let stepError: string | null = null
     try {
@@ -186,15 +220,14 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                     yield { type: "notice", message: "O agente pediu aprovação para usar uma ferramenta; aprovações não são suportadas aqui. Ajuste as permissões do agente no OpenCode." }
                     break
                 case "finish-step": {
-                    const meta = part.providerMetadata?.opencode as { cost?: unknown; error?: { message?: unknown } } | undefined
-                    const cost = numberOrNull(meta?.cost)
-                    if (cost !== null) costUsd = (costUsd ?? 0) + cost
+                    const meta = part.providerMetadata?.opencode as { error?: { message?: unknown } } | undefined
+                    cost = addStepCost(cost, prepared.takeStepCost(part.providerMetadata))
                     if (typeof meta?.error?.message === "string") stepError = meta.error.message
                     break
                 }
                 case "error":
                     failed = true
-                    yield { type: "error", message: describeAiError(part.error) }
+                    yield { type: "error", message: describeAiError(part.error, request.provider, request.model) }
                     break
                 case "abort":
                     failed = true
@@ -208,7 +241,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                             inputTokens: numberOrNull(part.totalUsage.inputTokens),
                             outputTokens: numberOrNull(part.totalUsage.outputTokens),
                             totalTokens: numberOrNull(part.totalUsage.totalTokens),
-                            costUsd,
+                            costUsd: cost?.costUsd ?? null,
                         }
                         if (consumptionKey && request.consumption) {
                             await recordAiConsumption({
@@ -219,6 +252,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                                 model: request.model,
                                 ...usage,
                                 apiKeyId: prepared.apiKeyId,
+                                billing: cost?.billing ?? null,
                             })
                         }
                         yield {
@@ -234,7 +268,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     } catch (error) {
         if (!request.signal?.aborted) {
             log.warn({ provider: request.provider, model: request.model, err: error instanceof Error ? error.message : error }, "[ai] falha na geração")
-            yield { type: "error", message: describeAiError(error) }
+            yield { type: "error", message: describeAiError(error, request.provider, request.model) }
         }
     } finally {
         await prepared.dispose().catch(() => undefined)

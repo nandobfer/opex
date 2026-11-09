@@ -248,6 +248,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                         totalTokens: step.tokens,
                         costUsd: step.costUsd,
                         apiKeyId: step.apiKeyId ?? null,
+                        billing: step.billing ?? null,
                     })
                 }
                 const maxTokens = run.snapshot.limits.maxTokens

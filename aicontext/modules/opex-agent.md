@@ -120,13 +120,18 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
   eles viram conteúdo conforme o provedor (`opexFileDelivery`), **baixando do S3 no turno**, sempre
   com uma linha de referência com o `fileId`:
 
-  | Tipo | Gemini | Anthropic | OpenAI | DeepSeek |
-  |---|---|---|---|---|
-  | Imagem (png, jpg, webp, gif) | conteúdo | conteúdo | conteúdo | referência |
-  | PDF | conteúdo | conteúdo | conteúdo | referência |
-  | Texto/código | inline (até 100 mil caracteres) | inline | inline | inline |
-  | Áudio/vídeo | conteúdo | referência | referência | referência |
-  | Outros (docx, xlsx, zip, SVG…) | referência | referência | referência | referência |
+  | Tipo | Gemini | Anthropic | OpenAI | DeepSeek | OpenCode Go |
+  |---|---|---|---|---|---|
+  | Imagem (png, jpg, webp, gif) | conteúdo | conteúdo | conteúdo | referência | conforme o modelo |
+  | PDF | conteúdo | conteúdo | conteúdo | referência | conforme o modelo |
+  | Texto/código | inline (até 100 mil caracteres) | inline | inline | inline | inline |
+  | Áudio/vídeo | conteúdo | referência | referência | referência | conforme o modelo |
+  | Outros (docx, xlsx, zip, SVG…) | referência | referência | referência | referência | referência |
+
+  No **OpenCode Go** (OPE-154) os tipos aceitos são **por modelo**: vêm dos tipos de entrada do
+  catálogo do Go (`modalities.input`, ex.: `image/png` → imagem, `application/pdf` → PDF;
+  `opencodeGoFileKinds` + `opexFileDelivery(..., accepted)`). Catálogo indisponível ou modelo fora
+  dele = só texto inline e o resto como referência.
 
   Tetos por arquivo: conteúdo até **20 MB** (`OPEX_FILE_CONTENT_MAX_BYTES`) e texto até **5 MB**
   (`OPEX_FILE_TEXT_MAX_BYTES`); acima disso o arquivo vai só como referência (o agente ainda pode
@@ -236,7 +241,10 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   na leitura (`withDefaults` + `migrateLegacyToolSettings` de `tool-tree.ts`): grupo desligado vira
   todas as ferramentas dele desligadas e a política "Toda alteração" vira confirmação ligada em cada
   ferramenta `write`.
-- Provedores: **Gemini, Anthropic, OpenAI e DeepSeek** (o OpenCode não executa ferramentas do app).
+- Provedores: **Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go** (o OpenCode de sessão não executa
+  ferramentas do app; o OpenCode Go é só inferência por API e executa — `modules/ai.md`, "OpenCode Go").
+  No Go, o turno usa o `x-opencode-session` `opex-agent-<sessão>` (estável na conversa) e grava no
+  consumo o custo informado pelo Go (cota + Extra Usage).
   Ativar exige provedor conectado; modelo e variante conferidos no catálogo (`assertCatalog`).
 
 ## Ferramentas (`server/tools/`)

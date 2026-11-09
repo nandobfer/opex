@@ -9,9 +9,11 @@ const mocks = vi.hoisted(() => ({
   anthropic: vi.fn((id: string) => ({ kind: 'anthropic', id })),
   openai: vi.fn((id: string) => ({ kind: 'openai', id })),
   deepseek: vi.fn((id: string) => ({ kind: 'deepseek', id })),
-  recordAiConsumption: vi.fn(async () => {}),
+  record: vi.fn(async () => {}),
+  goModel: vi.fn(),
+  goCosts: [] as unknown[],
 }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }))
+vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.record }))
 
 vi.mock('ai', () => ({
   streamText: (options: unknown) => {
@@ -30,6 +32,12 @@ vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => ({ provide
 vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => ({ provider: mocks.anthropic, apiKeyId: 'key_anthropic' }) }))
 vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => ({ provider: mocks.openai, apiKeyId: 'key_openai' }) }))
 vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ provider: mocks.deepseek, apiKeyId: 'key_deepseek' }) }))
+vi.mock('@/lib/ai/opencode-go', () => ({
+  createOpencodeGoModel: async (id: string, options: unknown) => {
+    mocks.goModel(id, options)
+    return { model: { kind: 'opencode-go', id }, meter: { take: () => mocks.goCosts.shift() ?? null } }
+  },
+}))
 
 import { streamAi, type AiStreamEvent } from '@/lib/ai/stream'
 
@@ -44,6 +52,7 @@ async function collect(request: Parameters<typeof streamAi>[0]): Promise<AiStrea
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.parts = []
+  mocks.goCosts = []
 })
 
 describe('streamAi', () => {
@@ -73,11 +82,11 @@ describe('streamAi', () => {
   it('consumo medido é atribuído à chave de API usada na preparação (OPE-155); OpenCode fica sem chave', async () => {
     mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
     await collect({ provider: 'anthropic', model: 'claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags', subject: 't1' } })
-    expect(mocks.recordAiConsumption).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'anthropic', origin: 'task-tags', apiKeyId: 'key_anthropic', inputTokens: 100 }))
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'anthropic', origin: 'task-tags', apiKeyId: 'key_anthropic', inputTokens: 100 }))
 
     mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
     await collect({ provider: 'opencode', model: 'anthropic/claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags' } })
-    expect(mocks.recordAiConsumption).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'opencode', apiKeyId: null }))
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'opencode', apiKeyId: null }))
   })
 
   it('Gemini: temperatura, máximo de tokens e nível de thinking', async () => {
@@ -102,6 +111,60 @@ describe('streamAi', () => {
     const options = mocks.streamText.mock.calls[1]![0] as Record<string, unknown>
     expect(options).toMatchObject({ temperature: 0.5 })
     expect(options).not.toHaveProperty('reasoning')
+  })
+
+  it('OpenCode Go: sessão estável, esforço do próprio modelo (inclui max), amostragem e custo = cobrado + cota no consumo', async () => {
+    mocks.parts = [
+      { type: 'reasoning-delta', id: 'r', text: 'pensando' },
+      { type: 'text-delta', id: 'x', text: 'ok' },
+      { type: 'finish-step', providerMetadata: {} },
+      { type: 'finish', finishReason: 'stop', totalUsage: usage },
+    ]
+    mocks.goCosts = [{ costUsd: 0.00002, billing: { source: 'go', allowanceUsd: 0.00002, listCostUsd: 0.00003 } }]
+    const events = await collect({
+      provider: 'opencode-go', model: 'deepseek-v4.1-flash', variant: 'max', temperature: 0.4, maxOutputTokens: 500,
+      session: 'opex-agent-1', instructions: 'i', prompt: 'p', consumption: { origin: 'task-summary', subject: 't1' },
+    })
+    expect(mocks.goModel).toHaveBeenCalledWith('deepseek-v4.1-flash', { session: 'opex-agent-1', signal: undefined })
+    expect(mocks.streamText.mock.calls[0]![0]).toMatchObject({ model: { kind: 'opencode-go' }, reasoning: 'max', temperature: 0.4, maxOutputTokens: 500 })
+    expect(events.map((event) => event.type)).toEqual(['reasoning', 'delta', 'done'])
+    expect(events.at(-1)).toMatchObject({ usage: { costUsd: 0.00002 } })
+    expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({
+      provider: 'opencode-go', model: 'deepseek-v4.1-flash', origin: 'task-summary', subject: 't1', costUsd: 0.00002,
+      billing: { source: 'go', allowanceUsd: 0.00002, listCostUsd: 0.00003 },
+    }))
+  })
+
+  it('OpenCode Go: sem custo informado fica null; esforço fora da lista não vai', async () => {
+    mocks.parts = [{ type: 'finish-step', providerMetadata: {} }, { type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    const events = await collect({ provider: 'opencode-go', model: 'kimi-k3', variant: 'turbo', instructions: 'i', prompt: 'p' })
+    expect(mocks.streamText.mock.calls[0]![0]).not.toHaveProperty('reasoning')
+    expect(events.at(-1)).toMatchObject({ type: 'done', usage: { costUsd: null } })
+    expect(mocks.record).not.toHaveBeenCalled()
+  })
+
+  it('OpenCode Go: chave recusada (401) e cota esgotada (429) viram mensagens acionáveis, classificadas pelo status', async () => {
+    const apiError = (statusCode: number) => Object.assign(new Error('Invalid credential oc_sk_segredo'), { statusCode })
+    mocks.parts = [{ type: 'error', error: apiError(401) }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
+    const [denied] = await collect({ provider: 'opencode-go', model: 'm', instructions: 'i', prompt: 'p' })
+    expect(denied).toMatchObject({ type: 'error', message: expect.stringContaining('O OpenCode Go recusou a chave (HTTP 401)') })
+    expect((denied as { message: string }).message).not.toContain('oc_sk_segredo')
+
+    mocks.parts = [{ type: 'error', error: apiError(429) }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
+    const [limited] = await collect({ provider: 'opencode-go', model: 'm', instructions: 'i', prompt: 'p' })
+    expect(limited).toMatchObject({ message: expect.stringContaining('Limite do plano OpenCode Go atingido') })
+  })
+
+  it('OpenCode Go: 403 num modelo gratuito (*-free) explica que ele pode funcionar só dentro do OpenCode', async () => {
+    const forbidden = Object.assign(new Error('Forbidden'), { statusCode: 403 })
+    mocks.parts = [{ type: 'error', error: forbidden }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
+    const [free] = await collect({ provider: 'opencode-go', model: 'longcat-2.5-free', instructions: 'i', prompt: 'p' })
+    expect(free).toMatchObject({ message: expect.stringContaining('modelo gratuito longcat-2.5-free') })
+    expect((free as { message: string }).message).not.toContain('região Global')
+
+    mocks.parts = [{ type: 'error', error: forbidden }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
+    const [paid] = await collect({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', instructions: 'i', prompt: 'p' })
+    expect(paid).toMatchObject({ message: expect.stringContaining('habilite a região Global') })
   })
 
   it('Anthropic: com raciocínio ligado não envia temperatura (a API recusa); sem ele, envia', async () => {

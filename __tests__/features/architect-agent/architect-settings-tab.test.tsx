@@ -100,7 +100,7 @@ describe('provedor do Agente Arquiteto', () => {
     render(<ArchitectAgentTab onDirtyChange={vi.fn()} />)
     fireEvent.click(tab('Agente'))
     expect(screen.getByText('Provedor e modelo')).toBeTruthy()
-    expect(screen.getByRole('radio', { name: /OpenCode/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.getByRole('radio', { name: /^OpenCode$/ }).getAttribute('aria-checked')).toBe('true')
     expect(screen.getByTestId('agent-fields')).toBeTruthy()
     expect(screen.getByText(/só tem permissão de leitura/)).toBeTruthy()
     // Gemini fora do ar não pode ser escolhido.

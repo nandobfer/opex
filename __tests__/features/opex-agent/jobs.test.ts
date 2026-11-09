@@ -29,7 +29,7 @@ vi.mock('ai', () => ({
   },
 }))
 vi.mock('@/lib/ai/stream', () => ({
-  prepareModel: async () => ({ model: { id: 'modelo' }, dispose: async () => {} }),
+  prepareModel: async () => ({ model: { id: 'modelo' }, takeStepCost: () => null, dispose: async () => {} }),
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }))

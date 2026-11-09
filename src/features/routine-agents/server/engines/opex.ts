@@ -137,7 +137,8 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                 },
             })
         }
-        prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: routineAgentTitle(agent.name) })
+        prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: routineAgentTitle(agent.name), session: `opex-routine-${activation.runId}`, signal })
+        const meteredModel = prepared
         const result = streamText({
             model: prepared.model,
             instructions: input.instructions(""),
@@ -163,16 +164,15 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                         input.onStep({ kind: "text", label: "Resposta do agente", detail: text.slice(0, MAX_DETAIL) })
                     }
                     stepText = ""
-                    const meta = part.providerMetadata?.opencode as { cost?: unknown } | undefined
-                    const cost = typeof meta?.cost === "number" && Number.isFinite(meta.cost) ? meta.cost : null
+                    const cost = meteredModel.takeStepCost(part.providerMetadata)
                     const inputTokens = part.usage?.inputTokens ?? null
                     const outputTokens = part.usage?.outputTokens ?? null
                     const total = part.usage?.totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0)
-                    input.onUsage({ tokens: total ?? 0, inputTokens, outputTokens, costUsd: cost, stepId: String(step), model: engine.model, provider: engine.provider!, apiKeyId: prepared.apiKeyId })
+                    input.onUsage({ tokens: total ?? 0, inputTokens, outputTokens, costUsd: cost?.costUsd ?? null, billing: cost?.billing ?? null, stepId: String(step), model: engine.model, provider: engine.provider!, apiKeyId: prepared.apiKeyId })
                     break
                 }
                 case "error":
-                    errorMessage = describeAiError(part.error)
+                    errorMessage = describeAiError(part.error, engine.provider ?? undefined, engine.model)
                     break
                 case "finish":
                     if (part.finishReason === "error" && !errorMessage) errorMessage = "O modelo terminou com erro"
@@ -184,7 +184,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         return { error: errorMessage, text, messages: JSON.stringify(trimRoutineHistory([...history, userMessage, ...response])) }
     } catch (error) {
         if (signal.aborted) return { error: null, text, messages: JSON.stringify([...history, userMessage]) }
-        const message = describeAiError(error)
+        const message = describeAiError(error, engine.provider ?? undefined, engine.model)
         routineLog.warn({ runId: activation.runId, err: message }, "[routine-agents] falha no motor Opex")
         return { error: message, text, messages: JSON.stringify([...history, userMessage]) }
     } finally {

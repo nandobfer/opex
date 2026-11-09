@@ -24,7 +24,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -119,6 +119,7 @@ describe('catálogo de integrações', () => {
     expect(integrationPath('ai_anthropic')).toBe('/integracoes/ia/anthropic')
     expect(integrationPath('ai_openai')).toBe('/integracoes/ia/openai')
     expect(integrationPath('ai_deepseek')).toBe('/integracoes/ia/deepseek')
+    expect(integrationPath('ai_opencode_go')).toBe('/integracoes/ia/opencode-go')
     expect(integrationPath('ai_jev')).toBe('/integracoes/ia/jev')
     expect(hasCustomIntegrationPath('ai_opencode')).toBe(true)
     expect(hasCustomIntegrationPath('github')).toBe(false)
@@ -128,9 +129,10 @@ describe('catálogo de integrações', () => {
       ['ai_anthropic', 'ai'],
       ['ai_openai', 'ai'],
       ['ai_deepseek', 'ai'],
+      ['ai_opencode_go', 'ai'],
       ['ai_jev', 'ai'],
     ])
-    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_jev'] as const) {
+    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_jev'] as const) {
       const def = getIntegrationDef(id)
       expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
     }
@@ -143,11 +145,13 @@ describe('catálogo de integrações', () => {
       ['opencodeBin', false],
       ['sshHostFingerprint', false],
     ])
-    for (const id of ['ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek'] as const) {
+    for (const id of ['ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go'] as const) {
       expect(getIntegrationDef(id).secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     }
     expect(getIntegrationDef('ai_jev').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     expect(getIntegrationDef('ai_jev').publicFields).toEqual([])
+    // OpenCode Go: só a chave oc_sk_… como segredo, sem campo público (a URL do gateway é fixa).
+    expect(getIntegrationDef('ai_opencode_go')).toMatchObject({ name: 'OpenCode Go', defaultEnvironment: 'externo', publicFields: [] })
   })
 
   it('SMTP e Storage S3: campos, defaults e sem .env', () => {

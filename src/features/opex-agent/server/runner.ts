@@ -15,6 +15,8 @@ import { refreshConfirmations, requestConfirmation } from "./confirmations"
 import { beginTurn, endTurn, enqueueFollowUp, isTurnActive, liveMessageOf, publishLine, takeFollowUp, abortTurn, type OpexFollowUp } from "./hub"
 import { OpexMessage, OpexSession, type IOpexFileRef, type IOpexMessage } from "@/lib/db/models/Opex"
 import { claimOpexFiles, fileMarkers, resolveFileMarkers } from "./files"
+import { opencodeGoFileKinds, type OpexFileKind } from "../files"
+import { addStepCost, type AiStepCost } from "@/lib/ai/provider-cost"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle } from "./titler"
@@ -261,11 +263,18 @@ interface TurnArgs {
     jobId: string | null
 }
 
-async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId, notices: readonly string[] = []): Promise<ModelMessage[]> {
+/** Tipos de arquivo que o modelo lê: no OpenCode Go vêm do catálogo (por modelo); nos demais, do provedor. */
+async function acceptedFileKinds(provider: OpexProviderId, model: string, signal?: AbortSignal): Promise<ReadonlySet<OpexFileKind> | undefined> {
+    if (provider !== "opencode-go") return undefined
+    const { opencodeGoModelInputs } = await import("@/lib/ai/opencode-go")
+    return opencodeGoFileKinds(await opencodeGoModelInputs(model, signal))
+}
+
+async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId, model: string, notices: readonly string[] = [], signal?: AbortSignal): Promise<ModelMessage[]> {
     const stored = await OpexMessage.find({ sessionId: new Types.ObjectId(sessionId) }).sort({ seq: 1 }).select({ role: 1, modelMessages: 1 }).lean<Pick<IOpexMessage, "role" | "modelMessages">[]>()
     const turns = stored.map((item) => ({ role: item.role, modelMessages: parseModelMessages(item.modelMessages) }))
     // Os arquivos entram só nos turnos que couberam no orçamento, no formato que o provedor atual lê.
-    const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider)
+    const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider, await acceptedFileKinds(provider, model, signal))
     // A data e a hora do turno vão só no envio, ao fim da mensagem do usuário, para o prompt de sistema não mudar.
     return withTurnContext(messages, turnContext(notices)) as ModelMessage[]
 }
@@ -287,6 +296,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     let errorMessage: string | null = null
     let aborted = false
     let usage: OpexUsageDto | null = null
+    let cost: AiStepCost | null = null
     let responseMessages: unknown[] | null = null
     const toolNames: string[] = []
     let mcp: McpTurnTools | null = null
@@ -304,7 +314,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const tools = [...appTools, ...memory.selfTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
         if (memory.notice) publishLine(sessionId, { type: "text-delta", text: `> ${memory.notice}\n\n` })
         const overrides = { ...mcp.overrides, ...appOverrides }
-        const history = await loadHistory(sessionId, session.summary, main.provider!, mcp.notices)
+        const history = await loadHistory(sessionId, session.summary, main.provider!, main.model!, mcp.notices, controller.signal)
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
@@ -330,7 +340,8 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                   }
                 : {}),
         })
-        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
+        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant, session: `opex-agent-${sessionId}`, signal: controller.signal })
+        const meteredModel = prepared
         const result = streamText({
             model: prepared.model,
             instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts }),
@@ -386,8 +397,11 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                         durationMs: runtime.durations.get(part.toolCallId) ?? null,
                     })
                     break
+                case "finish-step":
+                    cost = addStepCost(cost, meteredModel.takeStepCost(part.providerMetadata))
+                    break
                 case "error":
-                    errorMessage = describeAiError(part.error)
+                    errorMessage = describeAiError(part.error, main.provider!, main.model)
                     break
                 case "abort":
                     aborted = true
@@ -402,7 +416,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     } catch (error) {
         if (controller.signal.aborted) aborted = true
         else {
-            errorMessage = describeAiError(error)
+            errorMessage = describeAiError(error, main.provider ?? undefined, main.model)
             log.warn({ sessionId, provider: main.provider, model: main.model, err: errorMessage }, "[opex] falha no turno")
         }
     } finally {
@@ -410,7 +424,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         await mcp?.close().catch(() => undefined)
     }
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, responseMessages, toolNames, apiKeyId: prepared?.apiKeyId ?? null })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames, apiKeyId: prepared?.apiKeyId ?? null })
 }
 
 interface TurnOutcome {
@@ -418,6 +432,8 @@ interface TurnOutcome {
     errorMessage: string | null
     aborted: boolean
     usage: OpexUsageDto | null
+    /** Custo informado pelo provedor no turno (OpenCode Go). */
+    cost: AiStepCost | null
     responseMessages: unknown[] | null
     toolNames: string[]
     /** Chave de API usada no turno (provedores diretos, OPE-155). */
@@ -474,7 +490,8 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             subject: sessionId,
             model: settings.main.model,
             ...outcome.usage,
-            costUsd: null,
+            costUsd: outcome.cost?.costUsd ?? null,
+            billing: outcome.cost?.billing ?? null,
             apiKeyId: outcome.apiKeyId,
         })
     }

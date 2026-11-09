@@ -13,7 +13,11 @@ vi.mock("@/features/ai/components/api-keys/ApiKeysCard", () => ({ ApiKeysCard: (
 vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
-vi.mock("@/features/ai/components/ProviderUsageCard", () => ({ ProviderUsageCard: ({ provider, keyFilter }: { provider: string; keyFilter?: string }) => <div data-testid={`provider-usage-${provider}`} data-key-filter={keyFilter ?? ""} /> }))
+vi.mock("@/features/ai/components/ProviderUsageCard", () => ({
+    ProviderUsageCard: ({ provider, showCost, keyFilter }: { provider: string; showCost?: boolean; keyFilter?: string }) => (
+        <div data-testid={`provider-usage-${provider}`} data-show-cost={String(showCost)} data-key-filter={keyFilter ?? ""} />
+    ),
+}))
 vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
@@ -94,6 +98,7 @@ describe("AiProviderEditorForm", () => {
             renderForm(provider.integration)
             expect(screen.queryByRole("tab", { name: "Contas" })).toBeNull()
             fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
+            expect(screen.getByTestId(`provider-usage-${provider.id}`).getAttribute("data-show-cost")).toBe("false")
             // O filtro "Chave de API" (OPE-155) depende de o pai repassar o provedor como keyFilter.
             expect(screen.getByTestId(`provider-usage-${provider.id}`).getAttribute("data-key-filter")).toBe(provider.id)
         }
@@ -111,5 +116,15 @@ describe("AiProviderEditorForm", () => {
         cleanup()
         renderForm("ai_opencode")
         expect(screen.queryByTestId(/api-keys-/)).toBeNull()
+    })
+
+    it("OpenCode Go: Configuração, Modelos e Consumo com a coluna de custo (cota + Extra Usage), sem abas do OpenCode de sessão", () => {
+        window.history.replaceState(null, "", "/integracoes/ia/opencode-go")
+        renderForm("ai_opencode_go")
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Configuração", "Modelos", "Consumo"])
+        fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
+        expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-show-cost")).toBe("true")
+        // O Go tem uma única chave da assinatura, não o chaveiro: o painel não mostra o filtro de chave.
+        expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-key-filter")).toBe("")
     })
 })

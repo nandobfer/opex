@@ -13,6 +13,7 @@ e opções na própria aba da página "Inteligência Artificial".
 | Anthropic | `ai_anthropic` | `@ai-sdk/anthropic` | Chaves de API do Claude Console (chaveiro, uma em uso) |
 | OpenAI | `ai_openai` | `@ai-sdk/openai` (API Responses) | Chaves de API da plataforma OpenAI (chaveiro, uma em uso) |
 | DeepSeek | `ai_deepseek` | `@ai-sdk/deepseek` | Chaves de API da plataforma DeepSeek (chaveiro, uma em uso) |
+| OpenCode Go | `ai_opencode_go` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, conforme o modelo) | Chave `oc_sk_…` da assinatura Go (segredo; uma só, fora do chaveiro); gateway fixo `https://opencode.ai/inference/go` |
 | JEV | `ai_jev` | — (HTTP TypeSafe) | Chaves de API da TypeSafe (chaveiro, uma em uso); URL fixa `https://api.typesafe.ai` |
 
 - Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
@@ -39,7 +40,11 @@ e opções na própria aba da página "Inteligência Artificial".
   (exceto `-chat`).
 - **DeepSeek** (`src/lib/ai/deepseek.ts`): `GET /models` (`Bearer`). Variantes `low`/`medium`/`high`
   em todos, exceto o alias `deepseek-chat` (sem raciocínio).
-- Configuração só pela tela (chaves de API do chaveiro, cifradas, sem `env`; seção "Chaves de API").
+- **OpenCode Go** (`src/lib/ai/opencode-go.ts`, OPE-154): inferência pela API do gateway do plano
+  Go com a chave da assinatura, **sem sessão do OpenCode no host** e sem agente (provedor `opencode-go`,
+  separado do `opencode` de sessão). Detalhes na seção "OpenCode Go" abaixo.
+- Configuração só pela tela (chaves de API do chaveiro nos provedores diretos, cifradas, sem `env`;
+  seção "Chaves de API").
 - **JEV** (`src/lib/ai/jev.ts`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
   texto). Além do catálogo (`GET v1/models`, header `Authorization: Bearer <apiKey>`), expõe
   `askJevSystemOne` (`POST v1/systemone`): envia `state` + `questions` tipadas (`choice`, `score`,
@@ -73,14 +78,15 @@ e opções na própria aba da página "Inteligência Artificial".
   OPE-91): a disponibilidade das features (`availability`/`availabilityOf*`, `agenticAvailability`)
   e a validação ao salvar (`assertCatalog`, `assertAgentConfigs`) não recusam só pelo status
   gravado. Gravado conectado = segue sem rede; gravado desconectado (ex.: a verificação periódica
-  falhou de passagem) = testa o provedor agora (OpenCode: `GET /api/info`; demais: lista de modelos
-  sem cache), com limite de 8 s. Respondeu: a ação segue e o teste completo regrava o status em
+  falhou de passagem) = testa o provedor agora (OpenCode: `GET /api/info`; OpenCode Go: conferência da
+  chave, porque a lista de modelos do Go é pública; demais: lista de modelos sem cache), com limite de 8 s. Respondeu: a ação segue e o teste completo regrava o status em
   segundo plano (um por vez por provedor). Falhou: o motivo traz a falha real (`… não está conectado
   (ECONNREFUSED): …`). Chamadas simultâneas compartilham o teste em andamento (por provedor e
   limite); depois, o sucesso vale 15 s e a falha só 1,5 s (a conexão que voltou vale logo).
 - Testes de conexão (`src/features/ai/server/testers.ts`): OpenCode = info + modelos + agentes
   (amarelo sem modelos); Gemini, Anthropic, OpenAI e DeepSeek = lista de modelos (amarelo sem
-  modelos de texto); hub `ai` = testa cada provedor configurado
+  modelos de texto); OpenCode Go = lista de modelos + conferência da chave (falha com chave recusada,
+  mesmo com a lista respondendo); hub `ai` = testa cada provedor configurado
   (gravando o status de cada um) e resume (amarelo se só parte conecta; erro se nenhum).
 
 ## Chaves de API (chaveiro dos provedores, OPE-155)
@@ -146,7 +152,8 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
 
 - `streamAi(request)` é o **único ponto** das features: gera em streaming e nunca lança — falhas
   viram um evento `error` final. Eventos: `delta`, `reasoning` (uma vez, ao começar a raciocinar),
-  `tool` (`running`/`done`/`error`), `notice`, `done` (tokens, custo em USD do OpenCode, duração) e
+  `tool` (`running`/`done`/`error`), `notice`, `done` (tokens, custo em USD do OpenCode e do OpenCode
+  Go, duração) e
   `error`.
 - **OpenCode**: cada chamada cria uma sessão nova (`createNewSession`), com agente, variante,
   diretório e título; formulários do agente são cancelados (`formPolicy: "cancel"`); pedido de
@@ -160,6 +167,16 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   ignorada. Na Anthropic com raciocínio ligado a temperatura não é enviada (a API recusa); nos
   modelos de raciocínio da OpenAI a AI SDK descarta o que não se aplica. Essas APIs não informam
   custo: `costUsd` fica `null` ("—").
+- **OpenCode Go**: temperatura e máximo de tokens; a variante é o esforço de raciocínio **do próprio
+  modelo** (lista do catálogo do Go, inclusive `none`, `xhigh` e `max`), passado pela opção `reasoning`
+  da AI SDK; fora de `OPENCODE_GO_REASONING_LEVELS` é ignorada. O pedido aceita `session` (id estável
+  da conversa para o `x-opencode-session`); sem ele, cada geração ganha um id próprio. Custo = o
+  informado pelo Go (ver "OpenCode Go"). Erros da AI SDK são classificados pelo `statusCode` (nunca
+  pelo texto): 401 chave recusada, 403 acesso negado (plano ou região Global), 429 limite do plano —
+  mensagens pt-BR sem a chave (`opencode-go-errors.ts`).
+- Custo por passo: `prepareModel` devolve `takeStepCost(providerMetadata)` (OpenCode: metadados do
+  passo; OpenCode Go: medidor da resposta; demais: `null`), usado por `streamAi`, pelo Agente Opex e
+  pelo motor Opex dos rotineiros (`src/lib/ai/provider-cost.ts`, puro).
 - `streamAi` com o JEV termina em `error` (o JEV não gera texto).
 - **JEV**: não passa pelo `streamAi` (não gera texto); quem o usa chama `askJevSystemOne` direto.
 - Não há saída estruturada garantida pelo OpenCode: features que precisarem de JSON validam com Zod.
@@ -177,12 +194,62 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   `session.step.ended`, com `dedupKey` estável (`session:{origem}:{execução}:{stepId}`) — reconexão
   não duplica. Métricas ausentes ficam `null`. Falha de telemetria não interrompe a geração. Publica
   `ai-consumption-updated` em `private-app`. A medição começou com o painel: o histórico anterior não
-  é somado (decisão "precisão daqui em diante").
+  é somado (decisão "precisão daqui em diante"). O registro aceita `billing` (`source`, `allowanceUsd`,
+  `listCostUsd`, só o OpenCode Go; `null` nos demais). O Agente Opex grava o custo do turno quando o
+  provedor informa (antes, sempre `null`).
+
+## OpenCode Go (`opencode-go`, OPE-154)
+
+- **O que é**: gateway de inferência da assinatura OpenCode Go. O Opex chama a API do gateway com a
+  chave `oc_sk_…` (pessoal, do orçamento do membro — não é token de sistema do Opex) e **nunca** abre
+  sessão do OpenCode no host. Gera texto e serve de modelo ao Agente Opex e ao motor Opex dos
+  rotineiros (aceita as ferramentas do app); **não** é oferecido como sessão de agente
+  (`supportsAgent: false`) nem nas features exclusivas do OpenCode de sessão.
+- **Integração** `ai_opencode_go` (filha de `ai`, `/integracoes/ia/opencode-go`): só o segredo
+  `apiKey` (cifrado, sem `env`); abas Configuração, Modelos e Consumo. Sem chave: `AiProviderError`
+  "OpenCode Go sem chave: configure…" antes de qualquer chamada.
+- **Endpoints** (`src/lib/ai/endpoints.ts`): base `https://opencode.ai/inference/go`; Chat Completions
+  e Responses em `/openai/v1`, Messages em `/anthropic/v1`, Generate Content em `/google/v1beta`.
+  Toda requisição leva `Authorization: Bearer <chave>`, `x-opencode-session` (obrigatório: sem ele o Go
+  responde `400 MissingSessionID`) e o `User-Agent` próprio `OPENCODE_GO_USER_AGENT` (exigência do Go
+  para clientes de terceiros). Ids de sessão: `opex-agent-<sessão>` (Agente Opex),
+  `opex-routine-<execução>` (rotineiros) e `opex-<uuid>` por geração nas demais features.
+- **Modelos** (`GET /openai/v1/models`, público; `opencode-go-models.ts`, puro): entram **todos** os
+  modelos de texto (`type: "chat"`) de qualquer das quatro APIs (decisão do dono: não excluir modelo
+  utilizável). Cada modelo é chamado pela API que o catálogo declara, com a SDK correspondente
+  (`chat-completions` → `@ai-sdk/openai-compatible`, que lê o `reasoning_content`; `responses` →
+  `@ai-sdk/openai`; `messages` → `@ai-sdk/anthropic`; `generate-content` → `@ai-sdk/google`); base
+  declarada fora do gateway é ignorada (a chave nunca vai a outro host). Na geração, a consulta ao
+  catálogo (cache de 2 min) recebe o cancelamento de quem pediu e um limite próprio de 5 s
+  (`OPENCODE_GO_CATALOG_TIMEOUT_MS`); se falhar, usa o último catálogo lido (mesmo vencido) com aviso no
+  log, e só sem nenhum catálogo — ou com o modelo fora dele — vai por Chat Completions, também com aviso.
+  O mesmo vale para os tipos de entrada usados nos arquivos do Agente Opex. DTO: variantes = esforços do modelo, `group` = dono do `canonical_id`,
+  contexto, `inputModalities` e `free` (sufixo `-free` ou preço 0 — mostrados com o selo "grátis";
+  podem ser bloqueados fora do OpenCode). Um 403 num modelo `*-free` tem mensagem própria ("modelos
+  gratuitos podem funcionar só dentro do OpenCode; escolha um modelo pago do plano Go"), em vez da
+  dica de plano e região Global dos demais.
+- **Conferência da chave** (`verifyOpencodeGoKey`): como a lista é pública, o teste e a conexão na hora
+  fazem `POST /chat/completions` com o modelo inexistente `__opex_probe__` — 401 = chave recusada,
+  400 "Model is unavailable" = chave aceita, sem gerar nada nem consumir a cota.
+- **Custo** (decisão do dono): `costUsd = usage.cost + usage.opencode.allowance` — o cobrado em
+  dinheiro (Extra Usage) mais o descontado da cota da assinatura. `billing` guarda `billing_source`,
+  `allowance` e `list_cost` (preço de tabela). O `fetch` das SDKs lê o corpo em trânsito
+  (SSE ou JSON) sem alterá-lo (`createOpencodeGoCostScanner`) e acumula por resposta; cada passo lê e
+  zera o acumulado. A aba Consumo do Go mostra a coluna **Custo (USD)** (`USAGE_PROVIDERS_WITH_COST`).
+- **Debug** da integração: requisições e respostas no canal da integração, cabeçalhos mascarados e
+  **corpo omitido** (os prompts não vão ao debug).
+- **Limites e exigências do Go**: limites em dólar por modelo (ex.: DeepSeek V4.1 Flash: US$ 100/mês;
+  5 h = 20%, semana = 50%) com Extra Usage opcional; DeepSeek V4.1 Flash e V4 Pro exigem a região
+  **Global** em Settings › Privacy; o Go monitora abuso e espera tráfego de agente de código — uso em
+  lote (resumos, tags) fica a critério do dono. Cota esgotada (429) só é classificada e informada; o
+  fallback entre modelos continua com as features que já o têm.
+- **Fora do Engramind**: o Go não é fonte do Redator nem do Curador do Engramind — o Engramind chamaria
+  a API sem o `x-opencode-session` e o Go recusaria.
 
 ## Página `/integracoes/ia`
 
 - `ai` é o hub do catálogo ("Inteligência Artificial"); `ai_opencode`, `ai_gemini`, `ai_anthropic`,
-  `ai_openai`, `ai_deepseek` e `ai_jev` são **filhas** (`parent: "ai"`): ficam fora da lista de
+  `ai_openai`, `ai_deepseek`, `ai_opencode_go` e `ai_jev` são **filhas** (`parent: "ai"`): ficam fora da lista de
   `/integracoes` e têm rotas próprias (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`;
   `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
@@ -228,10 +295,10 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
   (só OpenCode; seção abaixo), **Skills**, **Agentes**, **Comandos**, **Plugins** e **MCPs** (só
   OpenCode — `modules/opencode-resources.md`) e **Consumo** (todos os provedores: OpenCode por
-  origem, JEV por feature e Gemini, Anthropic, OpenAI e DeepSeek por recurso). Trocar de aba com
+  origem, JEV por feature e Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go por recurso). Trocar de aba com
   alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
-  OpenCode, Gemini, Anthropic, OpenAI e DeepSeek (mais o JEV em Tags e Estimar prazos); só os
+  OpenCode, Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Agente Desenvolvedor são
   exclusivos do OpenCode.
 - **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
@@ -269,7 +336,10 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   conhecidos e entram no aviso ("N sem tokens de entrada/saída"), nunca como medição completa.
   Mesmo filtro de período, agregado no servidor em `GET /api/ai/providers/[provider]/usage` (só os
   quatro provedores diretos; OpenCode e JEV têm rotas próprias). O painel informa desde quando há
-  medição do provedor.
+  medição do provedor. Em `/integracoes/ia/opencode-go` o card é o mesmo, mas **com a coluna Custo
+  (USD)**: o Go informa o custo de cada resposta (cota + Extra Usage, ver "OpenCode Go"); a rota
+  também atende `opencode-go`. O Go tem uma única chave da assinatura, então o painel dele não tem o
+  filtro de chave.
 - **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek e
   JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
   recebe o parâmetro `apiKey`. Opções:
@@ -282,7 +352,8 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   O recorte (`usageKeyMatch`, `src/features/ai/usage-key-filter.ts`) vale para os cards (JEV), a
   tabela por recurso, a linha **Total** e o aviso de totais parciais. A cobertura ("Medição iniciada
   em") continua sendo a do provedor. Um id que não existe mais no provedor (ou valor inválido) na URL
-  volta para "Todas". O painel do OpenCode não tem o filtro.
+  volta para "Todas". Os painéis do OpenCode (de sessão) e do OpenCode Go, que não usam chaveiro, não
+  têm o filtro.
 - **Formatação do consumo**: os tokens das tabelas de consumo são abreviados com sufixo (`k`, `M`,
   `B`, `T`), até 3 casas decimais e sem zeros à direita, em pt-BR — `1000` → `1k`, `1234` →
   `1,234k`, `2_500_000` → `2,5M`; abaixo de mil o número aparece inteiro. O número completo fica no

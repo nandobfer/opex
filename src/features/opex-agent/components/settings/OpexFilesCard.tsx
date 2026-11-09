@@ -9,7 +9,7 @@ import { OPEX_FILE_SIZE_MB_MAX, OPEX_FILES_PER_MESSAGE_MAX } from "../../constan
 import type { OpexFilesSettings } from "../../schemas"
 
 const DEFAULT_DESCRIPTION =
-    "Imagens e PDFs vão para o modelo quando o provedor lê o tipo (Gemini também lê áudio e vídeo; DeepSeek só texto). Textos e códigos vão como texto. Os demais o agente pode anexar a tarefas e prévias."
+    "Imagens e PDFs vão para o modelo quando o provedor lê o tipo (Gemini também lê áudio e vídeo; DeepSeek só texto; no OpenCode Go, conforme os tipos de entrada de cada modelo). Textos e códigos vão como texto. Os demais o agente pode anexar a tarefas e prévias."
 
 const toNumber = (value: string) => (value.trim() === "" ? Number.NaN : Number(value))
 
