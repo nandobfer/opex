@@ -137,7 +137,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                 },
             })
         }
-        prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: routineAgentTitle(agent.name), session: `opex-routine-${activation.runId}` })
+        prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: routineAgentTitle(agent.name), session: `opex-routine-${activation.runId}`, signal })
         const meteredModel = prepared
         const result = streamText({
             model: prepared.model,
@@ -172,7 +172,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                     break
                 }
                 case "error":
-                    errorMessage = describeAiError(part.error, engine.provider ?? undefined)
+                    errorMessage = describeAiError(part.error, engine.provider ?? undefined, engine.model)
                     break
                 case "finish":
                     if (part.finishReason === "error" && !errorMessage) errorMessage = "O modelo terminou com erro"
@@ -184,7 +184,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         return { error: errorMessage, text, messages: JSON.stringify(trimRoutineHistory([...history, userMessage, ...response])) }
     } catch (error) {
         if (signal.aborted) return { error: null, text, messages: JSON.stringify([...history, userMessage]) }
-        const message = describeAiError(error, engine.provider ?? undefined)
+        const message = describeAiError(error, engine.provider ?? undefined, engine.model)
         routineLog.warn({ runId: activation.runId, err: message }, "[routine-agents] falha no motor Opex")
         return { error: message, text, messages: JSON.stringify([...history, userMessage]) }
     } finally {

@@ -2,6 +2,7 @@ import type { LanguageModel } from "ai"
 import { randomUUID } from "node:crypto"
 import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
+import { loggerFor } from "@/lib/logger"
 import { AiProviderError } from "./errors"
 import { opencodeGoStatusMessage } from "./opencode-go-errors"
 import { OPENCODE_GO_API_URL, OPENCODE_GO_USER_AGENT } from "./endpoints"
@@ -20,6 +21,10 @@ export { OPENCODE_GO_API_URL, opencodeGoStatusMessage }
 
 const LABEL = "OpenCode Go"
 const CATALOG_CACHE_MS = 2 * 60_000
+/** Limite da consulta ao catálogo no caminho da geração: catálogo lento não segura o turno. */
+export const OPENCODE_GO_CATALOG_TIMEOUT_MS = 5_000
+/** Logger sob demanda: módulos que mockam o logger sem `loggerFor` também importam este arquivo (via catálogo). */
+const log = () => loggerFor({ module: "ai", provider: "opencode-go" })
 /** Modelo que não existe: o Go valida a chave antes do modelo (401 = chave recusada, 400 = chave aceita), sem gerar nada. */
 export const OPENCODE_GO_PROBE_MODEL = "__opex_probe__"
 
@@ -66,14 +71,31 @@ export async function listOpencodeGoModels(signal?: AbortSignal): Promise<AiMode
     return toOpencodeGoModels(await loadCatalog(signal, true))
 }
 
-/** Tipos de entrada do modelo pelo catálogo (cache); `null` quando o catálogo não respondeu. */
-export async function opencodeGoModelInputs(modelId: string): Promise<string[] | null> {
+/**
+ * Catálogo para a geração: respeita o cancelamento de quem pediu e um limite próprio de poucos
+ * segundos. Falhou (lento, fora do ar): usa o último catálogo bom, mesmo vencido, com aviso no log;
+ * sem nenhum, `null`. Cancelamento de quem pediu é repassado (não vira catálogo vazio).
+ */
+async function catalogForGeneration(signal?: AbortSignal): Promise<OpencodeGoRawModel[] | null> {
+    const timeout = AbortSignal.timeout(OPENCODE_GO_CATALOG_TIMEOUT_MS)
     try {
-        const raw = (await loadCatalog()).find((model) => model.id === modelId)
-        return raw ? (raw.modalities?.input ?? ["text"]) : null
-    } catch {
+        return await loadCatalog(signal ? AbortSignal.any([signal, timeout]) : timeout)
+    } catch (error) {
+        if (signal?.aborted) throw error
+        const reason = error instanceof Error ? error.message : String(error)
+        if (catalogCache) {
+            log().warn({ err: reason }, "[opencode-go] catálogo indisponível; usando o último catálogo lido")
+            return catalogCache.list
+        }
+        log().warn({ err: reason }, "[opencode-go] catálogo indisponível e sem cópia anterior")
         return null
     }
+}
+
+/** Tipos de entrada do modelo pelo catálogo (cache); `null` quando o catálogo não respondeu. */
+export async function opencodeGoModelInputs(modelId: string, signal?: AbortSignal): Promise<string[] | null> {
+    const raw = (await catalogForGeneration(signal))?.find((model) => model.id === modelId)
+    return raw ? (raw.modalities?.input ?? ["text"]) : null
 }
 
 /**
@@ -158,7 +180,7 @@ export interface OpencodeGoModel {
  * Modelo pronto para a AI SDK. `session` é o id estável da conversa (`x-opencode-session`: roteamento
  * e cache de prompt do Go); sem ele, cada geração ganha um id novo.
  */
-export async function createOpencodeGoModel(modelId: string, options: { session?: string | null } = {}): Promise<OpencodeGoModel> {
+export async function createOpencodeGoModel(modelId: string, options: { session?: string | null; signal?: AbortSignal } = {}): Promise<OpencodeGoModel> {
     const apiKey = await getOpencodeGoApiKey()
     const session = options.session?.trim() || `opex-${randomUUID()}`
     let pending: AiStepCost | null = null
@@ -172,7 +194,10 @@ export async function createOpencodeGoModel(modelId: string, options: { session?
             return value
         },
     }
-    const raw = await loadCatalog().then((list) => list.find((item) => item.id === modelId)).catch(() => undefined)
+    const catalog = await catalogForGeneration(options.signal)
+    const raw = catalog?.find((item) => item.id === modelId)
+    // Sem catálogo (nem cópia anterior) ou modelo fora dele: vai por Chat Completions, com aviso no log.
+    if (!raw) log().warn({ model: modelId, catalog: catalog !== null }, "[opencode-go] modelo sem rota no catálogo; usando Chat Completions")
     const { api, baseURL } = opencodeGoRoute(raw)
     const common = { apiKey, baseURL, fetch: fetchImpl }
     if (api === "responses") {

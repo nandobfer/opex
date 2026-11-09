@@ -264,17 +264,17 @@ interface TurnArgs {
 }
 
 /** Tipos de arquivo que o modelo lê: no OpenCode Go vêm do catálogo (por modelo); nos demais, do provedor. */
-async function acceptedFileKinds(provider: OpexProviderId, model: string): Promise<ReadonlySet<OpexFileKind> | undefined> {
+async function acceptedFileKinds(provider: OpexProviderId, model: string, signal?: AbortSignal): Promise<ReadonlySet<OpexFileKind> | undefined> {
     if (provider !== "opencode-go") return undefined
     const { opencodeGoModelInputs } = await import("@/lib/ai/opencode-go")
-    return opencodeGoFileKinds(await opencodeGoModelInputs(model))
+    return opencodeGoFileKinds(await opencodeGoModelInputs(model, signal))
 }
 
-async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId, model: string, notices: readonly string[] = []): Promise<ModelMessage[]> {
+async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId, model: string, notices: readonly string[] = [], signal?: AbortSignal): Promise<ModelMessage[]> {
     const stored = await OpexMessage.find({ sessionId: new Types.ObjectId(sessionId) }).sort({ seq: 1 }).select({ role: 1, modelMessages: 1 }).lean<Pick<IOpexMessage, "role" | "modelMessages">[]>()
     const turns = stored.map((item) => ({ role: item.role, modelMessages: parseModelMessages(item.modelMessages) }))
     // Os arquivos entram só nos turnos que couberam no orçamento, no formato que o provedor atual lê.
-    const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider, await acceptedFileKinds(provider, model))
+    const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider, await acceptedFileKinds(provider, model, signal))
     // A data e a hora do turno vão só no envio, ao fim da mensagem do usuário, para o prompt de sistema não mudar.
     return withTurnContext(messages, turnContext(notices)) as ModelMessage[]
 }
@@ -314,7 +314,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const tools = [...appTools, ...memory.selfTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
         if (memory.notice) publishLine(sessionId, { type: "text-delta", text: `> ${memory.notice}\n\n` })
         const overrides = { ...mcp.overrides, ...appOverrides }
-        const history = await loadHistory(sessionId, session.summary, main.provider!, main.model!, mcp.notices)
+        const history = await loadHistory(sessionId, session.summary, main.provider!, main.model!, mcp.notices, controller.signal)
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
@@ -340,7 +340,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                   }
                 : {}),
         })
-        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant, session: `opex-agent-${sessionId}` })
+        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant, session: `opex-agent-${sessionId}`, signal: controller.signal })
         const meteredModel = prepared
         const result = streamText({
             model: prepared.model,
@@ -401,7 +401,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     cost = addStepCost(cost, meteredModel.takeStepCost(part.providerMetadata))
                     break
                 case "error":
-                    errorMessage = describeAiError(part.error, main.provider!)
+                    errorMessage = describeAiError(part.error, main.provider!, main.model)
                     break
                 case "abort":
                     aborted = true
@@ -416,7 +416,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     } catch (error) {
         if (controller.signal.aborted) aborted = true
         else {
-            errorMessage = describeAiError(error, main.provider ?? undefined)
+            errorMessage = describeAiError(error, main.provider ?? undefined, main.model)
             log.warn({ sessionId, provider: main.provider, model: main.model, err: errorMessage }, "[opex] falha no turno")
         }
     } finally {

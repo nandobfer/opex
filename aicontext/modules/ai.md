@@ -159,10 +159,15 @@ e opções na própria aba da página "Inteligência Artificial".
   utilizável). Cada modelo é chamado pela API que o catálogo declara, com a SDK correspondente
   (`chat-completions` → `@ai-sdk/openai-compatible`, que lê o `reasoning_content`; `responses` →
   `@ai-sdk/openai`; `messages` → `@ai-sdk/anthropic`; `generate-content` → `@ai-sdk/google`); base
-  declarada fora do gateway é ignorada (a chave nunca vai a outro host); modelo fora do catálogo vai
-  por Chat Completions. DTO: variantes = esforços do modelo, `group` = dono do `canonical_id`,
+  declarada fora do gateway é ignorada (a chave nunca vai a outro host). Na geração, a consulta ao
+  catálogo (cache de 2 min) recebe o cancelamento de quem pediu e um limite próprio de 5 s
+  (`OPENCODE_GO_CATALOG_TIMEOUT_MS`); se falhar, usa o último catálogo lido (mesmo vencido) com aviso no
+  log, e só sem nenhum catálogo — ou com o modelo fora dele — vai por Chat Completions, também com aviso.
+  O mesmo vale para os tipos de entrada usados nos arquivos do Agente Opex. DTO: variantes = esforços do modelo, `group` = dono do `canonical_id`,
   contexto, `inputModalities` e `free` (sufixo `-free` ou preço 0 — mostrados com o selo "grátis";
-  podem ser bloqueados fora do OpenCode).
+  podem ser bloqueados fora do OpenCode). Um 403 num modelo `*-free` tem mensagem própria ("modelos
+  gratuitos podem funcionar só dentro do OpenCode; escolha um modelo pago do plano Go"), em vez da
+  dica de plano e região Global dos demais.
 - **Conferência da chave** (`verifyOpencodeGoKey`): como a lista é pública, o teste e a conexão na hora
   fazem `POST /chat/completions` com o modelo inexistente `__opex_probe__` — 401 = chave recusada,
   400 "Model is unavailable" = chave aceita, sem gerar nada nem consumir a cota.

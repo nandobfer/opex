@@ -80,7 +80,7 @@ const DIRECT_PROVIDERS = {
 } as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
-export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "session">): Promise<PreparedModel> {
+export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "session" | "signal">): Promise<PreparedModel> {
     if (request.provider === "opencode") {
         const { createOpencodeProvider } = await import("./opencode")
         const { provider, directory } = await createOpencodeProvider()
@@ -108,7 +108,7 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
     }
     if (request.provider === "opencode-go") {
         const { createOpencodeGoModel } = await import("./opencode-go")
-        const { model, meter } = await createOpencodeGoModel(request.model, { session: request.session })
+        const { model, meter } = await createOpencodeGoModel(request.model, { session: request.session, signal: request.signal })
         return {
             model,
             // O esforço vem da lista do próprio modelo (inclui `none` e `max`); a AI SDK traduz para cada API.
@@ -148,11 +148,11 @@ function statusCodeOf(error: unknown): number | null {
     return typeof status === "number" ? status : null
 }
 
-export function describeAiError(error: unknown, provider?: AiProviderId): string {
+export function describeAiError(error: unknown, provider?: AiProviderId, model?: string | null): string {
     if (error instanceof AiProviderError) return error.message
     if (provider === "opencode-go") {
         const status = statusCodeOf(error)
-        const known = status === null ? null : opencodeGoStatusMessage(status)
+        const known = status === null ? null : opencodeGoStatusMessage(status, model)
         if (known) return known
     }
     const message = error instanceof Error ? error.message : String(error)
@@ -170,7 +170,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     try {
         prepared = await prepareModel(request)
     } catch (error) {
-        yield { type: "error", message: describeAiError(error, request.provider) }
+        yield { type: "error", message: describeAiError(error, request.provider, request.model) }
         return
     }
     let reasoningAnnounced = false
@@ -221,7 +221,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                 }
                 case "error":
                     failed = true
-                    yield { type: "error", message: describeAiError(part.error, request.provider) }
+                    yield { type: "error", message: describeAiError(part.error, request.provider, request.model) }
                     break
                 case "abort":
                     failed = true
@@ -261,7 +261,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
     } catch (error) {
         if (!request.signal?.aborted) {
             log.warn({ provider: request.provider, model: request.model, err: error instanceof Error ? error.message : error }, "[ai] falha na geração")
-            yield { type: "error", message: describeAiError(error, request.provider) }
+            yield { type: "error", message: describeAiError(error, request.provider, request.model) }
         }
     } finally {
         await prepared.dispose().catch(() => undefined)

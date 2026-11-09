@@ -115,7 +115,7 @@ describe('streamAi', () => {
       provider: 'opencode-go', model: 'deepseek-v4.1-flash', variant: 'max', temperature: 0.4, maxOutputTokens: 500,
       session: 'opex-agent-1', instructions: 'i', prompt: 'p', consumption: { origin: 'task-summary', subject: 't1' },
     })
-    expect(mocks.goModel).toHaveBeenCalledWith('deepseek-v4.1-flash', { session: 'opex-agent-1' })
+    expect(mocks.goModel).toHaveBeenCalledWith('deepseek-v4.1-flash', { session: 'opex-agent-1', signal: undefined })
     expect(mocks.streamText.mock.calls[0]![0]).toMatchObject({ model: { kind: 'opencode-go' }, reasoning: 'max', temperature: 0.4, maxOutputTokens: 500 })
     expect(events.map((event) => event.type)).toEqual(['reasoning', 'delta', 'done'])
     expect(events.at(-1)).toMatchObject({ usage: { costUsd: 0.00002 } })
@@ -143,6 +143,18 @@ describe('streamAi', () => {
     mocks.parts = [{ type: 'error', error: apiError(429) }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
     const [limited] = await collect({ provider: 'opencode-go', model: 'm', instructions: 'i', prompt: 'p' })
     expect(limited).toMatchObject({ message: expect.stringContaining('Limite do plano OpenCode Go atingido') })
+  })
+
+  it('OpenCode Go: 403 num modelo gratuito (*-free) explica que ele pode funcionar só dentro do OpenCode', async () => {
+    const forbidden = Object.assign(new Error('Forbidden'), { statusCode: 403 })
+    mocks.parts = [{ type: 'error', error: forbidden }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
+    const [free] = await collect({ provider: 'opencode-go', model: 'longcat-2.5-free', instructions: 'i', prompt: 'p' })
+    expect(free).toMatchObject({ message: expect.stringContaining('modelo gratuito longcat-2.5-free') })
+    expect((free as { message: string }).message).not.toContain('região Global')
+
+    mocks.parts = [{ type: 'error', error: forbidden }, { type: 'finish', finishReason: 'error', totalUsage: usage }]
+    const [paid] = await collect({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', instructions: 'i', prompt: 'p' })
+    expect(paid).toMatchObject({ message: expect.stringContaining('habilite a região Global') })
   })
 
   it('Anthropic: com raciocínio ligado não envia temperatura (a API recusa); sem ele, envia', async () => {

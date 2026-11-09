@@ -5,9 +5,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   config: {} as Record<string, unknown>,
   fetch: vi.fn(),
+  warn: vi.fn(),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async () => mocks.config) }))
+vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/lib/integrations/debug', () => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
@@ -45,6 +47,7 @@ const catalog = {
 }
 
 beforeEach(() => {
+  vi.useRealTimers()
   vi.clearAllMocks()
   clearOpencodeGoCatalogCache()
   mocks.config = { apiKey: 'oc_sk_teste' }
@@ -166,5 +169,46 @@ describe('createOpencodeGoModel', () => {
     expect(sessions).toHaveLength(2)
     expect(sessions[0]).toMatch(/^opex-/)
     expect(sessions[0]).not.toBe(sessions[1])
+  })
+})
+
+describe('catálogo no caminho da geração (cancelamento, limite e último catálogo bom)', () => {
+  const firstGenerationUrl = () => mocks.fetch.mock.calls.map(([url]) => String(url)).find((url) => !url.endsWith('/models'))
+
+  it('a consulta ao catálogo sempre leva um sinal com limite próprio, mesmo sem cancelamento de quem pediu', async () => {
+    mocks.fetch.mockImplementation(async (url: string) => (url.endsWith('/models') ? json(catalog) : json({ error: { message: 'x' } }, 400)))
+    await createOpencodeGoModel('deepseek-v4.1-flash')
+    const [, init] = mocks.fetch.mock.calls[0]!
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('cancelamento de quem pediu alcança a consulta pendurada e interrompe o preparo', async () => {
+    mocks.fetch.mockImplementation(
+      (_url: string, init: RequestInit) => new Promise((_resolve, reject) => init.signal!.addEventListener('abort', () => reject(new DOMException('abortado', 'AbortError')))),
+    )
+    const controller = new AbortController()
+    const pending = createOpencodeGoModel('claude-haiku-5-5', { signal: controller.signal })
+    setTimeout(() => controller.abort(), 10)
+    await expect(pending).rejects.toThrow()
+  })
+
+  it('catálogo vencido e fora do ar: usa o último catálogo lido (a rota do modelo continua certa) e avisa no log', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    mocks.fetch.mockResolvedValueOnce(json(catalog))
+    await listOpencodeGoModels()
+    vi.setSystemTime(Date.now() + 10 * 60_000)
+    mocks.fetch.mockImplementation(async (url: string) => (url.endsWith('/models') ? json({ error: 'fora' }, 503) : json({ error: { message: 'x' } }, 400)))
+    const { model } = await createOpencodeGoModel('claude-haiku-5-5')
+    for await (const part of streamText({ model, prompt: 'x', maxRetries: 0 }).fullStream) void part
+    expect(firstGenerationUrl()).toBe('https://opencode.ai/inference/go/anthropic/v1/messages')
+    expect(mocks.warn).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('usando o último catálogo lido'))
+  })
+
+  it('sem catálogo nenhum: vai por Chat Completions e registra o motivo no log', async () => {
+    mocks.fetch.mockImplementation(async (url: string) => (url.endsWith('/models') ? json({ error: 'fora' }, 503) : json({ error: { message: 'x' } }, 400)))
+    const { model } = await createOpencodeGoModel('claude-haiku-5-5')
+    for await (const part of streamText({ model, prompt: 'x', maxRetries: 0 }).fullStream) void part
+    expect(firstGenerationUrl()).toBe('https://opencode.ai/inference/go/openai/v1/chat/completions')
+    expect(mocks.warn).toHaveBeenCalledWith(expect.objectContaining({ model: 'claude-haiku-5-5', catalog: false }), expect.stringContaining('usando Chat Completions'))
   })
 })
