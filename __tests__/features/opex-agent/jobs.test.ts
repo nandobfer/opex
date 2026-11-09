@@ -86,6 +86,7 @@ vi.mock('@/features/opex-agent/server/confirmations', () => ({ requestConfirmati
 vi.mock('@/features/opex-agent/server/tools/context', () => ({ nowContext: () => ({ iso: '2026-10-23T12:00:00.000Z', local: 'sexta', timeZone: 'America/Sao_Paulo' }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ enabledOpexTools: () => [], findOpexTool: () => undefined, needsConfirmation: () => false }))
 vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ enabledClientOpexServerTools: () => [], findOpexClientServerTool: () => undefined }))
+vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: async () => ({ catalog: [], tools: [] }) }))
 vi.mock('@/features/opex-agent/server/client-config', () => ({
   assertClientOpexEnabled: mocks.assertClientEnabled,
   assertClientToolAllowed: vi.fn(),
