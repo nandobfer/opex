@@ -3,13 +3,14 @@ import type { OpexAgentSettings, OpexFilesSettings } from "./schemas"
 import type { OpexToolGroup } from "./constants"
 import type { OpexClientToolGroup } from "./client-tools"
 import type { OPEX_MCP_TOOL_GROUP } from "./mcp"
+import type { OPEX_SKILL_TOOL_GROUP } from "./skills"
 import type { ChatFileDto, ChatFileReservationDto } from "@/lib/chat-files/kind"
 import type { OpexToolMetaDto } from "./tool-tree"
 import type { OpencodeFormDto } from "@/lib/ai/opencode-events"
 import type { MADDOX_NATIVE_TOOL_GROUP } from "@/features/maddox-agent/constants"
 
 /** Grupo do card de uma ferramenta (do dono, do portal, de MCP do Opex ou nativa do OpenCode no Maddox). */
-export type OpexToolPartGroup = OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | typeof MADDOX_NATIVE_TOOL_GROUP
+export type OpexToolPartGroup = OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | typeof OPEX_SKILL_TOOL_GROUP | typeof MADDOX_NATIVE_TOOL_GROUP
 
 /** Arquivo enviado no chat (o binário fica no Storage S3; `url` = rota do conteúdo, sem `basePath`). */
 export type OpexFileDto = ChatFileDto

@@ -29,6 +29,7 @@ import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client
 import { OWNER_SCOPE, actorIdOf, sessionScopeOf, type OpexServerScope } from "./scope"
 import { nowContext } from "./tools/context"
 import { enabledOpexTools, findOpexTool } from "./tools/registry"
+import { skillsCatalogBlock, type OpexSkillCatalogItem } from "../skills"
 
 const log = loggerFor({ module: "opex-agent" })
 const INTERRUPTED = "Interrompido pelo usuário"
@@ -41,13 +42,14 @@ export function instructionsFor(
     settings: OpexAgentSettings,
     scope: OpexServerScope,
     memories = "",
-    options: { jobs?: boolean; selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null } = {},
+    options: { jobs?: boolean; selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null; skills?: readonly OpexSkillCatalogItem[] } = {},
 ): string {
     const read = options.memoryRead ?? false
     const write = options.selfMemory ?? false
     const self = read || write ? selfMemoryInstructions("opex", memoryTurnOf(scope), { counts: options.counts, read, write }) : ""
     if (scope.kind === "owner") {
-        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories), ...(self ? [self] : [])].join("\n")
+        const skills = skillsCatalogBlock(options.skills ?? [])
+        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories), ...(self ? [self] : []), ...(skills ? [skills] : [])].join("\n")
     }
     const role = scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"
     return [
@@ -300,15 +302,17 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         const mcpTools = new Map(mcp.tools.map((tool) => [tool.name, tool]))
         const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId, settings.disabledTools, args.userText)
         const selfNames = new Set(memory.selfTools.map((tool) => tool.name))
+        // Skills (OPE-153): só o Agente Opex do dono, com as ligadas no início do turno (portal e Maddox fora).
+        const skills = scope.kind === "owner" ? await (await import("./skills/turn")).ownerSkillsForTurn() : { catalog: [], tools: [] }
         const appNames = new Set([...appTools.map((tool) => tool.name), ...selfNames])
-        const tools = [...appTools, ...memory.selfTools, ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
+        const tools = [...appTools, ...memory.selfTools, ...skills.tools.filter((tool) => !appNames.has(tool.name)), ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
         if (memory.notice) publishLine(sessionId, { type: "text-delta", text: `> ${memory.notice}\n\n` })
         const overrides = { ...mcp.overrides, ...appOverrides }
         const history = await loadHistory(sessionId, session.summary, main.provider!, mcp.notices)
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
-        for (const tool of memory.selfTools) mcpTools.set(tool.name, tool)
+        for (const tool of [...memory.selfTools, ...skills.tools]) mcpTools.set(tool.name, tool)
         lookup = mcpTools
         const runtime = buildToolRuntime(tools, toolContext, overrides, {
             requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
@@ -333,7 +337,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant })
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts }),
+            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts, skills: skills.catalog }),
             messages: history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),

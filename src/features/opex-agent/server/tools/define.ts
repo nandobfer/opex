@@ -4,6 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import type { OpexToolGroup } from "../../constants"
 import type { OpexClientToolGroup } from "../../client-tools"
 import type { OPEX_MCP_TOOL_GROUP } from "../../mcp"
+import type { OPEX_SKILL_TOOL_GROUP } from "../../skills"
 import type { OpexServerScope } from "../scope"
 import type { HttpSecretVault } from "@/features/http-request/schemas"
 
@@ -35,7 +36,7 @@ export function contextSessionId(context: Pick<OpexToolContext, "sessionId">): s
 
 export interface OpexToolDef<I = unknown> {
     name: string
-    group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP
+    group: OpexToolGroup | OpexClientToolGroup | typeof OPEX_MCP_TOOL_GROUP | typeof OPEX_SKILL_TOOL_GROUP
     /** Rótulo curto em pt-BR exibido no card da ferramenta. */
     label: string
     description: string

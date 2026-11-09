@@ -1,4 +1,5 @@
-import { isInvalidRoutineOpexProvider, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE } from "../schemas"
+import { isInvalidRoutineOpexProvider, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE, withRoutineEngineDefaults } from "../schemas"
+import { skillsCatalogBlock } from "@/features/opex-agent/skills"
 import { guardedRoutineTool } from "./tools/guarded"
 import { HTTP_REQUEST_TOOL, httpTools } from "@/features/opex-agent/server/tools/http"
 import { loadRoutineSecretVault } from "./secrets"
@@ -84,6 +85,12 @@ export function assertRunnable(agent: RoutineAgentDoc): void {
     if (isInvalidRoutineOpexProvider(agent.engine, agent.opex?.provider)) throw new DomainError(409, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE, "ROUTINE_ENGINE_PROVIDER_INVALID")
 }
 
+/** Configuração dos motores para o snapshot, com os padrões dos campos novos. */
+export function enginesOf(agent: Parameters<typeof withRoutineEngineDefaults>[0]) {
+    const { opex, opencode } = withRoutineEngineDefaults(agent)
+    return { opex, opencode }
+}
+
 export async function triggerRoutineRun(agentId: string, input: TriggerInput, actorId: string): Promise<{ runId: string; status: RoutineRunStatus }> {
     const agent = await loadAgentDoc(agentId)
     assertRunnable(agent)
@@ -97,7 +104,8 @@ export async function triggerRoutineRun(agentId: string, input: TriggerInput, ac
         request: input.request?.trim() || null,
         payload: input.payload ?? null,
         status: "queued",
-        snapshot: { engine: agent.engine, opex: agent.opex, opencode: agent.opencode, confirmIrreversible: agent.confirmIrreversible !== false, limits: agent.limits },
+        // Configuração antiga sem as skills entra no snapshot já com o padrão (D3: nenhuma).
+        snapshot: { engine: agent.engine, ...enginesOf(agent), confirmIrreversible: agent.confirmIrreversible !== false, limits: agent.limits },
         queuedAt: now,
         delayMs: input.delayMs ?? null,
     })
@@ -189,12 +197,18 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
             if (settings.disabledTools.includes(HTTP_REQUEST_TOOL)) activation.warnings.push('A ferramenta "Chamada HTTP" está desligada no Agente Opex: a execução segue sem ela.')
             else opencodeHttp = httpTools.map((tool) => guardedRoutineTool(tool, { activation, confirmIrreversible: run.snapshot.confirmIrreversible, overrides: settings.confirmationOverrides }))
         }
+        // Skills do Agente Opex (OPE-153, motor Opex): só a seleção do snapshot (ligadas ou não, D2); as que
+        // sumiram viram aviso. O catálogo vai nas instruções; o corpo vem sob demanda pelas ferramentas.
+        const skills =
+            run.snapshot.engine === "opex" ? await (await import("@/features/opex-agent/server/skills/turn")).routineSkillsForRun(run.snapshot.opex?.enabledSkills ?? []) : { catalog: [], tools: [], missing: [] }
+        if (skills.missing.length) activation.warnings.push(`Skill indisponível (removida do Agente Opex), fora desta execução: ${skills.missing.join(", ")}.`)
         const secretCatalog = httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? activation.secrets.list() : []
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
             ...routineMemoryTools({ slug: agent.slug, label, target, runId, allowed: memoryChannels, warn: (message) => activation.warnings.push(message) }),
             // Motor OpenCode: a Chamada HTTP com segredos sai do servidor Opex, pelo MCP da execução.
             ...opencodeHttp,
+            ...skills.tools,
         ]
         activation.tools = internalTools
         const remaining = remainingActiveMs({ activeMs: run.activeMs ?? 0 }, run.snapshot.limits)
@@ -230,6 +244,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                     toolPrefix,
                     http: httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
                     warnings: activation.warnings,
+                    skillsBlock: skillsCatalogBlock(skills.catalog, toolPrefix),
                     now: new Date(),
                 }),
             internalTools,

@@ -23,6 +23,8 @@ export interface RoutineInstructionInput {
     now: Date
     /** Chamada HTTP liberada (nome da ferramenta no motor) e o catálogo dos segredos, sem valores. */
     http?: { tool: string; secrets: readonly { name: string; description: string; allowedHosts: readonly string[] }[] } | null
+    /** Bloco "Skills disponíveis" (motor Opex: só as skills da seleção; o corpo vem sob demanda). */
+    skillsBlock?: string
 }
 
 /** Chamada HTTP e segredos do agente: só nomes, descrições e domínios (o valor nunca vai ao modelo). */
@@ -62,6 +64,7 @@ export function routineInstructions(input: RoutineInstructionInput): string {
             : "- O dono liberou as ações irreversíveis: execute-as direto, com cuidado, e registre no relato.",
         `- No fim, chame ${t("finish")} com o relato final em pt-BR (o que foi feito, resultado e pendências).`,
         input.http ? httpSection(input.http, input.engine) : "",
+        input.skillsBlock?.trim() ? `\n${input.skillsBlock.trim()}` : "",
         input.warnings.length ? `\n## Avisos\n${input.warnings.map((warning) => `- ${warning}`).join("\n")}` : "",
         input.memoryBlock.trim() ? `\n## Memórias\n${input.memoryBlock.trim()}` : "",
     ]

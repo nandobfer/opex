@@ -2,6 +2,7 @@ import { AlarmClock, Globe, Repeat, BookOpen, Terminal, Bot, Boxes, Brain, Brain
 import type { OpexToolGroup } from "../constants"
 import type { OpexClientToolGroup } from "../client-tools"
 import { OPEX_MCP_TOOL_GROUP } from "../mcp"
+import { OPEX_SKILL_TOOL_GROUP } from "../skills"
 import { MADDOX_NATIVE_TOOL_GROUP } from "@/features/maddox-agent/constants"
 import type { OpexToolPartGroup } from "../types"
 
@@ -52,6 +53,7 @@ const OPEX_CLIENT_GROUP_ICONS: Record<OpexClientToolGroup, LucideIcon> = {
 export const toolIcon = (group: OpexToolPartGroup | null): LucideIcon => {
     if (!group) return Wrench
     if (group === OPEX_MCP_TOOL_GROUP) return Cable
+    if (group === OPEX_SKILL_TOOL_GROUP) return Sparkles
     // Agente Maddox: ferramentas nativas do OpenCode (terminal, arquivos, MCPs do OpenCode…).
     if (group === MADDOX_NATIVE_TOOL_GROUP) return Terminal
     return OPEX_TOOL_GROUP_ICONS[group as OpexToolGroup] ?? OPEX_CLIENT_GROUP_ICONS[group as OpexClientToolGroup] ?? Wrench

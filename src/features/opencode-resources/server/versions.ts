@@ -1,4 +1,4 @@
-import { githubRequest } from "@/features/github/client"
+import { githubGetWithPublicFallback } from "@/features/github/client"
 import { loggerFor } from "@/lib/logger"
 import { VERSION_CACHE_MS } from "../constants"
 import { latestStable } from "../versions"
@@ -70,15 +70,7 @@ interface RepoTree {
     folders: Record<string, string>
 }
 
-async function githubGet<T>(path: string): Promise<T> {
-    try {
-        return await githubRequest<T>(path)
-    } catch {
-        const res = await fetch(`https://api.github.com${path}`, { headers: { Accept: "application/vnd.github+json" }, cache: "no-store", signal: AbortSignal.timeout(10_000) })
-        if (!res.ok) throw new Error(`GitHub HTTP ${res.status}`)
-        return (await res.json()) as T
-    }
-}
+const githubGet = <T>(path: string) => githubGetWithPublicFallback<T>(path, { anyError: true })
 
 /** Hash (SHA da árvore no git) de uma pasta do repositório — o mesmo `skillFolderHash` da CLI `skills`. */
 export async function githubFolderHash(repo: string, folder: string, refresh = false): Promise<string | null> {

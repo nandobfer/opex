@@ -45,6 +45,23 @@ export function routineSessionPermissions(hostMcps: readonly string[], allowed: 
     return rules
 }
 
+/**
+ * Skills do host (OPE-153): nega todas (`skill` + `*`, inclusive nativas, de projeto e as que surgirem) e
+ * libera só as selecionadas que existem — a última regra que casa vence no OpenCode. Seleção por id ou nome.
+ */
+export function routineSkillPermissions(hostSkills: readonly { id: string; name: string }[], allowed: readonly string[]): { rules: PermissionRule[]; missing: string[] } {
+    const wanted = new Set(allowed)
+    const rules: PermissionRule[] = [{ action: "skill", resource: "*", effect: "deny" }]
+    const found = new Set<string>()
+    for (const skill of hostSkills) {
+        const key = wanted.has(skill.id) ? skill.id : wanted.has(skill.name) ? skill.name : null
+        if (!key) continue
+        found.add(key)
+        rules.push({ action: "skill", resource: skill.id, effect: "allow" })
+    }
+    return { rules, missing: allowed.filter((name) => !found.has(name)) }
+}
+
 /** Quanto a retomada espera o turno antigo da sessão parar depois de interrompê-lo. */
 export const STALE_TURN_WAIT_MS = 15_000
 
@@ -109,7 +126,16 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
             config: { type: "remote", url: `${base}${routineRunMcpPath(runId)}`, headers: { Authorization: `Bearer ${secret}` }, oauth: false, timeout: { execution: liveWaitBudgetMs(run.snapshot.limits) + 120_000 } },
         })
         for (const name of engine.enabledMcps) if (!hostMcps.includes(name)) activation.warnings.push(`O MCP "${name}" foi liberado mas não existe mais no opencode.jsonc do host: a execução segue sem ele.`)
-        const permissions = routineSessionPermissions(hostMcps, engine.enabledMcps, mcpName)
+        // Skills do host: sem a lista, a seleção não teria como ser aplicada com segurança — falha fechada.
+        let hostSkills: { id: string; name: string }[]
+        try {
+            hostSkills = ((await client.skill.list(location)).data ?? []).map((skill) => ({ id: skill.id, name: skill.name }))
+        } catch (error) {
+            return { error: `Não foi possível listar as skills do host para aplicar as permissões da sessão: ${messageOf(error)}. Confira o OpenCode e dispare de novo.`, text, sessionId }
+        }
+        const skills = routineSkillPermissions(hostSkills, engine.enabledSkills ?? [])
+        for (const name of skills.missing) activation.warnings.push(`A skill "${name}" foi liberada mas não existe mais no OpenCode do host: a execução segue sem ela.`)
+        const permissions = [...routineSessionPermissions(hostMcps, engine.enabledMcps, mcpName), ...skills.rules]
         if (sessionId) {
             const exists = await client.session
                 .get({ sessionID: sessionId })

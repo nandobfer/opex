@@ -5,8 +5,8 @@ import type { EncryptedSecret } from "@/lib/crypto/secretBox"
 import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "@/features/opex-agent/types"
 
 /**
- * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files`, `opex_jobs`
- * e `opex_mcp_servers`).
+ * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files`, `opex_jobs`,
+ * `opex_mcp_servers` e `opex_skills`).
  * Ver `aicontext/modules/opex-agent.md`. Os índices são garantidos pela migração
  * `ensure-opex-indexes`.
  */
@@ -311,7 +311,70 @@ const OpexMcpServerSchema = new Schema<IOpexMcpServer>(
 )
 OpexMcpServerSchema.index({ slug: 1 }, { unique: true })
 
+/** Arquivo de apoio de uma skill do Opex (caminho relativo à pasta da skill). */
+export interface IOpexSkillFile {
+    path: string
+    content: Buffer
+    /** Conteúdo não textual (só listado; o agente não lê). */
+    binary: boolean
+    size: number
+}
+
+/** Origem de uma skill: criada no Opex ou instalada de uma pasta de repositório do GitHub. */
+export interface IOpexSkillOrigin {
+    kind: "opex" | "github"
+    /** `dono/repo` (só GitHub). */
+    repo: string | null
+    /** Ref pedida na instalação (`null` = branch padrão). */
+    ref: string | null
+    /** Pasta da skill no repositório (`""` = raiz). */
+    path: string | null
+}
+
+/** Skill do Agente Opex (OPE-153): um documento por skill, gravado de uma vez (sem gravação parcial). */
+export interface IOpexSkill {
+    /** Nome único e imutável (= pasta), usado na seleção dos agentes rotineiros. */
+    name: string
+    description: string
+    /** Corpo do `SKILL.md` (sem o frontmatter). */
+    body: string
+    /** Frontmatter extra do `SKILL.md` (além de `name` e `description`). */
+    extra: Record<string, unknown>
+    files: IOpexSkillFile[]
+    origin: IOpexSkillOrigin
+    /** SHA da árvore da pasta no GitHub na instalação/atualização (`null` = criada no Opex). */
+    hash: string | null
+    /** Ligada para o Agente Opex do dono nas conversas (não afeta os rotineiros). */
+    enabled: boolean
+    /** Tamanho total (corpo + arquivos), em bytes. */
+    size: number
+    createdAt: Date
+    updatedAt: Date
+}
+
+const OpexSkillFileSchema = new Schema<IOpexSkillFile>(
+    { path: { type: String, required: true }, content: { type: Buffer, required: true }, binary: { type: Boolean, default: false }, size: { type: Number, default: 0 } },
+    { _id: false },
+)
+
+const OpexSkillSchema = new Schema<IOpexSkill>(
+    {
+        name: { type: String, required: true },
+        description: { type: String, required: true },
+        body: { type: String, default: "" },
+        extra: { type: Schema.Types.Mixed, default: {} },
+        files: { type: [OpexSkillFileSchema], default: [] },
+        origin: { type: Schema.Types.Mixed, required: true },
+        hash: { type: String, default: null },
+        enabled: { type: Boolean, default: true },
+        size: { type: Number, default: 0 },
+    },
+    { collection: "opex_skills", versionKey: false, timestamps: true, minimize: false },
+)
+OpexSkillSchema.index({ name: 1 }, { unique: true })
+
 if (process.env.NODE_ENV === "development") {
+    delete models.OpexSkill
     delete models.OpexMcpServer
     delete models.OpexJob
     delete models.OpexFile
@@ -327,3 +390,4 @@ export const OpexJob: Model<IOpexJob> = (models.OpexJob as Model<IOpexJob>) || m
 export const OpexPendingAction: Model<IOpexPendingAction> =
     (models.OpexPendingAction as Model<IOpexPendingAction>) || model<IOpexPendingAction>("OpexPendingAction", OpexPendingActionSchema)
 export const OpexMcpServer: Model<IOpexMcpServer> = (models.OpexMcpServer as Model<IOpexMcpServer>) || model<IOpexMcpServer>("OpexMcpServer", OpexMcpServerSchema)
+export const OpexSkill: Model<IOpexSkill> = (models.OpexSkill as Model<IOpexSkill>) || model<IOpexSkill>("OpexSkill", OpexSkillSchema)

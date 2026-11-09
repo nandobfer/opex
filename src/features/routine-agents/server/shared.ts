@@ -1,5 +1,5 @@
 import { Types } from "mongoose"
-import { isInvalidRoutineOpexProvider } from "../schemas"
+import { isInvalidRoutineOpexProvider, withRoutineEngineDefaults } from "../schemas"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
@@ -71,7 +71,8 @@ export async function publishRunAttention(payload: RoutineRunAttentionPayload): 
 
 const iso = (value: Date | string | null | undefined) => (value ? new Date(value).toISOString() : null)
 
-export function toAgentDto(doc: RoutineAgentDoc, extra: { lastRun?: RoutineAgentDto["lastRun"]; activeRuns?: number } = {}): RoutineAgentDto {
+export function toAgentDto(raw: RoutineAgentDoc, extra: { lastRun?: RoutineAgentDto["lastRun"]; activeRuns?: number } = {}): RoutineAgentDto {
+    const doc = withRoutineEngineDefaults(raw)
     const schedule = (doc.triggers ?? []).map((state) => ({ trigger: state.trigger, nextAt: iso(state.nextAt), lastFiredAt: iso(state.lastFiredAt) }))
     const upcoming = schedule
         .map((item) => item.nextAt)
