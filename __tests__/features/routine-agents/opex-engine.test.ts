@@ -17,6 +17,8 @@ const holder = vi.hoisted(() => ({
   settings: { disabledTools: [] as string[], confirmationOverrides: {} as Record<string, boolean> },
   catalog: new Map<string, OpexTool>(),
   executed: [] as string[],
+  stepCosts: [] as unknown[],
+  prepared: [] as unknown[],
 }))
 
 vi.mock('ai', () => ({
@@ -35,7 +37,10 @@ vi.mock('ai', () => ({
   },
 }))
 vi.mock('@/lib/ai/stream', () => ({
-  prepareModel: async () => ({ model: {}, providerOptions: {}, reasoning: null, dispose: async () => undefined }),
+  prepareModel: async (request: unknown) => {
+    holder.prepared.push(request)
+    return { model: {}, providerOptions: {}, reasoning: null, takeStepCost: () => holder.stepCosts.shift() ?? null, dispose: async () => undefined }
+  },
   describeAiError: (error: unknown) => String(error),
   samplingOptions: () => ({}),
 }))
@@ -69,18 +74,18 @@ const tool = (name: string, risk: OpexTool['risk'], group = 'tasks', extra: Part
     ...extra,
   }) as unknown as OpexTool
 
-function engineInput(enabledTools: string[], confirmIrreversible = true, messages: string | null = null): { input: EngineInput; activation: Activation; steps: string[] } {
+function engineInput(enabledTools: string[], confirmIrreversible = true, messages: string | null = null, onUsage: EngineInput['onUsage'] = () => undefined, provider = 'anthropic'): { input: EngineInput; activation: Activation; steps: string[] } {
   const activation = { runId: 'r'.repeat(24), controller: new AbortController(), outcome: null, stopReason: null, warnings: [] as string[], usage: { tokens: 0, costUsd: null }, baseTokens: 0 } as unknown as Activation
   const steps: string[] = []
   const input = {
     agent: { name: 'Vagas' },
-    run: { snapshot: { confirmIrreversible, opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools, enabledMcpServers: [] } }, messages },
+    run: { snapshot: { confirmIrreversible, opex: { provider, model: 'claude', variant: null, enabledTools, enabledMcpServers: [] } }, messages },
     activation,
     instructions: () => '',
     message: 'comece',
     internalTools: [],
     onStep: (step: { label: string }) => void steps.push(step.label),
-    onUsage: () => undefined,
+    onUsage,
   } as unknown as EngineInput
   return { input, activation, steps }
 }
@@ -89,10 +94,34 @@ beforeEach(() => {
   holder.calls = []
   holder.results = []
   holder.executed = []
+  holder.stepCosts = []
+  holder.prepared = []
   holder.settings = { disabledTools: [], confirmationOverrides: {} }
   holder.catalog = new Map(
     [tool('delete_task', 'destructive'), tool('update_task', 'write'), tool('list_tasks', 'read'), tool('confirm_routine_action', 'write', 'routine-agents'), tool('update_routine_agent', 'write', 'routine-agents')].map((item) => [item.name, item]),
   )
+})
+
+describe('motor Opex — custo do passo (OPE-154)', () => {
+  it('OpenCode Go: cada passo repassa ao onUsage o custo e o billing do medidor, com a sessão estável da execução', async () => {
+    holder.stepCosts = [{ costUsd: 0.0002, billing: { source: 'go', allowanceUsd: 0.0002, listCostUsd: 0.0003 } }]
+    const usages: unknown[] = []
+    const { input } = engineInput([], true, null, (step) => void usages.push(step), 'opencode-go')
+    const result = await runOpexEngine(input)
+    expect(result.error).toBeNull()
+    expect(holder.prepared[0]).toMatchObject({ provider: 'opencode-go', session: `opex-routine-${'r'.repeat(24)}` })
+    expect(usages).toEqual([
+      expect.objectContaining({ provider: 'opencode-go', tokens: 2, costUsd: 0.0002, billing: { source: 'go', allowanceUsd: 0.0002, listCostUsd: 0.0003 }, stepId: '1' }),
+    ])
+  })
+
+  it('provedor sem custo informado: costUsd e billing null, sem erro no motor', async () => {
+    const usages: unknown[] = []
+    const { input } = engineInput([], true, null, (step) => void usages.push(step))
+    const result = await runOpexEngine(input)
+    expect(result.error).toBeNull()
+    expect(usages).toEqual([expect.objectContaining({ costUsd: null, billing: null })])
+  })
 })
 
 describe('motor Opex — interceptação D4', () => {

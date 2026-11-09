@@ -16,6 +16,7 @@
     "@ai-sdk/google": "^4.0.92",
     "@ai-sdk/mcp": "2.0.71",
     "@ai-sdk/openai": "^4.0.96",
+    "@ai-sdk/openai-compatible": "3.0.71",
     "@aws-sdk/client-s3": "^3.1149.0",
     "@aws-sdk/s3-request-presigner": "^3.1149.0",
     "@codemirror/commands": "^6.11.1",

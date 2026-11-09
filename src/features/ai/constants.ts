@@ -25,7 +25,8 @@ export const AI_TAB_ALIASES: Readonly<Record<string, { tab: AiTab; section?: str
 /**
  * Abas da página de um provedor de IA (`/integracoes/ia/opencode`). `configuracao` é a padrão
  * (omitida da URL). Todos os provedores têm Consumo: o OpenCode por origem, o JEV por feature e os
- * provedores diretos (Gemini, Anthropic, OpenAI e DeepSeek) por recurso, só com tokens. `contas`
+ * provedores diretos (Gemini, Anthropic, OpenAI e DeepSeek) por recurso, só com tokens; o OpenCode Go
+ * por recurso, com o custo (cobrado + cota da assinatura). `contas`
  * (contas dos providers do servidor), `controles` (serviço) e os recursos (`skills`, `agentes`,
  * `comandos`, `plugins`, `mcps`) são só do OpenCode.
  */
@@ -39,6 +40,7 @@ export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]>
     anthropic: ["configuracao", "modelos", "consumo"],
     openai: ["configuracao", "modelos", "consumo"],
     deepseek: ["configuracao", "modelos", "consumo"],
+    "opencode-go": ["configuracao", "modelos", "consumo"],
     jev: ["configuracao", "modelos", "consumo"],
 }
 

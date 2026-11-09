@@ -47,11 +47,11 @@ export const EMPTY_ROUTINE_LIMITS: RoutineLimits = { concurrency: null, maxActiv
 
 /**
  * Decisão D9 do plano aprovado (OPE-130): o motor Opex usa só os provedores do Agente Opex (Gemini,
- * Anthropic, OpenAI, DeepSeek) — o OpenCode não aceita as ferramentas do app e é o próprio motor
+ * Anthropic, OpenAI, DeepSeek e, desde a OPE-154, OpenCode Go por API) — o OpenCode de sessão não aceita as ferramentas do app e é o próprio motor
  * "OpenCode no host".
  */
 export const ROUTINE_OPEX_PROVIDER_IDS = OPEX_PROVIDER_IDS
-export const ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE = "O motor Opex não usa o OpenCode: em Configurar, escolha Gemini, Anthropic, OpenAI ou DeepSeek, ou troque o motor para OpenCode no host."
+export const ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE = "O motor Opex não usa o OpenCode: em Configurar, escolha Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go, ou troque o motor para OpenCode no host."
 /** Provedor gravado que o motor Opex não aceita (agentes salvos antes de D9 com `opencode`). */
 export const isInvalidRoutineOpexProvider = (engine: string, provider: string | null | undefined): boolean =>
     engine === "opex" && provider !== null && provider !== undefined && !(ROUTINE_OPEX_PROVIDER_IDS as readonly string[]).includes(provider)

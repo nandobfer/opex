@@ -126,7 +126,8 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
 | Embedding | Gemini / OpenAI | `gemini` / `openai_compatible` | vazia / `OPENAI_API_URL` | do Opex |
 | Embedding | Desligado | `off` (só busca textual; o modelo não muda) | vazia | — |
 
-- **Redator**: provedor (OpenCode e Jev não aparecem), modelo e **até 5 modelos de reserva** da mesma
+- **Redator**: provedor (OpenCode, OpenCode Go e Jev não aparecem — o Go exige `x-opencode-session`,
+  que o Engramind não envia), modelo e **até 5 modelos de reserva** da mesma
   lista (`MultiAutocomplete`; sem repetir nem incluir o principal) e **Temperatura** (0 a 2, passo 0,1,
   `TemperatureInput`; vazia = `null`, que o Engramind não envia ao provedor — obrigatório nos modelos
   que recusam `temperature`, como a família 5.5 da Anthropic; vale para o Redator e a consolidação).

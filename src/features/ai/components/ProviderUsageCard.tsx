@@ -18,7 +18,7 @@ import { UsageBreakdownTable } from "./UsageBreakdownTable"
 import { UsageRefreshButton } from "./UsageRefreshButton"
 
 interface ProviderUsageCardProps {
-    /** Provedor consultado: `opencode` ou um dos provedores diretos (Gemini, Anthropic, OpenAI, DeepSeek). */
+    /** Provedor consultado: `opencode` ou um dos provedores diretos (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go). */
     provider: string
     title: string
     description: string

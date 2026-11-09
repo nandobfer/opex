@@ -56,7 +56,7 @@ import {
   resolveFileMarkers,
 } from '@/features/opex-agent/server/files'
 import { historySize, selectHistory } from '@/features/opex-agent/history'
-import { opexFileDelivery, opexFileKind } from '@/features/opex-agent/files'
+import { opencodeGoFileKinds, opexFileDelivery, opexFileKind } from '@/features/opex-agent/files'
 import { checkFiles } from '@/features/opex-agent/hooks/useOpexUploads'
 import { withDefaults } from '@/features/opex-agent/server/settings'
 import { DEFAULT_OPEX_AGENT_SETTINGS, opexAgentSettingsSchema, sendOpexMessageSchema } from '@/features/opex-agent/schemas'
@@ -109,6 +109,17 @@ describe('tipos de arquivo e o que cada provedor lê', () => {
     expect(opexFileDelivery('deepseek', 'text')).toBe('inline-text')
     expect(opexFileDelivery('anthropic', 'pdf', 50 * 1024 * 1024)).toBe('reference')
     expect(opexFileDelivery('openai', 'text', 6 * 1024 * 1024)).toBe('reference')
+  })
+
+  it('OpenCode Go: os tipos vêm do modelo (catálogo do Go); sem catálogo, só texto', () => {
+    const flash = opencodeGoFileKinds(['text', 'image/jpeg', 'image/png'])
+    expect([...flash]).toEqual(['image'])
+    expect(opexFileDelivery('opencode-go', 'image', 0, flash)).toBe('content')
+    expect(opexFileDelivery('opencode-go', 'pdf', 0, flash)).toBe('reference')
+    expect([...opencodeGoFileKinds(['text', 'application/pdf', 'audio/mpeg', 'video/mp4', 'image'])].sort()).toEqual(['audio', 'image', 'pdf', 'video'])
+    expect(opexFileDelivery('opencode-go', 'image', 0, opencodeGoFileKinds(['text']))).toBe('reference')
+    expect(opexFileDelivery('opencode-go', 'image')).toBe('reference')
+    expect(opexFileDelivery('opencode-go', 'text')).toBe('inline-text')
   })
 })
 
@@ -223,6 +234,16 @@ describe('arquivos no histórico do modelo', () => {
     const text = await stored('erro.log', 'text/plain', 'TypeError: x is undefined')
     const [inline] = (await resolveFileMarkers(text, 'deepseek')) as { content: { type: string; text?: string }[] }[]
     expect(inline!.content[1]!.text).toContain('TypeError: x is undefined')
+  })
+
+  it('OpenCode Go: modelo que lê imagem recebe o conteúdo; o que não lê, só a referência', async () => {
+    const image = await stored('print.png', 'image/png')
+    const [asContent] = (await resolveFileMarkers(image, 'opencode-go', opencodeGoFileKinds(['text', 'image/png']))) as { content: { type: string }[] }[]
+    expect(asContent!.content.map((part) => part.type)).toEqual(['text', 'text', 'image'])
+    s3.getFileObject.mockClear()
+    const [asReference] = (await resolveFileMarkers(image, 'opencode-go', opencodeGoFileKinds(['text']))) as { content: { type: string }[] }[]
+    expect(asReference!.content.map((part) => part.type)).toEqual(['text', 'text'])
+    expect(s3.getFileObject).not.toHaveBeenCalled()
   })
 
   it('o histórico guarda só o marcador; o peso do arquivo conta no orçamento', async () => {

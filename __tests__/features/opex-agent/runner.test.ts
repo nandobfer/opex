@@ -19,6 +19,8 @@ const mocks = vi.hoisted(() => ({
   mcpClose: vi.fn(async () => {}),
   loadMcpTools: vi.fn(),
   ownerSkillsForTurn: vi.fn(),
+  prepareModel: vi.fn(),
+  stepCosts: [] as unknown[],
 }))
 
 vi.mock('ai', () => ({
@@ -36,11 +38,15 @@ vi.mock('ai', () => ({
   },
 }))
 vi.mock('@/lib/ai/stream', () => ({
-  prepareModel: async () => ({ model: { id: 'modelo' }, dispose: async () => {} }),
+  prepareModel: async (request: unknown) => {
+    mocks.prepareModel(request)
+    return { model: { id: 'modelo' }, takeStepCost: () => mocks.stepCosts.shift() ?? null, dispose: async () => {} }
+  },
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }))
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }))
+vi.mock('@/lib/ai/opencode-go', () => ({ opencodeGoModelInputs: async () => ['text', 'image/png'] }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: async () => {}, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: vi.fn(async () => {}) }))
 vi.mock('@/lib/storage/s3', () => ({
@@ -183,6 +189,7 @@ beforeEach(() => {
   mocks.responseMessages = []
   mocks.available = true
   mocks.gate = null
+  mocks.stepCosts = []
   mocks.loadMcpTools.mockResolvedValue({ tools: [], overrides: {}, notices: [], close: mocks.mcpClose })
   mocks.ownerSkillsForTurn.mockResolvedValue({ catalog: [{ name: 'revisar-pr', description: 'Use ao revisar PR' }], tools: [skillTool] })
   for (const model of [sessions(), messages(), store.files as Model]) model.docs.splice(0)
@@ -229,6 +236,34 @@ describe('runner do Agente Opex', () => {
     expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-agent', subject: sessionId, totalTokens: 60, costUsd: null }))
     expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, { userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.', tools: ['Listar tarefas'] }, { kind: 'owner' })
     expect(isTurnActive(sessionId)).toBe(false)
+  })
+
+  it('OpenCode Go: sessão estável da conversa e consumo com o custo e o billing somados dos passos (OPE-154)', async () => {
+    const main = { ...settings.main }
+    Object.assign(settings.main, { provider: 'opencode-go', model: 'deepseek-v4.1-flash' })
+    try {
+      const sessionId = await newSession()
+      mocks.stepCosts = [
+        { costUsd: 0.0001, billing: { source: 'go', allowanceUsd: 0.0001, listCostUsd: 0.0002 } },
+        { costUsd: 0.00005, billing: { source: 'go', allowanceUsd: 0.00005, listCostUsd: 0.0001 } },
+      ]
+      mocks.parts = [
+        { type: 'finish-step', providerMetadata: {} },
+        { type: 'text-delta', id: 'x', text: 'ok' },
+        { type: 'finish-step', providerMetadata: {} },
+        { type: 'finish', finishReason: 'stop', totalUsage: { inputTokens: 40, outputTokens: 5, totalTokens: 45 } },
+      ]
+      mocks.responseMessages = [{ role: 'assistant', content: 'ok' }]
+      await runTurn(sessionId, 'Oi')
+      expect(mocks.prepareModel).toHaveBeenCalledWith(expect.objectContaining({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', session: `opex-agent-${sessionId}` }))
+      const [recorded] = mocks.recordAiConsumption.mock.calls[0] as unknown as [{ costUsd: number; billing: { source: string; allowanceUsd: number; listCostUsd: number } }]
+      expect(recorded).toMatchObject({ provider: 'opencode-go', model: 'deepseek-v4.1-flash', origin: 'opex-agent', totalTokens: 45, billing: { source: 'go' } })
+      expect(recorded.costUsd).toBeCloseTo(0.00015, 10)
+      expect(recorded.billing.allowanceUsd).toBeCloseTo(0.00015, 10)
+      expect(recorded.billing.listCostUsd).toBeCloseTo(0.0003, 10)
+    } finally {
+      Object.assign(settings.main, main)
+    }
   })
 
   it('o próximo turno reenvia o histórico gravado (pedido + resposta) antes da nova mensagem', async () => {

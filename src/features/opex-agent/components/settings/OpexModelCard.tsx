@@ -59,7 +59,7 @@ export function OpexModelCard({ form, target, providers, title, description }: O
                         extraOptions={target === "title" ? [{ value: SAME_AS_MAIN, label: "Mesmo do agente" }] : []}
                         value={provider ?? (target === "title" ? SAME_AS_MAIN : "")}
                         onChange={changeProvider}
-                        emptyText="Nenhum provedor conectado: configure e teste Gemini, Anthropic, OpenAI ou DeepSeek na aba Provedores."
+                        emptyText="Nenhum provedor conectado: configure e teste Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go na aba Provedores."
                     />
                     <p className="text-xs text-muted-foreground">O OpenCode não aparece: ele não aceita as ferramentas do app.</p>
                 </Field>
