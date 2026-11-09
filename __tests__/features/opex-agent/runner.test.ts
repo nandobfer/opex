@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   clientActorFor: vi.fn(),
   mcpClose: vi.fn(async () => {}),
   loadMcpTools: vi.fn(),
+  ownerSkillsForTurn: vi.fn(),
 }))
 
 vi.mock('ai', () => ({
@@ -121,6 +122,8 @@ vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({
 }))
 const mcpTool = { name: 'mcp_gh_search', group: 'mcp', label: 'GitHub · search', risk: 'read', description: '[MCP GitHub] Busca', mcpServerId: 'm1', input: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) }, execute: async () => 'ok' }
 vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ loadMcpTools: mocks.loadMcpTools }))
+const skillTool = { name: 'load_opex_skill', group: 'opex-skills', label: 'Carregar skill', risk: 'read', description: 'Carrega', input: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) }, execute: async () => ({ available: true }) }
+vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: mocks.ownerSkillsForTurn }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({
   enabledOpexTools: () => [fakeTool],
   findOpexTool: (name: string) => (name === fakeTool.name ? fakeTool : undefined),
@@ -181,6 +184,7 @@ beforeEach(() => {
   mocks.available = true
   mocks.gate = null
   mocks.loadMcpTools.mockResolvedValue({ tools: [], overrides: {}, notices: [], close: mocks.mcpClose })
+  mocks.ownerSkillsForTurn.mockResolvedValue({ catalog: [{ name: 'revisar-pr', description: 'Use ao revisar PR' }], tools: [skillTool] })
   for (const model of [sessions(), messages(), store.files as Model]) model.docs.splice(0)
 })
 
@@ -202,13 +206,17 @@ describe('runner do Agente Opex', () => {
     const options = mocks.streamText.mock.calls[0]![0] as { messages: unknown[]; instructions: string; tools: Record<string, unknown> }
     expect(options.messages).toEqual([{ role: 'user', content: [{ type: 'text', text: 'Quais tarefas do CRM?' }, { type: 'text', text: '(Contexto do turno: agora é segunda (America/Sao_Paulo; 2026-10-19T12:00:00.000Z).)' }] }])
     expect(options.instructions).toContain('Seja útil')
+    // OPE-153: skills ligadas no contexto (nome + descrição) e a ferramenta do turno para carregar o corpo.
+    expect(options.instructions).toContain('## Skills disponíveis')
+    expect(options.instructions).toContain('- revisar-pr: Use ao revisar PR')
+    expect(Object.keys(options.tools)).toContain('load_opex_skill')
     expect(options.instructions).not.toContain('America/Sao_Paulo')
     // Memórias do dono: globais + do dono, nunca as do cliente.
     expect(options.instructions).toContain('## Memórias e instruções permanentes')
     expect(options.instructions).toContain('- Regra global')
     expect(options.instructions).toContain('- Regra do dono')
     expect(options.instructions).not.toContain('Regra do cliente')
-    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'get_hints', 'get_memory', 'search_memories'])
+    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'get_hints', 'get_memory', 'search_memories', 'load_opex_skill'])
 
     const assistant = messages().docs.find((doc) => doc.role === 'assistant')!
     expect(assistant).toMatchObject({ status: 'complete', text: 'Achei 2 tarefas.', model: 'anthropic/claude-x' })
@@ -326,7 +334,7 @@ describe('runner com MCPs', () => {
     ]
     const lines = await runTurn(sessionId, 'Busque bugs')
     const options = mocks.streamText.mock.calls[0]![0] as { messages: { content: { text: string }[] }[]; tools: Record<string, unknown> }
-    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'get_hints', 'get_memory', 'search_memories', 'mcp_gh_search'])
+    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'get_hints', 'get_memory', 'search_memories', 'load_opex_skill', 'mcp_gh_search'])
     expect(options.messages[0]!.content.at(-1)!.text).toContain('MCP "Jira" indisponível')
     expect(lines.find((line) => line.type === 'tool-start')).toMatchObject({ name: 'mcp_gh_search', group: 'mcp', label: 'GitHub · search' })
     expect(mocks.loadMcpTools).toHaveBeenCalledWith({ kind: 'owner' }, expect.anything())
@@ -368,6 +376,10 @@ describe('runner no portal do cliente', () => {
     expect(mocks.enabledNames).toHaveBeenCalledWith(clientActor)
     const options = mocks.streamText.mock.calls[0]![0] as { instructions: string; tools: Record<string, unknown> }
     expect(options.instructions).toContain('portal do cliente')
+    // OPE-153 (D4): o portal não recebe skills.
+    expect(mocks.ownerSkillsForTurn).not.toHaveBeenCalled()
+    expect(options.instructions).not.toContain('Skills disponíveis')
+    expect(Object.keys(options.tools)).not.toContain('load_opex_skill')
     expect(options.instructions).toContain('ACME')
     // Memórias do portal: globais + do cliente, nunca as do dono.
     expect(options.instructions).toContain('- Regra global')

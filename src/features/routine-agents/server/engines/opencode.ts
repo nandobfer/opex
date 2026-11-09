@@ -119,13 +119,6 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
         } catch (error) {
             return { error: `Não foi possível listar os MCPs do host para aplicar as permissões da sessão: ${messageOf(error)}. Dispare de novo.`, text, sessionId }
         }
-        if (hostMcps.includes(mcpName)) await client.mcp.remove({ server: mcpName, ...location }).catch(() => undefined)
-        await client.mcp.add({
-            server: mcpName,
-            ...location,
-            config: { type: "remote", url: `${base}${routineRunMcpPath(runId)}`, headers: { Authorization: `Bearer ${secret}` }, oauth: false, timeout: { execution: liveWaitBudgetMs(run.snapshot.limits) + 120_000 } },
-        })
-        for (const name of engine.enabledMcps) if (!hostMcps.includes(name)) activation.warnings.push(`O MCP "${name}" foi liberado mas não existe mais no opencode.jsonc do host: a execução segue sem ele.`)
         // Skills do host: sem a lista, a seleção não teria como ser aplicada com segurança — falha fechada.
         let hostSkills: { id: string; name: string }[]
         try {
@@ -135,6 +128,13 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
         }
         const skills = routineSkillPermissions(hostSkills, engine.enabledSkills ?? [])
         for (const name of skills.missing) activation.warnings.push(`A skill "${name}" foi liberada mas não existe mais no OpenCode do host: a execução segue sem ela.`)
+        if (hostMcps.includes(mcpName)) await client.mcp.remove({ server: mcpName, ...location }).catch(() => undefined)
+        await client.mcp.add({
+            server: mcpName,
+            ...location,
+            config: { type: "remote", url: `${base}${routineRunMcpPath(runId)}`, headers: { Authorization: `Bearer ${secret}` }, oauth: false, timeout: { execution: liveWaitBudgetMs(run.snapshot.limits) + 120_000 } },
+        })
+        for (const name of engine.enabledMcps) if (!hostMcps.includes(name)) activation.warnings.push(`O MCP "${name}" foi liberado mas não existe mais no opencode.jsonc do host: a execução segue sem ele.`)
         const permissions = [...routineSessionPermissions(hostMcps, engine.enabledMcps, mcpName), ...skills.rules]
         if (sessionId) {
             const exists = await client.session

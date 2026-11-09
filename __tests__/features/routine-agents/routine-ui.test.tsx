@@ -16,7 +16,22 @@ const mocks = vi.hoisted(() => ({
   agents: [] as unknown[],
   loaded: undefined as unknown,
   providers: [] as { id: string; connected: boolean }[],
-  opencode: { available: true, reason: null, mcps: [{ name: 'playwright', status: 'connected', browser: true }, { name: 'github', status: 'connected', browser: false }], browserAvailable: true },
+  opencode: {
+    available: true,
+    reason: null as string | null,
+    mcps: [{ name: 'playwright', status: 'connected', browser: true }, { name: 'github', status: 'connected', browser: false }],
+    skills: [{ name: 'revisar-pr', description: 'Revisa PRs', native: false }, { name: 'customize-opencode', description: 'Ajusta o OpenCode', native: true }],
+    browserAvailable: true,
+  },
+  refetchOpencode: vi.fn(),
+  opexSkills: [
+    { id: 's1', name: 'resumir', description: 'Resume textos', enabled: true },
+    { id: 's2', name: 'traduzir', description: 'Traduz textos', enabled: false },
+  ],
+}))
+vi.mock('@/features/opex-agent/hooks/useOpexSkills', () => ({
+  useOpexSkills: () => ({ data: mocks.opexSkills, isLoading: false, isError: false, refetch: vi.fn() }),
+  useOpexSkillsRealtime: () => {},
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -25,7 +40,7 @@ vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSea
 vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
   useRoutineAgent: () => ({ data: mocks.loaded, isLoading: false }),
   useSaveRoutineAgent: () => ({ mutate: mocks.save, isPending: false }),
-  useRoutineOpencodeOptions: () => ({ data: mocks.opencode, isLoading: false }),
+  useRoutineOpencodeOptions: () => ({ data: mocks.opencode, isLoading: false, refetch: mocks.refetchOpencode }),
   useRoutineProvisioning: () => ({ mutate: mocks.provisioning, isPending: false }),
   useRoutineAgentStatus: () => ({ mutate: mocks.status, isPending: false }),
   useRoutineAgents: (filter: string) => {
@@ -120,6 +135,55 @@ describe('editor do agente rotineiro', () => {
     expect(screen.getByText('MCPs do host')).toBeTruthy()
     expect(screen.getByLabelText('Liberar playwright')).toBeTruthy()
     expect(screen.getByLabelText('Navegador')).toBeTruthy()
+  })
+
+  it('OPE-153: motor Opex lista todas as skills do Agente Opex (D2), com a situação só informativa, e nenhuma liberada (D3)', () => {
+    render(<RoutineAgentEditor open agentId={null} onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Ferramentas' }))
+    const traduzir = screen.getByLabelText('Liberar traduzir')
+    expect((traduzir as HTMLInputElement).checked).toBe(false)
+    expect(screen.getByText('Desligada no Agente Opex')).toBeTruthy()
+    expect(screen.getByText('Ligada no Agente Opex')).toBeTruthy()
+    fireEvent.click(traduzir)
+    expect((screen.getByLabelText('Liberar traduzir') as HTMLInputElement).checked).toBe(true)
+  })
+
+  it('OPE-153: motor OpenCode lista globais e nativas (selo "Nativa"); skill salva que sumiu aparece "(não encontrada)"', () => {
+    mocks.loaded = {
+      id: 'a1', name: 'Rec', title: 'Agente Rec', generated: { name: false, objective: false }, slug: 'rec', objective: 'x', instructions: '', engine: 'opencode',
+      opex: { provider: null, model: '', variant: null, enabledTools: [], enabledMcpServers: [], enabledSkills: [] },
+      opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [], enabledSkills: ['customize-opencode', 'apagada'] },
+      confirmIrreversible: true, limits: { concurrency: 1, maxActiveMinutes: null, maxWaitingMinutes: null, maxTokens: null, maxLiveWaitMinutes: null }, triggers: [], schedule: [], status: 'active',
+      provisioning: { status: 'ok', error: null, at: null, steps: {}, channels: [], extras: [], warnings: [] },
+    }
+    render(<RoutineAgentEditor open agentId="a1" onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Ferramentas' }))
+    expect(screen.getByText('Nativa')).toBeTruthy()
+    expect((screen.getByLabelText('Liberar customize-opencode') as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByLabelText('Liberar revisar-pr') as HTMLInputElement).checked).toBe(false)
+    expect(screen.getByText('(não encontrada)')).toBeTruthy()
+    mocks.loaded = undefined
+  })
+
+  it('OPE-153: OpenCode desligado no editor avisa com "Tentar novamente" e mantém a seleção salva visível', () => {
+    const previous = mocks.opencode
+    mocks.opencode = { ...previous, available: false, reason: 'Serviço OpenCode indisponível: ECONNREFUSED', mcps: [], skills: [], browserAvailable: false }
+    mocks.loaded = {
+      id: 'a1', name: 'Rec', title: 'Agente Rec', generated: { name: false, objective: false }, slug: 'rec', objective: 'x', instructions: '', engine: 'opencode',
+      opex: { provider: null, model: '', variant: null, enabledTools: [], enabledMcpServers: [], enabledSkills: [] },
+      opencode: { model: 'a/b', variant: null, agent: null, enabledMcps: [], enabledSkills: ['revisar-pr'] },
+      confirmIrreversible: true, limits: { concurrency: 1, maxActiveMinutes: null, maxWaitingMinutes: null, maxTokens: null, maxLiveWaitMinutes: null }, triggers: [], schedule: [], status: 'active',
+      provisioning: { status: 'ok', error: null, at: null, steps: {}, channels: [], extras: [], warnings: [] },
+    }
+    render(<RoutineAgentEditor open agentId="a1" onClose={() => {}} />)
+    fireEvent.click(screen.getByRole('radio', { name: 'Ferramentas' }))
+    expect(screen.getByText('Não foi possível listar as skills do host')).toBeTruthy()
+    expect((screen.getByLabelText('Liberar revisar-pr') as HTMLInputElement).checked).toBe(true)
+    expect(screen.getByText('(salva; OpenCode indisponível)')).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: /Tentar novamente/ })[0]!)
+    expect(mocks.refetchOpencode).toHaveBeenCalled()
+    mocks.opencode = previous
+    mocks.loaded = undefined
   })
 
   it('critério aprovado (OPE-130, D9): o motor Opex não oferece o OpenCode; o motor OpenCode continua com o seletor fixo', () => {

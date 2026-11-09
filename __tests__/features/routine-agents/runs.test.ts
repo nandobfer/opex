@@ -20,6 +20,14 @@ const holder = vi.hoisted(() => ({
   startProvisioning: vi.fn(async () => undefined),
   events: [] as { event: string; payload: Record<string, unknown> }[],
   opexSettings: { disabledTools: [] as string[], confirmationOverrides: {} as Record<string, boolean> },
+  opexSkills: [] as { name: string; description: string }[],
+}))
+vi.mock('@/features/opex-agent/server/skills/turn', () => ({
+  routineSkillsForRun: async (selected: string[]) => {
+    const catalog = holder.opexSkills.filter((skill) => selected.includes(skill.name))
+    const tools = catalog.length ? [{ name: 'load_opex_skill', label: 'Carregar skill', group: 'opex-skills', input: { parse: (raw: unknown) => raw }, execute: async () => ({ available: true }) }] : []
+    return { catalog, tools, missing: selected.filter((name) => !catalog.some((skill) => skill.name === name)) }
+  },
 }))
 vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: holder.opexSettings }) }))
 
@@ -730,6 +738,49 @@ describe('segredos e Chamada HTTP na ativação (critério aprovado OPE-130, D5)
     expect(names[0]).not.toContain('http_request')
     expect(run(runId).warnings).toContain('A ferramenta "Chamada HTTP" está desligada no Agente Opex: a execução segue sem ela.')
     holder.opexSettings = { disabledTools: [], confirmationOverrides: {} }
+  })
+})
+
+describe('skills no motor Opex (OPE-153)', () => {
+  it('configuração antiga sem o campo entra no snapshot com nenhuma skill (D3), sem catálogo nas instruções', async () => {
+    holder.opexSkills = [{ name: 'revisar-pr', description: 'Use ao revisar PR' }]
+    let instructions = ''
+    let names: string[] = []
+    holder.engine = async (input) => {
+      instructions = (input as unknown as { instructions: (prefix: string) => string }).instructions('')
+      names = input.internalTools.map((tool) => tool.name)
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const agent = seedAgent()
+    const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    const snapshot = run(runId).snapshot as { opex: { enabledSkills: string[] }; opencode: { enabledSkills: string[] } }
+    expect(snapshot.opex.enabledSkills).toEqual([])
+    expect(snapshot.opencode.enabledSkills).toEqual([])
+    expect(instructions).not.toContain('Skills disponíveis')
+    expect(names).not.toContain('load_opex_skill')
+  })
+
+  it('a seleção entra no snapshot: catálogo nas instruções, ferramenta do turno e aviso da skill que sumiu (D6)', async () => {
+    holder.opexSkills = [{ name: 'revisar-pr', description: 'Use ao revisar PR' }, { name: 'outra', description: 'Não selecionada' }]
+    let instructions = ''
+    let names: string[] = []
+    holder.engine = async (input) => {
+      instructions = (input as unknown as { instructions: (prefix: string) => string }).instructions('')
+      names = input.internalTools.map((tool) => tool.name)
+      await call(input, 'finish', { report: 'Feito' })
+      return { error: null, text: '' }
+    }
+    const agent = seedAgent({ slug: 'skills', opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools: [], enabledMcpServers: [], enabledSkills: ['revisar-pr', 'apagada'] } })
+    const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect((run(runId).snapshot as { opex: { enabledSkills: string[] } }).opex.enabledSkills).toEqual(['revisar-pr', 'apagada'])
+    expect(instructions).toContain('- revisar-pr: Use ao revisar PR')
+    expect(instructions).not.toContain('outra')
+    expect(names).toContain('load_opex_skill')
+    expect(run(runId).warnings).toContain('Skill indisponível (removida do Agente Opex), fora desta execução: apagada.')
+    holder.opexSkills = []
   })
 })
 

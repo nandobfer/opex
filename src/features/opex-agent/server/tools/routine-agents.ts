@@ -7,6 +7,7 @@ import {
     routineOpencodeEngineSchema,
     routineOpexEngineSchema,
     routineTriggerSchema,
+    withRoutineEngineDefaults,
     type RoutineAgentInput,
 } from "@/features/routine-agents/schemas"
 import { ROUTINE_RUN_STATUSES } from "@/features/routine-agents/status"
@@ -48,8 +49,8 @@ const inputOf = (agent: RoutineAgentDto): RoutineAgentInput => ({
     objective: agent.objective,
     instructions: agent.instructions,
     engine: agent.engine,
-    opex: agent.opex,
-    opencode: agent.opencode,
+    // Campos novos (ex.: skills, OPE-153) com o padrão quando o agente foi gravado antes deles.
+    ...withRoutineEngineDefaults({ opex: agent.opex, opencode: agent.opencode }),
     confirmIrreversible: agent.confirmIrreversible,
     limits: agent.limits,
     triggers: agent.triggers,
