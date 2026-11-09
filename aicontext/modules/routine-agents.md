@@ -73,7 +73,9 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     `SearchableCheckList` (`src/components/ui/check-list/`: busca, switches, skeleton e as chaves salvas que
     sumiram como "(não encontrada)", sem impedir o salvamento). Os MCPs do host usam a mesma lista.
     - **Motor Opex** (`RoutineOpexSkillsCard`): **todas** as skills de Agente Opex › Skills (D2), com
-      "Ligada/Desligada no Agente Opex" só como informação; grava `opex.enabledSkills` (nomes). Skill
+      "Ligada/Desligada no Agente Opex" só como informação; grava `opex.enabledSkills` (nomes). A lista vem
+      de `GET /api/opex/skills?versions=0` (`useOpexSkillOptions`), sem a verificação de versão no GitHub:
+      o editor não depende do GitHub estar no ar. Skill
       recém-adicionada que não existe → 400 `ROUTINE_SKILL_NOT_FOUND`.
     - **Motor OpenCode** (`RoutineOpencodeSkillsCard`, D8): as skills **globais** ligadas e as
       **nativas** do host (selo "Nativa"), vindas de `GET /api/routine-agents/opencode-options` (campo

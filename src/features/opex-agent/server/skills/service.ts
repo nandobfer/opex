@@ -116,15 +116,18 @@ const textFile = (path: string, content: string): IOpexSkillFile => {
     return { path, content: buffer, binary: false, size: buffer.byteLength }
 }
 
-/** Lista (sem conteúdo). Instaladas ganham o hash disponível no GitHub (cache de 10 min; `refresh` limpa). */
-export async function listOpexSkills(options: { refresh?: boolean } = {}): Promise<OpexSkillDto[]> {
+/** Lista (sem conteúdo). Instaladas ganham o hash disponível no GitHub (cache de 10 min; `refresh` limpa; `versions: false` pula). */
+export async function listOpexSkills(options: { refresh?: boolean; versions?: boolean; /** Espera o GitHub sem o teto de tempo ("Atualizar todos"). */ wait?: boolean } = {}): Promise<OpexSkillDto[]> {
     await dbConnect()
     if (options.refresh) clearSkillTreeCache()
     const docs = await OpexSkill.find({}, LIST_PROJECTION).sort({ name: 1 }).lean<SkillListDoc[]>()
+    // Seleção do rotineiro: sem a verificação de versão (não depende do GitHub).
+    if (options.versions === false) return docs.map((doc) => toDto(doc))
     const installed = docs.filter((doc) => doc.origin?.kind === "github" && doc.origin.repo && doc.hash)
     const hashes = await availableHashes(
         installed.map((doc) => ({ key: String(doc._id), repo: doc.origin.repo!, ref: doc.origin.ref ?? null, path: doc.origin.path ?? "" })),
         options.refresh,
+        !options.wait,
     )
     return docs.map((doc) => toDto(doc, hashes.get(String(doc._id)) ?? null))
 }
@@ -304,9 +307,16 @@ export async function installOpexSkills(input: OpexSkillInstallInput, actorId: s
  */
 export async function updateOpexSkills(input: OpexSkillUpdateManyInput, actorId: string): Promise<{ results: OpexSkillResultDto[] }> {
     await dbConnect()
-    const ids = input.all ? (await listOpexSkills({ refresh: true })).filter((skill) => skill.version?.outdated).map((skill) => skill.id) : (input.ids ?? [])
-    const trees = new Map<string, Promise<RepoTree>>()
     const results: OpexSkillResultDto[] = []
+    let ids = input.ids ?? []
+    if (input.all) {
+        // Sem o teto de 4 s da lista: espera o GitHub. A que não pôde ser verificada vira resultado com erro.
+        const installed = (await listOpexSkills({ refresh: true, wait: true })).filter((skill) => skill.version)
+        ids = installed.filter((skill) => skill.version?.outdated).map((skill) => skill.id)
+        for (const skill of installed.filter((item) => item.version?.available === null))
+            results.push({ key: skill.id, name: skill.name, ok: false, id: skill.id, message: "Não foi possível verificar a versão no GitHub (fora do ar ou a pasta não existe mais) — a versão atual foi mantida" })
+    }
+    const trees = new Map<string, Promise<RepoTree>>()
     for (const id of ids) {
         let name: string | null = null
         try {

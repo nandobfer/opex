@@ -22,6 +22,9 @@ const holder = vi.hoisted(() => ({
   opexSettings: { disabledTools: [] as string[], confirmationOverrides: {} as Record<string, boolean> },
   opexSkills: [] as { name: string; description: string }[],
 }))
+vi.mock('@/features/opex-agent/server/skills/service', () => ({
+  existingSkillNames: async (names: string[]) => new Set(names.filter((name) => holder.opexSkills.some((skill) => skill.name === name))),
+}))
 vi.mock('@/features/opex-agent/server/skills/turn', () => ({
   routineSkillsForRun: async (selected: string[]) => {
     const catalog = holder.opexSkills.filter((skill) => selected.includes(skill.name))
@@ -781,6 +784,29 @@ describe('skills no motor Opex (OPE-153)', () => {
     expect(names).toContain('load_opex_skill')
     expect(run(runId).warnings).toContain('Skill indisponível (removida do Agente Opex), fora desta execução: apagada.')
     holder.opexSkills = []
+  })
+})
+
+describe('seleção de skills no cadastro (OPE-153)', () => {
+  const input = { ...DEFAULT_ROUTINE_AGENT_INPUT, instructions: 'Procurar vagas', opex: { ...DEFAULT_ROUTINE_AGENT_INPUT.opex, provider: 'anthropic' as const, model: 'claude' } }
+
+  it('skill do Agente Opex inexistente recém-adicionada é recusada (400) ao criar e ao editar; skill do host não é conferida', async () => {
+    holder.opexSkills = [{ name: 'revisar-pr', description: 'x' }]
+    await expect(createRoutineAgent({ ...input, opex: { ...input.opex, enabledSkills: ['nao-existe'] } }, 'local')).rejects.toMatchObject({ status: 400, code: 'ROUTINE_SKILL_NOT_FOUND' })
+    const created = await createRoutineAgent({ ...input, opex: { ...input.opex, enabledSkills: ['revisar-pr'] }, opencode: { ...input.opencode, enabledSkills: ['so-no-host'] } }, 'local')
+    expect(created.opex.enabledSkills).toEqual(['revisar-pr'])
+    ;(holder.runs as unknown as { aggregate: () => Promise<unknown[]> }).aggregate = async () => []
+    await expect(updateRoutineAgent(created.id, { ...input, opex: { ...input.opex, enabledSkills: ['revisar-pr', 'nova-inexistente'] } }, 'local')).rejects.toMatchObject({ code: 'ROUTINE_SKILL_NOT_FOUND' })
+    holder.opexSkills = []
+  })
+
+  it('skill já salva que foi removida do Agente Opex (D6) não impede editar o agente', async () => {
+    holder.opexSkills = [{ name: 'revisar-pr', description: 'x' }]
+    const created = await createRoutineAgent({ ...input, opex: { ...input.opex, enabledSkills: ['revisar-pr'] } }, 'local')
+    holder.opexSkills = []
+    ;(holder.runs as unknown as { aggregate: () => Promise<unknown[]> }).aggregate = async () => []
+    const updated = await updateRoutineAgent(created.id, { ...input, objective: 'Novo', opex: { ...input.opex, enabledSkills: ['revisar-pr'] } }, 'local')
+    expect(updated.opex.enabledSkills).toEqual(['revisar-pr'])
   })
 })
 

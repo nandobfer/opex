@@ -10,7 +10,7 @@ import type { OpexSkillDto } from '@/features/opex-agent/skills'
 const mocks = vi.hoisted(() => ({
   list: { isLoading: false, isError: false, isFetching: false, data: [] as unknown[] | undefined, error: null as unknown },
   detail: { isLoading: false, isFetching: false, isFetchedAfterMount: true, isError: false, data: undefined as unknown, error: null as unknown },
-  usage: { isLoading: false, data: { count: 2, agents: [{ id: 'a1', name: 'Vagas' }, { id: 'a2', name: 'Notícias' }] } },
+  usage: { isLoading: false, isError: false, data: { count: 2, agents: [{ id: 'a1', name: 'Vagas' }, { id: 'a2', name: 'Notícias' }] } as unknown, refetch: vi.fn() },
   refresh: vi.fn(async () => {}),
   refetchDetail: vi.fn(),
   toggle: vi.fn(),
@@ -82,6 +82,7 @@ beforeEach(() => {
   mocks.list = { isLoading: false, isError: false, isFetching: false, data: [CREATED, INSTALLED], error: null }
   mocks.detail = { isLoading: false, isFetching: false, isFetchedAfterMount: true, isError: false, data: undefined, error: null }
   vi.clearAllMocks()
+  mocks.usage = { isLoading: false, isError: false, data: { count: 2, agents: [{ id: 'a1', name: 'Vagas' }, { id: 'a2', name: 'Notícias' }] }, refetch: vi.fn() }
 })
 afterEach(cleanup)
 
@@ -155,6 +156,23 @@ describe('OpexSkillsSection', () => {
     expect(screen.getByText('Vagas')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Desinstalar' }))
     await waitFor(() => expect(mocks.remove).toHaveBeenCalledWith(INSTALLED.id, expect.anything()))
+  })
+
+  it('remover com a consulta de uso falhando: não afirma "nenhum", avisa e permite tentar de novo (D6)', async () => {
+    mocks.usage = { isLoading: false, isError: true, data: undefined, refetch: vi.fn() }
+    render(<OpexSkillsSection />)
+    fireEvent.click(screen.getByRole('menuitem', { name: /Desinstalar/ }))
+    expect(await screen.findByText(/Não foi possível verificar quais agentes rotineiros usam esta skill/)).toBeTruthy()
+    expect(screen.queryByText(/Nenhum agente rotineiro usa/)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/ }))
+    expect(mocks.usage.refetch).toHaveBeenCalled()
+  })
+
+  it('remover sem uso (consulta com sucesso) informa que nenhum rotineiro usa', async () => {
+    mocks.usage = { isLoading: false, isError: false, data: { count: 0, agents: [] }, refetch: vi.fn() }
+    render(<OpexSkillsSection />)
+    fireEvent.click(screen.getByRole('menuitem', { name: /Desinstalar/ }))
+    expect(await screen.findByText(/Nenhum agente rotineiro usa esta skill/)).toBeTruthy()
   })
 
   it('instalar (D7): repositório com uma skill instala direto; com várias, o dono marca e vê o resultado por skill', async () => {

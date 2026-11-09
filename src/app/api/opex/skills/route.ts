@@ -8,10 +8,11 @@ import { createOpexSkill, listOpexSkills } from "@/features/opex-agent/server/sk
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-/** GET /api/opex/skills[?refresh=1] — skills do Agente Opex (sem conteúdo), com "Com atualização". */
+/** GET /api/opex/skills[?refresh=1][&versions=0] — skills do Agente Opex (sem conteúdo), com "Com atualização" (`versions=0` pula o GitHub). */
 export const GET = withRoute(async ({ req }) => {
     await requireAdminSession(req)
-    return ok(await listOpexSkills({ refresh: new URL(req.url).searchParams.get("refresh") === "1" }))
+    const params = new URL(req.url).searchParams
+    return ok(await listOpexSkills({ refresh: params.get("refresh") === "1", versions: params.get("versions") !== "0" }))
 })
 
 /** POST /api/opex/skills — cria uma skill com texto (auditado). */

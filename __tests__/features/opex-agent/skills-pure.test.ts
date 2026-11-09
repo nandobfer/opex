@@ -80,6 +80,11 @@ describe('descoberta no repositório', () => {
     expect(findSkillFolders(tree)).toEqual(['skills/a', 'skills/b'])
     expect(findSkillFolders(tree, 'skills/b')).toEqual(['skills/b'])
     expect(findSkillFolders({ entries: [{ path: 'SKILL.md', type: 'blob', sha: 'x' }, { path: 'sub/SKILL.md', type: 'blob', sha: 'y' }] })).toEqual([''])
+    // Pasta oculta pedida explicitamente na URL vale; abaixo dela, ocultas continuam ignoradas.
+    const hidden = { entries: [{ path: '.claude/skills/foo/SKILL.md', type: 'blob' as const, sha: 'h1' }, { path: '.claude/skills/.cache/x/SKILL.md', type: 'blob' as const, sha: 'h2' }] }
+    expect(findSkillFolders(hidden, '.claude/skills')).toEqual(['.claude/skills/foo'])
+    expect(findSkillFolders(hidden, '.claude/skills/foo')).toEqual(['.claude/skills/foo'])
+    expect(findSkillFolders(hidden)).toEqual([])
   })
 
   it('hash = SHA da árvore da pasta (raiz = árvore do repositório) e arquivos relativos à pasta', () => {

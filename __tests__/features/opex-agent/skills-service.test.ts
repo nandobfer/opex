@@ -15,6 +15,9 @@ const holder = vi.hoisted(() => ({
   events: [] as { event: string; payload: Record<string, unknown> }[],
   repo: {} as Record<string, unknown>,
   githubDown: false,
+  githubSlow: false,
+  githubCalls: 0,
+  githubDelay: null as Promise<void> | null,
 }))
 
 vi.mock('@/lib/db/models/Opex', async () => {
@@ -38,6 +41,9 @@ vi.mock('@/features/github/client', async (original) => {
   return {
     ...actual,
     githubGetWithPublicFallback: async (path: string) => {
+      holder.githubCalls++
+      if (holder.githubSlow) return new Promise(() => undefined)
+      if (holder.githubDelay) await holder.githubDelay
       if (holder.githubDown) throw new actual.GithubError('Não foi possível conectar ao GitHub', 'UNAVAILABLE')
       if (!(path in holder.repo)) throw new actual.GithubError('Não encontrado no GitHub (ou o token não tem acesso)', 'NOT_FOUND', 404)
       return holder.repo[path]
@@ -91,6 +97,9 @@ beforeEach(() => {
   holder.audit = []
   holder.events = []
   holder.githubDown = false
+  holder.githubSlow = false
+  holder.githubCalls = 0
+  holder.githubDelay = null
   clearSkillTreeCache()
   seedRepo()
 })
@@ -186,6 +195,62 @@ describe('atualizar', () => {
     // A lista não quebra sem o GitHub: a versão disponível fica "não verificada".
     clearSkillTreeCache()
     expect((await listOpexSkills())[0]!.version).toEqual({ installed: 'ta1', available: null, outdated: false })
+  })
+
+  it('a lista não espera o GitHub: falha memorizada por pouco tempo, lentidão vira "não verificado" e a seleção do rotineiro pula a verificação', async () => {
+    await installOpexSkills({ source: 'dono/skills', paths: ['skills/revisar-pr'] }, actor)
+    clearSkillTreeCache()
+    holder.githubDown = true
+    holder.githubCalls = 0
+    expect((await listOpexSkills())[0]!.version).toMatchObject({ available: null })
+    expect((await listOpexSkills())[0]!.version).toMatchObject({ available: null })
+    expect(holder.githubCalls).toBe(1)
+
+    holder.githubCalls = 0
+    expect((await listOpexSkills({ versions: false }))[0]!.version).toEqual({ installed: 'ta1', available: null, outdated: false })
+    expect(holder.githubCalls).toBe(0)
+
+    clearSkillTreeCache()
+    holder.githubDown = false
+    holder.githubSlow = true
+    vi.useFakeTimers()
+    try {
+      const pending = listOpexSkills()
+      await vi.advanceTimersByTimeAsync(4_000)
+      expect((await pending)[0]!.version).toMatchObject({ available: null, outdated: false })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('"Atualizar todos" espera o GitHub lento (sem o teto da lista) e atualiza; GitHub fora vira erro por skill', async () => {
+    const { results } = await installOpexSkills({ source: 'dono/skills', paths: ['skills/revisar-pr'] }, actor)
+    const id = results[0]!.id!
+    seedRepo('ta2', 'Versão nova')
+    clearSkillTreeCache()
+    let release: () => void = () => undefined
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    vi.useFakeTimers()
+    let pending: ReturnType<typeof updateOpexSkills>
+    try {
+      // A árvore só responde depois de 10 s (mais que o teto de 4 s da lista).
+      holder.githubDelay = gate
+      pending = updateOpexSkills({ all: true }, actor)
+      await vi.advanceTimersByTimeAsync(10_000)
+      release()
+    } finally {
+      vi.useRealTimers()
+    }
+    holder.githubDelay = null
+    expect((await pending).results).toEqual([expect.objectContaining({ id, ok: true })])
+    expect((await getOpexSkill(id)).body).toContain('Versão nova')
+
+    seedRepo('ta3', 'Outra')
+    clearSkillTreeCache()
+    holder.githubDown = true
+    const down = await updateOpexSkills({ all: true }, actor)
+    expect(down.results).toEqual([expect.objectContaining({ id, ok: false, message: expect.stringContaining('a versão atual foi mantida') })])
+    expect((await getOpexSkill(id)).body).toContain('Versão nova')
   })
 
   it('skill criada no Opex não tem Atualizar', async () => {

@@ -33,6 +33,14 @@ const fetchList = async (refresh = false) => unwrapApi((await api.get<ApiRespons
 
 export const useOpexSkills = () => useQuery({ queryKey: listKey, queryFn: () => fetchList(), staleTime: 30_000 })
 
+/** Skills para a seleção do rotineiro (motor Opex): a lista sem a verificação de versão no GitHub. */
+export const useOpexSkillOptions = () =>
+    useQuery({
+        queryKey: [...OPEX_SKILLS_KEY, "options"] as const,
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<OpexSkillDto[]>>("/opex/skills", { params: { versions: "0" } })).data),
+        staleTime: 30_000,
+    })
+
 /** "Atualizar" da lista: consulta de novo o GitHub (ignora o cache de versões). */
 export function useRefreshOpexSkills() {
     const queryClient = useQueryClient()

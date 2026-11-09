@@ -30,7 +30,7 @@ const mocks = vi.hoisted(() => ({
   ],
 }))
 vi.mock('@/features/opex-agent/hooks/useOpexSkills', () => ({
-  useOpexSkills: () => ({ data: mocks.opexSkills, isLoading: false, isError: false, refetch: vi.fn() }),
+  useOpexSkillOptions: () => ({ data: mocks.opexSkills, isLoading: false, isError: false, refetch: vi.fn() }),
   useOpexSkillsRealtime: () => {},
 }))
 

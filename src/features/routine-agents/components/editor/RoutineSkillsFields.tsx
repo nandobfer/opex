@@ -9,7 +9,7 @@ import { SearchableCheckList } from "@/components/ui/check-list/SearchableCheckL
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { useOpexSkills, useOpexSkillsRealtime } from "@/features/opex-agent/hooks/useOpexSkills"
+import { useOpexSkillOptions, useOpexSkillsRealtime } from "@/features/opex-agent/hooks/useOpexSkills"
 import type { RoutineAgentInput } from "../../schemas"
 import type { RoutineOpencodeOptionsDto } from "../../types"
 import { ROUTINE_SKILLS_LIST_SKELETON } from "./routine-tools-layout"
@@ -30,7 +30,7 @@ function SkillsCard({ description, children }: { description: string; children: 
 
 /** Motor Opex: todas as skills do Agente Opex (D2), com a situação do switch só como informação. */
 export function RoutineOpexSkillsCard({ form }: { form: UseFormReturn<RoutineAgentInput> }) {
-    const skills = useOpexSkills()
+    const skills = useOpexSkillOptions()
     useOpexSkillsRealtime()
     return (
         <SkillsCard description="Skills de Agente Opex › Skills que este agente pode carregar (nenhuma por padrão). Vale a seleção daqui, mesmo que a skill esteja desligada nas conversas do dono.">

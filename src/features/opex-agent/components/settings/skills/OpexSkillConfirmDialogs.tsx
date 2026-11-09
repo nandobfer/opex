@@ -1,5 +1,7 @@
 "use client"
 
+import { RotateCcw } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { OpexSkillDto } from "../../../skills"
@@ -18,6 +20,9 @@ export function OpexSkillRemoveDialog({ skill, pending, onConfirm, onClose }: { 
             description={
                 usage.isLoading ? (
                     <Skeleton className="h-4 w-64" />
+                ) : usage.isError || !usage.data ? (
+                    // Sem a consulta de uso, nunca afirma "nenhum": o aviso do D6 fica neutro.
+                    "Não foi possível verificar quais agentes rotineiros usam esta skill. Se algum usar, ela sai da seleção dele."
                 ) : count > 0 ? (
                     `Usada por ${count} agente(s) rotineiro(s): ela sai da seleção deles. Execuções em andamento seguem e recebem o aviso de skill indisponível.`
                 ) : (
@@ -29,7 +34,15 @@ export function OpexSkillRemoveDialog({ skill, pending, onConfirm, onClose }: { 
             variant="destructive"
             pending={pending}
             onConfirm={() => skill && onConfirm(skill)}
-        />
+        >
+            {usage.isError ? (
+                <div className="flex justify-start">
+                    <Button type="button" size="sm" variant="outline" className="gap-1.5" onClick={() => void usage.refetch()}>
+                        <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Tentar novamente
+                    </Button>
+                </div>
+            ) : null}
+        </ConfirmDialog>
     )
 }
 

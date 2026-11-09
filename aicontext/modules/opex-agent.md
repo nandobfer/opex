@@ -534,7 +534,7 @@ compartilhados (`src/components/resources/`: `ResourceListCard`, `ResourceRowFra
   recursiva (`git/trees/<ref|HEAD>?recursive=1`) e os blobs (`git/blobs/<sha>`) pela **integração
   GitHub** (token para privados; sem token cadastrado, modo anônimo só para públicos —
   `githubGetWithPublicFallback` de `src/features/github/client.ts`). Uma pasta com `SKILL.md` é uma
-  skill (não se procura outra dentro dela; pastas ocultas e `node_modules` ficam de fora). Passos:
+  skill (não se procura outra dentro dela; pastas ocultas e `node_modules` ficam de fora, exceto a pasta pedida na URL — ex.: `…/tree/main/.claude/skills` vale). Passos:
   origem → lista das skills encontradas (`POST /api/opex/skills/discover`, com o motivo das que não podem
   entrar: frontmatter inválido, nome já existente) → marcar → resultado **por skill**
   (`POST /api/opex/skills/install`). Repositório com uma única skill instalável instala direto. Nome
@@ -542,16 +542,24 @@ compartilhados (`src/components/resources/`: `ResourceListCard`, `ResourceRowFra
   sem `SKILL.md` (`OPEX_SKILL_NO_SKILL_MD`) e árvore grande demais (`OPEX_SKILL_TREE_TRUNCATED`, pedir a
   pasta na URL) têm mensagens claras.
 - **Com atualização / Atualizar:** a lista compara o `hash` gravado com o SHA atual da pasta (uma chamada
-  `trees` por repositório/ref, cache de 10 min; o botão Atualizar da lista passa `?refresh=1`). GitHub
-  fora na lista = versão "não verificada" (sem quebrar). Atualizar (`POST /api/opex/skills/update`,
+  `trees` por repositório/ref, cache de 10 min; o botão Atualizar da lista passa `?refresh=1`). A lista
+  **não espera o GitHub mais de 4 s** (`OPEX_SKILL_VERSION_BUDGET_MS`): passado o teto, responde com a
+  versão "não verificada" e a consulta segue em segundo plano, enchendo o cache para a próxima leitura.
+  Uma **falha** do GitHub fica memorizada por **1 min** (`OPEX_SKILL_VERSION_FAILURE_CACHE_MS`; `?refresh=1`
+  consulta de novo), para a lista não esperar o timeout a cada leitura. GitHub fora na lista = versão "não
+  verificada" (sem quebrar). `?versions=0` devolve a lista **sem** a verificação de versão (usada pela
+  seleção de skills do editor do rotineiro, `useOpexSkillOptions`). Atualizar (`POST /api/opex/skills/update`,
   `ids` ou `all`) sobrescreve corpo, extras e arquivos com a versão do repositório, mantém nome e switch;
   falha no GitHub ou acima do limite mantém a versão atual daquela skill (resultado por skill).
   **"Atualizar todos (N)" conta todas as instaladas com atualização, ligadas ou desligadas** (as
-  desligadas continuam valendo para os rotineiros, D2). Skill criada no Opex não tem Atualizar.
+  desligadas continuam valendo para os rotineiros, D2). No `all`, o servidor confere as versões **sem o
+  teto de 4 s** (espera o GitHub); a skill instalada que não pôde ser verificada (GitHub fora ou pasta
+  removida do repositório) volta como resultado com erro, "a versão atual foi mantida", em vez de sumir
+  da resposta. Skill criada no Opex não tem Atualizar.
 - **Switch (D2):** vale **só para o Agente Opex nas conversas do dono**; resposta otimista com reversão
   animada e toast; o estado final vem do servidor.
 - **Remover/Desinstalar (D6):** a confirmação mostra quantos agentes rotineiros usam a skill
-  (`GET …/usage`) e quais; ao confirmar, a skill sai de `opex.enabledSkills` de cada um
+  (`GET …/usage`) e quais (se a consulta falhar, o texto fica neutro — "não foi possível verificar" — com Tentar novamente, nunca "nenhum"); ao confirmar, a skill sai de `opex.enabledSkills` de cada um
   (`server/skills/unlink.ts`), com auditoria `AgenteRotineiro` e `routine-agent-updated` em cada. Execuções
   em andamento seguem com o `snapshot` e recebem "skill indisponível" ao carregar.
 - **Mecanismo de uso (item B):** `server/skills/turn.ts`. O catálogo (só `name` + `description`) entra
@@ -745,7 +753,7 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 | `GET/PATCH/DELETE /api/opex/jobs/[id]` | Detalhe; edita (agendado, só job do dono; 403 `OPEX_JOB_CLIENT_READONLY`); cancela (agendado) |
 | `GET/POST /api/opex/mcp-servers` | MCPs (segredos só pelas chaves); cadastra |
 | `GET/PUT/PATCH/DELETE /api/opex/mcp-servers/[id]` | Detalhe; edita; `{ enabled }`; exclui (e retira dos clientes) |
-| `GET/POST /api/opex/skills[?refresh=1]` | Skills (sem conteúdo, com "Com atualização"); cria com texto (409 `OPEX_SKILL_NAME_TAKEN`, 413 `OPEX_SKILL_TOO_LARGE`) |
+| `GET/POST /api/opex/skills[?refresh=1][&versions=0]` | Skills (sem conteúdo, com "Com atualização"; teto de 4 s no GitHub, falha em cache por 1 min; `versions=0` pula a verificação); cria com texto (409 `OPEX_SKILL_NAME_TAKEN`, 413 `OPEX_SKILL_TOO_LARGE`) |
 | `GET/PUT/PATCH/DELETE /api/opex/skills/[id]` | Detalhe (corpo + arquivos sem conteúdo); edita; `{ enabled }`; remove e desvincula dos rotineiros (D6) |
 | `GET /api/opex/skills/[id]/file?path=` · `GET …/usage` | Conteúdo de um arquivo de apoio; rotineiros que usam a skill |
 | `POST /api/opex/skills/discover` · `install` · `update` | Skills de um repositório; instala as marcadas; atualiza (`ids` ou `all`) — resultado por skill |

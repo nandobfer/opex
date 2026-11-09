@@ -2,7 +2,7 @@ import { githubGetWithPublicFallback } from "@/features/github/client"
 import { toGithubDomainError } from "@/features/github/server/errors"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
-import { OPEX_SKILL_VERSION_CACHE_MS } from "./constants"
+import { OPEX_SKILL_VERSION_BUDGET_MS, OPEX_SKILL_VERSION_CACHE_MS, OPEX_SKILL_VERSION_FAILURE_CACHE_MS } from "./constants"
 
 /**
  * Leitura de skills de repositórios do GitHub (OPE-153) — SOMENTE servidor. Usa a integração GitHub
@@ -38,8 +38,9 @@ export function findSkillFolders(tree: Pick<RepoTree, "entries">, base: string |
     const folders = tree.entries
         .filter((entry) => entry.type === "blob" && (entry.path === "SKILL.md" || entry.path.endsWith("/SKILL.md")))
         .map((entry) => entry.path.slice(0, -"SKILL.md".length).replace(/\/$/, ""))
-        .filter((folder) => !folder.split("/").some(SKIPPED_SEGMENT))
         .filter((folder) => !base || folder === base || folder.startsWith(`${base}/`))
+        // Pastas ocultas/node_modules só são ignoradas abaixo da pasta pedida na URL (ex.: `.claude/skills/x` vale).
+        .filter((folder) => !(base ? folder.slice(base.length) : folder).split("/").some(SKIPPED_SEGMENT))
         .sort((a, b) => a.split("/").length - b.split("/").length || a.localeCompare(b))
     const kept: string[] = []
     for (const folder of folders) if (!kept.some((parent) => parent === "" || folder.startsWith(`${parent}/`))) kept.push(folder)
@@ -85,6 +86,8 @@ export async function fetchRepoTree(repo: string, ref: string | null): Promise<R
 
 interface CacheEntry {
     at: number
+    /** Validade da entrada: 10 min para a árvore; curta para uma falha memorizada. */
+    ttl: number
     value: Promise<RepoTree>
 }
 const globalForCache = globalThis as unknown as { opexSkillTreeCache?: Map<string, CacheEntry> }
@@ -98,17 +101,33 @@ export function clearSkillTreeCache(): void {
 export function cachedRepoTree(repo: string, ref: string | null, refresh = false): Promise<RepoTree> {
     const key = `${repo}@${ref ?? "HEAD"}`
     const hit = treeCache.get(key)
-    if (hit && !refresh && Date.now() - hit.at < OPEX_SKILL_VERSION_CACHE_MS) return hit.value
+    if (hit && !refresh && Date.now() - hit.at < hit.ttl) return hit.value
     const value = fetchRepoTree(repo, ref).catch((error: unknown) => {
-        treeCache.delete(key)
+        // Falha memorizada por pouco tempo: GitHub lento/fora não é consultado de novo a cada lista.
+        const failed = Promise.reject(error)
+        failed.catch(() => undefined)
+        treeCache.set(key, { at: Date.now(), ttl: OPEX_SKILL_VERSION_FAILURE_CACHE_MS, value: failed })
         throw error
     })
-    treeCache.set(key, { at: Date.now(), value })
+    treeCache.set(key, { at: Date.now(), ttl: OPEX_SKILL_VERSION_CACHE_MS, value })
     return value
 }
 
-/** Hash disponível de várias pastas, uma chamada por repositório/ref. Falha → `null` (não verificado). */
-export async function availableHashes(items: { key: string; repo: string; ref: string | null; path: string }[], refresh = false): Promise<Map<string, string | null>> {
+const withinBudget = <T>(promise: Promise<T>, ms: number): Promise<T | typeof BUDGET_EXCEEDED> => {
+    promise.catch(() => undefined)
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const timeout = new Promise<typeof BUDGET_EXCEEDED>((resolve) => (timer = setTimeout(() => resolve(BUDGET_EXCEEDED), ms)))
+    return Promise.race([promise, timeout]).finally(() => clearTimeout(timer))
+}
+const BUDGET_EXCEEDED = Symbol("budget")
+
+/**
+ * Hash disponível de várias pastas, uma chamada por repositório/ref. Falha → `null` (não verificado).
+ * A lista não espera o GitHub além de `OPEX_SKILL_VERSION_BUDGET_MS`: passou disso, responde "não
+ * verificado" e a consulta segue em segundo plano, enchendo o cache para a próxima leitura. Com
+ * `budget = false` ("Atualizar todos"), espera a resposta do GitHub.
+ */
+export async function availableHashes(items: { key: string; repo: string; ref: string | null; path: string }[], refresh = false, budget = true): Promise<Map<string, string | null>> {
     const out = new Map<string, string | null>()
     const groups = new Map<string, typeof items>()
     for (const item of items) groups.set(`${item.repo}@${item.ref ?? ""}`, [...(groups.get(`${item.repo}@${item.ref ?? ""}`) ?? []), item])
@@ -116,7 +135,11 @@ export async function availableHashes(items: { key: string; repo: string; ref: s
         [...groups.values()].map(async (group) => {
             const first = group[0]!
             try {
-                const tree = await cachedRepoTree(first.repo, first.ref, refresh)
+                const tree = budget ? await withinBudget(cachedRepoTree(first.repo, first.ref, refresh), OPEX_SKILL_VERSION_BUDGET_MS) : await cachedRepoTree(first.repo, first.ref, refresh)
+                if (tree === BUDGET_EXCEEDED) {
+                    for (const item of group) out.set(item.key, null)
+                    return
+                }
                 for (const item of group) out.set(item.key, folderHashOf(tree, item.path))
             } catch (error) {
                 log.warn({ repo: first.repo, err: error instanceof Error ? error.message : String(error) }, "[opex-skills] Falha ao verificar atualização no GitHub")
