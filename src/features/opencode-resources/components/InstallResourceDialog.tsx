@@ -8,6 +8,7 @@ import { ChipInput } from "@/components/ui/chip-input"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
+import { ResourceSourceField } from "@/components/resources/ResourceSourceField"
 import type { InstallableKind } from "../constants"
 import { installFormSchema, type InstallFormValues } from "../form-schemas"
 import { useInstallOpencodeResource } from "../hooks/useOpencodeResources"
@@ -41,9 +42,7 @@ export function InstallResourceDialog({ kind, scope, open, onClose }: { kind: In
                     <DialogDescription>{NOTES[kind]} Um backup da configuração é feito antes.</DialogDescription>
                 </DialogHeader>
                 <form className="space-y-4" onSubmit={form.handleSubmit(submit)} noValidate>
-                    <Field id="install-source" label={ui.installSourceLabel} error={errors.source?.message}>
-                        <Input id="install-source" className="font-mono" placeholder={ui.installSourcePlaceholder} autoFocus {...form.register("source")} />
-                    </Field>
+                    <ResourceSourceField id="install-source" label={ui.installSourceLabel} placeholder={ui.installSourcePlaceholder} error={errors.source?.message} registration={form.register("source")} />
                     {kind === "skill" ? (
                         <Field id="install-skills" label="Skills do repositório (opcional)" error={errors.skills?.message}>
                             <Controller control={form.control} name="skills" render={({ field }) => <ChipInput id="install-skills" value={field.value} onChange={field.onChange} placeholder="nome-da-skill e Enter" />} />
