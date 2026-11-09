@@ -5,7 +5,7 @@ import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Globe, Lock } from "lucide-react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { Switch } from "@/components/ui/switch"
+import { SearchableCheckList } from "@/components/ui/check-list/SearchableCheckList"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
@@ -16,6 +16,9 @@ import { ClienteOpexMcpCard } from "@/features/opex-agent/components/settings/cl
 import { ROUTINE_INTERNAL_TOOLS, ROUTINE_INTERNAL_TOOL_LABELS, isRoutineForbiddenToolGroup } from "../../constants"
 import type { RoutineAgentInput } from "../../schemas"
 import { useRoutineOpencodeOptions } from "../../hooks/useRoutineAgents"
+import type { RoutineOpencodeOptionsDto } from "../../types"
+import { RoutineOpencodeSkillsCard, RoutineOpexSkillsCard } from "./RoutineSkillsFields"
+import { ROUTINE_MCPS_LIST_SKELETON } from "./routine-tools-layout"
 
 /** Ferramentas internas: entram sempre e não podem ser desmarcadas. */
 function InternalToolsCard() {
@@ -57,57 +60,65 @@ function OpexTools({ form }: { form: UseFormReturn<RoutineAgentInput> }) {
                 name="opex.enabledMcpServers"
                 render={({ field }) => <ClienteOpexMcpCard value={field.value} onChange={field.onChange} description="MCPs cadastrados em Agente Opex › MCPs. Ligue os que este agente pode usar (ex.: um MCP de navegador)." warning={null} />}
             />
+            <RoutineOpexSkillsCard form={form} />
         </>
     )
 }
 
-function OpencodeMcps({ form }: { form: UseFormReturn<RoutineAgentInput> }) {
-    const options = useRoutineOpencodeOptions(true)
-    const mcps = options.data?.mcps ?? []
+function OpencodeMcps({ form, options, loading, onRetry }: { form: UseFormReturn<RoutineAgentInput>; options: RoutineOpencodeOptionsDto | undefined; loading: boolean; onRetry: () => void }) {
+    const unavailable = !loading && !options?.available
     return (
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">MCPs do host</CardTitle>
                 <CardDescription>MCPs do opencode.jsonc do host liberados para este agente; os demais ficam negados na sessão. O navegador para plataformas externas vem do MCP de navegador do host.</CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2">
-                {options.isLoading ? (
-                    <Skeleton className="h-16 w-full" />
-                ) : !options.data?.available ? (
-                    <p className="text-sm text-muted-foreground">{options.data?.reason ?? "Serviço OpenCode indisponível."}</p>
-                ) : mcps.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">Nenhum MCP no opencode.jsonc do host.</p>
+            <CardContent className="space-y-3">
+                {loading ? (
+                    <Skeleton className={ROUTINE_MCPS_LIST_SKELETON} />
                 ) : (
-                    <Controller
-                        control={form.control}
-                        name="opencode.enabledMcps"
-                        render={({ field }) => (
-                            <ul className="space-y-2">
-                                {mcps.map((mcp) => (
-                                    <li key={mcp.name} className="flex items-center justify-between gap-3 rounded-md border p-2">
-                                        <span className="flex items-center gap-2 text-sm">
-                                            {mcp.browser && <Globe className="h-4 w-4 text-primary" aria-label="Navegador" />}
-                                            <code>{mcp.name}</code>
-                                            <span className="text-xs text-muted-foreground">{mcp.status}</span>
-                                        </span>
-                                        <Switch
-                                            aria-label={`Liberar ${mcp.name}`}
-                                            checked={field.value.includes(mcp.name)}
-                                            onCheckedChange={(checked) => field.onChange(checked ? [...field.value, mcp.name] : field.value.filter((name) => name !== mcp.name))}
-                                        />
-                                    </li>
-                                ))}
-                            </ul>
-                        )}
-                    />
+                    <>
+                        {unavailable ? <ErrorState title="Não foi possível listar os MCPs do host" description={options?.reason ?? "Serviço OpenCode indisponível."} onRetry={onRetry} /> : null}
+                        <Controller
+                            control={form.control}
+                            name="opencode.enabledMcps"
+                            render={({ field }) => (
+                                <SearchableCheckList
+                                    ariaLabel="MCPs do host"
+                                    items={(options?.mcps ?? []).map((mcp) => ({
+                                        key: mcp.name,
+                                        label: mcp.name,
+                                        icon: mcp.browser ? <Globe className="h-4 w-4 text-primary" aria-label="Navegador" /> : undefined,
+                                        meta: <span className="text-xs text-muted-foreground">{mcp.status}</span>,
+                                    }))}
+                                    value={field.value}
+                                    onChange={field.onChange}
+                                    missingLabel={unavailable ? "(salvo; OpenCode indisponível)" : "(não encontrado)"}
+                                    searchPlaceholder="Buscar MCP"
+                                    emptyText={unavailable ? "A lista volta quando o OpenCode responder." : "Nenhum MCP no opencode.jsonc do host."}
+                                />
+                            )}
+                        />
+                    </>
                 )}
-                {options.data?.available && !options.data.browserAvailable && <p className="text-xs text-warning">Nenhum MCP de navegador conectado no host: o agente não navega em plataformas externas.</p>}
+                {options?.available && !options.browserAvailable && <p className="text-xs text-warning">Nenhum MCP de navegador conectado no host: o agente não navega em plataformas externas.</p>}
             </CardContent>
         </Card>
     )
 }
 
-/** Ferramentas por motor (Opex: árvore + MCPs do Opex; OpenCode: MCPs do host) e as internas fixas. */
+function OpencodeFields({ form }: { form: UseFormReturn<RoutineAgentInput> }) {
+    const options = useRoutineOpencodeOptions(true)
+    const retry = () => void options.refetch()
+    return (
+        <>
+            <OpencodeMcps form={form} options={options.data} loading={options.isLoading} onRetry={retry} />
+            <RoutineOpencodeSkillsCard form={form} options={options.data} loading={options.isLoading} onRetry={retry} />
+        </>
+    )
+}
+
+/** Ferramentas por motor (Opex: árvore + MCPs e skills do Opex; OpenCode: MCPs e skills do host) e as internas fixas. */
 export function RoutineToolsFields({ form }: { form: UseFormReturn<RoutineAgentInput> }) {
     const engine = useWatch({ control: form.control, name: "engine" })
     return (
@@ -117,7 +128,7 @@ export function RoutineToolsFields({ form }: { form: UseFormReturn<RoutineAgentI
                 <OpexTools form={form} />
             ) : (
                 <>
-                    <OpencodeMcps form={form} />
+                    <OpencodeFields form={form} />
                     <FormToggleCard
                         control={form.control}
                         name="opencode.httpRequests"
