@@ -66,7 +66,7 @@ export function OpexAiModelPicker({
             <AnimatePresence initial={false}>
                 {provider && (
                     <motion.div key="model" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="space-y-4 overflow-hidden">
-                        <ModelPickerField id={`${id}-model`} models={models} modelId={modelId} error={errors?.model} disabled={disabled} onPick={onModelPick} />
+                        <ModelPickerField id={`${id}-model`} provider={provider} models={models} modelId={modelId} error={errors?.model} disabled={disabled} onPick={onModelPick} />
                         {children}
                     </motion.div>
                 )}

@@ -6,6 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { AxiosError } from 'axios'
 import { framerMotionMock } from '../../helpers/framer-motion'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 /**
  * Card "IA do Opex" (aba Provedores do Engramind): os mesmos seletores de provedor/modelo da tela de IA,
@@ -24,6 +25,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 vi.mock('@/features/ai/hooks/useAi', () => ({
   useAiProviderStatuses: () => ({ providers: mocks.providers, isLoading: false }),

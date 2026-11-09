@@ -4,8 +4,10 @@ import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
+import { modelFavoritesMock } from "../../helpers/model-favorites"
 
 vi.mock("framer-motion", () => framerMotionMock())
+vi.mock("@/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock())
 
 import { AgentConfigFields } from "@/features/agentic/components/settings/AgentConfigFields"
 import type { AgentConfig } from "@/features/agentic/schemas"

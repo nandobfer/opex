@@ -3,6 +3,7 @@
 import type { ReactElement, ReactNode } from "react"
 import { SearchPicker } from "@/components/ui/search-picker"
 import type { AiModelDto } from "@/lib/ai/providers"
+import { useModelFavoritePicker } from "./useModelFavoritePicker"
 
 interface ModelSearchPickerProps {
     trigger: ReactElement
@@ -15,8 +16,9 @@ interface ModelSearchPickerProps {
     align?: "start" | "center" | "end"
 }
 
-/** Busca de modelos do OpenCode (configurações dos papéis e troca de modelo na mesa e no fork). */
+/** Busca de modelos do OpenCode (configurações dos papéis e troca de modelo na mesa e no fork), com os favoritos no topo. */
 export function ModelSearchPicker({ trigger, models, onPick, footer, disabled, matchTriggerWidth = false, align }: ModelSearchPickerProps) {
+    const favorites = useModelFavoritePicker("opencode")
     return (
         <SearchPicker<AiModelDto>
             trigger={trigger}
@@ -29,6 +31,7 @@ export function ModelSearchPicker({ trigger, models, onPick, footer, disabled, m
                     <span className="block truncate font-mono text-[11px] text-muted-foreground">{item.id}</span>
                 </span>
             )}
+            {...favorites}
             onPick={onPick}
             loading={models.isLoading}
             disabled={disabled}

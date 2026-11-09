@@ -16,7 +16,7 @@ export function DirectModelFields({ id, provider, value, onChange, error }: { id
     const def = getAiProvider(provider)
     return (
         <div className={FORM_GRID_WIDE}>
-            <ModelPickerField id={`${id}-model`} models={models} modelId={value.model} error={error} onPick={(item) => onChange({ agent: null, model: item.id, variant: null, fallbacks: [] })} />
+            <ModelPickerField id={`${id}-model`} provider={provider} models={models} modelId={value.model} error={error} onPick={(item) => onChange({ agent: null, model: item.id, variant: null, fallbacks: [] })} />
             {model && model.variants.length > 0 && <VariantSelectField id={`${id}-variant`} label={def.variantLabel} variants={model.variants} value={value.variant} onChange={(variant) => onChange({ ...value, variant })} />}
         </div>
     )

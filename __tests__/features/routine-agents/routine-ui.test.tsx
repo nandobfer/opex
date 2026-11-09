@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { framerMotionMock } from '../../helpers/framer-motion'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 /** Telas dos agentes rotineiros (OPE-130): editor, lista da aba Rotineiros, Entradas e o toast de atenção. */
 
@@ -19,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(), usePathname: () => '/' }))
 vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
   useRoutineAgent: () => ({ data: mocks.loaded, isLoading: false }),

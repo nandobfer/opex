@@ -6,6 +6,7 @@ import { SearchPicker } from "@/components/ui/search-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiErrorMessage } from "@/lib/api"
 import type { AiModelDto } from "@/lib/ai/providers"
+import { useModelFavoritePicker } from "./model-picker/useModelFavoritePicker"
 
 const DEFAULT_OPTION = "__default__"
 
@@ -31,6 +32,8 @@ interface ModelQuery {
 
 interface ModelPickerFieldProps {
     id: string
+    /** Provedor dos modelos listados (escopo dos favoritos); `null` enquanto não há provedor escolhido. */
+    provider: string | null
     models: ModelQuery
     modelId: string | null
     /** Erro de validação do campo (o erro ao listar os modelos é mostrado sem ele). */
@@ -42,10 +45,11 @@ interface ModelPickerFieldProps {
 
 /**
  * Campo "Modelo" das features de IA: busca nos modelos do provedor (fuse.js do `SearchPicker`), com o
- * modelo salvo mostrado mesmo fora da lista. Compartilhado pelas abas de IA, pelo Agente Opex e pelo
- * Agente Mentor.
+ * modelo salvo mostrado mesmo fora da lista e os favoritos do provedor (estrela) no topo.
+ * Compartilhado pelas abas de IA, pelo Agente Opex e pelo Agente Mentor.
  */
-export function ModelPickerField({ id, models, modelId, error, disabled, placeholder = "Escolha o modelo", onPick }: ModelPickerFieldProps) {
+export function ModelPickerField({ id, provider, models, modelId, error, disabled, placeholder = "Escolha o modelo", onPick }: ModelPickerFieldProps) {
+    const favorites = useModelFavoritePicker(provider)
     const model = models.data?.find((item) => item.id === modelId)
     return (
         <Field id={id} label="Modelo" error={error ?? (models.isError ? apiErrorMessage(models.error, "Não foi possível listar os modelos") : undefined)}>
@@ -55,6 +59,7 @@ export function ModelPickerField({ id, models, modelId, error, disabled, placeho
                 getKey={(item) => item.id}
                 searchKeys={["name", "id", "group"]}
                 renderItem={(item) => <ModelOption model={item} />}
+                {...favorites}
                 onPick={onPick}
                 loading={models.isLoading}
                 disabled={disabled}

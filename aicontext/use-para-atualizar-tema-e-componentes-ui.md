@@ -352,7 +352,10 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   Enter, opções bloqueadas com motivo (`disabledReason`) e entrada/saída animadas. A ordem das
   opções é a recebida, salvo `orderItems` (ex.: **uso recente**, ver `modules/repository-recency.md`)
   — a ordenação entra ANTES da busca, então a relevância do fuse.js prevalece e a ordem decide os
-  empates. O gatilho com cara de campo é o `FieldTrigger` (`ui/field-trigger.tsx`). `Select` fica para
+  empates. Já `pinFirst` fixa itens no topo **depois** da busca (com termo, os fixados que casam vêm
+  antes, e o corte de itens visíveis acontece depois). Ele é usado pelos **modelos favoritos**, ver
+  `modules/ai.md`. `renderItemAction` põe uma ação à direita da opção (ex.: estrela). Ela fica fora do
+  botão da opção, então clicar nela não escolhe nem fecha. Sem essas props, o markup não muda. O gatilho com cara de campo é o `FieldTrigger` (`ui/field-trigger.tsx`). `Select` fica para
   listas curtas e simples. Ao fechar, `onCloseAutoFocus` entrega o evento de restauração de foco no
   gatilho: quem escolheu um item e vai devolver o foco a **outro** campo chama `event.preventDefault()`
   (ex.: escolher o repositório na prévia foca a descrição — `modules/tasks.md`).
