@@ -71,4 +71,9 @@ describe("Consumo do OpenCode", () => {
         expect(mocks.usage).toHaveBeenLastCalledWith("opencode", null)
         expect(screen.getByText("Período inválido")).toBeTruthy()
     })
+
+    it("OpenCode não tem chave de API: o painel não mostra o filtro de chave (OPE-155)", () => {
+        render(<OpencodeUsageCard />)
+        expect(screen.queryByRole("combobox", { name: "Chave de API" })).toBeNull()
+    })
 })

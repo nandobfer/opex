@@ -13,7 +13,7 @@ vi.mock("@/features/ai/components/api-keys/ApiKeysCard", () => ({ ApiKeysCard: (
 vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
-vi.mock("@/features/ai/components/ProviderUsageCard", () => ({ ProviderUsageCard: ({ provider }: { provider: string }) => <div data-testid={`provider-usage-${provider}`} /> }))
+vi.mock("@/features/ai/components/ProviderUsageCard", () => ({ ProviderUsageCard: ({ provider, keyFilter }: { provider: string; keyFilter?: string }) => <div data-testid={`provider-usage-${provider}`} data-key-filter={keyFilter ?? ""} /> }))
 vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
@@ -94,7 +94,8 @@ describe("AiProviderEditorForm", () => {
             renderForm(provider.integration)
             expect(screen.queryByRole("tab", { name: "Contas" })).toBeNull()
             fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
-            expect(screen.getByTestId(`provider-usage-${provider.id}`)).toBeTruthy()
+            // O filtro "Chave de API" (OPE-155) depende de o pai repassar o provedor como keyFilter.
+            expect(screen.getByTestId(`provider-usage-${provider.id}`).getAttribute("data-key-filter")).toBe(provider.id)
         }
     })
 

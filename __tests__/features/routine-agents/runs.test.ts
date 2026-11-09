@@ -29,7 +29,8 @@ vi.mock('@/lib/db', () => ({
   AcaoAuditoria: { EXECUTAR: 'EXECUTAR', ABORTAR: 'ABORTAR', APROVAR: 'APROVAR', DEVOLVER: 'DEVOLVER', CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR' },
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: async (event: string, payload: Record<string, unknown>) => void holder.events.push({ event, payload }) }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: async () => undefined }))
+const consumption = vi.hoisted(() => ({ record: vi.fn(async (..._args: unknown[]) => undefined) }))
+vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: consumption.record }))
 vi.mock('@/lib/db/models/RoutineAgent', () => ({
   get RoutineAgent() {
     return holder.agents
@@ -488,6 +489,20 @@ describe('provisionamento interrompido por reinício', () => {
 })
 
 describe('limites ligados ao turno', () => {
+  it('OPE-155: o consumo do passo é gravado com a chave de API usada (sem chave = null)', async () => {
+    const agent = seedAgent()
+    consumption.record.mockClear()
+    holder.engine = async (input) => {
+      input.onUsage({ tokens: 10, inputTokens: 8, outputTokens: 2, costUsd: null, stepId: '1', model: 'claude', provider: 'anthropic', apiKeyId: 'key_x' })
+      input.onUsage({ tokens: 5, inputTokens: 4, outputTokens: 1, costUsd: null, stepId: '2', model: 'claude', provider: 'anthropic' })
+      return { error: null, text: '' }
+    }
+    await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', totalTokens: 10, apiKeyId: 'key_x' }))
+    expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 5, apiKeyId: null }))
+  })
+
   it('o uso de um passo que alcança o máximo de tokens interrompe o turno → Erro "Limite de tokens atingido"', async () => {
     const agent = seedAgent({ limits: { ...EMPTY_ROUTINE_LIMITS, maxTokens: 100 } })
     holder.engine = async (input) => {

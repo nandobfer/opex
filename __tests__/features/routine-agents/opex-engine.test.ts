@@ -35,7 +35,7 @@ vi.mock('ai', () => ({
   },
 }))
 vi.mock('@/lib/ai/stream', () => ({
-  prepareModel: async () => ({ model: {}, providerOptions: {}, reasoning: null, dispose: async () => undefined }),
+  prepareModel: async () => ({ model: {}, providerOptions: {}, reasoning: null, apiKeyId: 'key_x', dispose: async () => undefined }),
   describeAiError: (error: unknown) => String(error),
   samplingOptions: () => ({}),
 }))
@@ -93,6 +93,16 @@ beforeEach(() => {
   holder.catalog = new Map(
     [tool('delete_task', 'destructive'), tool('update_task', 'write'), tool('list_tasks', 'read'), tool('confirm_routine_action', 'write', 'routine-agents'), tool('update_routine_agent', 'write', 'routine-agents')].map((item) => [item.name, item]),
   )
+})
+
+describe('motor Opex — consumo por chave de API (OPE-155)', () => {
+  it('o uso de cada passo leva a chave usada na preparação do modelo', async () => {
+    const { input } = engineInput([])
+    const usages: unknown[] = []
+    ;(input as { onUsage: (step: unknown) => void }).onUsage = (step) => void usages.push(step)
+    await runOpexEngine(input)
+    expect(usages).toEqual([expect.objectContaining({ provider: 'anthropic', model: 'claude', apiKeyId: 'key_x' })])
+  })
 })
 
 describe('motor Opex — interceptação D4', () => {
