@@ -86,6 +86,7 @@ vi.mock('@/features/opex-agent/server/confirmations', () => ({ requestConfirmati
 vi.mock('@/features/opex-agent/server/tools/context', () => ({ nowContext: () => ({ iso: '2026-10-23T12:00:00.000Z', local: 'sexta', timeZone: 'America/Sao_Paulo' }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ enabledOpexTools: () => [], findOpexTool: () => undefined, needsConfirmation: () => false }))
 vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ enabledClientOpexServerTools: () => [], findOpexClientServerTool: () => undefined }))
+vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: async () => ({ catalog: [], tools: [] }) }))
 vi.mock('@/features/opex-agent/server/client-config', () => ({
   assertClientOpexEnabled: mocks.assertClientEnabled,
   assertClientToolAllowed: vi.fn(),
@@ -168,7 +169,7 @@ describe('jobs do dono', () => {
     expect(job.status).toBe('running')
     expect(job.origin).toEqual({ kind: 'owner' })
     expect(sessions().docs[0]).toMatchObject({ title: 'Resumo dos PRs', clientId: null })
-    await vi.waitFor(() => expect(jobDoc().status).toBe('done'))
+    await vi.waitFor(() => expect(jobDoc().status).toBe('done'), { timeout: 5_000 })
 
     const user = messages().docs.find((doc) => doc.role === 'user')!
     expect(user).toMatchObject({ kind: 'job', text: 'Liste os PRs abertos', job: { id: job.id, title: 'Resumo dos PRs' } })
@@ -190,7 +191,7 @@ describe('jobs do dono', () => {
 
     const late = new Date(NOW.getTime() + 45 * 60_000)
     expect(await runDueOpexJobs(late)).toHaveLength(1)
-    await vi.waitFor(() => expect(jobDoc().status).toBe('done'))
+    await vi.waitFor(() => expect(jobDoc().status).toBe('done'), { timeout: 5_000 })
     expect(jobDoc().delayMs).toBe(15 * 60_000)
     expect(String(jobDoc().resultSessionId)).toBe(sessionId)
     const modelText = JSON.parse(messages().docs.find((doc) => doc.role === 'user')!.modelMessages as string)[0].content as string
@@ -207,7 +208,7 @@ describe('jobs do dono', () => {
 
     mocks.available = true
     expect(await runDueOpexJobs(new Date(NOW.getTime() + 20 * 60_000))).toHaveLength(1)
-    await vi.waitFor(() => expect(jobDoc().status).toBe('done'))
+    await vi.waitFor(() => expect(jobDoc().status).toBe('done'), { timeout: 5_000 })
     expect(jobDoc().delayMs).toBe(20 * 60_000)
   })
 
@@ -221,7 +222,7 @@ describe('jobs do dono', () => {
     expect(messages().docs.filter((doc) => doc.kind === 'job')).toHaveLength(0)
     mocks.gate = null
     release()
-    await vi.waitFor(() => expect(jobDoc().status).toBe('done'))
+    await vi.waitFor(() => expect(jobDoc().status).toBe('done'), { timeout: 5_000 })
     expect(messages().docs.filter((doc) => doc.kind === 'job')).toHaveLength(1)
     await vi.waitFor(() => expect(isTurnActive(sessionId)).toBe(false))
   })
@@ -275,7 +276,7 @@ describe('jobs do portal do cliente', () => {
     const job = await createOpexJob(input(), { actorId: USER, createdBy: 'agent' }, clientScope(), NOW)
     expect(job.origin).toEqual({ kind: 'client', clientId: CLIENT, clientName: 'ACME', userId: USER, userName: 'ana' })
     expect(sessions().docs[0]).toMatchObject({ clientId: CLIENT, userId: USER, title: 'Resumo dos PRs' })
-    await vi.waitFor(() => expect(jobDoc().status).toBe('done'))
+    await vi.waitFor(() => expect(jobDoc().status).toBe('done'), { timeout: 5_000 })
     expect(jobDoc()).toMatchObject({ clientId: CLIENT, userId: USER })
     expect(mocks.clientActorFor).toHaveBeenCalledWith(USER, CLIENT)
     expect(eventsOf('opex-job-finished')).toEqual([expect.objectContaining({ id: job.id, status: 'done', origin: 'client' })])

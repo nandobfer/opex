@@ -70,6 +70,22 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     (`ClienteOpexMcpCard`); OpenCode = os MCPs do
     `opencode.jsonc` do host (`GET /api/routine-agents/opencode-options`), com o MCP de navegador
     detectado pelo nome. As ferramentas internas aparecem fixas ("Sempre liberadas").
+  - **Skills por motor** (OPE-153), no mesmo bloco de Ferramentas/MCPs, com a lista compartilhada
+    `SearchableCheckList` (`src/components/ui/check-list/`: busca, switches, skeleton e as chaves salvas que
+    sumiram como "(não encontrada)", sem impedir o salvamento). Os MCPs do host usam a mesma lista.
+    - **Motor Opex** (`RoutineOpexSkillsCard`): **todas** as skills de Agente Opex › Skills (D2), com
+      "Ligada/Desligada no Agente Opex" só como informação; grava `opex.enabledSkills` (nomes). A lista vem
+      de `GET /api/opex/skills?versions=0` (`useOpexSkillOptions`), sem a verificação de versão no GitHub:
+      o editor não depende do GitHub estar no ar. Skill
+      recém-adicionada que não existe → 400 `ROUTINE_SKILL_NOT_FOUND`.
+    - **Motor OpenCode** (`RoutineOpencodeSkillsCard`, D8): as skills **globais** ligadas e as
+      **nativas** do host (selo "Nativa"), vindas de `GET /api/routine-agents/opencode-options` (campo
+      `skills`, pela mesma listagem da aba Skills do OpenCode, `listResources("skill", "global")`;
+      as desligadas na aba do OpenCode não aparecem); grava `opencode.enabledSkills`. OpenCode
+      desligado → `ErrorState` com "Tentar novamente" (vale também para os MCPs do host) e a seleção
+      salva continua visível ("(salva; OpenCode indisponível)").
+    - **D3:** agente novo ou configuração antiga sem o campo começa com **nenhuma** skill nos dois
+      motores (`withRoutineEngineDefaults` em `schemas.ts`, aplicado no DTO, no snapshot e nos motores).
   - **Limites** (vazio = sem limite): execuções simultâneas, tempo máximo ativo, tempo máximo total
     esperando, **máximo de tokens** (D1) e espera viva máxima (sem valor: 10 min).
   - **Gatilhos** (vários): a cada N minutos/horas, diário em horário fixo, dias da semana com
@@ -231,6 +247,12 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   cortado por ativação dentro do orçamento (`ROUTINE_HISTORY_CHAR_BUDGET`, o mesmo do Agente Opex) —
   a primeira ativação (disparo) fica sempre, das demais ficam as mais recentes, com um aviso no lugar
   das omitidas; o corte vale no envio e no que é gravado em `messages`.
+  **Skills (OPE-153):** o mesmo mecanismo do Agente Opex (`routineSkillsForRun` em
+  `opex-agent/server/skills/turn.ts`): o catálogo (nome + descrição) da seleção do snapshot entra nas
+  instruções (`skillsBlock` de `routineInstructions`) e `load_opex_skill`/`read_opex_skill_file` entram
+  como ferramentas internas, restritas à seleção (vale mesmo com a skill desligada no Agente Opex, D2).
+  Skill da seleção que não existe mais vira aviso "Skill indisponível…" e a execução segue; removida no
+  meio do turno, a ferramenta devolve "indisponível" sem erro (D6).
 - **Retenção dos passos**: ao fechar cada turno ficam só os `MAX_RUN_STEPS` passos mais recentes da
   execução (`pruneRunSteps`).
 - **Motor OpenCode** (`server/engines/opencode.ts`): sessão na pasta do agente (recriada se apagada;
@@ -241,6 +263,13 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   Serviço desligado → **Erro** com o motivo. As permissões falham fechadas: sem conseguir listar os
   MCPs do host → **Erro** acionável; sessão reaproveitada cujas permissões não puderam ser atualizadas
   → sessão nova, com aviso. As chamadas ao MCP da execução (memória, Chamada HTTP) viram passos.
+  **Skills do host (OPE-153):** as mesmas permissões da sessão levam `{ action: "skill", resource: "*",
+  effect: "deny" }` e depois `allow` para cada skill selecionada que existe no host
+  (`routineSkillPermissions`; a última regra que casa vence no OpenCode). O curinga bloqueia também as
+  nativas, as de projeto e as que surgirem. Falha fechada: sem conseguir listar as skills do host
+  (`client.skill.list`) → **Erro** acionável, antes de registrar o MCP da execução. Skill selecionada que
+  sumiu do host vira aviso e é ignorada. A sessão reaproveitada recebe as regras novas; sem conseguir
+  atualizá-las → sessão nova, com aviso (o mesmo caminho dos MCPs).
 - Limites conferidos a cada passo (tokens) e por temporizador (tempo ativo). Estourou → **Erro**.
 - **Teto técnico do turno** (`ROUTINE_TURN_TIMEOUT_MS`, 6 h, nos dois motores): sem "Tempo máximo
   ativo" (ou com um maior), o turno é interrompido no teto → **Erro** "O turno passou do teto técnico de
@@ -369,7 +398,9 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `update_routine_agent` chamados por token (`origin.kind = "api-token"`, com `origin.scopes`), cada
   ferramenta NOVA em `opex.enabledTools` precisa da mesma decisão que o token teria para chamá-la
   (`mcpOwnerToolDecision`: `http` e `files` nunca; destrutivas só com `mcp:owner:destructive`); MCPs novos
-  e a Chamada HTTP do motor OpenCode só pelo dono. O que o dono já liberou continua como está.
+  e a Chamada HTTP do motor OpenCode só pelo dono. **Skills novas** (`opex.enabledSkills` e
+  `opencode.enabledSkills`, OPE-153) também só pelo dono. O que o dono já liberou continua como está.
+  As duas ferramentas aceitam a seleção de skills dos dois motores (`enabledSkills` em `opex`/`opencode`).
 
 Grupo `routine-agents` (`server/tools/routine-agents.ts`, só no dono): `list_routine_agents`,
 `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`,
@@ -407,8 +438,9 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 
 ## Auditoria, logs e tempo real
 
-- `recordAudit` em `AgenteRotineiro` (criar, editar, pausar/retomar, arquivar/desarquivar,
-  provisionar/reprovisionar, remover/bloquear/desbloquear canal, entrada) e `ExecucaoAgenteRotineiro` (disparar, confirmar, recusar,
+- `recordAudit` em `AgenteRotineiro` (criar, editar — com as skills dos dois motores —, pausar/retomar, arquivar/desarquivar,
+  provisionar/reprovisionar, remover/bloquear/desbloquear canal, entrada, skill removida do Agente Opex
+  — D6) e `ExecucaoAgenteRotineiro` (disparar, confirmar, recusar,
   cancelar, concluir/erro/expirar). Logs Pino (`module: routine-agents`).
 - Pusher em `private-app`: `routine-agent-updated` (`{ id }`), `routine-run-updated`
   (`{ id, agentId, status }`) e `routine-run-attention` (`{ id, agentId, kind, status, agentName }`).

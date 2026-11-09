@@ -62,6 +62,8 @@ export const routineOpexEngineSchema = z.object({
     variant: z.string().trim().max(80).nullable(),
     enabledTools: z.array(z.string().trim().min(1).max(120)).max(500),
     enabledMcpServers: z.array(z.string().trim().min(1).max(64)).max(100),
+    /** Skills do Agente Opex liberadas (por nome; OPE-153, D3: nenhuma por padrão). */
+    enabledSkills: z.array(z.string().trim().min(1).max(64)).max(200),
 })
 export type RoutineOpexEngine = z.infer<typeof routineOpexEngineSchema>
 
@@ -70,10 +72,28 @@ export const routineOpencodeEngineSchema = z.object({
     variant: z.string().trim().max(80).nullable(),
     agent: z.string().trim().max(120).nullable(),
     enabledMcps: z.array(z.string().trim().min(1).max(120)).max(100),
+    /** Skills do OpenCode no host (globais e nativas, por id) liberadas na sessão; as demais ficam bloqueadas (OPE-153). */
+    enabledSkills: z.array(z.string().trim().min(1).max(120)).max(200),
     /** "Chamadas HTTP com segredos": `http_request` no MCP da execução, com os segredos do agente (padrão desligado). */
     httpRequests: z.boolean().optional(),
 })
 export type RoutineOpencodeEngine = z.infer<typeof routineOpencodeEngineSchema>
+
+/**
+ * Configuração gravada antes de um campo existir ganha o padrão na leitura (OPE-153, D3: skills vazias nos
+ * dois motores). Aplicado no DTO, no snapshot da execução e nos motores.
+ */
+export function withRoutineEngineDefaults<T extends { opex?: Partial<RoutineOpexEngine> | null; opencode?: Partial<RoutineOpencodeEngine> | null }>(
+    doc: T,
+): Omit<T, "opex" | "opencode"> & { opex: RoutineOpexEngine; opencode: RoutineOpencodeEngine } {
+    const opex = doc.opex ?? {}
+    const opencode = doc.opencode ?? {}
+    return {
+        ...doc,
+        opex: { provider: null, model: "", variant: null, ...opex, enabledTools: opex.enabledTools ?? [], enabledMcpServers: opex.enabledMcpServers ?? [], enabledSkills: opex.enabledSkills ?? [] },
+        opencode: { model: "", variant: null, agent: null, ...opencode, enabledMcps: opencode.enabledMcps ?? [], enabledSkills: opencode.enabledSkills ?? [] },
+    }
+}
 
 export const ROUTINE_ENGINES = ["opex", "opencode"] as const
 export type RoutineEngine = (typeof ROUTINE_ENGINES)[number]
@@ -114,8 +134,8 @@ export const DEFAULT_ROUTINE_AGENT_INPUT: RoutineAgentInput = {
     objective: "",
     instructions: "",
     engine: "opex",
-    opex: { provider: null, model: "", variant: null, enabledTools: [], enabledMcpServers: [] },
-    opencode: { model: "", variant: null, agent: null, enabledMcps: [], httpRequests: false },
+    opex: { provider: null, model: "", variant: null, enabledTools: [], enabledMcpServers: [], enabledSkills: [] },
+    opencode: { model: "", variant: null, agent: null, enabledMcps: [], enabledSkills: [], httpRequests: false },
     confirmIrreversible: true,
     limits: EMPTY_ROUTINE_LIMITS,
     triggers: [],

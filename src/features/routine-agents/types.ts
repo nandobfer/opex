@@ -139,6 +139,8 @@ export interface RoutineOpencodeOptionsDto {
     available: boolean
     reason: string | null
     mcps: { name: string; status: string; browser: boolean }[]
+    /** Skills do host selecionáveis (globais ligadas + nativas, com `native`). */
+    skills: { name: string; description: string; native: boolean }[]
     browserAvailable: boolean
 }
 

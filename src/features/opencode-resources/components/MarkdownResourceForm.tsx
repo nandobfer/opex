@@ -5,10 +5,9 @@ import { zodResolver } from "@hookform/resolvers/zod"
 import { Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field } from "@/components/ui/field"
-import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { MarkdownField } from "@/components/ui/markdown-field"
+import { MarkdownResourceFields } from "@/components/resources/MarkdownResourceFields"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Switch } from "@/components/ui/switch"
 import { markdownFormSchema, type MarkdownFormValues } from "../form-schemas"
@@ -32,13 +31,7 @@ export function MarkdownResourceForm({ kind, initial, creating, pending, onSubmi
     const errors = form.formState.errors
     return (
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
-            <div className={FORM_GRID}>
-                <Field id="resource-name" label="Nome" error={errors.name?.message}>
-                    <Input id="resource-name" {...form.register("name")} disabled={!creating} placeholder="meu-item" className="font-mono" />
-                </Field>
-                <Field id="resource-description" label={kind === "skill" ? "Descrição (quando usar)" : "Descrição"} error={errors.description?.message}>
-                    <Input id="resource-description" {...form.register("description")} placeholder={kind === "skill" ? "Use quando o usuário pedir…" : "Opcional"} />
-                </Field>
+            <MarkdownResourceFields form={form} creating={creating} descriptionLabel={kind === "skill" ? "Descrição (quando usar)" : "Descrição"} descriptionPlaceholder={kind === "skill" ? "Use quando o usuário pedir…" : "Opcional"} bodyLabel={BODY_LABEL[kind]}>
                 {kind !== "skill" ? (
                     <Field id="resource-model" label="Modelo (opcional)" error={errors.model?.message}>
                         <Input id="resource-model" {...form.register("model")} placeholder="provedor/modelo" className="font-mono" />
@@ -61,10 +54,7 @@ export function MarkdownResourceForm({ kind, initial, creating, pending, onSubmi
                         <Label htmlFor="resource-subtask">Rodar como subtarefa</Label>
                     </div>
                 ) : null}
-            </div>
-            <Field id="resource-body" label={BODY_LABEL[kind]} error={errors.body?.message}>
-                <Controller control={form.control} name="body" render={({ field }) => <MarkdownField id="resource-body" value={field.value} onChange={field.onChange} rows={12} invalid={Boolean(errors.body)} ariaLabel={BODY_LABEL[kind]} />} />
-            </Field>
+            </MarkdownResourceFields>
             <div className="flex justify-end gap-2">
                 <Button type="button" variant="ghost" onClick={onCancel} disabled={pending}>
                     Cancelar

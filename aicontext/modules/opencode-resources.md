@@ -68,6 +68,21 @@ MCP, versão instalada → disponível), **Switch** de ligar/desligar (otimista,
 lista o que muda e pede confirmação; em massa entram só os itens **ligados** e desatualizados (os
 desligados ficam como estão), e o resultado informa só o que foi de fato atualizado. Com alterações não salvas na Configuração, pede para salvar.
 
+**Referência para as Skills do Agente Opex (OPE-153).** As peças genéricas da aba foram extraídas para
+`src/components/resources/` e esta aba passou a usá-las: `ResourceListCard` (cabeçalho, busca, filtro,
+lista virtualizada e estados; o escopo entra pelo `toolbar`), `ResourceListSkeleton`, `ResourceRowFrame`
+(+ `ResourceVersionText`; o `ResourceRow` monta selos e ações), `MarkdownResourceFields` (nome, descrição
+e corpo; o `MarkdownResourceForm` acrescenta os campos de agente/comando) e `ResourceSourceField` (origem
+da instalação). A seção Skills do Agente Opex (`aicontext/modules/opex-agent.md`, "Skills") é montada com
+as mesmas peças. O helper de leitura do GitHub com o modo anônimo (`githubGetWithPublicFallback`,
+`src/features/github/client.ts`) é o mesmo da verificação de hash das skills daqui (`versions.ts`, com
+fallback em qualquer erro) e da instalação de skills do Opex (fallback só sem token cadastrado).
+
+**Reuso da listagem do host.** O editor do agente rotineiro (motor OpenCode) lista as skills
+selecionáveis pela mesma `listResources("skill", "global")` desta aba (`GET
+/api/routine-agents/opencode-options`, campo `skills`: globais ligadas + nativas, com `native`), e a
+execução bloqueia as não selecionadas pela permissão `skill` da sessão (`aicontext/modules/routine-agents.md`).
+
 | Tipo | Lista | Criar/editar | Ligar/desligar | Instalar / atualizar |
 |---|---|---|---|---|
 | Skills | Pastas com `SKILL.md` em `~/.agents/skills`, `~/.config/opencode/skills`… (projeto: `<dir>/.agents/skills`, `<dir>/.opencode/skills`) + nativas (`/builtin`, só leitura) | Frontmatter `name` (= pasta) + `description` e o corpo; criadas em `~/.agents/skills/<nome>` | Pasta movida para `.opex-disabled` | `npx skills add <repo> -s … -g -y` (projeto: no diretório) / `npx skills update`; versão = `skillFolderHash` do lock x SHA da pasta no GitHub |

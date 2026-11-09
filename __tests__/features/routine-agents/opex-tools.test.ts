@@ -103,6 +103,22 @@ describe('ferramentas dos agentes rotineiros', () => {
     expect(mocks.service.updateRoutineAgent).toHaveBeenCalledTimes(1)
   })
 
+  it('OPE-153: token não libera skills novas (motor Opex nem host); as que o dono já liberou ficam', async () => {
+    const origin = { kind: 'api-token' as const, tokenId: 't', nome: 'n', prefixo: 'p', scopes: ['mcp:owner', 'mcp:owner:tool:*'] }
+    const create = (patch: Record<string, unknown>) => tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Varredor', objective: 'x', opex: { provider: 'anthropic', model: 'claude' }, ...patch }), { ...ctx, origin })
+    await expect(create({ opex: { provider: 'anthropic', model: 'claude', enabledSkills: ['revisar-pr'] } })).rejects.toThrow(/Skills.*revisar-pr/)
+    await expect(create({ opencode: { enabledSkills: ['customize-opencode'] } })).rejects.toThrow(/customize-opencode/)
+    expect(mocks.service.createRoutineAgent).not.toHaveBeenCalled()
+    mocks.service.getRoutineAgent.mockResolvedValue({ name: 'Varredor', objective: 'x', instructions: '', engine: 'opex', opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools: [], enabledMcpServers: [], enabledSkills: ['revisar-pr'] }, opencode: { model: '', variant: null, agent: null, enabledMcps: [], enabledSkills: [] }, confirmIrreversible: false, limits: EMPTY_ROUTINE_LIMITS, triggers: [] })
+    const update = (patch: Record<string, unknown>) => tool('update_routine_agent').execute(tool('update_routine_agent').input.parse({ id: ID, ...patch }), { ...ctx, origin })
+    await update({ objective: 'mantém a skill do dono' })
+    expect(mocks.service.updateRoutineAgent).toHaveBeenCalledTimes(1)
+    await expect(update({ opex: { enabledSkills: ['revisar-pr', 'nova'] } })).rejects.toThrow(/nova/)
+    // O dono (sem origin) libera skills.
+    await tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Dono', objective: 'x', opex: { provider: 'anthropic', model: 'claude', enabledSkills: ['revisar-pr'] } }), ctx)
+    expect(mocks.service.createRoutineAgent).toHaveBeenCalledTimes(1)
+  })
+
   it('criar sem modelo é recusado pela validação do contrato', async () => {
     await expect(tool('create_routine_agent').execute(tool('create_routine_agent').input.parse({ name: 'Vagas', objective: 'Candidatar' }), ctx)).rejects.toThrow()
     expect(mocks.service.createRoutineAgent).not.toHaveBeenCalled()

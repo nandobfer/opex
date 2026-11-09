@@ -1,11 +1,8 @@
 "use client"
 
-import { ArrowUpCircle, MoreHorizontal, Pencil, PlugZap, Trash2 } from "lucide-react"
+import { ArrowUpCircle, Pencil, PlugZap, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Switch } from "@/components/ui/switch"
-import { cn } from "@/lib/utils"
+import { ResourceRowFrame, ResourceVersionText, type ResourceRowAction } from "@/components/resources/ResourceRowFrame"
 import type { McpRuntimeStatus, OpencodeResourceDto } from "../types"
 import { KIND_UI } from "./kind-ui"
 
@@ -28,15 +25,25 @@ export interface ResourceRowActions {
     onTest: (item: OpencodeResourceDto) => void
 }
 
+function rowActions(item: OpencodeResourceDto, actions: ResourceRowActions): ResourceRowAction[] {
+    const list: ResourceRowAction[] = []
+    if (item.editable && item.enabled) list.push({ key: "edit", label: "Editar", icon: Pencil, onSelect: () => actions.onEdit(item) })
+    if (item.version?.outdated && item.enabled) list.push({ key: "update", label: "Atualizar", icon: ArrowUpCircle, onSelect: () => actions.onUpdate(item) })
+    if (item.kind === "mcp") list.push({ key: "test", label: "Testar conexão", icon: PlugZap, onSelect: () => actions.onTest(item) })
+    if (item.removable) list.push({ key: "remove", label: KIND_UI[item.kind].removeVerb, icon: Trash2, onSelect: () => actions.onRemove(item), destructive: true })
+    return list
+}
+
 /** Uma linha da lista de recursos: nome, selos, versão, situação (MCP), liga/desliga e ações. */
 export function ResourceRow({ item, actions, busy }: { item: OpencodeResourceDto; actions: ResourceRowActions; busy?: boolean }) {
-    const ui = KIND_UI[item.kind]
     const version = item.version
     return (
-        <div className={cn("flex items-start gap-3 px-4 py-3 transition-colors", !item.enabled && "opacity-70")}>
-            <div className="min-w-0 flex-1 space-y-1">
-                <div className="flex flex-wrap items-center gap-2">
-                    <span className="truncate font-mono text-sm font-medium text-foreground">{item.name}</span>
+        <ResourceRowFrame
+            name={item.name}
+            enabled={item.enabled}
+            description={item.description}
+            badges={
+                <>
                     <Badge variant="outline" className="text-[11px]">
                         {ORIGIN_LABEL[item.origin]}
                     </Badge>
@@ -45,56 +52,19 @@ export function ResourceRow({ item, actions, busy }: { item: OpencodeResourceDto
                             {STATUS[item.status.state].label}
                         </Badge>
                     ) : null}
-                    {version ? (
-                        <span className={cn("font-mono text-[11px]", version.outdated ? "text-warning" : "text-muted-foreground")} title="Instalada → disponível">
-                            {version.installed ?? "última"}
-                            {version.available && version.available !== version.installed ? ` → ${version.available}` : ""}
-                        </span>
-                    ) : null}
+                    {version ? <ResourceVersionText installed={version.installed} available={version.available} outdated={version.outdated} /> : null}
                     {item.tags.map((tag) => (
                         <Badge key={tag} variant="secondary" className="text-[11px] font-normal">
                             {tag}
                         </Badge>
                     ))}
-                </div>
-                {item.description ? <p className="line-clamp-2 text-xs text-muted-foreground">{item.description}</p> : null}
-                {item.status?.error ? <p className="line-clamp-2 text-xs text-destructive">{item.status.error}</p> : null}
-            </div>
-            <div className="flex shrink-0 items-center gap-1">
-                <Switch checked={item.enabled} disabled={item.builtin || busy} onCheckedChange={(checked) => actions.onToggle(item, checked)} aria-label={item.enabled ? `Desligar ${item.name}` : `Ligar ${item.name}`} />
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label={`Ações de ${item.name}`} disabled={item.builtin && item.kind !== "mcp"}>
-                            <MoreHorizontal className="h-4 w-4" aria-hidden />
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {item.editable && item.enabled ? (
-                            <DropdownMenuItem onSelect={() => actions.onEdit(item)}>
-                                <Pencil className="mr-2 h-4 w-4" aria-hidden /> Editar
-                            </DropdownMenuItem>
-                        ) : null}
-                        {version?.outdated && item.enabled ? (
-                            <DropdownMenuItem onSelect={() => actions.onUpdate(item)}>
-                                <ArrowUpCircle className="mr-2 h-4 w-4" aria-hidden /> Atualizar
-                            </DropdownMenuItem>
-                        ) : null}
-                        {item.kind === "mcp" ? (
-                            <DropdownMenuItem onSelect={() => actions.onTest(item)}>
-                                <PlugZap className="mr-2 h-4 w-4" aria-hidden /> Testar conexão
-                            </DropdownMenuItem>
-                        ) : null}
-                        {item.removable ? (
-                            <>
-                                <DropdownMenuSeparator />
-                                <DropdownMenuItem className="text-destructive focus:text-destructive" onSelect={() => actions.onRemove(item)}>
-                                    <Trash2 className="mr-2 h-4 w-4" aria-hidden /> {ui.removeVerb}
-                                </DropdownMenuItem>
-                            </>
-                        ) : null}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        </div>
+                </>
+            }
+            extra={item.status?.error ? <p className="line-clamp-2 text-xs text-destructive">{item.status.error}</p> : null}
+            switchDisabled={item.builtin || busy}
+            onToggle={(checked) => actions.onToggle(item, checked)}
+            actions={rowActions(item, actions)}
+            menuDisabled={item.builtin && item.kind !== "mcp"}
+        />
     )
 }

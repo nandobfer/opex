@@ -7,6 +7,7 @@ import {
     routineOpencodeEngineSchema,
     routineOpexEngineSchema,
     routineTriggerSchema,
+    withRoutineEngineDefaults,
     type RoutineAgentInput,
 } from "@/features/routine-agents/schemas"
 import { ROUTINE_RUN_STATUSES } from "@/features/routine-agents/status"
@@ -25,8 +26,8 @@ const agentFields = {
     objective: z.string().optional().describe("Objetivo do agente. Vazio: o provisionamento gera a partir das instruções (objetivo ou instruções são obrigatórios)"),
     instructions: z.string().optional().describe("Instruções em markdown"),
     engine: z.enum(["opex", "opencode"]).optional().describe("Motor: opex (provedores do app) ou opencode (OpenCode no host)"),
-    opex: routineOpexEngineSchema.partial().optional().describe("Motor Opex: provider, model, variant, enabledTools (nomes das ferramentas do Agente Opex), enabledMcpServers (ids)"),
-    opencode: routineOpencodeEngineSchema.partial().optional().describe("Motor OpenCode: model (provedor/modelo), variant, agent, enabledMcps (nomes do opencode.jsonc)"),
+    opex: routineOpexEngineSchema.partial().optional().describe("Motor Opex: provider, model, variant, enabledTools (nomes das ferramentas do Agente Opex), enabledMcpServers (ids), enabledSkills (nomes das skills do Agente Opex; padrão nenhuma)"),
+    opencode: routineOpencodeEngineSchema.partial().optional().describe("Motor OpenCode: model (provedor/modelo), variant, agent, enabledMcps (nomes do opencode.jsonc), enabledSkills (ids das skills globais/nativas do OpenCode no host; as demais ficam bloqueadas)"),
     confirmIrreversible: z.boolean().optional().describe("Pedir confirmação antes de ações irreversíveis (padrão: sim)"),
     limits: routineLimitsSchema.partial().optional().describe("concurrency, maxActiveMinutes, maxWaitingMinutes, maxTokens, maxLiveWaitMinutes (null = sem limite)"),
     triggers: z.array(routineTriggerSchema).optional().describe("Gatilhos: interval, daily, weekly, once (YYYY-MM-DDTHH:mm, Brasília) e webhook"),
@@ -48,8 +49,8 @@ const inputOf = (agent: RoutineAgentDto): RoutineAgentInput => ({
     objective: agent.objective,
     instructions: agent.instructions,
     engine: agent.engine,
-    opex: agent.opex,
-    opencode: agent.opencode,
+    // Campos novos (ex.: skills, OPE-153) com o padrão quando o agente foi gravado antes deles.
+    ...withRoutineEngineDefaults({ opex: agent.opex, opencode: agent.opencode }),
     confirmIrreversible: agent.confirmIrreversible,
     limits: agent.limits,
     triggers: agent.triggers,
@@ -58,7 +59,7 @@ const inputOf = (agent: RoutineAgentDto): RoutineAgentInput => ({
 /**
  * Pelo token de sistema, o agente rotineiro não pode ganhar mais alcance que o próprio token (F2): cada
  * ferramenta NOVA em `opex.enabledTools` precisa da mesma decisão que o token teria para chamá-la
- * (grupos fora dos tokens, como `http` e `files`, nunca), e MCPs do app/host e a Chamada HTTP do motor
+ * (grupos fora dos tokens, como `http` e `files`, nunca), e MCPs e skills do app/host e a Chamada HTTP do motor
  * OpenCode não são ligados por token. O que o dono já tinha configurado continua como está.
  */
 export async function assertTokenRoutineReach(origin: OpexToolContext["origin"], next: RoutineAgentInput, current: RoutineAgentInput | null): Promise<void> {
@@ -78,6 +79,9 @@ export async function assertTokenRoutineReach(origin: OpexToolContext["origin"],
     const hadMcps = new Set([...(current?.opex.enabledMcpServers ?? []), ...(current?.opencode.enabledMcps ?? [])])
     const newMcps = [...next.opex.enabledMcpServers, ...next.opencode.enabledMcps].filter((name) => !hadMcps.has(name))
     if (newMcps.length) throw new OpexToolError(`MCPs do agente rotineiro só são liberados pelo dono, na tela do agente: ${newMcps.join(", ")}.`)
+    const hadSkills = { opex: new Set(current?.opex.enabledSkills ?? []), opencode: new Set(current?.opencode.enabledSkills ?? []) }
+    const newSkills = [...next.opex.enabledSkills.filter((name) => !hadSkills.opex.has(name)), ...next.opencode.enabledSkills.filter((name) => !hadSkills.opencode.has(name))]
+    if (newSkills.length) throw new OpexToolError(`Skills do agente rotineiro só são liberadas pelo dono, na tela do agente: ${newSkills.join(", ")}.`)
     if (next.opencode.httpRequests === true && current?.opencode.httpRequests !== true) throw new OpexToolError("A Chamada HTTP do motor OpenCode só é ligada pelo dono, na tela do agente.")
 }
 

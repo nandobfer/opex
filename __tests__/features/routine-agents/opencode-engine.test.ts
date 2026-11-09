@@ -15,6 +15,8 @@ const holder = vi.hoisted(() => ({
   runUpdates: [] as unknown[],
   turnOutcome: { outcome: 'done' as string, message: null as string | null },
   listError: false,
+  skillListError: false,
+  hostSkills: [{ id: 'revisar-pr', name: 'revisar-pr' }, { id: 'customize-opencode', name: 'customize-opencode' }] as { id: string; name: string }[],
   updateError: false,
   runFilters: [] as unknown[],
   ownCount: 1,
@@ -41,6 +43,12 @@ vi.mock('@/lib/ai/opencode-client', () => ({
         },
         add: async (args: unknown) => void holder.calls.add.push(args),
         remove: async (args: unknown) => void holder.calls.remove.push(args),
+      },
+      skill: {
+        list: async () => {
+          if (holder.skillListError) throw new Error('skills fora do ar')
+          return { data: holder.hostSkills.map((skill) => ({ ...skill, path: `/x/${skill.id}`, content: '' })) }
+        },
       },
       session: {
         get: async ({ sessionID }: { sessionID: string }) => {
@@ -71,7 +79,7 @@ vi.mock('@/lib/ai/opencode-run', () => ({
   },
 }))
 
-import { hashMcpSecret, routineSessionPermissions, runOpencodeEngine } from '@/features/routine-agents/server/engines/opencode'
+import { hashMcpSecret, routineSessionPermissions, routineSkillPermissions, runOpencodeEngine } from '@/features/routine-agents/server/engines/opencode'
 import type { EngineInput } from '@/features/routine-agents/server/engines/types'
 import { EMPTY_ROUTINE_LIMITS } from '@/features/routine-agents/schemas'
 
@@ -103,6 +111,8 @@ beforeEach(() => {
   holder.runUpdates = []
   holder.turnOutcome = { outcome: 'done', message: null }
   holder.listError = false
+  holder.skillListError = false
+  holder.hostSkills = [{ id: 'revisar-pr', name: 'revisar-pr' }, { id: 'customize-opencode', name: 'customize-opencode' }]
   holder.updateError = false
   holder.runFilters = []
   holder.ownCount = 1
@@ -118,6 +128,28 @@ describe('routineSessionPermissions', () => {
       { action: 'github_*', resource: '*', effect: 'deny' },
       { action: `${MCP}_*`, resource: '*', effect: 'allow' },
     ])
+  })
+})
+
+describe('routineSkillPermissions (OPE-153)', () => {
+  it('nega todas as skills (inclusive nativas) e libera só as selecionadas que existem no host', () => {
+    const host = [
+      { id: 'revisar-pr', name: 'revisar-pr' },
+      { id: 'customize-opencode', name: 'customize-opencode' },
+      { id: 'git-release', name: 'Git Release' },
+    ]
+    expect(routineSkillPermissions(host, ['customize-opencode', 'Git Release', 'sumiu'])).toEqual({
+      rules: [
+        { action: 'skill', resource: '*', effect: 'deny' },
+        { action: 'skill', resource: 'customize-opencode', effect: 'allow' },
+        { action: 'skill', resource: 'git-release', effect: 'allow' },
+      ],
+      missing: ['sumiu'],
+    })
+  })
+
+  it('sem seleção, só a negação geral', () => {
+    expect(routineSkillPermissions([{ id: 'a', name: 'a' }], []).rules).toEqual([{ action: 'skill', resource: '*', effect: 'deny' }])
   })
 })
 
@@ -149,6 +181,8 @@ describe('runOpencodeEngine', () => {
     expect((holder.calls.create[0] as { permissions: unknown }).permissions).toEqual([
       { action: 'github_*', resource: '*', effect: 'deny' },
       { action: `${MCP}_*`, resource: '*', effect: 'allow' },
+      // OPE-153 (D3): snapshot antigo sem skills = nenhuma liberada, inclusive as nativas.
+      { action: 'skill', resource: '*', effect: 'deny' },
     ])
     expect(activation.warnings).toEqual(['O MCP "sumiu" foi liberado mas não existe mais no opencode.jsonc do host: a execução segue sem ele.'])
     expect(usage).toEqual([expect.objectContaining({ tokens: 16, provider: 'opencode', recorded: true })])
@@ -212,6 +246,25 @@ describe('runOpencodeEngine', () => {
     expect((await runOpencodeEngine(input)).sessionId).toBe('ses_nova')
     expect(activation.warnings).toContain('Não foi possível atualizar as permissões da sessão anterior do OpenCode: a execução continuou numa sessão nova.')
     expect((holder.calls.create[0] as { permissions: unknown[] }).permissions).toContainEqual({ action: 'github_*', resource: '*', effect: 'deny' })
+  })
+
+  it('OPE-153: skills selecionadas liberadas na sessão; a que sumiu do host vira aviso e é ignorada', async () => {
+    const { input, activation } = engineInput()
+    ;(input.run.snapshot.opencode as { enabledSkills?: string[] }).enabledSkills = ['customize-opencode', 'apagada']
+    await runOpencodeEngine(input)
+    const permissions = (holder.calls.create[0] as { permissions: unknown[] }).permissions
+    expect(permissions).toContainEqual({ action: 'skill', resource: '*', effect: 'deny' })
+    expect(permissions).toContainEqual({ action: 'skill', resource: 'customize-opencode', effect: 'allow' })
+    expect(permissions).not.toContainEqual(expect.objectContaining({ resource: 'revisar-pr' }))
+    expect(activation.warnings).toContain('A skill "apagada" foi liberada mas não existe mais no OpenCode do host: a execução segue sem ela.')
+  })
+
+  it('OPE-153: falha fechada — sem a lista de skills do host, a execução vira Erro sem abrir sessão nem registrar o MCP', async () => {
+    holder.skillListError = true
+    const result = await runOpencodeEngine(engineInput().input)
+    expect(result.error).toContain('Não foi possível listar as skills do host')
+    expect(holder.calls.add).toEqual([])
+    expect(holder.calls.create).toEqual([])
   })
 
   it('turno que falha no OpenCode vira Erro com a mensagem', async () => {

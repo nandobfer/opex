@@ -115,6 +115,35 @@ export async function githubRequest<T>(path: string, options: GithubRequestOptio
     return (await githubRequestFull<T>(path, options)).data
 }
 
+/**
+ * GET pela integração; sem token cadastrado (ou, com `anyError`, em qualquer falha) tenta o
+ * `api.github.com` anônimo — só repositórios públicos, com o limite de uso anônimo. Os erros do modo
+ * anônimo também viram `GithubError` com mensagem pt-BR.
+ */
+export async function githubGetWithPublicFallback<T>(path: string, options: { anyError?: boolean; signal?: AbortSignal } = {}): Promise<T> {
+    try {
+        return await githubRequest<T>(path, { signal: options.signal })
+    } catch (error) {
+        if (!options.anyError && !(error instanceof GithubError && error.code === "NOT_CONFIGURED")) throw error
+    }
+    let response: Response
+    try {
+        const timeout = AbortSignal.timeout(GITHUB_TIMEOUT_MS)
+        response = await fetch(`${GITHUB_DEFAULT_API_URL}${path}`, {
+            headers: { Accept: "application/vnd.github+json", "User-Agent": "opex" },
+            cache: "no-store",
+            signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
+        })
+    } catch {
+        throw new GithubError("Não foi possível conectar ao GitHub", "UNAVAILABLE")
+    }
+    if (response.ok) return (await response.json()) as T
+    if (response.status === 404) throw new GithubError("Não encontrado no GitHub (repositório inexistente ou privado: cadastre um token com acesso em Integrações › GitHub)", "NOT_FOUND", 404)
+    if (response.status === 403 || response.status === 429) throw new GithubError("Limite de uso anônimo da API do GitHub atingido: cadastre um token em Integrações › GitHub ou tente mais tarde", "RATE_LIMITED", response.status)
+    if (response.status >= 500) throw new GithubError(`O GitHub respondeu HTTP ${response.status}`, "UNAVAILABLE", response.status)
+    throw new GithubError(`O GitHub recusou a requisição (HTTP ${response.status})`, "REJECTED", response.status)
+}
+
 /** Endpoint GraphQL a partir da URL da API REST (`…/api/v3` do GHES vira `…/api/graphql`). */
 export function graphqlUrlOf(apiUrl: string): string {
     const base = apiUrl.replace(/\/+$/, "")

@@ -230,6 +230,9 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
     (`maxTimeoutSeconds`, 5–1800, padrão 300). Configuração antiga sem `host` recebe o padrão.
   - **MCPs** (`OpexMcpSection`, `?secao=mcps`): lista, cadastra, edita, habilita/desabilita e exclui
     os servidores MCP do agente; salva sozinha (cada ação grava na hora). Detalhes em "MCPs".
+  - **Skills** (`OpexSkillsSection`, `?secao=skills`, OPE-153): lista, cria com texto, edita, instala/
+    atualiza do GitHub, remove e liga/desliga as skills que o agente usa nas conversas do dono; salva
+    sozinha. Detalhes em "Skills".
   - **Memórias** (`OpexMemoriesSection`): chave **Aprendizado autônomo** do Agente Opex
     (`SelfMemorySwitch`) e **um card só** com o universo do agente `opex/opex` (OPE-148,
     `MemoryUniverseSection`): Memórias do Opex, globais, do dono, do portal e as de cada cliente (canal
@@ -502,6 +505,85 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
   sem argumentos e sem a query da URL) e evento `opex-mcp-updated` `{ id }` em `private-app`
   (`useOpexMcpRealtime`).
 
+### Skills (OPE-153)
+
+Instruções reutilizáveis (formato `SKILL.md`: frontmatter `name` + `description` + corpo, e arquivos de
+apoio) que o Agente Opex do dono carrega quando o pedido combina com a descrição. A UX e as capacidades
+seguem a aba Skills do OpenCode (Integrações › IA › OpenCode), com os mesmos componentes
+compartilhados (`src/components/resources/`: `ResourceListCard`, `ResourceRowFrame`,
+`MarkdownResourceFields`, `ResourceSourceField`).
+
+- **Armazenamento (D1, D5):** coleção `opex_skills` (`OpexSkill` em `src/lib/db/models/Opex.ts`), **um
+  documento por skill**: `name` (único e imutável, mesma regra de nome/pasta do OpenCode), `description`,
+  `body`, `extra` (frontmatter além de name/description), `files` (`{ path, content: Buffer, binary,
+  size }`), `origin` (`{ kind: "opex" | "github", repo, ref, path }`), `hash` (SHA da árvore da pasta no
+  GitHub; `null` = criada no Opex), `enabled` e `size`. **Sem limite de tamanho** além do limite técnico
+  do MongoDB (16 MB por documento): a gravação confere o tamanho em BSON antes (`assertSkillFitsDb`,
+  `server/skills/size.ts`) e falha com 413 `OPEX_SKILL_TOO_LARGE` sem gravar nada (documento único =
+  gravação atômica; editar acima do limite mantém a versão anterior). A lista nunca carrega o conteúdo
+  (projeção sem `body` e `files.content`).
+- **Seção** (`components/settings/skills/`): lista com nome, descrição, origem (**Criada no Opex** ou
+  `dono/repo[/pasta]`), versão `atual → disponível`, selo **Com atualização** e o switch; busca por nome
+  (fuse.js), filtro Todos/Ligadas/Desligadas/Com atualização, skeleton, vazio com Nova skill/Instalar do
+  GitHub e erro com Tentar novamente. Menu: Editar, Atualizar (só instalada com atualização) e
+  Remover/Desinstalar. Uma skill nova ou instalada começa **ligada**.
+- **Criar/editar** (`OpexSkillEditorDialog` + `OpexSkillForm`): mesmo schema Zod da API
+  (`opexSkillCreateSchema`/`opexSkillUpdateSchema` em `skills.ts`; formulário em `skill-form-schemas.ts`),
+  validação em tempo real (inclusive nome já usado). Arquivos de apoio de texto (caminho relativo, sem
+  `..`, diferente de `SKILL.md`): o conteúdo de um arquivo existente só é lido ao clicar Editar
+  (`GET …/file?path=`), para skill grande não travar o editor; binários de repositório só são listados
+  (podem ser removidos). A edição envia só as mudanças (texto = grava, `null` = remove). Leitura que
+  falha mostra erro com Tentar novamente e **nunca abre o editor vazio**; erro ao salvar fica no
+  formulário, com o que foi digitado. Skill instalada editada continua vinculada à origem.
+- **Instalar do GitHub (D1, D7)** (`OpexSkillInstallDialog`): origem `dono/repo`,
+  `https://github.com/dono/repo(.git)` ou `…/tree/<ref>/<pasta>` (ref sem `/`), validada pelo mesmo
+  `installSourceSchema` do OpenCode e convertida por `parseGithubSkillSource` (`skill-source.ts`; o que
+  não for GitHub, como `@pacote`, é recusado). O servidor (`server/skills/github.ts`) lê a árvore
+  recursiva (`git/trees/<ref|HEAD>?recursive=1`) e os blobs (`git/blobs/<sha>`) pela **integração
+  GitHub** (token para privados; sem token cadastrado, modo anônimo só para públicos —
+  `githubGetWithPublicFallback` de `src/features/github/client.ts`). Uma pasta com `SKILL.md` é uma
+  skill (não se procura outra dentro dela; pastas ocultas e `node_modules` ficam de fora, exceto a pasta pedida na URL — ex.: `…/tree/main/.claude/skills` vale). Passos:
+  origem → lista das skills encontradas (`POST /api/opex/skills/discover`, com o motivo das que não podem
+  entrar: frontmatter inválido, nome já existente) → marcar → resultado **por skill**
+  (`POST /api/opex/skills/install`). Repositório com uma única skill instalável instala direto. Nome
+  duplicado é recusado sem impedir as demais. Repositório inexistente/sem acesso (404 `GITHUB_NOT_FOUND`),
+  sem `SKILL.md` (`OPEX_SKILL_NO_SKILL_MD`) e árvore grande demais (`OPEX_SKILL_TREE_TRUNCATED`, pedir a
+  pasta na URL) têm mensagens claras.
+- **Com atualização / Atualizar:** a lista compara o `hash` gravado com o SHA atual da pasta (uma chamada
+  `trees` por repositório/ref, cache de 10 min; o botão Atualizar da lista passa `?refresh=1`). A lista
+  **não espera o GitHub mais de 4 s** (`OPEX_SKILL_VERSION_BUDGET_MS`): passado o teto, responde com a
+  versão "não verificada" e a consulta segue em segundo plano, enchendo o cache para a próxima leitura.
+  Uma **falha** do GitHub fica memorizada por **1 min** (`OPEX_SKILL_VERSION_FAILURE_CACHE_MS`; `?refresh=1`
+  consulta de novo), para a lista não esperar o timeout a cada leitura. GitHub fora na lista = versão "não
+  verificada" (sem quebrar). `?versions=0` devolve a lista **sem** a verificação de versão (usada pela
+  seleção de skills do editor do rotineiro, `useOpexSkillOptions`). Atualizar (`POST /api/opex/skills/update`,
+  `ids` ou `all`) sobrescreve corpo, extras e arquivos com a versão do repositório, mantém nome e switch;
+  falha no GitHub ou acima do limite mantém a versão atual daquela skill (resultado por skill).
+  **"Atualizar todos (N)" conta todas as instaladas com atualização, ligadas ou desligadas** (as
+  desligadas continuam valendo para os rotineiros, D2). No `all`, o servidor confere as versões **sem o
+  teto de 4 s** (espera o GitHub); a skill instalada que não pôde ser verificada (GitHub fora ou pasta
+  removida do repositório) volta como resultado com erro, "a versão atual foi mantida", em vez de sumir
+  da resposta. Skill criada no Opex não tem Atualizar.
+- **Switch (D2):** vale **só para o Agente Opex nas conversas do dono**; resposta otimista com reversão
+  animada e toast; o estado final vem do servidor.
+- **Remover/Desinstalar (D6):** a confirmação mostra quantos agentes rotineiros usam a skill
+  (`GET …/usage`) e quais (se a consulta falhar, o texto fica neutro — "não foi possível verificar" — com Tentar novamente, nunca "nenhum"); ao confirmar, a skill sai de `opex.enabledSkills` de cada um
+  (`server/skills/unlink.ts`), com auditoria `AgenteRotineiro` e `routine-agent-updated` em cada. Execuções
+  em andamento seguem com o `snapshot` e recebem "skill indisponível" ao carregar.
+- **Mecanismo de uso (item B):** `server/skills/turn.ts`. O catálogo (só `name` + `description`) entra
+  nas instruções (`skillsCatalogBlock`, bloco "Skills disponíveis"; estável entre turnos). O corpo e os
+  arquivos vêm **sob demanda** por duas ferramentas **do turno** (grupo `opex-skills`, risco `read`):
+  `load_opex_skill` (corpo em janelas numeradas de até 400 linhas + lista dos arquivos) e
+  `read_opex_skill_file` (um arquivo em janelas; binário só com o tamanho). Elas **não** entram no
+  registro `OPEX_TOOLS`, na árvore de ferramentas nem no catálogo do Maddox/token. Alcance: no chat do
+  dono, as **ligadas** no início do turno, conferidas de novo ao carregar (mudar o switch vale a partir
+  da próxima resposta; desligada não pode ser carregada); no rotineiro do motor Opex, a seleção do
+  snapshot (ligada ou não). Fora do alcance, desligada ou removida devolve "indisponível" sem erro.
+  **Portal do cliente e Maddox não recebem skills (D4).**
+- **Auditoria e tempo real:** entidade `SkillOpex` (criar/editar/ligar/excluir; sem corpo, arquivos nem o
+  token do GitHub), log Pino (`module: "opex-skills"`) e `opex-skills-updated` `{ id, action }` em
+  `private-app` (`useOpexSkillsRealtime`, também no editor do rotineiro).
+
 ### Chamadas HTTP
 
 Grupo `http` (`server/tools/http.ts`, núcleo em `src/features/http-request/`), só no dono. Decisões da
@@ -679,6 +761,10 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 | `GET/PATCH/DELETE /api/opex/jobs/[id]` | Detalhe; edita (agendado, só job do dono; 403 `OPEX_JOB_CLIENT_READONLY`); cancela (agendado) |
 | `GET/POST /api/opex/mcp-servers` | MCPs (segredos só pelas chaves); cadastra |
 | `GET/PUT/PATCH/DELETE /api/opex/mcp-servers/[id]` | Detalhe; edita; `{ enabled }`; exclui (e retira dos clientes) |
+| `GET/POST /api/opex/skills[?refresh=1][&versions=0]` | Skills (sem conteúdo, com "Com atualização"; teto de 4 s no GitHub, falha em cache por 1 min; `versions=0` pula a verificação); cria com texto (409 `OPEX_SKILL_NAME_TAKEN`, 413 `OPEX_SKILL_TOO_LARGE`) |
+| `GET/PUT/PATCH/DELETE /api/opex/skills/[id]` | Detalhe (corpo + arquivos sem conteúdo); edita; `{ enabled }`; remove e desvincula dos rotineiros (D6) |
+| `GET /api/opex/skills/[id]/file?path=` · `GET …/usage` | Conteúdo de um arquivo de apoio; rotineiros que usam a skill |
+| `POST /api/opex/skills/discover` · `install` · `update` | Skills de um repositório; instala as marcadas; atualiza (`ids` ou `all`) — resultado por skill |
 | `POST /api/opex/mcp-servers/test` | Testa o rascunho (`id` opcional para usar os segredos salvos): `{ ok, tools, error, durationMs, serverInfo }` |
 
 ### Portal do cliente
@@ -704,7 +790,7 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
 ## Dados
 
 - Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions` (com `clientId`/`userId` do escopo),
-  `opex_messages` (`kind: "job"` + `job`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`) e `opex_files` (só metadados: sessão, nome, mime,
+  `opex_messages` (`kind: "job"` + `job`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`), `opex_skills` (ver "Skills"; índice único em `name`) e `opex_files` (só metadados: sessão, nome, mime,
   tamanho, `key`/`uploadKey`, `pending`, `ready`, `messageId`). Índices pela migração
   `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`
   (`enabled`, `disabledTools`, `enabledOptInTools`, `enabledMcpServers`).
@@ -714,16 +800,16 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
 
 - Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
   `scope`, `client-tools` (catálogo do portal + `buildOpexClientToolTree`), `tool-tree` (árvore,
-  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host), `issue-readiness` e `issue-nodes` (entrega, veredito e ranking das issues), `mcp` (MCPs: schemas, nomes, risco e confirmação).
+  confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host), `issue-readiness` e `issue-nodes` (entrega, veredito e ranking das issues), `mcp` (MCPs: schemas, nomes, risco e confirmação), `skills`, `skill-source` e `skill-form-schemas` (Skills).
 - `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
-  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`, `issue-graph`, `server/mcp/` (`connect`, `service`, `tools`); `server/tools/` (um arquivo por grupo +
+  `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`, `issue-graph`, `server/mcp/` (`connect`, `service`, `tools`), `server/skills/` (`service`, `github`, `size`, `unlink`, `turn`); `server/tools/` (um arquivo por grupo +
   `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
   + `registry`).
 - `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
-  `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`, `useOpexMcpServers`.
+  `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`, `useOpexMcpServers`, `useOpexSkills`.
 - `components/`: `agents/` (`AgentChatNavItem`, `AgentChatPanel`, `AgentSwitcherHeader`,
   `AgentSwitchProvider`, `agent-descriptors`), `OpexSessionTabs`, `OpexSessionsPanel`, `OpexStatusDot`,
-  `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` (com `settings/mcp/` e `ToolConfirmMeta`) e `settings/client/` (com
+  `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` (com `settings/mcp/`, `settings/skills/` e `ToolConfirmMeta`) e `settings/client/` (com
   `ClienteOpexMcpCard`). O campo secreto somente-escrita é `SecretValueInput`
   (`src/components/ui/secret-value-input.tsx`), compartilhado com `SecretField` das Integrações.
 - Pontos de montagem: `AppSidebar` (`footerItems`), `AppShell` (`sidebarFooterItems`),
@@ -746,6 +832,6 @@ escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agen
 indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-tools-card` (árvore, switch "Pede confirmação" e
 desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas) e `mcp` (nomes, risco, schema, cadastro com segredos cifrados, teste de
 conexão, ferramentas no turno, MCP indisponível, portal, ação confirmada e as ferramentas de gerenciar
-MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente) e `session-retention` (arquivar/excluir por inatividade, carência do arquivamento, proteções e `archivedAt`). Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
+MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente) e `session-retention` (arquivar/excluir por inatividade, carência do arquivamento, proteções e `archivedAt`) e, das Skills (OPE-153), `skills-pure` (SKILL.md/frontmatter, origem, descoberta, hash, catálogo, janelas e formulário), `skills-service` (criar, nome duplicado, limite técnico sem gravação parcial, instalar várias com duplicada, "Com atualização", atualizar sobrescrevendo edição, GitHub fora e desvínculo D6 — GitHub simulado), `skills-turn` (só ligadas no dono, revalidação ao carregar, seleção do rotineiro e indisponível) e `skills-ui` (lista, filtros, estados, switch, editor com leitura falhando, nome duplicado, remoção com uso e instalação); o `runner` confere que o dono recebe o catálogo e o portal não. Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,
 `memory-list`, `memories-realtime`, `agent-memory-mapping`, `self-memory-tools`, `self-memory-mcp` e
 `agent-settings-tabs`; `__tests__/features/opex-agent/memory-tools.test.ts` cobre `list_agent_memories`.

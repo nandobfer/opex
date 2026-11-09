@@ -37,6 +37,7 @@ const auditView = (doc: Pick<IRoutineAgent, "name" | "objective" | "engine" | "o
     motor: doc.engine,
     modelo: doc.engine === "opex" ? `${doc.opex.provider ?? ""}/${doc.opex.model}` : doc.opencode.model,
     confirmacao: doc.confirmIrreversible,
+    skills: { opex: doc.opex?.enabledSkills ?? [], opencode: doc.opencode?.enabledSkills ?? [] },
     limites: doc.limits,
     gatilhos: doc.triggers.map((state) => state.trigger),
     status: doc.status,
@@ -74,8 +75,23 @@ export async function getRoutineAgent(id: string): Promise<RoutineAgentDto> {
     return toAgentDto(doc, (await runSummaries([id])).get(id))
 }
 
+/**
+ * Skills do Agente Opex recém-adicionadas à seleção precisam existir (as que já estavam salvas podem ter
+ * sido removidas — saem sozinhas pelo D6). As do host não são conferidas: podem sumir fora do Opex.
+ */
+async function assertOpexSkillsExist(next: readonly string[], previous: readonly string[]): Promise<void> {
+    const had = new Set(previous)
+    const added = next.filter((name) => !had.has(name))
+    if (!added.length) return
+    const { existingSkillNames } = await import("@/features/opex-agent/server/skills/service")
+    const found = await existingSkillNames(added)
+    const missing = added.filter((name) => !found.has(name))
+    if (missing.length) throw new DomainError(400, `Skill não encontrada no Agente Opex: ${missing.join(", ")}. Confira em Integrações › IA › Agente Opex › Skills.`, "ROUTINE_SKILL_NOT_FOUND")
+}
+
 export async function createRoutineAgent(input: RoutineAgentInput, actorId: string): Promise<RoutineAgentDto> {
     await routineDb()
+    await assertOpexSkillsExist(input.opex.enabledSkills, [])
     const { Types } = await import("mongoose")
     const _id = new Types.ObjectId()
     const named = Boolean(input.name)
@@ -119,6 +135,7 @@ export async function createRoutineAgent(input: RoutineAgentInput, actorId: stri
 export async function updateRoutineAgent(id: string, input: RoutineAgentInput, actorId: string): Promise<RoutineAgentDto> {
     const before = await loadAgentDoc(id)
     if (input.name && input.name !== before.name) await assertNameFree(input.name, id)
+    await assertOpexSkillsExist(input.opex.enabledSkills, before.opex?.enabledSkills ?? [])
     const triggers = buildTriggerStates(input.triggers, before.triggers ?? [], new Date())
     const generated = before.generated ?? { name: false, objective: false }
     const next = {
