@@ -3,6 +3,7 @@ import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/conf
 import { clearAiCatalogCache, listAiAgents, listAiModels } from "@/lib/ai/catalog"
 import { AiProviderError } from "@/lib/ai/errors"
 import { getOpencodeInfo } from "@/lib/ai/opencode"
+import { verifyOpencodeGoKey } from "@/lib/ai/opencode-go"
 import { AI_PROVIDERS } from "@/lib/ai/providers"
 import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "@/features/integrations/testers/types"
 
@@ -65,6 +66,21 @@ function apiKeyModelsTester(providerId: keyof typeof API_KEY_INTEGRATIONS, keyHi
 export const testAnthropic = apiKeyModelsTester("anthropic", "do Claude Console", "/v1/models")
 export const testOpenai = apiKeyModelsTester("openai", "da plataforma OpenAI", "/v1/models")
 export const testDeepseek = apiKeyModelsTester("deepseek", "da plataforma DeepSeek", "/models")
+
+/** OpenCode Go: a lista de modelos é pública, então o teste também confere a chave (sem gerar nada). */
+export const testOpencodeGo: IntegrationTester = async ({ emit, signal }) => {
+    const resolved = await getIntegration("ai_opencode_go")
+    if (!resolved.values.apiKey) fail("Sem chave: cadastre a chave oc_sk_… do OpenCode Go em Campos privados")
+    clearAiCatalogCache()
+    emit("step", "GET /openai/v1/models")
+    const models = await listAiModels("opencode-go", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
+    emit(models.length ? "success" : "warn", `${models.length} modelo(s) disponível(is) no Go`)
+    emit("step", "POST /openai/v1/chat/completions (conferência da chave, sem gerar)")
+    await verifyOpencodeGoKey(stepSignal(signal, 20_000)).catch(failFrom)
+    emit("success", "Chave aceita pelo OpenCode Go")
+    if (!models.length) return warnResult("Chave aceita, mas o Go não listou modelos")
+    return `Chave aceita; ${models.length} modelo(s)`
+}
 
 export const testJev: IntegrationTester = async ({ emit, signal }) => {
     const resolved = await getIntegration("ai_jev")

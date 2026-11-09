@@ -46,6 +46,7 @@ export interface IntegrationConfigMap {
     ai_anthropic: { apiKey?: string }
     ai_openai: { apiKey?: string }
     ai_deepseek: { apiKey?: string }
+    ai_opencode_go: { apiKey?: string }
     ai_jev: { apiKey?: string }
     orcamentos: Record<string, never>
     smtp: { host?: string; port: number; user?: string; from?: string; password?: string }

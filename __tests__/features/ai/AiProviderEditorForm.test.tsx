@@ -12,7 +12,9 @@ vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: Reac
 vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
-vi.mock("@/features/ai/components/ProviderUsageCard", () => ({ ProviderUsageCard: ({ provider }: { provider: string }) => <div data-testid={`provider-usage-${provider}`} /> }))
+vi.mock("@/features/ai/components/ProviderUsageCard", () => ({
+    ProviderUsageCard: ({ provider, showCost }: { provider: string; showCost?: boolean }) => <div data-testid={`provider-usage-${provider}`} data-show-cost={String(showCost)} />,
+}))
 vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
@@ -93,7 +95,15 @@ describe("AiProviderEditorForm", () => {
             renderForm(provider.integration)
             expect(screen.queryByRole("tab", { name: "Contas" })).toBeNull()
             fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
-            expect(screen.getByTestId(`provider-usage-${provider.id}`)).toBeTruthy()
+            expect(screen.getByTestId(`provider-usage-${provider.id}`).getAttribute("data-show-cost")).toBe("false")
         }
+    })
+
+    it("OpenCode Go: Configuração, Modelos e Consumo com a coluna de custo (cota + Extra Usage), sem abas do OpenCode de sessão", () => {
+        window.history.replaceState(null, "", "/integracoes/ia/opencode-go")
+        renderForm("ai_opencode_go")
+        expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Configuração", "Modelos", "Consumo"])
+        fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
+        expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-show-cost")).toBe("true")
     })
 })

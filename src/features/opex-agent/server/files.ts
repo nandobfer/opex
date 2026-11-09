@@ -7,7 +7,7 @@ import { loggerFor } from "@/lib/logger"
 import { getFileObject, getUploadUrl, storageErrorInfo } from "@/lib/storage/s3"
 import { promoteStagedUpload, removeStoredObjectQuietly, StagedUploadError } from "@/lib/storage/staged-upload"
 import { OPEX_FILE_PENDING_TTL_MS, OPEX_FILE_TEXT_INLINE_MAX, OPEX_FILE_UPLOAD_URL_TTL_SECONDS, type OpexProviderId } from "../constants"
-import { opexFileDelivery, opexFileKind, opexFileReference, opexFileWeight, opexMaxBytes } from "../files"
+import { opexFileDelivery, opexFileKind, opexFileReference, opexFileWeight, opexMaxBytes, type OpexFileKind } from "../files"
 import type { OpexFilesSettings, ReserveOpexFileInput } from "../schemas"
 import type { OpexFileDto, OpexFileReservationDto } from "../types"
 import { OWNER_SCOPE, type OpexServerScope } from "./scope"
@@ -189,10 +189,10 @@ export async function readOpexFileBytes(doc: Pick<OpexFileDoc, "key">): Promise<
 
 type ContentPart = { type: "text"; text: string } | { type: "image"; image: Uint8Array; mediaType: string } | { type: "file"; data: Uint8Array; mediaType: string; filename: string }
 
-async function filePartsFor(doc: OpexFileDoc | null, fileId: string, provider: OpexProviderId): Promise<ContentPart[]> {
+async function filePartsFor(doc: OpexFileDoc | null, fileId: string, provider: OpexProviderId, accepted?: ReadonlySet<OpexFileKind>): Promise<ContentPart[]> {
     if (!doc) return [{ type: "text", text: `[Arquivo do chat ${fileId} não está mais disponível.]` }]
     const kind = opexFileKind(doc.mediaType, doc.name)
-    const delivery = opexFileDelivery(provider, kind, doc.size)
+    const delivery = opexFileDelivery(provider, kind, doc.size, accepted)
     const ref = { id: doc._id.toString(), name: doc.name, mediaType: doc.mediaType, size: doc.size, kind }
     const reference: ContentPart = { type: "text", text: opexFileReference(ref, delivery) }
     if (delivery === "reference") return [reference]
@@ -212,8 +212,8 @@ async function filePartsFor(doc: OpexFileDoc | null, fileId: string, provider: O
     return [reference, { type: "file", data, mediaType: doc.mediaType, filename: doc.name }]
 }
 
-/** Troca os marcadores `opex-file` do histórico pelo conteúdo, conforme o que o provedor lê. */
-export async function resolveFileMarkers(messages: readonly unknown[], provider: OpexProviderId): Promise<unknown[]> {
+/** Troca os marcadores `opex-file` do histórico pelo conteúdo, conforme o que o provedor (ou o modelo, em `accepted`) lê. */
+export async function resolveFileMarkers(messages: readonly unknown[], provider: OpexProviderId, accepted?: ReadonlySet<OpexFileKind>): Promise<unknown[]> {
     const ids = new Set<string>()
     for (const message of messages) {
         const content = (message as { content?: unknown })?.content
@@ -223,7 +223,7 @@ export async function resolveFileMarkers(messages: readonly unknown[], provider:
     const docs = await OpexFile.find({ _id: { $in: [...ids].filter((id) => Types.ObjectId.isValid(id)) }, ready: true }).lean<OpexFileDoc[]>()
     const byId = new Map(docs.map((doc) => [doc._id.toString(), doc]))
     const resolved = new Map<string, ContentPart[]>()
-    for (const id of ids) resolved.set(id, await filePartsFor(byId.get(id) ?? null, id, provider))
+    for (const id of ids) resolved.set(id, await filePartsFor(byId.get(id) ?? null, id, provider, accepted))
     return messages.map((message) => {
         const typed = message as { content?: unknown }
         if (!Array.isArray(typed.content) || !typed.content.some(isFileMarker)) return message

@@ -33,7 +33,7 @@ const SECTIONS: { value: Section; label: string }[] = [
 ]
 const AGENT_COPY: AgentCardCopy = {
     id: "architect",
-    description: "OpenCode: cada versão abre uma sessão NOVA no worktree da mesa (ou na base do repositório) e o agente só lê o plano, a tarefa e o código. Gemini, Anthropic, OpenAI e DeepSeek: uma chamada direta ao modelo, só com o plano e a tarefa.",
+    description: "OpenCode: cada versão abre uma sessão NOVA no worktree da mesa (ou na base do repositório) e o agente só lê o plano, a tarefa e o código. Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go: uma chamada direta ao modelo, só com o plano e a tarefa.",
     timeoutLabel: "Tempo máximo da geração (minutos)",
     timeoutMin: ARCHITECT_TIMEOUT_MIN,
     timeoutMax: ARCHITECT_TIMEOUT_MAX,

@@ -1,3 +1,4 @@
+import type { AiBilling } from "@/lib/ai/provider-cost"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { Activation } from "../hub"
 import type { RoutineAgentDoc, RoutineRunDoc } from "../shared"
@@ -25,7 +26,7 @@ export interface EngineInput {
     internalTools: OpexTool[]
     onStep: (step: EngineStep) => void
     /** Uso de um passo: soma, grava o consumo (se o motor ainda não gravou: `recorded`) e confere os limites (interrompe se estourar). */
-    onUsage: (step: { tokens: number; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; stepId: string; model: string; provider: string; recorded?: boolean }) => void
+    onUsage: (step: { tokens: number; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; billing?: AiBilling | null; stepId: string; model: string; provider: string; recorded?: boolean }) => void
 }
 
 export interface EngineResult {

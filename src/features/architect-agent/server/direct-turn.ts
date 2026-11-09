@@ -2,7 +2,7 @@ import type { TurnEvent, TurnResult } from "@/lib/ai/opencode-run"
 import type { AiTextProviderId } from "@/lib/ai/providers"
 import { streamAi } from "@/lib/ai/stream"
 
-/** Pedido de um turno do arquiteto num provedor direto (Gemini, Anthropic, OpenAI, DeepSeek). */
+/** Pedido de um turno do arquiteto num provedor direto (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go). */
 export interface DirectTurnRequest {
     provider: Exclude<AiTextProviderId, "opencode">
     model: string
