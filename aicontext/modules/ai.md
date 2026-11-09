@@ -454,8 +454,9 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   (`src/features/ai/memory-universe.ts`, puro): agente, canal inicial de **Nova memória** (a global do
   agente; na central, o canal da central) e os canais permitidos. "Nova memória" escolhe o canal entre os do
   universo. As ações do card (ativar, fixar, editar, excluir, criar) são as da lib pelo proxy
-  `/api/engramind/**` (catálogo e auditoria do proxy), e o tempo real vem pelo SSE da lib. A rede preenche a
-  altura disponível da página (`fill`; ver `aicontext/modules/engramind.md`, "Altura"). Acima dela,
+  `/api/engramind/**` (catálogo e auditoria do proxy), e o tempo real vem pelo SSE da lib. O card inteiro
+  ocupa a altura visível da tela (`fill="viewport"` com o card como âncora "bloco"; ver
+  `aicontext/modules/engramind.md`, "Altura dos universos"). Acima dela,
   `MemoriesNotices` com `universe` (`outsideForUniverse`: as combinações de canais do próprio consumidor; na
   central, só as que cabem nos canais dela): migração pendente, Engramind indisponível e memórias fora do
   contexto. `useMemoriesRealtime` continua relendo os metadados. O hook otimista antigo das listas

@@ -308,13 +308,19 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `PageSkeleton` marca o bloco trilha + barra + `NetworkSkeleton fill="viewport"` com `NETWORK_FILL_ROOT_PROPS`
   (o skeleton do card fica fora), para ter a mesma altura sem salto. Antes (OPE-148) a rede usava `fill`, que só
   preenchia a sobra abaixo do conteúdo e deixava o canvas baixo.
-- **Altura dos universos (OPE-148, lib ≥ 0.7.0):** os universos dos cards (`AgentUniverse fill`) **preenchem a
-  altura que sobra da página**: a lib mede a sobra abaixo do conteúdo da área que rola (`<main>` do `AppShell`) e
-  ajusta o canvas antes da pintura (`useFillAvailableHeight`, conta pura `nextFillHeight`), de novo a cada
-  mudança de tamanho da área ou do conteúdo (avisos que aparecem, janela redimensionada). Quando a página já
-  transborda, o canvas fica no mínimo `NETWORK_FILL_MIN_HEIGHT` (320 px). A visão reenquadra só na primeira
-  medida (redimensionar não desfaz o pan). A limitação vinha da lib (`h-[min(72dvh,44rem)]` e `h-[28rem]`
-  fixos, sem `className` no `EngramindNetwork`); o ajuste por prop no Opex não bastava.
+- **Altura dos universos (OPE-151, lib ≥ 0.10.0):** o card da rede de memórias de todas as telas de agente
+  (`AgentUniverseCard`: `/agente-opex`, `/agente-maddox`, `/agente-desenvolvedor`, `/agente-arquiteto`, a aba do
+  Adversário, a aba Memórias da central, Integrações › IA › Agente Desenvolvedor e a aba Memórias dos rotineiros)
+  **ocupa a altura visível da área que rola**, como a rede de `/engramind`: o `Card` é a âncora "bloco"
+  (`NETWORK_FILL_BLOCK_PROPS`, `data-network-fill-root="block"`) e o `AgentUniverse fill="viewport"` fica com
+  `visível − padding do <main> − (altura do card − altura do canvas)` (cabeçalho, descrição, avisos e o padding
+  de baixo do card; `fillOutside` + `viewportFillHeight`). O que fica acima do card (cabeçalho da página, abas,
+  interruptor de aprendizado) sai da tela ao rolar até ele. Mínimo `NETWORK_FILL_MIN_HEIGHT` (320 px); recalcula
+  com a janela e com o próprio card (um aviso que aparece encolhe o canvas), reenquadrando só na primeira medida.
+  O skeleton de carregamento é o `NetworkSkeleton` interno do `AgentUniverse`, no mesmo modo e dentro do card.
+  Antes (OPE-148) os cards usavam `fill` (a sobra da página) e a altura compacta `NETWORK_CANVAS_COMPACT_CLASS`,
+  que deixavam o canvas no mínimo nas páginas de agente. A prévia da aba Visualização (`UniverseLayoutPreview`)
+  continua com altura fixa.
 - **Pendências no Engramind** (para o modo app da lib, não para o Opex): o prazo de desuso e os pesos da
   busca em `get_consumer_settings`, o estado do webhook do próprio app para o token de app e a edição dos
   canais criados pelo app. A tarefa está em `docs/engramind-consumer-settings.md` do repositório da lib.

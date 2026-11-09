@@ -8,7 +8,7 @@ import { cleanup, render, screen } from '@testing-library/react'
 const seen = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }))
 
 vi.mock('@engramind/client/react', () => ({
-  NETWORK_CANVAS_COMPACT_CLASS: 'compact',
+  NETWORK_FILL_BLOCK_PROPS: { 'data-network-fill-root': 'block' },
   AgentUniverse: (props: Record<string, unknown>) => {
     seen.props.push(props)
     return <div data-testid="agent-universe" />
@@ -25,8 +25,11 @@ describe('aba Memórias do agente rotineiro', () => {
     render(<RoutineMemoriesTab slug="vagas" />)
     expect(screen.getAllByTestId('agent-universe')).toHaveLength(1)
     expect(screen.getByText('Rede de memórias')).toBeTruthy()
-    // OPE-148: card compartilhado, rede preenchendo a altura disponível, sem filtro de canais nem avisos.
-    expect(seen.props.at(-1)).toMatchObject({ agent: 'opex/rotineiro-vagas', defaultCreateChannel: 'agentes/rotineiros/vagas', className: 'compact', fill: true, includeChannel: null })
+    // OPE-148: card compartilhado, sem filtro de canais nem avisos. OPE-151: o card inteiro na altura visível
+    // (âncora "bloco" + fill="viewport"), sem a altura compacta de antes.
+    expect(seen.props.at(-1)).toMatchObject({ agent: 'opex/rotineiro-vagas', defaultCreateChannel: 'agentes/rotineiros/vagas', fill: 'viewport', includeChannel: null })
+    expect(seen.props.at(-1)).not.toHaveProperty('className')
+    expect(screen.getByTestId('agent-universe-card').getAttribute('data-network-fill-root')).toBe('block')
     expect(screen.queryByTestId('memories-notices')).toBeNull()
   })
 })
