@@ -87,8 +87,10 @@ describe('memórias do agente desenvolvedor (tela, critério aprovado OPE-148: u
     expect(screen.getByTestId('memory-node-m_opex')).toBeTruthy()
     expect(screen.getByTestId('memory-node-m_global')).toBeTruthy()
     expect(screen.queryByTestId('memory-node-m_other')).toBeNull()
-    // A rede preenche a altura disponível da página.
-    expect(screen.getByTestId('network-canvas').getAttribute('data-fill')).toBe('true')
+    // OPE-151: o card inteiro ocupa a altura visível — o canvas no modo viewport, dentro do card-bloco.
+    const canvas = screen.getByTestId('network-canvas')
+    expect(canvas.getAttribute('data-fill')).toBe('viewport')
+    expect(canvas.closest('[data-network-fill-root="block"]')).toBe(screen.getByTestId('agent-universe-card'))
   })
 
   it('sem central (aba Desenvolvimento agêntico): todas as memórias do agente, inclusive as das centrais', async () => {

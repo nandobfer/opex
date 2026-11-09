@@ -5,14 +5,14 @@ import { cleanup, render, screen } from '@testing-library/react'
 
 /**
  * Universo único das memórias de cada agente (critério aprovado OPE-148): um card só por página de memórias,
- * com todas as memórias que o agente alcança (na central, só as que valem nela), a rede preenchendo a altura
- * disponível e os canais de cliente rotulados pelo nome do cliente.
+ * com todas as memórias que o agente alcança (na central, só as que valem nela), o card inteiro na altura
+ * visível (OPE-151) e os canais de cliente rotulados pelo nome do cliente.
  */
 
 const seen = vi.hoisted(() => ({ props: [] as Record<string, unknown>[] }))
 
 vi.mock('@engramind/client/react', () => ({
-  NETWORK_CANVAS_COMPACT_CLASS: 'compact',
+  NETWORK_FILL_BLOCK_PROPS: { 'data-network-fill-root': 'block' },
   AgentUniverse: (props: Record<string, unknown>) => {
     seen.props.push(props)
     return <div data-testid="agent-universe" />
@@ -86,12 +86,13 @@ describe('outsideForUniverse (puro)', () => {
 })
 
 describe('seções de memórias: um card só, o universo do agente', () => {
-  it('Agente Opex: um universo, com fill, avisos e sem seletor de cliente', () => {
+  it('Agente Opex: um universo na altura visível (card-bloco, OPE-151), com avisos e sem seletor de cliente', () => {
     render(<OpexMemoriesSection tab="agente-opex" />)
     expect(screen.getAllByTestId('agent-universe-card')).toHaveLength(1)
     expect(screen.getAllByTestId('agent-universe')).toHaveLength(1)
     expect(screen.queryByRole('combobox')).toBeNull()
-    expect(seen.props.at(-1)).toMatchObject({ agent: 'opex/opex', defaultCreateChannel: 'agentes/opex/global', fill: true, includeChannel: null })
+    expect(seen.props.at(-1)).toMatchObject({ agent: 'opex/opex', defaultCreateChannel: 'agentes/opex/global', fill: 'viewport', includeChannel: null })
+    expect(screen.getByTestId('agent-universe-card').getAttribute('data-network-fill-root')).toBe('block')
     expect(screen.getByTestId('memories-outside').textContent).toContain('3 memórias')
   })
 

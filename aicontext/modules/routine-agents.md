@@ -196,8 +196,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   - As instruções da execução listam os canais graváveis e mandam consultar o canal (formato `titulos`)
     antes de trabalhar e usar chave fixa por item.
 - Aba **Memórias** da página: um card só (`AgentUniverseCard`, compartilhado com os demais agentes desde a
-  OPE-148) com o universo do agente `opex/rotineiro-<slug>`; "Nova memória" começa no canal próprio. A rede
-  preenche a altura disponível da página (`fill`).
+  OPE-148) com o universo do agente `opex/rotineiro-<slug>`; "Nova memória" começa no canal próprio. O card
+  inteiro ocupa a altura visível da tela (`fill="viewport"`, ver `aicontext/modules/engramind.md`, "Altura dos
+  universos").
 
 ## Execução
 
