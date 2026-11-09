@@ -253,6 +253,17 @@ describe('capacidade dos provedores', () => {
     expect(AI_PROVIDERS.map((provider) => provider.id)).toContain('jev')
   })
 
+  it('OpenCode Go: provedor de texto por API, com amostragem e sem agente (separado do OpenCode de sessão)', () => {
+    expect(AI_TEXT_PROVIDER_IDS).toContain('opencode-go')
+    expect(AI_PROVIDERS.find((provider) => provider.id === 'opencode-go')).toMatchObject({
+      integrationId: 'ai_opencode_go',
+      name: 'OpenCode Go',
+      supportsTextGeneration: true,
+      supportsSampling: true,
+      supportsAgent: false,
+    })
+  })
+
   it('Anthropic, OpenAI e DeepSeek são provedores de texto com amostragem e sem agente', () => {
     for (const id of ['anthropic', 'openai', 'deepseek'] as const) {
       expect(AI_TEXT_PROVIDER_IDS).toContain(id)

@@ -7,6 +7,7 @@ import { listDeepseekModels } from "./deepseek"
 import { listGeminiEmbeddingModels, listGeminiModels } from "./gemini"
 import { listJevModels } from "./jev"
 import { listOpenaiEmbeddingModels, listOpenaiModels } from "./openai"
+import { listOpencodeGoModels } from "./opencode-go"
 import { listOpencodeAgents, listOpencodeModels, listOpencodeSkills } from "./opencode"
 import { AI_PROVIDERS, getAiProvider, type AiAgentDto, type AiModelDto, type AiSkillDto, type AiProviderId, type AiProviderStatusDto } from "./providers"
 
@@ -21,6 +22,7 @@ const MODEL_LISTERS: Record<AiProviderId, (signal?: AbortSignal) => Promise<AiMo
     anthropic: listAnthropicModels,
     openai: listOpenaiModels,
     deepseek: listDeepseekModels,
+    "opencode-go": listOpencodeGoModels,
     jev: listJevModels,
 }
 

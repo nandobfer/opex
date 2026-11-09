@@ -35,7 +35,7 @@ export const architectSettingsSchema = z
          * modelo, variante e fallbacks em `agent`). Os demais: só `agent.model`/`agent.variant`, sem
          * acesso ao código (o diagrama sai do plano e da tarefa).
          */
-        provider: z.enum(AI_TEXT_PROVIDER_IDS, { error: "Escolha um provedor de texto: OpenCode, Gemini, Anthropic, OpenAI ou DeepSeek" }),
+        provider: z.enum(AI_TEXT_PROVIDER_IDS, { error: "Escolha um provedor de texto: OpenCode, Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go" }),
         agent: agentConfigSchema,
         timeoutMinutes: int(ARCHITECT_TIMEOUT_MIN, ARCHITECT_TIMEOUT_MAX),
         instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),

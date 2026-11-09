@@ -28,7 +28,7 @@ import { loadArchitectSettings } from "./settings"
 
 /**
  * Geração de uma versão do diagrama (SOMENTE servidor). Com um provedor direto (Gemini, Anthropic,
- * OpenAI, DeepSeek), uma chamada `streamAi` sem acesso ao código, só com o plano e a tarefa. Com o
+ * OpenAI, DeepSeek, OpenCode Go), uma chamada `streamAi` sem acesso ao código, só com o plano e a tarefa. Com o
  * OpenCode (padrão), abre uma sessão NOVA, só leitura,
  * no worktree da mesa (ou na base do repositório, se o worktree ainda não existe), lê o plano, a
  * tarefa e o código e grava o grafo saneado. O diagrama é montado AO VIVO: cada pedaço do texto do

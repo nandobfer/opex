@@ -4,7 +4,8 @@ import { z } from "zod"
 /**
  * Consumo medido dos provedores de IA que não têm painel próprio (`ai_consumption_logs`).
  * O OpenCode e o JEV têm rotas e cards próprios; aqui ficam os provedores diretos
- * (Gemini, Anthropic, OpenAI e DeepSeek), que informam tokens mas não custo.
+ * (Gemini, Anthropic, OpenAI e DeepSeek), que informam tokens mas não custo, e o OpenCode Go, que
+ * informa o custo de cada resposta (cobrado + cota da assinatura).
  */
 
 const optionalDate = z.preprocess((value) => (value === "" || value === null ? undefined : value), z.iso.datetime({ offset: true, error: "Data inválida" }).optional())
@@ -30,12 +31,19 @@ export function usageRangeQuery(from: string, to: string): UsageQuery | null {
 }
 
 /** Provedores diretos com aba Consumo (o OpenCode e o JEV têm rotas fixas). */
-export const USAGE_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek"] as const
+export const USAGE_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go"] as const
 
 export type UsageProviderId = (typeof USAGE_PROVIDER_IDS)[number]
 
 export function isUsageProviderId(value: string): value is UsageProviderId {
     return (USAGE_PROVIDER_IDS as readonly string[]).includes(value)
+}
+
+/** Provedores desta rota que informam custo (a coluna Custo só aparece neles). */
+export const USAGE_PROVIDERS_WITH_COST: readonly UsageProviderId[] = ["opencode-go"]
+
+export function usageProviderReportsCost(value: string): boolean {
+    return (USAGE_PROVIDERS_WITH_COST as readonly string[]).includes(value)
 }
 
 /** Uma linha do painel: consumo de um recurso (feature ou agente) no período. */

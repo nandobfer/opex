@@ -24,7 +24,7 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D6 | Uma ferramenta **"Chamada HTTP"** (`http_request`, grupo `http`) para qualquer método, `risk: "write"` e **sem** confirmação por padrão; o dono liga em Agente Opex › Ferramentas e o ajuste vale nos rotineiros (D4). |
 | D7 | A Chamada HTTP **não bloqueia endereços** (inclui a rede interna e os containers). Por isso o grupo `http` fica fora dos tokens de sistema. |
 | D8 | **Nome e objetivo opcionais**: o subagente de provisionamento gera o que ficar vazio. O nome gerado é **só o papel** ("Recrutador"), como o `navLabel` dos agentes fixos; as telas mostram "Agente <nome>" (`routineAgentTitle`). |
-| D9 | O **motor Opex não usa o OpenCode**: os provedores dele são os do Agente Opex (Gemini, Anthropic, OpenAI, DeepSeek — `OPEX_PROVIDER_IDS`); o OpenCode é só o motor "OpenCode no host". O card do subagente de provisionamento continua aceitando o OpenCode (D2). |
+| D9 | O **motor Opex não usa o OpenCode**: os provedores dele são os do Agente Opex (Gemini, Anthropic, OpenAI, DeepSeek e, desde a OPE-154, OpenCode Go por API — `OPEX_PROVIDER_IDS`); o OpenCode é só o motor "OpenCode no host". O card do subagente de provisionamento continua aceitando o OpenCode (D2). |
 | D10 | A aba **Memórias** do rotineiro é **um card** com o **universo do agente igual ao de `/engramind`** (`AgentUniverse` da lib `@engramind/client`, o mesmo componente da rede): todas as memórias dos canais que ele assina. |
 | D11 | **"Nova memória"** no universo do agente escolhe o **canal** entre os assinados e não arquivados (inicial: o canal próprio do rotineiro), em `/engramind` e no rotineiro. |
 | D12 | Com o cursor sobre a partícula de uma memória, o nome aparece **completo e destacado** (antes sumia), em todos os universos. |
@@ -58,7 +58,8 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     não muda — um "Agente" no começo não entra no slug, `global` é reservado, colisão ganha sufixo),
     objetivo (opcional — D8), instruções (markdown) e o switch
     **"Pedir confirmação antes de ações irreversíveis"** (ligado por padrão).
-  - **Motor** (`OptionTabs`): **Opex** (só os provedores do Agente Opex — D9; o OpenCode não aparece,
+  - **Motor** (`OptionTabs`): **Opex** (só os provedores do Agente Opex — D9, inclusive o OpenCode Go,
+    com `x-opencode-session` `opex-routine-<execução>` e o custo do Go em cada passo; o OpenCode de sessão não aparece,
     com a dica "Para usar o OpenCode, escolha o motor OpenCode no host") ou **OpenCode no host** (modelos e
     agente do serviço OpenCode). O `ProviderModelCard` compartilhado aceita caminhos aninhados
     (`names`). Trocar o motor ou o modelo vale só para as próximas execuções (cada execução guarda um

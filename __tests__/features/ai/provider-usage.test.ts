@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect:
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
 vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
 
-import { formatTokensCompact, isUsageProviderId, usageRangeQuery } from "@/features/ai/provider-usage"
+import { formatTokensCompact, isUsageProviderId, usageProviderReportsCost, usageRangeQuery } from "@/features/ai/provider-usage"
 import { getProviderUsage } from "@/features/ai/server/provider-usage"
 
 const chain = (doc: { createdAt: Date } | null) => ({
@@ -80,9 +80,14 @@ describe("consumo dos provedores diretos por recurso", () => {
 })
 
 describe("provedores com painel de consumo direto", () => {
-    it("aceita só Gemini, Anthropic, OpenAI e DeepSeek", () => {
-        for (const provider of ["gemini", "anthropic", "openai", "deepseek"]) expect(isUsageProviderId(provider)).toBe(true)
+    it("aceita só Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go", () => {
+        for (const provider of ["gemini", "anthropic", "openai", "deepseek", "opencode-go"]) expect(isUsageProviderId(provider)).toBe(true)
         for (const provider of ["opencode", "jev", "desconhecido"]) expect(isUsageProviderId(provider)).toBe(false)
+    })
+
+    it("só o OpenCode Go informa custo nesta rota (a coluna Custo aparece só nele)", () => {
+        expect(usageProviderReportsCost("opencode-go")).toBe(true)
+        for (const provider of ["gemini", "anthropic", "openai", "deepseek"]) expect(usageProviderReportsCost(provider)).toBe(false)
     })
 
     it("converte o calendário local incluindo todo o dia final e rejeita períodos inválidos", () => {

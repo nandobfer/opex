@@ -2,7 +2,7 @@
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
  * Integrações ativas: Pusher, API interna, Crons, GitHub, Inteligência Artificial (hub `ai`
- * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek` e `ai_jev`, que só aparecem dentro do hub), Clientes,
+ * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek`, `ai_opencode_go` e `ai_jev`, que só aparecem dentro do hub), Clientes,
  * SMTP, Storage S3 e Builder Machine (prévias no Docker do PC; liga pelo campo "Integração ativa").
  * `google_drive` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
@@ -18,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -577,7 +577,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
     {
         id: "ai",
         name: "Inteligência Artificial",
-        description: "Provedores de IA (OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, JEV) e as features do app que os usam",
+        description: "Provedores de IA (OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go, JEV) e as features do app que os usam",
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,
         publicFields: [],
@@ -696,6 +696,16 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         parent: "ai",
         publicFields: [],
         secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma DeepSeek (platform.deepseek.com/api_keys)", required: true }],
+    },
+    {
+        id: "ai_opencode_go",
+        name: "OpenCode Go",
+        description: "Modelos da assinatura OpenCode Go pela API do gateway, sem sessão do OpenCode no host",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "Chave do OpenCode Go", description: "Chave oc_sk_… da assinatura Go (opencode.ai › Go). DeepSeek V4.1 Flash e V4 Pro exigem a região Global em Settings › Privacy", required: true }],
     },
     {
         id: "ai_jev",
@@ -822,6 +832,7 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     ai_anthropic: `${INTEGRATIONS_BASE_PATH}/ia/anthropic`,
     ai_openai: `${INTEGRATIONS_BASE_PATH}/ia/openai`,
     ai_deepseek: `${INTEGRATIONS_BASE_PATH}/ia/deepseek`,
+    ai_opencode_go: `${INTEGRATIONS_BASE_PATH}/ia/opencode-go`,
     ai_jev: `${INTEGRATIONS_BASE_PATH}/ia/jev`,
     orcamentos: `${INTEGRATIONS_BASE_PATH}/clientes`,
 }

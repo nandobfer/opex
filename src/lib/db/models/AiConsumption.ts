@@ -12,7 +12,7 @@ import { Schema, model, models, type Model } from "mongoose"
  */
 export interface IAiConsumption {
     dedupKey: string
-    /** Provedor medido (hoje `opencode`). */
+    /** Provedor medido (`opencode`, provedores diretos e `opencode-go`). */
     provider: string
     /** Origem do uso: id da feature de IA, `refinement` (refinar tarefa) ou `agentic` (mesas). */
     origin: string
@@ -23,6 +23,8 @@ export interface IAiConsumption {
     outputTokens: number | null
     totalTokens: number | null
     costUsd: number | null
+    /** Detalhe da cobrança informado pelo OpenCode Go (`costUsd` = cobrado + cota); `null` nos demais. */
+    billing?: { source: string | null; allowanceUsd: number | null; listCostUsd: number | null } | null
     createdAt: Date
 }
 
@@ -37,6 +39,10 @@ const AiConsumptionSchema = new Schema<IAiConsumption>(
         outputTokens: { type: Number, default: null },
         totalTokens: { type: Number, default: null },
         costUsd: { type: Number, default: null },
+        billing: {
+            type: new Schema({ source: { type: String, default: null }, allowanceUsd: { type: Number, default: null }, listCostUsd: { type: Number, default: null } }, { _id: false }),
+            default: null,
+        },
         createdAt: { type: Date, default: () => new Date() },
     },
     { collection: "ai_consumption_logs", versionKey: false },

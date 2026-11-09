@@ -42,6 +42,12 @@ async function probe(providerId: AiProviderId, signal: AbortSignal): Promise<voi
         await getOpencodeInfo(signal)
         return
     }
+    if (providerId === "opencode-go") {
+        // A lista de modelos do Go é pública: só o pedido de conferência prova que a chave vale.
+        const { verifyOpencodeGoKey } = await import("./opencode-go")
+        await verifyOpencodeGoKey(signal)
+        return
+    }
     await listAiModels(providerId, { fresh: true, signal })
 }
 

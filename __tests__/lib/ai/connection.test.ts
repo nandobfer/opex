@@ -6,12 +6,14 @@ const mocks = vi.hoisted(() => ({
   statuses: vi.fn(),
   models: vi.fn(),
   info: vi.fn(),
+  verifyGo: vi.fn(),
   runTest: vi.fn(async () => ({ ok: true, latencyMs: 1, message: 'ok' })),
 }))
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/ai/catalog', () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models }))
 vi.mock('@/lib/ai/opencode', () => ({ getOpencodeInfo: mocks.info }))
+vi.mock('@/lib/ai/opencode-go', () => ({ verifyOpencodeGoKey: mocks.verifyGo }))
 vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.runTest }))
 
 import { AiProviderError } from '@/lib/ai/errors'
@@ -162,5 +164,13 @@ describe('confirmAiProviderConnection', () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it('OpenCode Go: a lista de modelos é pública, então o teste na hora confere a chave', async () => {
+    mocks.statuses.mockResolvedValue([{ id: 'opencode-go', integrationId: 'ai_opencode_go', name: 'OpenCode Go', configured: true, connected: false }])
+    mocks.verifyGo.mockRejectedValueOnce(new AiProviderError('O OpenCode Go recusou a chave (HTTP 401)'))
+    expect(await confirmAiProviderConnection('opencode-go')).toMatchObject({ configured: true, connected: false, detail: 'O OpenCode Go recusou a chave (HTTP 401)' })
+    expect(mocks.verifyGo).toHaveBeenCalledTimes(1)
+    expect(mocks.models).not.toHaveBeenCalled()
   })
 })
