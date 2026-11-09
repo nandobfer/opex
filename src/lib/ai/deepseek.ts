@@ -1,8 +1,8 @@
 import { createDeepSeek, type DeepSeekProvider } from "@ai-sdk/deepseek"
-import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { AI_REASONING_LEVELS, type AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
 
 /**
  * DeepSeek — SOMENTE servidor. Lista de modelos pela REST `/models`; geração pelo
@@ -13,10 +13,13 @@ import { DEEPSEEK_API_URL } from "./endpoints"
 
 export { DEEPSEEK_API_URL }
 
+/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
+async function getDeepseekKey(): Promise<ActiveAiProviderKey> {
+    return requireActiveAiProviderKey("ai_deepseek", "DeepSeek")
+}
+
 async function getDeepseekApiKey(): Promise<string> {
-    const { apiKey } = await getIntegrationConfig("ai_deepseek")
-    if (!apiKey) throw new AiProviderError("DeepSeek sem API key: configure em Integrações › Inteligência Artificial › DeepSeek")
-    return apiKey
+    return (await getDeepseekKey()).apiKey
 }
 
 /** `deepseek-chat` é o alias sem raciocínio; os demais modelos raciocinam. */
@@ -49,6 +52,8 @@ export async function listDeepseekModels(signal?: AbortSignal): Promise<AiModelD
     return (body.data ?? []).map(toDeepseekModel).sort((a, b) => a.id.localeCompare(b.id))
 }
 
-export async function createDeepseekProvider(): Promise<DeepSeekProvider> {
-    return createDeepSeek({ apiKey: await getDeepseekApiKey() })
+/** Cliente da AI SDK com a chave ativa e o id dela (o consumo é atribuído à chave usada). */
+export async function createDeepseekProvider(): Promise<{ provider: DeepSeekProvider; apiKeyId: string }> {
+    const key = await getDeepseekKey()
+    return { provider: createDeepSeek({ apiKey: key.apiKey }), apiKeyId: key.id }
 }

@@ -1,6 +1,7 @@
 import { dbConnect } from "@/lib/db"
 import { AiUsageLog } from "@/lib/db/models/Ai"
 import { aiConsumptionOriginLabel } from "../provider-usage"
+import { providerKeyMatch } from "./provider-usage"
 import type { JevUsageFeatureRow, JevUsageQuery, JevUsageSummary } from "../jev-usage"
 
 const missing = (field: string) => ({ $eq: [{ $ifNull: [`$${field}`, null] }, null] })
@@ -47,6 +48,7 @@ export async function getJevUsage(query: JevUsageQuery): Promise<JevUsageSummary
     await dbConnect()
     const filter = {
         provider: "jev",
+        ...(await providerKeyMatch("jev", query.apiKey)),
         ...(query.from || query.to ? { createdAt: {
             ...(query.from ? { $gte: new Date(query.from) } : {}),
             ...(query.to ? { $lte: new Date(query.to) } : {}),

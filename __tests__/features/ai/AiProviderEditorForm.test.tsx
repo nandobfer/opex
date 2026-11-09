@@ -9,6 +9,7 @@ import type { IntegrationDetailDto } from "@/features/integrations/types"
 
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
+vi.mock("@/features/ai/components/api-keys/ApiKeysCard", () => ({ ApiKeysCard: ({ provider }: { provider: string }) => <div data-testid={`api-keys-${provider}`} /> }))
 vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
@@ -95,5 +96,19 @@ describe("AiProviderEditorForm", () => {
             fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
             expect(screen.getByTestId(`provider-usage-${provider.id}`)).toBeTruthy()
         }
+    })
+
+    it("Configuração dos provedores por API key mostra Chaves de API, sem o campo privado da chave; OpenCode não", () => {
+        for (const provider of ["gemini", "anthropic", "openai", "deepseek", "jev"] as const) {
+            window.history.replaceState(null, "", `/integracoes/ia/${provider}`)
+            cleanup()
+            renderForm(`ai_${provider}`)
+            expect(screen.getByTestId(`api-keys-${provider}`)).toBeTruthy()
+            expect(screen.queryByText("API key")).toBeNull()
+        }
+        window.history.replaceState(null, "", "/integracoes/ia/opencode")
+        cleanup()
+        renderForm("ai_opencode")
+        expect(screen.queryByTestId(/api-keys-/)).toBeNull()
     })
 })

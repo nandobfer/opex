@@ -55,6 +55,8 @@ export interface PreparedModel {
     providerOptions?: StreamTextOptions["providerOptions"]
     /** Nível de raciocínio da AI SDK (Anthropic, OpenAI e DeepSeek). */
     reasoning?: StreamTextOptions["reasoning"]
+    /** Chave de API usada (provedores diretos, OPE-155); `null` no OpenCode. O consumo é atribuído a ela. */
+    apiKeyId: string | null
     dispose: () => Promise<void>
 }
 
@@ -69,7 +71,7 @@ const DIRECT_PROVIDERS = {
     anthropic: async () => (await import("./anthropic")).createAnthropicProvider(),
     openai: async () => (await import("./openai")).createOpenaiProvider(),
     deepseek: async () => (await import("./deepseek")).createDeepseekProvider(),
-} as const satisfies Partial<Record<AiProviderId, () => Promise<(modelId: string) => LanguageModel>>>
+} as const satisfies Partial<Record<AiProviderId, () => Promise<{ provider: (modelId: string) => LanguageModel; apiKeyId: string }>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
 export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title">): Promise<PreparedModel> {
@@ -86,21 +88,23 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
             formPolicy: "cancel",
             logger: false,
         })
-        return { model, dispose: () => provider.dispose() }
+        return { model, apiKeyId: null, dispose: () => provider.dispose() }
     }
     if (request.provider === "gemini") {
         const { createGeminiProvider } = await import("./gemini")
-        const google = await createGeminiProvider()
+        const { provider: google, apiKeyId } = await createGeminiProvider()
         return {
             model: google(request.model),
+            apiKeyId,
             providerOptions: request.variant ? { google: { thinkingConfig: { thinkingLevel: request.variant, includeThoughts: false } } } : undefined,
             dispose: noDispose,
         }
     }
     if (request.provider === "jev") throw new AiProviderError("O JEV decide de forma estruturada e não gera texto")
-    const provider = await DIRECT_PROVIDERS[request.provider]()
+    const { provider, apiKeyId } = await DIRECT_PROVIDERS[request.provider]()
     return {
         model: provider(request.model),
+        apiKeyId,
         reasoning: request.variant && isAiReasoningLevel(request.variant) ? request.variant : undefined,
         dispose: noDispose,
     }
@@ -214,6 +218,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                                 subject: request.consumption.subject ?? null,
                                 model: request.model,
                                 ...usage,
+                                apiKeyId: prepared.apiKeyId,
                             })
                         }
                         yield {

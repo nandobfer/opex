@@ -9,7 +9,9 @@ const mocks = vi.hoisted(() => ({
   anthropic: vi.fn((id: string) => ({ kind: 'anthropic', id })),
   openai: vi.fn((id: string) => ({ kind: 'openai', id })),
   deepseek: vi.fn((id: string) => ({ kind: 'deepseek', id })),
+  recordAiConsumption: vi.fn(async () => {}),
 }))
+vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }))
 
 vi.mock('ai', () => ({
   streamText: (options: unknown) => {
@@ -24,10 +26,10 @@ vi.mock('ai', () => ({
 vi.mock('@/lib/ai/opencode', () => ({
   createOpencodeProvider: async () => ({ provider: Object.assign(mocks.opencodeModel, { dispose: mocks.dispose }), directory: '/home/eu/ia' }),
 }))
-vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => mocks.google }))
-vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => mocks.anthropic }))
-vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => mocks.openai }))
-vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => mocks.deepseek }))
+vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => ({ provider: mocks.google, apiKeyId: 'key_google' }) }))
+vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => ({ provider: mocks.anthropic, apiKeyId: 'key_anthropic' }) }))
+vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => ({ provider: mocks.openai, apiKeyId: 'key_openai' }) }))
+vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ provider: mocks.deepseek, apiKeyId: 'key_deepseek' }) }))
 
 import { streamAi, type AiStreamEvent } from '@/lib/ai/stream'
 
@@ -66,6 +68,16 @@ describe('streamAi', () => {
     expect(events.map((event) => event.type)).toEqual(['reasoning', 'tool', 'tool', 'delta', 'delta', 'done'])
     expect(events.at(-1)).toMatchObject({ type: 'done', finishReason: 'stop', usage: { inputTokens: 100, outputTokens: 20, totalTokens: 120, costUsd: 0.0012 } })
     expect(mocks.dispose).toHaveBeenCalledTimes(1)
+  })
+
+  it('consumo medido é atribuído à chave de API usada na preparação (OPE-155); OpenCode fica sem chave', async () => {
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'anthropic', model: 'claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags', subject: 't1' } })
+    expect(mocks.recordAiConsumption).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'anthropic', origin: 'task-tags', apiKeyId: 'key_anthropic', inputTokens: 100 }))
+
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'opencode', model: 'anthropic/claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags' } })
+    expect(mocks.recordAiConsumption).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'opencode', apiKeyId: null }))
   })
 
   it('Gemini: temperatura, máximo de tokens e nível de thinking', async () => {

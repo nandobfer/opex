@@ -23,6 +23,8 @@ export interface IAiConsumption {
     outputTokens: number | null
     totalTokens: number | null
     costUsd: number | null
+    /** Chave de API do provedor direto usada (OPE-155). Ausente/`null` = sem chave identificada (histórico ou OpenCode). */
+    apiKeyId?: string | null
     createdAt: Date
 }
 
@@ -37,6 +39,7 @@ const AiConsumptionSchema = new Schema<IAiConsumption>(
         outputTokens: { type: Number, default: null },
         totalTokens: { type: Number, default: null },
         costUsd: { type: Number, default: null },
+        apiKeyId: { type: String, default: null },
         createdAt: { type: Date, default: () => new Date() },
     },
     { collection: "ai_consumption_logs", versionKey: false },
@@ -44,6 +47,7 @@ const AiConsumptionSchema = new Schema<IAiConsumption>(
 
 AiConsumptionSchema.index({ provider: 1, createdAt: -1 })
 AiConsumptionSchema.index({ provider: 1, origin: 1, createdAt: -1 })
+AiConsumptionSchema.index({ provider: 1, apiKeyId: 1, createdAt: -1 })
 
 if (process.env.NODE_ENV === "development") {
     delete models.AiConsumption

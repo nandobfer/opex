@@ -25,7 +25,7 @@ export interface EngineInput {
     internalTools: OpexTool[]
     onStep: (step: EngineStep) => void
     /** Uso de um passo: soma, grava o consumo (se o motor ainda não gravou: `recorded`) e confere os limites (interrompe se estourar). */
-    onUsage: (step: { tokens: number; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; stepId: string; model: string; provider: string; recorded?: boolean }) => void
+    onUsage: (step: { tokens: number; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; stepId: string; model: string; provider: string; recorded?: boolean; apiKeyId?: string | null }) => void
 }
 
 export interface EngineResult {

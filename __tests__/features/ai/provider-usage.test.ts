@@ -1,10 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect: vi.fn() }))
+const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect: vi.fn(), stored: vi.fn() }))
+vi.mock("@/lib/integrations/store", () => ({ loadStoredIntegration: mocks.stored, invalidateStoredIntegrations: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
 vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
 
-import { formatTokensCompact, isUsageProviderId, usageRangeQuery } from "@/features/ai/provider-usage"
+import { formatTokensCompact, isUsageProviderId, usageQuerySchema, usageRangeQuery, withUsageKey } from "@/features/ai/provider-usage"
+import { resolveUsageKey, usageKeyMatch, usageKeyOptions } from "@/features/ai/usage-key-filter"
 import { getProviderUsage } from "@/features/ai/server/provider-usage"
 
 const chain = (doc: { createdAt: Date } | null) => ({
@@ -76,6 +78,60 @@ describe("consumo dos provedores diretos por recurso", () => {
         mocks.findOne.mockReturnValue(chain({ createdAt: new Date("2026-10-12T12:00:00.000Z") }))
         const result = await getProviderUsage("deepseek", {})
         expect(result.coverageFrom).toBe("2026-10-12T12:00:00.000Z")
+    })
+})
+
+describe("filtro por chave de API (OPE-155)", () => {
+    const KEY_A = "key_aaaaaaaaaaaaaaaaaa"
+    const KEY_B = "key_bbbbbbbbbbbbbbbbbb"
+
+    it("monta o $match: todas, uma chave, sem chave identificada (histórico) e chaves removidas", () => {
+        expect(usageKeyMatch(undefined, [KEY_A])).toEqual({})
+        expect(usageKeyMatch("all", [KEY_A])).toEqual({})
+        expect(usageKeyMatch(KEY_A, [KEY_A])).toEqual({ apiKeyId: KEY_A })
+        // `null` casa também com o campo ausente dos registros antigos.
+        expect(usageKeyMatch("none", [KEY_A])).toEqual({ apiKeyId: null })
+        expect(usageKeyMatch("removed", [KEY_A, KEY_B])).toEqual({ apiKeyId: { $nin: [null, KEY_A, KEY_B] } })
+    })
+
+    it("aplica o recorte da chave no agregado (linhas e Total) e mantém métricas desconhecidas do histórico como null", async () => {
+        mocks.stored.mockResolvedValue({ apiKeys: [{ id: KEY_A }, { id: KEY_B }], activeApiKeyId: KEY_A })
+        mocks.aggregate.mockResolvedValue([
+            { _id: "task-summary", requests: 2, inputTokens: 0, outputTokens: 0, totalTokens: 0, costUsd: 0, missingInput: 2, missingOutput: 2, missingTotal: 2, missingCost: 2 },
+        ])
+        const result = await getProviderUsage("gemini", { apiKey: "none" })
+        expect(mocks.aggregate.mock.calls[0]![0][0]).toEqual({ $match: { provider: "gemini", apiKeyId: null } })
+        expect(result.total).toMatchObject({ requests: 2, inputTokens: null, outputTokens: null, totalTokens: null })
+        expect(result.missingTokenRequests).toBe(2)
+
+        await getProviderUsage("gemini", { apiKey: "removed" })
+        expect(mocks.stored).toHaveBeenCalledWith("ai_gemini")
+        expect(mocks.aggregate.mock.calls[1]![0][0]).toEqual({ $match: { provider: "gemini", apiKeyId: { $nin: [null, KEY_A, KEY_B] } } })
+
+        await getProviderUsage("gemini", { apiKey: KEY_B })
+        expect(mocks.aggregate.mock.calls[2]![0][0]).toEqual({ $match: { provider: "gemini", apiKeyId: KEY_B } })
+        // A cobertura continua sendo a do provedor, independente da chave.
+        expect(mocks.findOne).toHaveBeenLastCalledWith({ provider: "gemini" })
+    })
+
+    it("valida o parâmetro e só envia apiKey quando não é Todas", () => {
+        expect(usageQuerySchema.safeParse({ apiKey: KEY_A }).success).toBe(true)
+        expect(usageQuerySchema.safeParse({ apiKey: "none" }).success).toBe(true)
+        expect(usageQuerySchema.safeParse({ apiKey: "qualquer" }).success).toBe(false)
+        const base = { from: "2026-10-10T03:00:00.000Z" }
+        expect(withUsageKey(base, "all")).toEqual(base)
+        expect(withUsageKey(base, KEY_A)).toEqual({ ...base, apiKey: KEY_A })
+        expect(withUsageKey(null, KEY_A)).toBeNull()
+    })
+
+    it("opções do seletor e valor da URL: id inexistente ou lixo voltam para Todas", () => {
+        const keys = [{ id: KEY_A, name: "Pessoal", active: true }]
+        expect(usageKeyOptions(keys).map((option) => option.label)).toEqual(["Todas as chaves", "Pessoal (em uso)", "Sem chave identificada (histórico)", "Chaves removidas"])
+        expect(resolveUsageKey(KEY_A, keys)).toBe(KEY_A)
+        expect(resolveUsageKey(KEY_B, keys)).toBe("all")
+        expect(resolveUsageKey(KEY_B, undefined)).toBe(KEY_B)
+        expect(resolveUsageKey("removed", keys)).toBe("removed")
+        expect(resolveUsageKey("<script>", keys)).toBe("all")
     })
 })
 

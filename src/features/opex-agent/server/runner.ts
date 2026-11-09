@@ -410,7 +410,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         await mcp?.close().catch(() => undefined)
     }
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, responseMessages, toolNames })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, responseMessages, toolNames, apiKeyId: prepared?.apiKeyId ?? null })
 }
 
 interface TurnOutcome {
@@ -420,6 +420,8 @@ interface TurnOutcome {
     usage: OpexUsageDto | null
     responseMessages: unknown[] | null
     toolNames: string[]
+    /** Chave de API usada no turno (provedores diretos, OPE-155). */
+    apiKeyId: string | null
 }
 
 async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
@@ -473,6 +475,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             model: settings.main.model,
             ...outcome.usage,
             costUsd: null,
+            apiKeyId: outcome.apiKeyId,
         })
     }
     if (status !== "interrupted" || text) {

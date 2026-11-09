@@ -168,7 +168,7 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                     const inputTokens = part.usage?.inputTokens ?? null
                     const outputTokens = part.usage?.outputTokens ?? null
                     const total = part.usage?.totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0)
-                    input.onUsage({ tokens: total ?? 0, inputTokens, outputTokens, costUsd: cost, stepId: String(step), model: engine.model, provider: engine.provider! })
+                    input.onUsage({ tokens: total ?? 0, inputTokens, outputTokens, costUsd: cost, stepId: String(step), model: engine.model, provider: engine.provider!, apiKeyId: prepared.apiKeyId })
                     break
                 }
                 case "error":

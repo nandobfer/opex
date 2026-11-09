@@ -14,6 +14,7 @@ vi.mock('@/lib/integrations/config', () => ({
   getIntegration: vi.fn(async () => ({ version: 'v1' })),
   isIntegrationConfigured: () => true,
 }))
+vi.mock('@/lib/ai/api-keys', () => ({ requireActiveAiProviderKey: vi.fn(async () => ({ id: 'key_ativa', name: 'Principal', apiKey: 'chave' })) }))
 vi.mock('@/lib/integrations/debug', () => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),

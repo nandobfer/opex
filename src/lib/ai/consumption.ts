@@ -23,6 +23,8 @@ export interface AiConsumptionInput {
     outputTokens: number | null
     totalTokens: number | null
     costUsd: number | null
+    /** Chave de API usada (provedores diretos, OPE-155); `null`/ausente = sem chave identificada. */
+    apiKeyId?: string | null
 }
 
 export async function recordAiConsumption(input: AiConsumptionInput): Promise<void> {
@@ -40,6 +42,7 @@ export async function recordAiConsumption(input: AiConsumptionInput): Promise<vo
                     outputTokens: input.outputTokens,
                     totalTokens: input.totalTokens,
                     costUsd: input.costUsd,
+                    apiKeyId: input.apiKeyId ?? null,
                     createdAt: new Date(),
                 },
             },

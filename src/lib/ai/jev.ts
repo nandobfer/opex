@@ -1,7 +1,7 @@
-import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import type { AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
 import { recordJevUsage, type JevUsageContext } from "./record-jev-usage"
 
 /**
@@ -14,10 +14,13 @@ import { recordJevUsage, type JevUsageContext } from "./record-jev-usage"
 
 export const JEV_API_URL = "https://api.typesafe.ai/v1"
 
+/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
+async function getJevKey(): Promise<ActiveAiProviderKey> {
+    return requireActiveAiProviderKey("ai_jev", "JEV")
+}
+
 async function getJevApiKey(): Promise<string> {
-    const { apiKey } = await getIntegrationConfig("ai_jev")
-    if (!apiKey) throw new AiProviderError("JEV sem API key: configure em Integrações › Inteligência Artificial › JEV")
-    return apiKey
+    return (await getJevKey()).apiKey
 }
 
 interface JevModelRaw {
@@ -116,8 +119,11 @@ export async function askJevSystemOne(input: JevSystemOneInput): Promise<JevResp
     const startedAt = Date.now()
     let body: JevResponse | undefined
     let failure: string | null = null
+    let apiKeyId: string | null = null
     try {
-        const apiKey = await getJevApiKey()
+        const key = await getJevKey()
+        apiKeyId = key.id
+        const apiKey = key.apiKey
         let res: Response
         try {
             res = await debugFetch(integrationDebug("ai_jev"), "JEV", `${JEV_API_URL}/systemone`, {
@@ -147,6 +153,7 @@ export async function askJevSystemOne(input: JevSystemOneInput): Promise<JevResp
             error: failure,
             durationMs: Date.now() - startedAt,
             usage: body?.usage,
+            apiKeyId,
         })
     }
 }

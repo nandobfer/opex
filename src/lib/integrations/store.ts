@@ -9,6 +9,16 @@ import type { IntegrationEnvironment, PublicFieldValue } from "./catalog"
  * no fallback do `.env`, sem tentar conectar ao banco).
  */
 
+/** Uma chave de API nomeada do chaveiro de uma integração. O segredo fica cifrado e nunca sai do servidor. */
+export interface StoredApiKey {
+    id: string
+    name: string
+    secret: EncryptedSecret
+    createdAt: Date
+    updatedAt: Date
+    createdBy?: string
+}
+
 export interface StoredIntegration {
     integrationId: string
     environment: IntegrationEnvironment
@@ -16,6 +26,10 @@ export interface StoredIntegration {
     swaggerUrl?: string | null
     publicValues: Record<string, PublicFieldValue>
     secretValues: Record<string, EncryptedSecret | null>
+    /** Chaveiro de chaves de API nomeadas (provedores de IA, OPE-155). Ausente nas demais integrações. */
+    apiKeys?: StoredApiKey[]
+    /** Chave do chaveiro em uso; `null`/ausente = nenhuma ativa (integração não configurada). */
+    activeApiKeyId?: string | null
     updatedAt?: Date
     updatedBy?: string
 }

@@ -37,7 +37,7 @@ export const testOpencode: IntegrationTester = async ({ emit, signal }) => {
 
 export const testGemini: IntegrationTester = async ({ emit, signal }) => {
     const resolved = await getIntegration("ai_gemini")
-    if (!resolved.values.apiKey) fail("Sem API key: cadastre a chave do Google AI Studio em Campos privados")
+    if (!resolved.values.apiKey) fail("Sem chave de API ativa: cadastre e ative uma chave do Google AI Studio em Chaves de API")
     clearAiCatalogCache()
     emit("step", "GET /v1beta/models")
     const models = await listAiModels("gemini", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
@@ -52,7 +52,7 @@ const API_KEY_INTEGRATIONS = { anthropic: "ai_anthropic", openai: "ai_openai", d
 function apiKeyModelsTester(providerId: keyof typeof API_KEY_INTEGRATIONS, keyHint: string, endpoint: string): IntegrationTester {
     return async ({ emit, signal }) => {
         const resolved = await getIntegration(API_KEY_INTEGRATIONS[providerId])
-        if (!resolved.values.apiKey) fail(`Sem API key: cadastre a chave ${keyHint} em Campos privados`)
+        if (!resolved.values.apiKey) fail(`Sem chave de API ativa: cadastre e ative uma chave ${keyHint} em Chaves de API`)
         clearAiCatalogCache()
         emit("step", `GET ${endpoint}`)
         const models = await listAiModels(providerId, { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
@@ -68,7 +68,7 @@ export const testDeepseek = apiKeyModelsTester("deepseek", "da plataforma DeepSe
 
 export const testJev: IntegrationTester = async ({ emit, signal }) => {
     const resolved = await getIntegration("ai_jev")
-    if (!resolved.values.apiKey) fail("Sem API key: cadastre a chave da TypeSafe em Campos privados")
+    if (!resolved.values.apiKey) fail("Sem chave de API ativa: cadastre e ative uma chave da TypeSafe em Chaves de API")
     clearAiCatalogCache()
     emit("step", "GET /v1/models")
     const models = await listAiModels("jev", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)

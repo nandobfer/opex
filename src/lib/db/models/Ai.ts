@@ -41,6 +41,8 @@ export interface IAiUsageLog {
     reconciliationBatch: string | null
     reconciledAt: Date | null
     durationMs: number
+    /** Chave de API usada (OPE-155). Ausente/`null` = registro histórico, sem chave identificada. */
+    apiKeyId?: string | null
     createdAt: Date
 }
 
@@ -61,12 +63,14 @@ const AiUsageLogSchema = new Schema<IAiUsageLog>(
         reconciliationBatch: { type: String, default: null },
         reconciledAt: { type: Date, default: null },
         durationMs: { type: Number, required: true },
+        apiKeyId: { type: String, default: null },
         createdAt: { type: Date, default: () => new Date(), expires: 60 * 60 * 24 * 90 },
     },
     { collection: "ai_usage_logs", versionKey: false },
 )
 
 AiUsageLogSchema.index({ provider: 1, createdAt: -1 })
+AiUsageLogSchema.index({ provider: 1, apiKeyId: 1, createdAt: -1 })
 
 if (process.env.NODE_ENV === "development") {
     delete models.AiFeatureSetting
