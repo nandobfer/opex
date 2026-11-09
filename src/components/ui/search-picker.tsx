@@ -31,6 +31,17 @@ export interface SearchPickerProps<T> {
      * decide os empates. Memoize a função para não recriar o índice a cada render.
      */
     orderItems?: (items: readonly T[]) => T[]
+    /**
+     * Itens fixados no topo (ex.: modelos favoritos). Diferente de `orderItems`, vale DEPOIS da busca:
+     * com termo, os fixados que casam vêm antes dos demais (cada bloco na ordem de relevância), e o
+     * corte de itens visíveis acontece depois, para nenhum fixado ficar de fora.
+     */
+    pinFirst?: (item: T) => boolean
+    /**
+     * Ação à direita da opção (ex.: estrela de favorito). Fica FORA do botão da opção: clicar nela não
+     * escolhe o item nem fecha a lista.
+     */
+    renderItemAction?: (item: T) => ReactNode
     onSearchChange?: (term: string) => void
     onOpenChange?: (open: boolean) => void
     /**
@@ -64,6 +75,14 @@ export interface SearchPickerProps<T> {
  * Esc para fechar. Fecha e limpa a busca ao escolher. A ordem das opções é a recebida, salvo
  * `orderItems` (ex.: uso recente).
  */
+/** Separação estável: os itens fixados primeiro, cada bloco na ordem recebida. */
+export function pinItemsFirst<T>(items: readonly T[], isPinned: (item: T) => boolean): T[] {
+    const pinned: T[] = []
+    const rest: T[] = []
+    for (const item of items) (isPinned(item) ? pinned : rest).push(item)
+    return [...pinned, ...rest]
+}
+
 export function SearchPicker<T>({
     trigger,
     items,
@@ -73,6 +92,8 @@ export function SearchPicker<T>({
     searchKeys,
     filterItems,
     orderItems,
+    pinFirst,
+    renderItemAction,
     onSearchChange,
     onOpenChange,
     onCloseAutoFocus,
@@ -99,9 +120,9 @@ export function SearchPicker<T>({
     const fuse = useMemo(() => (searchKeys ? new Fuse([...ordered], { keys: searchKeys, threshold: 0.35, ignoreLocation: true }) : null), [ordered, searchKeys])
     const query = term.trim()
     const visible = useMemo(() => {
-        if (filterItems) return filterItems(ordered, query).slice(0, MAX_VISIBLE)
-        return (fuse && query ? fuse.search(query).map((result) => result.item) : [...ordered]).slice(0, MAX_VISIBLE)
-    }, [filterItems, fuse, ordered, query])
+        const found = filterItems ? filterItems(ordered, query) : fuse && query ? fuse.search(query).map((result) => result.item) : [...ordered]
+        return (pinFirst ? pinItemsFirst(found, pinFirst) : found).slice(0, MAX_VISIBLE)
+    }, [filterItems, fuse, ordered, query, pinFirst])
 
     const changeTerm = (next: string) => {
         setTerm(next)
@@ -160,26 +181,41 @@ export function SearchPicker<T>({
                     <AnimatePresence initial={false}>
                         {visible.map((item, index) => {
                             const reason = disabledReason?.(item) || undefined
+                            const action = renderItemAction?.(item)
+                            const option = (
+                                <button
+                                    type="button"
+                                    id={optionDomId(index)}
+                                    role="option"
+                                    aria-selected={index === active}
+                                    aria-disabled={reason ? true : undefined}
+                                    disabled={Boolean(reason)}
+                                    title={reason}
+                                    onMouseEnter={action ? undefined : () => setActive(index)}
+                                    onClick={() => pick(item)}
+                                    className={cn(
+                                        "flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted",
+                                        index === active && "bg-muted",
+                                        reason && "cursor-not-allowed opacity-50 hover:bg-transparent",
+                                        action && "pr-10",
+                                    )}
+                                >
+                                    {renderItem(item)}
+                                </button>
+                            )
                             return (
-                                <motion.li key={getKey(item)} layout="position" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.12 }}>
-                                    <button
-                                        type="button"
-                                        id={optionDomId(index)}
-                                        role="option"
-                                        aria-selected={index === active}
-                                        aria-disabled={reason ? true : undefined}
-                                        disabled={Boolean(reason)}
-                                        title={reason}
-                                        onMouseEnter={() => setActive(index)}
-                                        onClick={() => pick(item)}
-                                        className={cn(
-                                            "flex w-full items-center gap-3 rounded-sm px-2 py-1.5 text-left text-sm hover:bg-muted",
-                                            index === active && "bg-muted",
-                                            reason && "cursor-not-allowed opacity-50 hover:bg-transparent",
-                                        )}
-                                    >
-                                        {renderItem(item)}
-                                    </button>
+                                <motion.li
+                                    key={getKey(item)}
+                                    layout="position"
+                                    initial={{ opacity: 0 }}
+                                    animate={{ opacity: 1 }}
+                                    exit={{ opacity: 0 }}
+                                    transition={{ duration: 0.12 }}
+                                    className={action ? "relative" : undefined}
+                                    onMouseEnter={action ? () => setActive(index) : undefined}
+                                >
+                                    {option}
+                                    {action && <div className="absolute top-1/2 right-1 -translate-y-1/2">{action}</div>}
                                 </motion.li>
                             )
                         })}

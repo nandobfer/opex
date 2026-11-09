@@ -527,6 +527,55 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 - **Adoção (OPE-117)**: o card do `SelfMemorySwitch` mostra gravações em 7 dias, última gravação, último
   contexto lido e a última entrega (`AgentMemoryActivity`); ver `modules/engramind.md`, "Contratos 0.11.0 e OPE-117".
 
+## Modelos favoritos (estrela nas buscas de modelo, OPE-152)
+
+- **Onde aparece**: em toda busca de modelo de IA do app. Isso inclui:
+  - o `ModelPickerField` (`src/features/ai/components/ModelFields.tsx`), usado no campo "Modelo" das
+    abas de IA, no Agente Opex, no Agente Mentor, no Maddox, no embedding e no Redator/curador do
+    Engramind (`OpexAiModelPicker`) e nos provedores diretos (`DirectModelFields`);
+  - o `ModelSearchPicker` (`model-picker/ModelSearchPicker.tsx`), usado nos fallbacks do
+    desenvolvimento agêntico e na troca de modelo da mesa e do fork.
+- **Botão de estrela**: cada opção tem o `ModelFavoriteButton`.
+  - Estado: a estrela vazia significa "não favorito" e a preenchida (`fill-primary`) significa
+    "favorito".
+  - Acessibilidade: `aria-pressed` acompanha o estado, e o `aria-label` e a dica dizem "Favoritar
+    modelo" ou "Remover dos favoritos".
+  - Fica **fora** do botão da opção (`renderItemAction` do `SearchPicker`). Clicar nela não escolhe o
+    modelo, não chama `onPick` e não fecha a lista.
+  - O clique com o mouse não tira o foco da busca, então ↑/↓ continuam funcionando. Pelo teclado,
+    Tab chega na estrela e Espaço/Enter alterna.
+- **Ordem**: os favoritos do provedor vêm no topo (`pinFirst` do `SearchPicker`). A separação é
+  estável e acontece **depois** da busca:
+  - sem termo, cada bloco mantém a ordem do catálogo;
+  - com termo, os favoritos que casam vêm antes dos demais, cada bloco na relevância do fuse.js.
+
+  O corte de 100 opções visíveis acontece depois disso, para nenhum favorito ficar de fora.
+  Desfavoritar devolve o modelo ao bloco de baixo, sem tirá-lo da lista. Não há cabeçalho
+  "Favoritos".
+- **Chave**: o favorito é o par `{ provider, model }`, em campos separados. O mesmo id pode existir em
+  provedores diferentes, e os ids do OpenCode têm `/` e `:`.
+  - `provider` é um de `AI_PROVIDER_IDS` mais `local` (embedding fastembed), definido em
+    `MODEL_FAVORITE_PROVIDERS`.
+  - O `ModelPickerField` recebe o `provider` dos consumidores. Com `provider` nulo (campo à espera do
+    provedor), não há estrela. O `ModelSearchPicker` usa `opencode`.
+  - Favorito de um modelo que saiu do catálogo é ignorado.
+- **Persistência**: fica no servidor, por usuário (`getLocalUser().id`), na coleção
+  `ai_model_favorites`, com índice único `(userId, provider, model)`. O código fica em
+  `src/features/ai/model-favorites/` (schemas, constantes, `favoriteSetFor` e `server/service.ts`).
+  - Favoritar e desfavoritar são **idempotentes**: repetir não duplica e remover um favorito
+    inexistente devolve a lista.
+  - Só uma mudança real grava auditoria (`ModelosFavoritos`, CRIAR/EXCLUIR), log e o evento
+    `ai-model-favorites-updated` (`{ provider, model, action: "added" | "removed" }`) em `private-app`.
+- **Cliente**: `useAiModelFavorites` (`src/features/ai/hooks/useAiModelFavorites.ts`) lê a query
+  `["ai-model-favorites"]`, compartilhada por todos os pickers. Favoritar num lugar reflete nos outros.
+  - A mudança é **otimista**; se falhar, mostra um toast em pt-BR (não há toast de sucesso). Nem a
+    resposta do servidor nem um snapshot antigo são gravados no cache: quando a **última** mutação em
+    voo termina (`mutationKey` + `isMutating`), a query é invalidada e o servidor decide o estado. Assim,
+    duas estrelas seguidas não se sobrescrevem e a que falhou volta sozinha.
+  - O evento do Pusher invalida o cache.
+  - A ligação com o `SearchPicker` é feita por `useModelFavoritePicker(provider)`, em
+    `model-picker/useModelFavoritePicker.tsx`.
+
 ## APIs
 
 | Rota | Descrição |
@@ -545,6 +594,7 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 | `POST .../accounts/credentials/[credentialId]/activate` | Seleciona a conta em uso |
 | `/api/ai/providers/opencode/service/**`, `/scopes`, `/resources/**`, `/backups/**` | Serviço e recursos do OpenCode (`modules/opencode-resources.md`, "APIs") |
 | `GET /api/ai/agents` | Agentes primários do OpenCode |
+| `GET/POST/DELETE /api/ai/model-favorites` | Modelos favoritos do usuário: listar; favoritar `{ provider, model }`; remover com o mesmo corpo JSON. Favoritar e remover são idempotentes e devolvem `{ favorites }`; um corpo inválido devolve 400 |
 | `GET /api/ai/skills` (`?refresh=1`) | Skills instaladas no OpenCode (`AiSkillDto`, sem o conteúdo; `empty` = vazia) |
 | `GET/PUT /api/ai/features/task-summary` | Configuração de "Resumos de tarefas" + disponibilidade |
 | `GET/PUT /api/ai/features/task-tags` | Configuração de "Tags de tarefas" (taxonomia) + disponibilidade |
@@ -572,6 +622,10 @@ hooks (regressão React #310) — e `task-summary-card` o card do resumo sem o r
 `estimate-hours-settings` cobre a configuração de "Estimar prazos"; tags: `task-tags` puro,
 `task-tags-settings`, `task-tags-job`; estimativa por tarefas semelhantes: `orcamentos-estimate` e
 `orcamentos-similar`; `task-refinement-settings` cobre a configuração do "Agente Refinador", `task-refinement-tab` a aba e `opencode-skills` a lista de skills;
+modelos favoritos: `model-favorites/` (serviço, rotas, hook e estrela), `model-fields` e
+`model-search-picker` (estrela e ordem nos pickers), mais `__tests__/components/search-picker.test.tsx`
+(`pinFirst`/`renderItemAction`). Telas que montam pickers de modelo sem QueryClient usam o mock
+`__tests__/helpers/model-favorites.ts`;
 memórias: `memories`, `agent-memory-mapping`, `memory-list`, `memories-realtime`, `self-memory-tools` e
 `self-memory-mcp`). A
 feature "Orçamentos" é coberta em `__tests__/features/orcamentos/` (ver `modules/orcamentos.md`); o

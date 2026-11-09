@@ -144,4 +144,70 @@ describe('SearchPicker', () => {
     await waitFor(() => expect(document.activeElement).toBe(destino))
     destino.remove()
   })
+
+  describe('pinFirst e renderItemAction (OPE-152)', () => {
+    const many = (count: number): Fruit[] => Array.from({ length: count }, (_, index) => ({ id: `f${index}`, nome: `Fruta ${index}` }))
+    const open = (props: Partial<React.ComponentProps<typeof SearchPicker<Fruit>>> & { items?: Fruit[] } = {}) => {
+      const onPick = vi.fn()
+      render(
+        <SearchPicker<Fruit>
+          trigger={<button type="button">Escolher fruta</button>}
+          items={props.items ?? FRUITS}
+          getKey={(fruit) => fruit.id}
+          renderItem={(fruit) => <span>{fruit.nome}</span>}
+          onPick={onPick}
+          searchKeys={['nome']}
+          searchLabel="Buscar fruta"
+          listLabel="Frutas"
+          emptyText="Nenhuma fruta"
+          emptySearchText="Nenhuma fruta encontrada"
+          {...props}
+        />,
+      )
+      fireEvent.click(screen.getByRole('button', { name: 'Escolher fruta' }))
+      return onPick
+    }
+    const names = () => screen.getAllByRole('option').map((option) => option.textContent)
+
+    it('sem termo, os fixados vêm primeiro e cada bloco mantém a ordem recebida', () => {
+      open({ pinFirst: (fruit) => fruit.id === 'c' || fruit.id === 'b' })
+      expect(names()).toEqual(['Banana', 'Caju', 'Abacaxi'])
+    })
+
+    it('com termo, os fixados que casam vêm antes dos demais, mesmo menos relevantes', () => {
+      const items: Fruit[] = [
+        { id: 'a', nome: 'Manga' },
+        { id: 'b', nome: 'Mangaba' },
+        { id: 'c', nome: 'Caju' },
+      ]
+      open({ items, pinFirst: (fruit) => fruit.id === 'b' })
+      fireEvent.change(screen.getByLabelText('Buscar fruta'), { target: { value: 'manga' } })
+      expect(names()).toEqual(['Mangaba', 'Manga'])
+    })
+
+    it('um fixado além do limite de itens visíveis continua na lista', () => {
+      open({ items: many(150), pinFirst: (fruit) => fruit.id === 'f149' })
+      expect(names()[0]).toBe('Fruta 149')
+      expect(names()).toHaveLength(100)
+    })
+
+    it('a ação da opção fica fora do botão da opção: clicar nela não escolhe nem fecha', () => {
+      const action = vi.fn()
+      const onPick = open({ renderItemAction: (fruit) => <button type="button" onClick={() => action(fruit.id)}>Ação {fruit.nome}</button> })
+      const button = screen.getByRole('button', { name: 'Ação Banana' })
+      expect(button.closest('[role="option"]')).toBeNull()
+      fireEvent.click(button)
+      expect(action).toHaveBeenCalledWith('b')
+      expect(onPick).not.toHaveBeenCalled()
+      expect(screen.getAllByRole('option')).toHaveLength(3)
+    })
+
+    it('sem as props novas, o item continua sendo só o botão da opção (contrato do componente)', () => {
+      open()
+      const option = screen.getByRole('option', { name: 'Banana' })
+      expect(option.parentElement!.children).toHaveLength(1)
+      expect(option.parentElement!.getAttribute('class')).toBeNull()
+      expect(option.className).not.toContain('pr-10')
+    })
+  })
 })

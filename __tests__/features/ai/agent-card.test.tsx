@@ -4,6 +4,7 @@ import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, render, screen } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 /** Cartão compartilhado do agente: sem `providerSelect` (Agente Adversário) é sempre OpenCode. */
 
@@ -12,6 +13,7 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
   useAiModels: () => ({ data: [], isLoading: false, isError: false }),
   useAiProviderStatuses: () => ({ providers: [{ id: 'opencode', name: 'OpenCode', configured: true, connected: true }, { id: 'anthropic', name: 'Anthropic', configured: true, connected: true }] }),
 }))
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('@/features/agentic/components/settings/AgentConfigFields', () => ({ AgentConfigFields: () => <div data-testid="agent-fields" /> }))
 
 import { AgentCard, type AgentCardCopy, type AgentFormShape } from '@/features/ai/components/agent-settings/AgentCard'

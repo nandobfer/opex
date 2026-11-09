@@ -206,6 +206,9 @@ sem pedido explícito.
   que já existem de cada agente (ver `aicontext/modules/agent-metrics.md`).
 - Cores favoritas (Configurações › Aparência): `color-palette-updated` (`{ color, action, previousColor? }`)
   em `private-app` ao adicionar, editar ou remover uma favorita (ver `aicontext/modules/settings.md`).
+- Modelos de IA favoritos (estrela nas buscas de modelo, OPE-152): `ai-model-favorites-updated`
+  (`{ provider, model, action: "added" | "removed" }`) em `private-app` só quando o favorito muda (ver
+  `aicontext/modules/ai.md`, "Modelos favoritos").
 - Recursos do servidor (OPE-145): `host-metrics-updated` em `private-app` com o DTO dos medidores
   (`{ state, message, metrics, checkedAt, attemptedAt, staleAfterMs }`, só números), publicado pela rotina
   `host-metrics-refresh` quando um percentual arredondado ou o estado muda e, sem mudança, a cada 20 s; o

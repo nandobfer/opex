@@ -4,6 +4,7 @@ import React from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 /**
  * Aba "Agente Mentor" montada inteira, com a configuração salva (decisor e redator com provedor,
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('@/features/ai/hooks/useAi', () => ({
   AI_QUERY_KEY: 'ai',
   useAiFeatureRealtime: vi.fn(),

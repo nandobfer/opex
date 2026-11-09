@@ -70,6 +70,7 @@ export function OpexModelCard({ form, target, providers, title, description }: O
                             <div className={FORM_GRID_WIDE}>
                                 <ModelPickerField
                                     id={id("model")}
+                                    provider={provider}
                                     models={models}
                                     modelId={modelId}
                                     error={errors?.model?.message}

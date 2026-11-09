@@ -86,6 +86,7 @@ export function ProviderModelCard<T extends FieldValues>({ form, providers, onPr
                 <div className={FORM_GRID_WIDE}>
                     <ModelPickerField
                         id={`${idPrefix}-model`}
+                        provider={provider}
                         models={models}
                         modelId={modelId}
                         error={errorAt(errors, names.model)}

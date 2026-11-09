@@ -5,6 +5,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { framerMotionMock } from '../../helpers/framer-motion'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 const mocks = vi.hoisted(() => ({
   save: vi.fn(async (input: unknown) => ({ settings: input })),
@@ -17,6 +18,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
 vi.mock('@/features/ai/hooks/useAi', () => ({
   AI_QUERY_KEY: 'ai',

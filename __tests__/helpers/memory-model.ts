@@ -223,6 +223,7 @@ export function memoryModel() {
         deleteOne: async (filter: Doc) => {
             const index = docs.findIndex((doc) => matches(doc, filter))
             if (index !== -1) docs.splice(index, 1)
+            return { deletedCount: index === -1 ? 0 : 1 }
         },
         deleteMany: async (filter: Doc) => {
             for (let i = docs.length - 1; i >= 0; i--) if (matches(docs[i]!, filter)) docs.splice(i, 1)

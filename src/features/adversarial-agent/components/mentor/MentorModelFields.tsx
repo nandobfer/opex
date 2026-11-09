@@ -48,7 +48,7 @@ export function MentorModelFields({ form, part, providerIds, providers }: { form
                 {provider && (
                     <motion.div key="model" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="overflow-hidden">
                         <div className={FORM_GRID_WIDE}>
-                            <ModelPickerField id={`${id}-model`} models={models} modelId={modelId} error={errors?.model?.message} onPick={(item) => setModel(item.id)} />
+                            <ModelPickerField id={`${id}-model`} provider={provider} models={models} modelId={modelId} error={errors?.model?.message} onPick={(item) => setModel(item.id)} />
                             {model && model.variants.length > 0 && (
                                 <Controller
                                     control={form.control}

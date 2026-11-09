@@ -4,6 +4,7 @@ import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { framerMotionMock } from '../../helpers/framer-motion'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 /**
  * Aba "Agente Arquiteto" de `/integracoes/ia`: seções Geral · Diagrama · Agente · Memórias ·
@@ -13,6 +14,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const mocks = vi.hoisted(() => ({ save: vi.fn(async (values: unknown) => ({ settings: values })), settings: null as unknown, data: null as unknown }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   // Dados estáveis entre renders, como o TanStack Query (o efeito do formulário reinicia ao mudar).
   useArchitectSettings: () => {

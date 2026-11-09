@@ -37,6 +37,7 @@ export function MaddoxModelCard({ form, target, title, description }: MaddoxMode
                 <div className={FORM_GRID}>
                     <ModelPickerField
                         id={`maddox-${target}-model`}
+                        provider="opencode"
                         models={models}
                         modelId={modelId}
                         error={error}

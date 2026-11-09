@@ -86,7 +86,7 @@ export function EmbeddingSourceSection({ state, providers, reindexing, localMode
             <AnimatePresence initial={false}>
                 {provider && provider !== "off" && (
                     <motion.div key={`model-${provider === "local" ? "local" : "remote"}`} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="space-y-4 overflow-hidden">
-                        <ModelPickerField id="embedding-source-model" models={models} modelId={modelId} error={errors.model?.message} disabled={blocked} placeholder="Escolha o modelo de embedding" onPick={(item) => form.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })} />
+                        <ModelPickerField id="embedding-source-model" provider={provider} models={models} modelId={modelId} error={errors.model?.message} disabled={blocked} placeholder="Escolha o modelo de embedding" onPick={(item) => form.setValue("model", item.id, { shouldDirty: true, shouldValidate: true })} />
                         {isRemote(provider) && (
                             <InfoField id="embedding-source-dimensions" label="Dimensão (opcional)" info={AI_SOURCE_HELP.dimensions} error={errors.dimensions?.message}>
                                 <Input
