@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { Brain, Info, Loader2, Plug, RotateCcw, Save, Settings2, Undo2, Wrench } from "lucide-react"
+import { Brain, Info, Loader2, Plug, RotateCcw, Save, Settings2, Sparkles, Undo2, Wrench } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
@@ -25,12 +25,14 @@ import { OpexHostCard } from "./OpexHostCard"
 import { OpexToolsCard } from "./OpexToolsCard"
 import { OpexMemoriesSection } from "./OpexMemoriesSection"
 import { OpexMcpSection } from "./mcp/OpexMcpSection"
+import { OpexSkillsSection } from "./skills/OpexSkillsSection"
 
-type OpexSection = "geral" | "ferramentas" | "mcps" | "memorias"
+type OpexSection = "geral" | "ferramentas" | "mcps" | "skills" | "memorias"
 const SECTIONS: IntegrationTabDef<OpexSection>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "ferramentas", label: "Ferramentas", icon: Wrench },
     { id: "mcps", label: "MCPs", icon: Plug },
+    { id: "skills", label: "Skills", icon: Sparkles },
     { id: "memorias", label: "Memórias", icon: Brain },
 ]
 
@@ -150,8 +152,9 @@ export function OpexAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean
                             {footer(go)}
                         </>
                     )}
-                    {/* Salvam sozinhos (cada MCP e cada memória gravam na hora). */}
+                    {/* Salvam sozinhos (cada MCP, skill e memória gravam na hora). */}
                     {section === "mcps" && <OpexMcpSection />}
+                    {section === "skills" && <OpexSkillsSection />}
                     {section === "memorias" && <OpexMemoriesSection />}
                 </>
             )}
