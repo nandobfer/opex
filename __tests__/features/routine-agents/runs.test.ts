@@ -29,7 +29,7 @@ vi.mock('@/lib/db', () => ({
   AcaoAuditoria: { EXECUTAR: 'EXECUTAR', ABORTAR: 'ABORTAR', APROVAR: 'APROVAR', DEVOLVER: 'DEVOLVER', CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR' },
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: async (event: string, payload: Record<string, unknown>) => void holder.events.push({ event, payload }) }))
-const consumption = vi.hoisted(() => ({ record: vi.fn(async (..._args: unknown[]) => undefined) }))
+const consumption = vi.hoisted(() => ({ record: vi.fn(async (...args: unknown[]) => void args) }))
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: consumption.record }))
 vi.mock('@/lib/db/models/RoutineAgent', () => ({
   get RoutineAgent() {
