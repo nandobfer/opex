@@ -1,8 +1,8 @@
 import { createAnthropic, type AnthropicProvider } from "@ai-sdk/anthropic"
-import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { AI_REASONING_LEVELS, type AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
 
 /**
  * Anthropic (Claude) — SOMENTE servidor. Lista de modelos pela REST `v1/models`; geração pelo
@@ -14,10 +14,13 @@ import { ANTHROPIC_API_URL } from "./endpoints"
 export { ANTHROPIC_API_URL }
 const ANTHROPIC_VERSION = "2023-06-01"
 
+/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
+async function getAnthropicKey(): Promise<ActiveAiProviderKey> {
+    return requireActiveAiProviderKey("ai_anthropic", "Anthropic")
+}
+
 async function getAnthropicApiKey(): Promise<string> {
-    const { apiKey } = await getIntegrationConfig("ai_anthropic")
-    if (!apiKey) throw new AiProviderError("Anthropic sem API key: configure em Integrações › Inteligência Artificial › Anthropic")
-    return apiKey
+    return (await getAnthropicKey()).apiKey
 }
 
 interface AnthropicModelRaw {
@@ -65,6 +68,8 @@ export async function listAnthropicModels(signal?: AbortSignal): Promise<AiModel
     return models.sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? "")).map(toAnthropicModel)
 }
 
-export async function createAnthropicProvider(): Promise<AnthropicProvider> {
-    return createAnthropic({ apiKey: await getAnthropicApiKey() })
+/** Cliente da AI SDK com a chave ativa e o id dela (o consumo é atribuído à chave usada). */
+export async function createAnthropicProvider(): Promise<{ provider: AnthropicProvider; apiKeyId: string }> {
+    const key = await getAnthropicKey()
+    return { provider: createAnthropic({ apiKey: key.apiKey }), apiKeyId: key.id }
 }

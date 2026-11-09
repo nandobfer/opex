@@ -26,7 +26,7 @@ function fieldsOf(id: IntegrationId) {
     const def = getIntegrationDef(id)
     return {
         publicFields: def.publicFields.map((field) => ({ key: field.key, label: field.label, kind: field.kind, description: field.description ?? null, options: field.options ?? null, cardManaged: field.group === "card" })),
-        secretFields: def.secretFields.map((field) => ({ key: field.key, label: field.label, description: field.description ?? null, cardManaged: field.group === "card" })),
+        secretFields: def.secretFields.map((field) => ({ key: field.key, label: field.label, description: field.description ?? null, cardManaged: field.group === "card", keyRing: field.keyRing === true })),
     }
 }
 

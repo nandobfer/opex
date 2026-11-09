@@ -3,9 +3,11 @@ import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
+import { aiApiKeysMock, apiKeyDto } from "../../helpers/ai-api-keys"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn(), refetch: vi.fn() }))
 vi.mock("framer-motion", () => framerMotionMock())
+vi.mock("@/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Pessoal", true), apiKeyDto("key_bbbbbbbbbbbbbbbbbb", "Empresa")]))
 vi.mock("@/features/ai/hooks/useJevUsage", () => ({ useJevUsage: mocks.usage }))
 vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
@@ -92,5 +94,13 @@ describe("Consumo do JEV", () => {
         expect(mocks.usage).toHaveBeenLastCalledWith(null)
         expect(screen.getByText("Período inválido")).toBeTruthy()
         expect(screen.getByRole("button", { name: "Atualizar" }).hasAttribute("disabled")).toBe(true)
+    })
+
+    it("filtro Chave de API (OPE-155): cards, tabela e Total vêm da consulta recortada pela chave", () => {
+        window.history.replaceState(null, "", "/integracoes/ia/jev?aba=consumo&usageKey=key_aaaaaaaaaaaaaaaaaa")
+        render(<JevUsageCard />)
+        expect(screen.getByRole("combobox", { name: "Chave de API" }).textContent).toContain("Pessoal (em uso)")
+        const call = mocks.usage.mock.calls.at(-1)![0] as Record<string, unknown>
+        expect(call.apiKey).toBe("key_aaaaaaaaaaaaaaaaaa")
     })
 })

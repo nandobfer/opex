@@ -1,5 +1,6 @@
 import { endOfDay, isValid, parseISO, startOfDay } from "date-fns"
 import { z } from "zod"
+import { USAGE_KEY_ALL, USAGE_KEY_PATTERN } from "./usage-key-filter"
 
 /**
  * Consumo medido dos provedores de IA que não têm painel próprio (`ai_consumption_logs`).
@@ -9,7 +10,12 @@ import { z } from "zod"
  */
 
 const optionalDate = z.preprocess((value) => (value === "" || value === null ? undefined : value), z.iso.datetime({ offset: true, error: "Data inválida" }).optional())
-export const usageQuerySchema = z.object({ from: optionalDate, to: optionalDate }).refine(
+/** Filtro por chave de API (OPE-155): `all`, id da chave, `none` (sem chave identificada) ou `removed`. */
+const optionalKey = z.preprocess(
+    (value) => (value === "" || value === null ? undefined : value),
+    z.string().regex(USAGE_KEY_PATTERN, "Chave de API inválida").optional(),
+)
+export const usageQuerySchema = z.object({ from: optionalDate, to: optionalDate, apiKey: optionalKey }).refine(
     (query) => !query.from || !query.to || new Date(query.from) <= new Date(query.to),
     { message: "O início do período deve ser anterior ao fim", path: ["to"] },
 )
@@ -28,6 +34,12 @@ export function usageRangeQuery(from: string, to: string): UsageQuery | null {
     if (start === null || end === null) return null
     const parsed = usageQuerySchema.safeParse({ from: start, to: end })
     return parsed.success ? parsed.data : null
+}
+
+/** Junta o filtro de chave ao período (`all` não vai na query). */
+export function withUsageKey(query: UsageQuery | null, apiKey: string): UsageQuery | null {
+    if (!query) return null
+    return apiKey && apiKey !== USAGE_KEY_ALL ? { ...query, apiKey } : query
 }
 
 /** Provedores diretos com aba Consumo (o OpenCode e o JEV têm rotas fixas). */

@@ -3,9 +3,11 @@ import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
+import { aiApiKeysMock, apiKeyDto } from "../../helpers/ai-api-keys"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn(), refetch: vi.fn() }))
 vi.mock("framer-motion", () => framerMotionMock())
+vi.mock("@/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Pessoal", true), apiKeyDto("key_bbbbbbbbbbbbbbbbbb", "Empresa")]))
 vi.mock("@/features/ai/hooks/useProviderUsage", () => ({ useProviderUsage: mocks.usage }))
 vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
@@ -68,5 +70,10 @@ describe("Consumo do OpenCode", () => {
         render(<OpencodeUsageCard />)
         expect(mocks.usage).toHaveBeenLastCalledWith("opencode", null)
         expect(screen.getByText("Período inválido")).toBeTruthy()
+    })
+
+    it("OpenCode não tem chave de API: o painel não mostra o filtro de chave (OPE-155)", () => {
+        render(<OpencodeUsageCard />)
+        expect(screen.queryByRole("combobox", { name: "Chave de API" })).toBeNull()
     })
 })

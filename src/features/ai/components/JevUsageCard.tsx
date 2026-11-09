@@ -13,6 +13,9 @@ import { FilterGroup } from "@/components/list/FilterGroup"
 import { apiErrorMessage } from "@/lib/api"
 import { formatJevCost, jevUsageRangeQuery } from "../jev-usage"
 import { useJevUsage } from "../hooks/useJevUsage"
+import { useUsageKeyFilter } from "../hooks/useUsageKeyFilter"
+import { withUsageKey } from "../provider-usage"
+import { USAGE_FILTERS_GRID, UsageKeySelect } from "./UsageKeySelect"
 import { useUsageRange } from "../hooks/useUsageRange"
 import { UsageBreakdownTable } from "./UsageBreakdownTable"
 import { UsageRefreshButton } from "./UsageRefreshButton"
@@ -29,7 +32,8 @@ function Metric({ label, value, cost = false }: { label: string; value: number |
 export function JevUsageCard() {
     const reducedMotion = useReducedMotion()
     const { range, setRange, defaults } = useUsageRange()
-    const query = useMemo(() => jevUsageRangeQuery(range.usageFrom, range.usageTo), [range.usageFrom, range.usageTo])
+    const usageKey = useUsageKeyFilter("jev")
+    const query = useMemo(() => withUsageKey(jevUsageRangeQuery(range.usageFrom, range.usageTo), usageKey.value), [range.usageFrom, range.usageTo, usageKey.value])
     const usage = useJevUsage(query)
     const data = usage.data
     const view = query === null ? "invalid" : usage.isLoading ? "loading" : usage.isError ? "error" : !data?.requests ? "empty" : "data"
@@ -43,9 +47,12 @@ export function JevUsageCard() {
             <p className="text-sm text-muted-foreground">Logs retidos por 90 dias. Entrada: US$ 0,042 por milhão de tokens; saída gratuita.</p>
         </CardHeader>
         <CardContent className="space-y-4">
-            <FilterGroup label="Período">
-                <PresetDateRangeFilter startDate={range.usageFrom} endDate={range.usageTo} onChange={(next) => setRange({ usageFrom: next.startDate, usageTo: next.endDate })} />
-            </FilterGroup>
+            <div className={USAGE_FILTERS_GRID}>
+                <FilterGroup label="Período">
+                    <PresetDateRangeFilter startDate={range.usageFrom} endDate={range.usageTo} onChange={(next) => setRange({ usageFrom: next.startDate, usageTo: next.endDate })} />
+                </FilterGroup>
+                <UsageKeySelect value={usageKey.value} options={usageKey.options} onChange={usageKey.setValue} />
+            </div>
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.15 }}>
                     {view === "invalid" && <ErrorState title="Período inválido" description="Selecione datas válidas, com início anterior ao fim." onRetry={() => setRange(defaults)} />}
@@ -54,7 +61,7 @@ export function JevUsageCard() {
                         <div className="space-y-2"><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /><Skeleton className="h-8 w-full" /></div>
                     </div>}
                     {view === "error" && <ErrorState title="Não foi possível carregar o consumo" description={apiErrorMessage(usage.error, "Tente novamente.")} onRetry={() => void usage.refetch()} />}
-                    {view === "empty" && <EmptyState icon={BarChart3} title="Nenhum uso do JEV neste período" description="Selecione outro período para consultar o consumo." actionLabel="Último mês" onAction={() => setRange(defaults)} />}
+                    {view === "empty" && <EmptyState icon={BarChart3} title="Nenhum uso do JEV neste período" description="Selecione outro período ou outra chave para consultar o consumo." actionLabel="Último mês" onAction={() => setRange(defaults)} />}
                     {view === "data" && data && <div className="space-y-4">
                         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                             <Metric label="Tokens totais" value={data.totalTokens} />

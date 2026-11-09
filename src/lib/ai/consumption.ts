@@ -24,6 +24,8 @@ export interface AiConsumptionInput {
     outputTokens: number | null
     totalTokens: number | null
     costUsd: number | null
+    /** Chave de API usada (provedores diretos, OPE-155); `null`/ausente = sem chave identificada. */
+    apiKeyId?: string | null
     /** Detalhe da cobrança do OpenCode Go (cota, preço de tabela e origem). */
     billing?: AiBilling | null
 }
@@ -43,6 +45,7 @@ export async function recordAiConsumption(input: AiConsumptionInput): Promise<vo
                     outputTokens: input.outputTokens,
                     totalTokens: input.totalTokens,
                     costUsd: input.costUsd,
+                    apiKeyId: input.apiKeyId ?? null,
                     billing: input.billing ?? null,
                     createdAt: new Date(),
                 },

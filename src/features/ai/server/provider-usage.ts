@@ -1,11 +1,21 @@
 import { dbConnect } from "@/lib/db"
 import { AiConsumption } from "@/lib/db/models/AiConsumption"
+import { getAiProvider, isAiProviderId } from "@/lib/ai/providers"
+import { loadStoredIntegration } from "@/lib/integrations/store"
+import { usageKeyMatch } from "../usage-key-filter"
 import {
     aiConsumptionOriginLabel,
     type ProviderUsageRow,
     type ProviderUsageSummary,
     type UsageQuery,
 } from "../provider-usage"
+
+/** Recorte por chave de API (OPE-155); "Chaves removidas" compara com as chaves atuais do provedor. */
+export async function providerKeyMatch(provider: string, apiKey: string | undefined): Promise<Record<string, unknown>> {
+    if (!apiKey || !isAiProviderId(provider)) return {}
+    const stored = await loadStoredIntegration(getAiProvider(provider).integrationId)
+    return usageKeyMatch(apiKey, (stored?.apiKeys ?? []).map((key) => key.id))
+}
 
 const missing = (field: string) => ({ $eq: [{ $ifNull: [`$${field}`, null] }, null] })
 const countMissing = (field: string) => ({ $sum: { $cond: [missing(field), 1, 0] } })
@@ -42,6 +52,7 @@ export async function getProviderUsage(provider: string, query: UsageQuery): Pro
     await dbConnect()
     const filter = {
         provider,
+        ...(await providerKeyMatch(provider, query.apiKey)),
         ...(query.from || query.to
             ? {
                   createdAt: {

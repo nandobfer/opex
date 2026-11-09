@@ -18,7 +18,9 @@ import { OpencodeAccountsCard } from "@/features/opencode-accounts/components/Op
 import { OpencodeResourceTab } from "@/features/opencode-resources/components/OpencodeResourceTab"
 import { OpencodeControlsTab } from "@/features/opencode-service/components/OpencodeControlsTab"
 import { AI_PROVIDER_TAB_IDS, type AiProviderTab } from "../constants"
+import { isAiApiKeyProviderId } from "../api-keys"
 import { isUsageProviderId, usageProviderReportsCost } from "../provider-usage"
+import { ApiKeysCard } from "./api-keys/ApiKeysCard"
 import { AiModelsCard } from "./AiModelsCard"
 import { JevUsageCard } from "./JevUsageCard"
 import { OpencodeUsageCard } from "./OpencodeUsageCard"
@@ -63,7 +65,9 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
     const setPublic = (key: string, value: PublicFieldValue | "") =>
         setDraft((prev) => ({ ...prev, publicValues: { ...prev.publicValues, [key]: value } }))
 
-    const secretFields = def.secretFields.filter((field) => !field.group)
+    // A API key dos provedores de chaveiro é gerenciada pelo card "Chaves de API" (OPE-155), não pelos campos privados.
+    const secretFields = def.secretFields.filter((field) => !field.group && !field.keyRing)
+    const keyRingProvider = provider && isAiApiKeyProviderId(provider.id) ? provider.id : null
     const regularFields = def.publicFields.filter((field) => !field.group)
     const tabs = allowed.map((id) => TAB_DEFS[id])
 
@@ -85,6 +89,7 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                 {tab === "configuracao" && (
                     <>
                         <GeneralCard draft={draft} setDraft={setDraft} />
+                        {keyRingProvider && provider && <ApiKeysCard provider={keyRingProvider} providerName={provider.name} />}
                         {secretFields.length > 0 && <SecretFieldsCard fields={secretFields} data={data} draft={draft} setDraft={setDraft} />}
                         {regularFields.length > 0 && <PublicFieldsCard fields={regularFields} data={data} publicValues={draft.publicValues} setPublic={setPublic} />}
                         <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
@@ -113,6 +118,7 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                         emptyTitle={`Nenhum uso do ${provider.name} neste período`}
                         showCost={usageProviderReportsCost(provider.id)}
                         showCoverage
+                        keyFilter={keyRingProvider ?? undefined}
                     />
                 )}
             </IntegrationTabs>

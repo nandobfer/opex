@@ -1,8 +1,8 @@
 import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai"
-import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { AI_REASONING_LEVELS, type AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
 
 /**
  * OpenAI — SOMENTE servidor. Lista de modelos pela REST `v1/models` (filtrada para modelos de
@@ -13,10 +13,13 @@ import { OPENAI_API_URL } from "./endpoints"
 
 export { OPENAI_API_URL }
 
+/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
+async function getOpenaiKey(): Promise<ActiveAiProviderKey> {
+    return requireActiveAiProviderKey("ai_openai", "OpenAI")
+}
+
 async function getOpenaiApiKey(): Promise<string> {
-    const { apiKey } = await getIntegrationConfig("ai_openai")
-    if (!apiKey) throw new AiProviderError("OpenAI sem API key: configure em Integrações › Inteligência Artificial › OpenAI")
-    return apiKey
+    return (await getOpenaiKey()).apiKey
 }
 
 interface OpenaiModelRaw {
@@ -78,6 +81,8 @@ export async function listOpenaiEmbeddingModels(signal?: AbortSignal): Promise<A
         .map((model) => ({ ...toOpenaiModel(model), variants: [] }))
 }
 
-export async function createOpenaiProvider(): Promise<OpenAIProvider> {
-    return createOpenAI({ apiKey: await getOpenaiApiKey() })
+/** Cliente da AI SDK com a chave ativa e o id dela (o consumo é atribuído à chave usada). */
+export async function createOpenaiProvider(): Promise<{ provider: OpenAIProvider; apiKeyId: string }> {
+    const key = await getOpenaiKey()
+    return { provider: createOpenAI({ apiKey: key.apiKey }), apiKeyId: key.id }
 }

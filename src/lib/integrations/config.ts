@@ -14,7 +14,7 @@ import {
     type PublicFieldDef,
     type PublicFieldValue,
 } from "./catalog"
-import { loadStoredIntegration, type StoredIntegration } from "./store"
+import { loadStoredIntegration, type StoredApiKey, type StoredIntegration } from "./store"
 
 /**
  * Resolvedor de configuração das integrações — SOMENTE servidor.
@@ -165,6 +165,31 @@ function resolveSecret(
     return fromEnv ? { value: fromEnv, source: "env" } : { source: "none" }
 }
 
+/**
+ * Segredo do chaveiro (OPE-155): o valor é o da chave **ativa**. Sem chave ativa o segredo não existe
+ * (integração não configurada). O `secretValues[key]` legado é ignorado: fica só como cópia de
+ * segurança da migração `migrate-ai-provider-api-keys`.
+ */
+function resolveKeyRingSecret(key: string, stored: StoredIntegration | null, integrationId: string, errors: string[]): { value?: string; source: SecretSource } {
+    const active = activeApiKeyOf(stored)
+    if (!active) return { source: "none" }
+    if (isEncryptedSecret(active.secret)) {
+        try {
+            return { value: decryptSecret(active.secret), source: "db" }
+        } catch (error) {
+            logger.error({ integrationId, key, err: error instanceof Error ? error.message : error }, "[integrations] Falha ao descriptografar a chave ativa do chaveiro")
+        }
+    }
+    errors.push(key)
+    return { source: "none" }
+}
+
+/** Chave ativa do chaveiro (`null` sem chaveiro, sem chave ativa ou com o id ativo inexistente). */
+export function activeApiKeyOf(stored: Pick<StoredIntegration, "apiKeys" | "activeApiKeyId"> | null): StoredApiKey | null {
+    if (!stored?.activeApiKeyId) return null
+    return stored.apiKeys?.find((item) => item.id === stored.activeApiKeyId) ?? null
+}
+
 export function buildResolvedIntegration<Id extends IntegrationId>(
     def: IntegrationDef,
     stored: StoredIntegration | null,
@@ -175,7 +200,7 @@ export function buildResolvedIntegration<Id extends IntegrationId>(
     const secretSources: Record<string, SecretSource> = {}
     const secretErrors: string[] = []
     for (const field of def.secretFields) {
-        const { value, source } = resolveSecret(field.key, field.env, stored, def.id, secretErrors)
+        const { value, source } = field.keyRing ? resolveKeyRingSecret(field.key, stored, def.id, secretErrors) : resolveSecret(field.key, field.env, stored, def.id, secretErrors)
         values[field.key] = value
         secretSources[field.key] = source
     }

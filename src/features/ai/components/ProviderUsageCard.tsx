@@ -11,7 +11,10 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { FilterGroup } from "@/components/list/FilterGroup"
 import { apiErrorMessage } from "@/lib/api"
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
-import { usageRangeQuery } from "../provider-usage"
+import type { AiApiKeyProviderId } from "../api-keys"
+import { usageRangeQuery, withUsageKey } from "../provider-usage"
+import { useUsageKeyFilter } from "../hooks/useUsageKeyFilter"
+import { USAGE_FILTERS_GRID, UsageKeySelect } from "./UsageKeySelect"
 import { useProviderUsage } from "../hooks/useProviderUsage"
 import { useUsageRange } from "../hooks/useUsageRange"
 import { UsageBreakdownTable } from "./UsageBreakdownTable"
@@ -28,6 +31,8 @@ interface ProviderUsageCardProps {
     showCost?: boolean
     /** Painel prospectivo: informa desde quando há medição. */
     showCoverage?: boolean
+    /** Provedor com chaveiro (OPE-155): mostra o filtro "Chave de API". */
+    keyFilter?: AiApiKeyProviderId
 }
 
 /**
@@ -35,10 +40,11 @@ interface ProviderUsageCardProps {
  * recurso com o total e notas de cobertura. Métricas ausentes aparecem como `—`; totais parciais
  * são sinalizados, nunca apresentados como medição completa.
  */
-export function ProviderUsageCard({ provider, title, description, firstColumnLabel, emptyTitle, showCost = true, showCoverage = false }: ProviderUsageCardProps) {
+export function ProviderUsageCard({ provider, title, description, firstColumnLabel, emptyTitle, showCost = true, showCoverage = false, keyFilter }: ProviderUsageCardProps) {
     const reducedMotion = useReducedMotion()
     const { range, setRange, defaults } = useUsageRange()
-    const query = useMemo(() => usageRangeQuery(range.usageFrom, range.usageTo), [range.usageFrom, range.usageTo])
+    const usageKey = useUsageKeyFilter(keyFilter ?? null)
+    const query = useMemo(() => withUsageKey(usageRangeQuery(range.usageFrom, range.usageTo), usageKey.value), [range.usageFrom, range.usageTo, usageKey.value])
     const usage = useProviderUsage(provider, query)
     const data = usage.data
     const view = query === null ? "invalid" : usage.isLoading ? "loading" : usage.isError ? "error" : !data?.rows.length ? "empty" : "data"
@@ -63,15 +69,18 @@ export function ProviderUsageCard({ provider, title, description, firstColumnLab
                 <p className="text-sm text-muted-foreground">{description}</p>
             </CardHeader>
             <CardContent className="space-y-4">
-                <FilterGroup label="Período">
-                    <PresetDateRangeFilter startDate={range.usageFrom} endDate={range.usageTo} onChange={(next) => setRange({ usageFrom: next.startDate, usageTo: next.endDate })} />
-                </FilterGroup>
+                <div className={keyFilter ? USAGE_FILTERS_GRID : undefined}>
+                    <FilterGroup label="Período">
+                        <PresetDateRangeFilter startDate={range.usageFrom} endDate={range.usageTo} onChange={(next) => setRange({ usageFrom: next.startDate, usageTo: next.endDate })} />
+                    </FilterGroup>
+                    {keyFilter && <UsageKeySelect value={usageKey.value} options={usageKey.options} onChange={usageKey.setValue} />}
+                </div>
                 <AnimatePresence mode="wait" initial={false}>
                     <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.15 }}>
                         {view === "invalid" && <ErrorState title="Período inválido" description="Selecione datas válidas, com início anterior ao fim." onRetry={() => setRange(defaults)} />}
                         {view === "loading" && <div className="space-y-2" role="status" aria-label="Carregando consumo"><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /><Skeleton className="h-10 w-full" /></div>}
                         {view === "error" && <ErrorState title="Não foi possível carregar o consumo" description={apiErrorMessage(usage.error, "Tente novamente.")} onRetry={() => void usage.refetch()} />}
-                        {view === "empty" && <EmptyState icon={BarChart3} title={emptyTitle} description="Selecione outro período para consultar o consumo." actionLabel="Último mês" onAction={() => setRange(defaults)} />}
+                        {view === "empty" && <EmptyState icon={BarChart3} title={emptyTitle} description={keyFilter ? "Selecione outro período ou outra chave para consultar o consumo." : "Selecione outro período para consultar o consumo."} actionLabel="Último mês" onAction={() => setRange(defaults)} />}
                         {view === "data" && data && (
                             <div className="space-y-3">
                                 <UsageBreakdownTable firstColumnLabel={firstColumnLabel} rows={data.rows} total={data.total} showCost={showCost} />

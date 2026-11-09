@@ -262,6 +262,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                         outputTokens: step.outputTokens,
                         totalTokens: step.tokens,
                         costUsd: step.costUsd,
+                        apiKeyId: step.apiKeyId ?? null,
                         billing: step.billing ?? null,
                     })
                 }

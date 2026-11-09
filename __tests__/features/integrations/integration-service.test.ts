@@ -208,30 +208,35 @@ describe('gancho de ativação (Builder Machine)', () => {
   })
 })
 
-describe('sincronização da chave com o Engramind', () => {
+describe('chaveiro dos provedores de IA (OPE-155)', () => {
   const stored = (id: string) => ({ integrationId: id, environment: 'externo', debugMode: false, publicValues: {}, secretValues: {} })
   const flush = () => new Promise((resolve) => setTimeout(resolve, 0))
   beforeEach(() => mocks.engramindSync.mockClear())
 
-  it('gravar a chave de um provedor de IA agenda o reenvio ao Engramind', async () => {
+  it('o PATCH genérico recusa gravar ou apagar a API key (só a lista de chaves grava), sem gravar nem sincronizar', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(stored('ai_openai'))
-    await updateIntegration('ai_openai', { secrets: { apiKey: { action: 'set', value: 'sk-nova' } } }, actor)
+    await expect(updateIntegration('ai_openai', { secrets: { apiKey: { action: 'set', value: 'sk-nova' } } }, actor)).rejects.toBeInstanceOf(IntegrationUpdateError)
+    mocks.loadStoredIntegration.mockResolvedValue(stored('ai_jev'))
+    await expect(updateIntegration('ai_jev', { secrets: { apiKey: { action: 'clear' } } }, actor)).rejects.toThrow(/Chaves de API/)
     await flush()
-    expect(mocks.engramindSync).toHaveBeenCalledWith('ai_openai')
+    expect(mocks.updateOne).not.toHaveBeenCalled()
+    expect(mocks.engramindSync).not.toHaveBeenCalled()
   })
 
-  it('apagar a chave também agenda (o Engramind marca a chave como apagada)', async () => {
-    mocks.loadStoredIntegration.mockResolvedValue(stored('ai_gemini'))
-    await updateIntegration('ai_gemini', { secrets: { apiKey: { action: 'clear' } } }, actor)
-    await flush()
-    expect(mocks.engramindSync).toHaveBeenCalledWith('ai_gemini')
+  it('o detalhe mostra a API key definida pela chave ativa do chaveiro (nunca o valor)', async () => {
+    mocks.loadStoredIntegration.mockResolvedValue({
+      ...stored('ai_gemini'),
+      apiKeys: [{ id: 'k1', name: 'Pessoal', secret: encryptSecret('gm-ativa'), createdAt: new Date(), updatedAt: new Date() }],
+      activeApiKeyId: 'k1',
+    })
+    const detail = await getIntegrationDetail('ai_gemini')
+    expect(detail.secrets.apiKey).toMatchObject({ configured: true, source: 'db' })
+    expect(JSON.stringify(detail)).not.toContain('gm-ativa')
   })
 
-  it('mudar só o debug ou outra integração não agenda', async () => {
+  it('mudar só o debug não sincroniza nada com o Engramind', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(stored('ai_openai'))
     await updateIntegration('ai_openai', { debugMode: true }, actor)
-    mocks.loadStoredIntegration.mockResolvedValue(stored('smtp'))
-    await updateIntegration('smtp', { debugMode: true }, actor)
     await flush()
     expect(mocks.engramindSync).not.toHaveBeenCalled()
   })

@@ -216,6 +216,9 @@ sem pedido explícito.
   cliente grava no cache sem nova consulta (ver `aicontext/modules/host-metrics.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
+- Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
+  ao criar, renomear, substituir o segredo, ativar ou remover uma chave (ver `aicontext/modules/ai.md`,
+  "Chaves de API").
 - Agentes rotineiros: `routine-agent-updated` (`{ id }`), `routine-run-updated` (`{ id, agentId, status }`) e
   `routine-run-attention` (`{ id, agentId, kind: "confirmation" | "finished", status, agentName }`, que alimenta o
   toast "Abrir execução" em qualquer tela) em `private-app` (ver `aicontext/modules/routine-agents.md`).

@@ -428,7 +428,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         await mcp?.close().catch(() => undefined)
     }
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames, apiKeyId: prepared?.apiKeyId ?? null })
 }
 
 interface TurnOutcome {
@@ -440,6 +440,8 @@ interface TurnOutcome {
     cost: AiStepCost | null
     responseMessages: unknown[] | null
     toolNames: string[]
+    /** Chave de API usada no turno (provedores diretos, OPE-155). */
+    apiKeyId: string | null
 }
 
 async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
@@ -494,6 +496,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             ...outcome.usage,
             costUsd: outcome.cost?.costUsd ?? null,
             billing: outcome.cost?.billing ?? null,
+            apiKeyId: outcome.apiKeyId,
         })
     }
     if (status !== "interrupted" || text) {

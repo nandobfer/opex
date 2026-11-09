@@ -155,8 +155,10 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
   Engramind não foi trocada depois da última cópia (`updated_at` do segredo); "Configurado no
   Engramind" quando algo mudou por fora (ferramenta `update_engramind_settings`, CLI, outro admin ou
   chave gravada à mão no card Chaves); "Ainda não aplicado" sem snapshot. Aplicar de novo volta ao Opex.
-- **Sincronização automática**: gravar ou apagar a chave de `ai_gemini|ai_anthropic|ai_openai|ai_deepseek`
-  agenda `syncEngramindProviderKey` (depois da resposta, import dinâmico): reenvia a chave a **toda
+- **Sincronização automática**: quando a **chave em uso** de `ai_gemini|ai_anthropic|ai_openai|ai_deepseek`
+  muda no chaveiro do provedor (ativar outra, substituir o segredo da que está em uso, primeira chave
+  ou remoção da única, `modules/ai.md`, "Chaves de API"), o serviço das chaves agenda
+  `syncEngramindProviderKey` (depois da resposta, import dinâmico): reenvia a chave **em uso** a **toda
   seção** que usa o provedor; outro provedor, Engramind não configurado ou nenhuma seção → nada (log
   informativo). Chave apagada no Opex → nada é enviado e o card avisa ("A chave do X foi apagada no
   Opex"). Falha no Engramind nunca propaga: vira `syncError` + log de aviso + "Reenviar a chave"

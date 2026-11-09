@@ -1,7 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), fetch: vi.fn(), create: vi.fn(), connect: vi.fn(), audit: vi.fn(), publish: vi.fn(), warn: vi.fn() }))
-vi.mock("@/lib/integrations/config", () => ({ getIntegrationConfig: mocks.config }))
+// A chave vem do chaveiro (OPE-155): `null` = sem chave ativa.
+vi.mock("@/lib/ai/api-keys", async () => {
+    const { AiProviderError } = await import("@/lib/ai/errors")
+    return {
+        requireActiveAiProviderKey: async () => {
+            const config = (await mocks.config()) as { apiKey?: string } | null
+            if (!config?.apiKey) throw new AiProviderError("JEV sem chave de API ativa")
+            return { id: "key_ativa", name: "Principal", apiKey: config.apiKey }
+        },
+    }
+})
 vi.mock("@/lib/integrations/debug", () => ({ integrationDebug: () => ({}), debugFetch: mocks.fetch }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { create: mocks.create } }))
@@ -26,7 +36,7 @@ describe("registro centralizado de requisições JEV", () => {
         const result = await askJevSystemOne(input)
         expect(result.answers?.tag).toEqual({ type: "noul", noul: 0.9 })
         expect(mocks.create).toHaveBeenCalledOnce()
-        expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ feature: "task-tags", subject: "task-1", provider: "jev", model: "jev-1.13.0", inputTokens: 100, outputTokens: 20, totalTokens: 120, usageSource: "api", inputPricePerMillionUsd: 0.042, ok: true, error: null }))
+        expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ feature: "task-tags", subject: "task-1", provider: "jev", model: "jev-1.13.0", inputTokens: 100, outputTokens: 20, totalTokens: 120, usageSource: "api", inputPricePerMillionUsd: 0.042, ok: true, error: null, apiKeyId: "key_ativa" }))
         expect(mocks.create.mock.calls[0]![0].costUsd).toBeCloseTo(0.0000042, 12)
         expect(mocks.connect.mock.invocationCallOrder[0]).toBeLessThan(mocks.create.mock.invocationCallOrder[0]!)
         expect(mocks.create.mock.invocationCallOrder[0]).toBeLessThan(mocks.audit.mock.invocationCallOrder[0]!)

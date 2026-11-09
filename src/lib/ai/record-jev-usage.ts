@@ -17,21 +17,23 @@ interface JevUsageRecord extends JevUsageContext {
     error: string | null
     durationMs: number
     usage?: { input_tokens?: number; output_tokens?: number }
+    /** Chave de API usada (OPE-155); `null` quando a chamada falhou antes de resolver a chave. */
+    apiKeyId?: string | null
 }
 
 /** Uma linha por requisição, antes do processamento de negócio. Falhas de telemetria não quebram IA. */
 export async function recordJevUsage(input: JevUsageRecord): Promise<void> {
     try {
         await dbConnect()
-        const { usage, ...context } = input
+        const { usage, apiKeyId, ...context } = input
         const metrics = normalizeJevUsage(usage)
-        const log = await AiUsageLog.create({ ...context, provider: "jev", ...metrics })
+        const log = await AiUsageLog.create({ ...context, provider: "jev", apiKeyId: apiKeyId ?? null, ...metrics })
         await recordAudit({
             userId: getLocalUser().id,
             entidade: "UsoIA",
             entidadeId: String(log._id),
             acao: AcaoAuditoria.CRIAR,
-            depois: { provider: "jev", feature: input.feature, model: input.model, ...metrics },
+            depois: { provider: "jev", feature: input.feature, model: input.model, apiKeyId: apiKeyId ?? null, ...metrics },
         })
         await publishAppEvent(JEV_USAGE_UPDATED_EVENT, { provider: "jev" })
     } catch (error) {

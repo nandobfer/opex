@@ -1,8 +1,8 @@
 import { createGoogleGenerativeAI, type GoogleProvider } from "@ai-sdk/google"
-import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { GEMINI_THINKING_LEVELS, type AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
+import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
 
 /**
  * Google Gemini (API do Google AI Studio) — SOMENTE servidor. Lista de modelos pela REST
@@ -13,10 +13,13 @@ import { GEMINI_API_URL } from "./endpoints"
 
 export { GEMINI_API_URL }
 
+/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
+async function getGeminiKey(): Promise<ActiveAiProviderKey> {
+    return requireActiveAiProviderKey("ai_gemini", "Gemini")
+}
+
 async function getGeminiApiKey(): Promise<string> {
-    const { apiKey } = await getIntegrationConfig("ai_gemini")
-    if (!apiKey) throw new AiProviderError("Gemini sem API key: configure em Integrações › Inteligência Artificial › Gemini")
-    return apiKey
+    return (await getGeminiKey()).apiKey
 }
 
 interface GeminiModelRaw {
@@ -75,6 +78,8 @@ export async function listGeminiEmbeddingModels(signal?: AbortSignal): Promise<A
         .sort((a, b) => b.id.localeCompare(a.id))
 }
 
-export async function createGeminiProvider(): Promise<GoogleProvider> {
-    return createGoogleGenerativeAI({ apiKey: await getGeminiApiKey() })
+/** Cliente da AI SDK com a chave ativa e o id dela (o consumo é atribuído à chave usada). */
+export async function createGeminiProvider(): Promise<{ provider: GoogleProvider; apiKeyId: string }> {
+    const key = await getGeminiKey()
+    return { provider: createGoogleGenerativeAI({ apiKey: key.apiKey }), apiKeyId: key.id }
 }

@@ -5,9 +5,24 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock('@/lib/integrations/config', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@/lib/integrations/config')>()),
   getIntegrationConfig: vi.fn(async (id: string) => mocks.config[id] ?? {}),
 }))
+// Provedores por API key leem a chave ATIVA do chaveiro (OPE-155): o documento é montado a partir do `apiKey`.
+vi.mock('@/lib/integrations/store', () => ({
+  loadStoredIntegration: vi.fn(async (id: string) => {
+    const apiKey = mocks.config[id]?.apiKey
+    if (typeof apiKey !== 'string') return null
+    const now = new Date()
+    return { integrationId: id, publicValues: {}, secretValues: {}, apiKeys: [{ id: 'key_ativa', name: 'Principal', secret: encryptSecret(apiKey), createdAt: now, updatedAt: now }], activeApiKeyId: 'key_ativa' }
+  }),
+  invalidateStoredIntegrations: vi.fn(),
+}))
+
+import { randomBytes } from 'crypto'
+import { encryptSecret } from '@/lib/crypto/secretBox'
+process.env.INTEGRATIONS_ENCRYPTION_KEY = randomBytes(32).toString('base64')
 vi.mock('@/lib/integrations/debug', () => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
@@ -125,7 +140,7 @@ describe('Gemini', () => {
 
     mocks.config.ai_gemini = {}
     mocks.fetch.mockClear()
-    await expect(listGeminiModels()).rejects.toThrow('Gemini sem API key')
+    await expect(listGeminiModels()).rejects.toThrow('Gemini sem chave de API ativa')
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })
@@ -152,7 +167,7 @@ describe('Anthropic', () => {
 
     mocks.config.ai_anthropic = {}
     mocks.fetch.mockClear()
-    await expect(listAnthropicModels()).rejects.toThrow('Anthropic sem API key')
+    await expect(listAnthropicModels()).rejects.toThrow('Anthropic sem chave de API ativa')
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })
@@ -187,7 +202,7 @@ describe('OpenAI', () => {
 
     mocks.config.ai_openai = {}
     mocks.fetch.mockClear()
-    await expect(listOpenaiModels()).rejects.toThrow('OpenAI sem API key')
+    await expect(listOpenaiModels()).rejects.toThrow('OpenAI sem chave de API ativa')
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })
@@ -211,7 +226,7 @@ describe('DeepSeek', () => {
 
     mocks.config.ai_deepseek = {}
     mocks.fetch.mockClear()
-    await expect(listDeepseekModels()).rejects.toThrow('DeepSeek sem API key')
+    await expect(listDeepseekModels()).rejects.toThrow('DeepSeek sem chave de API ativa')
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })
@@ -241,7 +256,7 @@ describe('JEV', () => {
 
     mocks.config.ai_jev = {}
     mocks.fetch.mockClear()
-    await expect(listJevModels()).rejects.toThrow('JEV sem API key')
+    await expect(listJevModels()).rejects.toThrow('JEV sem chave de API ativa')
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })

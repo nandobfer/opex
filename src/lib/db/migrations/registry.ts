@@ -18,6 +18,7 @@ import { normalizeServiceDates } from "./normalize-service-dates"
 import { removeUnderstandTaskFeature } from "./remove-understand-task-feature"
 import { startAgentMetricsTracking } from "./agent-metrics-tracking-start"
 import { ensureRoutineAgentIndexes } from "./ensure-routine-agent-indexes"
+import { migrateAiProviderApiKeys } from "./migrate-ai-provider-api-keys"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -35,4 +36,5 @@ registerMigrations(
     { name: "remove-understand-task-feature", run: () => removeUnderstandTaskFeature() },
     { name: "agent-metrics-tracking-start", run: () => startAgentMetricsTracking() },
     { name: "ensure-routine-agent-indexes", run: () => ensureRoutineAgentIndexes() },
+    { name: "migrate-ai-provider-api-keys", run: () => migrateAiProviderApiKeys() },
 )

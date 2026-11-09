@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), connect: vi.fn() }))
+const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), connect: vi.fn(), stored: vi.fn() }))
+vi.mock("@/lib/integrations/store", () => ({ loadStoredIntegration: mocks.stored, invalidateStoredIntegrations: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: mocks.aggregate } }))
 
@@ -107,5 +108,17 @@ describe("consumo JEV por recurso", () => {
     it("período sem registros devolve tabela vazia", async () => {
         mocks.aggregate.mockResolvedValue([{ summary: [], features: [] }])
         expect((await getJevUsage({})).features).toEqual([])
+    })
+})
+
+describe("consumo JEV por chave de API (OPE-155)", () => {
+    it("recorta pela chave em ai_usage_logs; sem chave identificada casa os registros históricos", async () => {
+        mocks.stored.mockResolvedValue({ apiKeys: [{ id: "key_aaaaaaaaaaaaaaaaaa" }], activeApiKeyId: "key_aaaaaaaaaaaaaaaaaa" })
+        mocks.aggregate.mockResolvedValue([{ summary: [], features: [] }])
+        await getJevUsage({ apiKey: "key_aaaaaaaaaaaaaaaaaa" })
+        expect(mocks.aggregate.mock.calls.at(-1)![0][0]).toEqual({ $match: { provider: "jev", apiKeyId: "key_aaaaaaaaaaaaaaaaaa" } })
+        await getJevUsage({ apiKey: "none" })
+        expect(mocks.aggregate.mock.calls.at(-1)![0][0]).toEqual({ $match: { provider: "jev", apiKeyId: null } })
+        expect(mocks.stored).toHaveBeenCalledWith("ai_jev")
     })
 })

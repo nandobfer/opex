@@ -40,7 +40,7 @@ vi.mock('ai', () => ({
 vi.mock('@/lib/ai/stream', () => ({
   prepareModel: async (request: unknown) => {
     mocks.prepareModel(request)
-    return { model: { id: 'modelo' }, takeStepCost: () => mocks.stepCosts.shift() ?? null, dispose: async () => {} }
+    return { model: { id: 'modelo' }, apiKeyId: 'key_x', takeStepCost: () => mocks.stepCosts.shift() ?? null, dispose: async () => {} }
   },
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
@@ -233,7 +233,7 @@ describe('runner do Agente Opex', () => {
       { type: 'text', text: 'Achei 2 tarefas.' },
     ])
     expect(sessions().docs[0]).toMatchObject({ status: 'idle', lastError: null })
-    expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-agent', subject: sessionId, totalTokens: 60, costUsd: null }))
+    expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-agent', subject: sessionId, totalTokens: 60, costUsd: null, apiKeyId: 'key_x' }))
     expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, { userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.', tools: ['Listar tarefas'] }, { kind: 'owner' })
     expect(isTurnActive(sessionId)).toBe(false)
   })

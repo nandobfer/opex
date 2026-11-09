@@ -30,4 +30,13 @@ describe("GET /api/ai/providers/[provider]/usage", () => {
         expect((await call("openai", "?from=2026-10-12T00:00:00Z&to=2026-10-10T00:00:00Z")).status).toBe(400)
         expect(mocks.usage).not.toHaveBeenCalled()
     })
+
+    it("aceita o filtro de chave (id, none ou removed) e recusa valor inválido (OPE-155)", async () => {
+        mocks.usage.mockResolvedValue({ rows: [], total: {} })
+        expect((await call("gemini", "?apiKey=key_aaaaaaaaaaaaaaaaaa")).status).toBe(200)
+        expect(mocks.usage).toHaveBeenLastCalledWith("gemini", { apiKey: "key_aaaaaaaaaaaaaaaaaa" })
+        expect((await call("gemini", "?apiKey=none")).status).toBe(200)
+        expect((await call("gemini", "?apiKey=chave-qualquer")).status).toBe(400)
+        expect(mocks.usage).toHaveBeenCalledTimes(2)
+    })
 })
