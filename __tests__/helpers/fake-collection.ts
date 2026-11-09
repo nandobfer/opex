@@ -1,6 +1,6 @@
 /**
  * Coleção Mongoose em memória para testes de serviço (só o que os serviços usam): filtros com
- * igualdade, caminho com ponto, `$or`/`$and` (no nível de cima do filtro), `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`; `deleteOne`/`deleteMany`/`updateMany`; cadeias
+ * igualdade, caminho com ponto, `$or`/`$and` (no nível de cima do filtro), `$in`, `$nin`, `$ne`, `$lt`, `$lte`, `$gte`; `$set`/`$inc`/`$pull`; `deleteOne`/`deleteMany`/`updateMany`; cadeias
  * `select/sort/skip/limit/lean`. Ids são strings de 24 hex (o `_id` vira objeto com `toString`).
  */
 
@@ -72,6 +72,10 @@ function apply(doc: Record<string, unknown>, update: Record<string, unknown>) {
     const ops = Object.keys(update).some((key) => key.startsWith('$')) ? update : { $set: update }
     for (const [path, value] of Object.entries((ops.$set ?? {}) as Record<string, unknown>)) set(doc, path, structuredCloneSafe(value))
     for (const [path, value] of Object.entries((ops.$inc ?? {}) as Record<string, number>)) set(doc, path, ((get(doc, path) as number) ?? 0) + value)
+    for (const [path, value] of Object.entries((ops.$pull ?? {}) as Record<string, unknown>)) {
+        const current = get(doc, path)
+        if (Array.isArray(current)) set(doc, path, current.filter((item) => !eq(item, value)))
+    }
     doc.updatedAt = new Date()
 }
 
