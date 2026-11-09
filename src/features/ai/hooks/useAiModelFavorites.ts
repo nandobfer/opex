@@ -13,7 +13,7 @@ import type { ModelFavoriteDto, ModelFavoritesDto } from "../model-favorites/sch
 const EMPTY: readonly ModelFavoriteDto[] = []
 
 type Toggle = ModelFavoriteDto & { favorite: boolean }
-type Context = { previous?: ModelFavoritesDto }
+const MUTATION_KEY = ["ai-model-favorites", "toggle"] as const
 
 export interface AiModelFavorites {
     favorites: readonly ModelFavoriteDto[]
@@ -53,7 +53,8 @@ export function useAiModelFavorites(): AiModelFavorites {
     })
     useAiModelFavoritesRealtime()
 
-    const mutation = useMutation<ModelFavoritesDto, unknown, Toggle, Context>({
+    const mutation = useMutation<ModelFavoritesDto, unknown, Toggle>({
+        mutationKey: MUTATION_KEY,
         mutationFn: async ({ provider, model, favorite }) => {
             const body = { provider, model }
             const response = favorite ? await api.post<ApiResponse<ModelFavoritesDto>>("/ai/model-favorites", body) : await api.delete<ApiResponse<ModelFavoritesDto>>("/ai/model-favorites", { data: body })
@@ -65,13 +66,16 @@ export function useAiModelFavorites(): AiModelFavorites {
             const list = (previous?.favorites ?? []).filter((item) => !sameFavorite(item, input))
             const next = input.favorite ? [...list, { provider: input.provider, model: input.model }] : list
             queryClient.setQueryData<ModelFavoritesDto>(AI_MODEL_FAVORITES_QUERY_KEY, { favorites: next })
-            return { previous }
         },
-        onError: (error, input, context) => {
-            queryClient.setQueryData(AI_MODEL_FAVORITES_QUERY_KEY, context?.previous)
+        onError: (error, input) => {
             toast.error(apiErrorMessage(error, input.favorite ? "Não foi possível favoritar o modelo" : "Não foi possível remover o modelo dos favoritos"))
         },
-        onSuccess: (data) => queryClient.setQueryData(AI_MODEL_FAVORITES_QUERY_KEY, data),
+        // Várias estrelas seguidas: nem a resposta (só traz o estado daquele momento) nem um snapshot
+        // antigo servem de verdade. Quando a última mutação em voo termina, o servidor decide: o que
+        // falhou volta ao estado real e o que foi gravado continua, sem apagar o clique seguinte.
+        onSettled: () => {
+            if (queryClient.isMutating({ mutationKey: MUTATION_KEY }) === 1) void queryClient.invalidateQueries({ queryKey: AI_MODEL_FAVORITES_QUERY_KEY })
+        },
     })
 
     const favorites = query.data?.favorites ?? EMPTY

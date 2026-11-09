@@ -19,13 +19,14 @@ const mocks = vi.hoisted(() => ({
   testImpl: (async () => ({ model: 'x', latency_ms: 10 })) as (input: unknown) => Promise<unknown>,
   providers: [] as { id: string; integrationId: string; name: string; configured: boolean; connected: boolean }[],
   applied: [] as unknown[],
+  setFavorite: vi.fn(),
   tested: [] as unknown[],
   resent: [] as unknown[],
   applyImpl: (async () => ({ applied: true, keySynced: true })) as (input: unknown) => Promise<unknown>,
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
+vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock([], mocks.setFavorite))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 vi.mock('@/features/ai/hooks/useAi', () => ({
   useAiProviderStatuses: () => ({ providers: mocks.providers, isLoading: false }),
@@ -92,6 +93,7 @@ beforeEach(() => {
     reindexing: false,
   }
   mocks.applied = []
+  mocks.setFavorite.mockReset()
   mocks.tested = []
   mocks.resent = []
   mocks.applyImpl = async () => ({ applied: true, keySynced: true })
@@ -99,6 +101,17 @@ beforeEach(() => {
 })
 
 describe('OpexAiCard', () => {
+  it('estrela de modelo favorito: o Redator grava no escopo do provedor e o embedding Local no escopo "local" (OPE-152)', () => {
+    render(<OpexAiCard />)
+    fireEvent.click(document.getElementById('redator-source-model')!)
+    fireEvent.click(screen.getByRole('button', { name: 'Favoritar modelo' }))
+    expect(mocks.setFavorite).toHaveBeenLastCalledWith({ provider: 'openai', model: 'openai-m1', favorite: true })
+    fireEvent.keyDown(screen.getByLabelText('Buscar modelo'), { key: 'Escape' })
+    fireEvent.click(document.getElementById('embedding-source-model')!)
+    fireEvent.click(screen.getAllByRole('button', { name: 'Favoritar modelo' })[0]!)
+    expect(mocks.setFavorite).toHaveBeenLastCalledWith({ provider: 'local', model: 'multilingual-e5-small', favorite: true })
+  })
+
   it('Redator só com os provedores do Opex (sem OpenCode), desconectado desabilitado; embedding com Local e Desligado', () => {
     render(<OpexAiCard />)
     const redator = screen.getByTestId('redator-source')

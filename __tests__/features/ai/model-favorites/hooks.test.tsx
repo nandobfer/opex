@@ -54,7 +54,9 @@ describe('useAiModelFavorites', () => {
     await waitFor(() => expect(result.current.isFavorite('opencode', 'anthropic/opus')).toBe(true))
     expect(mocks.post).toHaveBeenCalledWith('/ai/model-favorites', { provider: 'opencode', model: 'anthropic/opus' })
     const saved = { favorites: [...LIST.favorites, { provider: 'opencode', model: 'anthropic/opus' }] }
+    mocks.get.mockResolvedValue({ data: { success: true, data: saved } })
     await act(async () => resolve({ data: { success: true, data: saved } }))
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2))
     expect(result.current.favorites).toEqual(saved.favorites)
   })
 
@@ -69,8 +71,36 @@ describe('useAiModelFavorites', () => {
     await waitFor(() => expect(result.current.isFavorite('gemini', 'flash')).toBe(false))
     expect(mocks.del).toHaveBeenCalledWith('/ai/model-favorites', { data: { provider: 'gemini', model: 'flash' } })
     await act(async () => reject(new Error('falhou')))
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2))
     await waitFor(() => expect(result.current.isFavorite('gemini', 'flash')).toBe(true))
     expect(mocks.toastError).toHaveBeenCalledWith('Não foi possível remover o modelo dos favoritos')
+  })
+
+  it('duas estrelas em voo: a resposta parcial e o rollback não apagam o clique seguinte (regressão F1)', async () => {
+    const { wrapper } = setup()
+    const posts: { resolve: (value: unknown) => void; reject: (error: unknown) => void }[] = []
+    mocks.post.mockImplementation(() => new Promise((resolve, reject) => posts.push({ resolve, reject })))
+    const { result } = renderHook(() => useAiModelFavorites(), { wrapper })
+    await waitFor(() => expect(result.current.favorites).toHaveLength(1))
+
+    act(() => result.current.setFavorite({ provider: 'opencode', model: 'A', favorite: true }))
+    await waitFor(() => expect(result.current.isFavorite('opencode', 'A')).toBe(true))
+    act(() => result.current.setFavorite({ provider: 'opencode', model: 'B', favorite: true }))
+    await waitFor(() => expect(result.current.isFavorite('opencode', 'B')).toBe(true))
+    await waitFor(() => expect(posts).toHaveLength(2))
+
+    // A falha: o favorito de B (já visível, talvez já gravado) não pode sumir, e ainda não há releitura.
+    await act(async () => posts[0]!.reject(new Error('falhou')))
+    expect(result.current.isFavorite('opencode', 'B')).toBe(true)
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    expect(mocks.toastError).toHaveBeenCalledWith('Não foi possível favoritar o modelo')
+
+    // Só quando a última termina o servidor decide: A não foi gravado, B sim.
+    mocks.get.mockResolvedValue({ data: { success: true, data: { favorites: [...LIST.favorites, { provider: 'opencode', model: 'B' }] } } })
+    await act(async () => posts[1]!.resolve({ data: { success: true, data: { favorites: [...LIST.favorites, { provider: 'opencode', model: 'B' }] } } }))
+    await waitFor(() => expect(mocks.get).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(result.current.isFavorite('opencode', 'A')).toBe(false))
+    expect(result.current.isFavorite('opencode', 'B')).toBe(true)
   })
 
   it('o evento do Pusher invalida o cache dos favoritos e a assinatura sai na desmontagem', async () => {

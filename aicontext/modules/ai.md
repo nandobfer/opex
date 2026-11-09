@@ -568,7 +568,10 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
     `ai-model-favorites-updated` (`{ provider, model, action: "added" | "removed" }`) em `private-app`.
 - **Cliente**: `useAiModelFavorites` (`src/features/ai/hooks/useAiModelFavorites.ts`) lê a query
   `["ai-model-favorites"]`, compartilhada por todos os pickers. Favoritar num lugar reflete nos outros.
-  - A mudança é **otimista** e, se falhar, reverte com um toast em pt-BR. Não há toast de sucesso.
+  - A mudança é **otimista**; se falhar, mostra um toast em pt-BR (não há toast de sucesso). Nem a
+    resposta do servidor nem um snapshot antigo são gravados no cache: quando a **última** mutação em
+    voo termina (`mutationKey` + `isMutating`), a query é invalidada e o servidor decide o estado. Assim,
+    duas estrelas seguidas não se sobrescrevem e a que falhou volta sozinha.
   - O evento do Pusher invalida o cache.
   - A ligação com o `SearchPicker` é feita por `useModelFavoritePicker(provider)`, em
     `model-picker/useModelFavoritePicker.tsx`.
