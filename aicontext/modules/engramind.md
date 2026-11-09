@@ -297,9 +297,19 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `agentes/desenvolvedor/global` e o canal da central (`memoryUniverseOf`, `src/features/ai/memory-universe.ts`).
   Rótulos no `OpexEngramindProvider`: siglas das centrais (`centralChannelLabels`) e nomes dos clientes nos
   canais `agentes/{opex|maddox}/clientes/<id>` (`clientChannelLabels`, `useOrcamentoClients`).
-- **Altura (OPE-148, lib ≥ 0.7.0):** a rede de `/engramind` (`EngramindNetwork fill`, inclusive o
-  `NetworkSkeleton` do `PageSkeleton`) e os universos dos cards (`AgentUniverse fill`) **preenchem a altura
-  que sobra da página**: a lib mede a sobra abaixo do conteúdo da área que rola (`<main>` do `AppShell`) e
+- **Altura da rede de `/engramind` (OPE-151, lib ≥ 0.9.0):** `EngramindNetwork fill="viewport"`. O bloco da
+  rede (trilha, filtros e canvas) **ocupa a altura visível da área que rola**: canvas = `<main>.clientHeight`
+  − padding de cima e de baixo do `<main>` (a folga em relação a `100dvh`, `visibleScrollHeight`) − a altura da
+  trilha e dos filtros acima do canvas, medida da âncora `[data-network-fill-root]` (raiz do `EngramindNetwork`)
+  por `offsetTop` (sem o efeito dos `transform` das animações), conta pura `viewportFillHeight`. O conteúdo
+  abaixo (card "O que é o Engramind") não encolhe o canvas: fica logo depois, ao rolar; o título "Engramind"
+  sai da tela ao rolar até a rede. Mínimo `NETWORK_FILL_MIN_HEIGHT` (320 px) em janelas baixas. Recalcula com a
+  janela, a área e a âncora (filtros que quebram linha); a visão reenquadra só na primeira medida. O
+  `PageSkeleton` marca o bloco trilha + barra + `NetworkSkeleton fill="viewport"` com `NETWORK_FILL_ROOT_PROPS`
+  (o skeleton do card fica fora), para ter a mesma altura sem salto. Antes (OPE-148) a rede usava `fill`, que só
+  preenchia a sobra abaixo do conteúdo e deixava o canvas baixo.
+- **Altura dos universos (OPE-148, lib ≥ 0.7.0):** os universos dos cards (`AgentUniverse fill`) **preenchem a
+  altura que sobra da página**: a lib mede a sobra abaixo do conteúdo da área que rola (`<main>` do `AppShell`) e
   ajusta o canvas antes da pintura (`useFillAvailableHeight`, conta pura `nextFillHeight`), de novo a cada
   mudança de tamanho da área ou do conteúdo (avisos que aparecem, janela redimensionada). Quando a página já
   transborda, o canvas fica no mínimo `NETWORK_FILL_MIN_HEIGHT` (320 px). A visão reenquadra só na primeira
@@ -642,8 +652,8 @@ As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela 
 - **Card limitado ao quadro** (vale em qualquer tela, `memoryCardSize`): largura e altura cabem no quadro
   menos 8 px de cada lado; texto longo rola dentro do card.
 - **Link:** no toque, o modo da assinatura aparece por 1,5 s (`LINK_TOUCH_LABEL_MS`).
-- **Quadro e botões:** a altura preenche o que sobra da página (modo `fill`, ver "Altura"), com o mínimo de
-  320 px quando o cabeçalho empurra o conteúdo; Centralizar, Nova memória e o menu "⋯" do canal
+- **Quadro e botões:** trilha, filtros e quadro ocupam a altura visível da tela (modo `fill="viewport"`, ver
+  "Altura da rede de `/engramind`"), com o mínimo de 320 px em janelas baixas; Centralizar, Nova memória e o menu "⋯" do canal
   com área de toque de 40 px; a trilha mostra só Voltar e o nome atual. O skeleton acompanha (card
   recolhido no canto).
 

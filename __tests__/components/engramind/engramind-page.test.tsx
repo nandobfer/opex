@@ -15,7 +15,7 @@ vi.mock('@/features/engramind/components/OpexEngramindProvider', () => ({ OpexEn
 const holder = vi.hoisted(() => ({ About: null as null | ((props: { onConfigure: () => void }) => React.ReactNode) }))
 vi.mock('@engramind/client/react', async (importOriginal) => ({
   ...(await importOriginal<object>()),
-  EngramindNetwork: ({ onConfigure, fill }: { onConfigure: () => void; fill?: boolean }) => {
+  EngramindNetwork: ({ onConfigure, fill }: { onConfigure: () => void; fill?: boolean | 'viewport' }) => {
     const About = holder.About!
     return (
       <div data-testid="engramind-network" data-fill={String(fill)}>
@@ -52,16 +52,21 @@ describe('EngramindPage', () => {
     expect(await screen.findByText('Sobre o Engramind')).toBeTruthy()
   })
 
-  // Critério aprovado OPE-148: a rede de /engramind (e o skeleton dela) ocupa toda a altura disponível.
-  it('a rede preenche a altura disponível (fill)', () => {
+  // Critério aprovado OPE-151 (antes OPE-148, `fill`): trilha, filtros e canvas ocupam a altura visível da tela,
+  // e não só a sobra que o card "O que é" deixa.
+  it('a rede ocupa a altura visível da tela (fill="viewport")', () => {
     render(<EngramindPage />)
-    expect(screen.getByTestId('engramind-network').getAttribute('data-fill')).toBe('true')
+    expect(screen.getByTestId('engramind-network').getAttribute('data-fill')).toBe('viewport')
   })
 
-  it('o skeleton da página também preenche a altura disponível (fill)', () => {
+  it('o skeleton acompanha: barras e área na âncora do viewport, o card "O que é" fora dela', () => {
     connection.isLoading = true
     render(<EngramindPage />)
-    expect(screen.getByTestId('engramind-page-skeleton')).toBeTruthy()
-    expect(screen.getByTestId('network-skeleton').getAttribute('data-fill')).toBe('true')
+    const root = screen.getByTestId('network-fill-root-skeleton')
+    expect(root.hasAttribute('data-network-fill-root')).toBe(true)
+    const skeleton = screen.getByTestId('network-skeleton')
+    expect(skeleton.getAttribute('data-fill')).toBe('viewport')
+    expect(skeleton.closest('[data-network-fill-root]')).toBe(root)
+    expect(screen.getByTestId('about-card-skeleton').closest('[data-network-fill-root]')).toBeNull()
   })
 })
