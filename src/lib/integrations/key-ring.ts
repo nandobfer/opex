@@ -3,8 +3,8 @@ import { INTEGRATIONS, type IntegrationId } from "./catalog"
 
 /**
  * Chaveiro de chaves de API nomeadas (OPE-155): várias chaves por integração, uma ativa. Hoje vale
- * para os provedores de IA por API key (Gemini, Anthropic, OpenAI, DeepSeek e JEV); o OpenCode usa a
- * senha do `opencode serve` e fica fora.
+ * para os provedores de IA por API key (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e JEV); o
+ * OpenCode no host usa a senha do `opencode serve` e fica fora.
  */
 
 /** Integrações com um campo de chaveiro (`keyRing`). */

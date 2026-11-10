@@ -24,10 +24,13 @@ import {
  * caminho de gravação da API key desses provedores (o PATCH genérico de integrações a recusa).
  *
  * Quando a chave **efetiva** muda (ativar, substituir o segredo da ativa, primeira chave, remover a
- * ativa), limpa os caches, testa o provedor de novo e reenvia a chave ao Engramind depois da resposta.
+ * ativa), limpa os caches (inclusive o catálogo do Go), testa o provedor de novo e reenvia a chave ao
+ * Engramind depois da resposta (só os provedores que o Engramind usa).
  */
 
 const log = loggerFor({ module: "ai", feature: "api-keys" })
+/** Provedores que não alimentam o Engramind: o JEV não gera texto e o Go não é fonte do Redator nem do embedding. */
+const NOT_ENGRAMIND_SOURCES: readonly AiApiKeyProviderId[] = ["jev", "opencode-go"]
 export const AI_API_KEY_AUDIT_ENTITY = "ChaveApiIA"
 
 interface KeyRingDoc {
@@ -105,13 +108,13 @@ async function afterEffectiveKeyChange(provider: AiApiKeyProviderId, hasActive: 
     const [{ clearAiCatalogCache }, { resetAiConnectionProbes }] = await Promise.all([import("@/lib/ai/catalog"), import("@/lib/ai/connection")])
     clearAiCatalogCache()
     resetAiConnectionProbes()
+    if (provider === "opencode-go") (await import("@/lib/ai/opencode-go")).clearOpencodeGoCatalogCache()
     runAfterResponse("ai-api-key-effects", async () => {
         if (hasActive) {
             const { runIntegrationTest } = await import("@/features/integrations/services/integration-test-runner")
             await runIntegrationTest(integrationId, { source: "scheduler" }).catch((error: unknown) => log.warn({ err: error, integrationId }, "[ai] falha ao testar o provedor com a nova chave"))
         }
-        // O JEV não alimenta o Engramind (a "IA do Opex" usa só provedores de texto e embedding).
-        if (provider !== "jev") {
+        if (!NOT_ENGRAMIND_SOURCES.includes(provider)) {
             const { syncEngramindProviderKey } = await import("@/features/engramind/server/ai-source")
             await syncEngramindProviderKey(integrationId)
         }

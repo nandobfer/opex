@@ -21,8 +21,20 @@ const key = (id: string, value: string) => ({ id, name: id, secret: encryptSecre
 const stored = (overrides: Partial<StoredIntegration>): StoredIntegration => ({ integrationId: 'ai_gemini', environment: 'externo', debugMode: false, publicValues: {}, secretValues: {}, ...overrides })
 
 describe('chaveiro das integrações de IA', () => {
-  it('vale para Gemini, Anthropic, OpenAI, DeepSeek e JEV; nunca para o OpenCode', () => {
-    expect([...KEY_RING_INTEGRATION_IDS].sort()).toEqual(['ai_anthropic', 'ai_deepseek', 'ai_gemini', 'ai_jev', 'ai_openai'])
+  it('vale para Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go (OPE-156) e JEV; nunca para o OpenCode no host', () => {
+    expect([...KEY_RING_INTEGRATION_IDS].sort()).toEqual(['ai_anthropic', 'ai_deepseek', 'ai_gemini', 'ai_jev', 'ai_openai', 'ai_opencode_go'])
+    expect(KEY_RING_INTEGRATION_IDS).not.toContain('ai_opencode')
+  })
+
+  it('OpenCode Go (OPE-156): a chave em uso vira a API key; só a chave legada não configura o provedor', () => {
+    const def = getIntegrationDef('ai_opencode_go')
+    const keys = [key('key_a', 'oc_sk_a'), key('key_b', 'oc_sk_b')]
+    const resolved = buildResolvedIntegration<'ai_opencode_go'>(def, stored({ integrationId: 'ai_opencode_go', apiKeys: keys, activeApiKeyId: 'key_b' }))
+    expect(resolved.values.apiKey).toBe('oc_sk_b')
+    expect(isIntegrationConfigured(def, resolved)).toBe(true)
+    const legacyOnly = buildResolvedIntegration<'ai_opencode_go'>(def, stored({ integrationId: 'ai_opencode_go', secretValues: { apiKey: encryptSecret('oc_sk_legado') }, apiKeys: [], activeApiKeyId: null }))
+    expect(legacyOnly.values.apiKey).toBeUndefined()
+    expect(isIntegrationConfigured(def, legacyOnly)).toBe(false)
   })
 
   it('a chave ativa vira a API key; trocar a ativa muda o version (cache do catálogo)', () => {

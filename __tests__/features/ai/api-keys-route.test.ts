@@ -33,6 +33,15 @@ describe('rotas do chaveiro dos provedores de IA (OPE-155)', () => {
     expect(mocks.create).toHaveBeenCalledWith('gemini', { name: 'Pessoal', secret: 'gm' }, 'local')
   })
 
+  it('OpenCode Go (OPE-156) também tem chaveiro: lista e cria pelas mesmas rotas', async () => {
+    const list = await GET(new NextRequest(url('opencode-go/keys')), { params: Promise.resolve({ provider: 'opencode-go' }) })
+    expect(list.status).toBe(200)
+    expect(mocks.list).toHaveBeenCalledWith('opencode-go')
+    const created = await POST(json('opencode-go/keys', 'POST', { name: 'Assinatura', secret: 'oc_sk_x' }), { params: Promise.resolve({ provider: 'opencode-go' }) })
+    expect(created.status).toBe(200)
+    expect(mocks.create).toHaveBeenCalledWith('opencode-go', { name: 'Assinatura', secret: 'oc_sk_x' }, 'local')
+  })
+
   it('OpenCode e provedor desconhecido respondem 404; corpo inválido responde 400 sem gravar', async () => {
     expect((await GET(new NextRequest(url('opencode/keys')), { params: Promise.resolve({ provider: 'opencode' }) })).status).toBe(404)
     expect((await POST(json('x/keys', 'POST', { name: 'a', secret: 'b' }), { params: Promise.resolve({ provider: 'x' }) })).status).toBe(404)

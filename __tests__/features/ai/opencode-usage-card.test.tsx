@@ -11,7 +11,9 @@ vi.mock("@/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_
 vi.mock("@/features/ai/hooks/useProviderUsage", () => ({ useProviderUsage: mocks.usage }))
 vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
-    PresetDateRangeFilter: ({ onChange }: { onChange: (range: { startDate: string; endDate: string }) => void }) => <button type="button" onClick={() => onChange({ startDate: "2026-10-10", endDate: "2026-10-11" })}>Selecionar período personalizado</button>,
+    // Período fixo que NUNCA coincide com o padrão "Último mês" (hoje−1 mês … hoje): se coincidisse,
+    // useUrlFilters omitiria o parâmetro igual ao padrão e o teste dependeria do dia em que roda.
+    PresetDateRangeFilter: ({ onChange }: { onChange: (range: { startDate: string; endDate: string }) => void }) => <button type="button" onClick={() => onChange({ startDate: "2026-10-05", endDate: "2026-10-06" })}>Selecionar período personalizado</button>,
 }))
 
 import { OpencodeUsageCard } from "@/features/ai/components/OpencodeUsageCard"
@@ -53,8 +55,8 @@ describe("Consumo do OpenCode", () => {
     it("troca o período na URL e refaz a consulta", () => {
         render(<OpencodeUsageCard />)
         fireEvent.click(screen.getByRole("button", { name: "Selecionar período personalizado" }))
-        expect(new URLSearchParams(window.location.search).get("usageFrom")).toBe("2026-10-10")
-        expect(mocks.usage).toHaveBeenLastCalledWith("opencode", opencodeUsageRangeQuery("2026-10-10", "2026-10-11"))
+        expect(new URLSearchParams(window.location.search).get("usageFrom")).toBe("2026-10-05")
+        expect(mocks.usage).toHaveBeenLastCalledWith("opencode", opencodeUsageRangeQuery("2026-10-05", "2026-10-06"))
         fireEvent.click(screen.getByRole("button", { name: "Atualizar" }))
         expect(mocks.refetch).toHaveBeenCalledOnce()
     })

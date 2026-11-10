@@ -70,7 +70,7 @@ export const testDeepseek = apiKeyModelsTester("deepseek", "da plataforma DeepSe
 /** OpenCode Go: a lista de modelos é pública, então o teste também confere a chave (sem gerar nada). */
 export const testOpencodeGo: IntegrationTester = async ({ emit, signal }) => {
     const resolved = await getIntegration("ai_opencode_go")
-    if (!resolved.values.apiKey) fail("Sem chave: cadastre a chave oc_sk_… do OpenCode Go em Campos privados")
+    if (!resolved.values.apiKey) fail("Sem chave de API ativa: cadastre e ative uma chave oc_sk_… do OpenCode Go em Chaves de API")
     clearAiCatalogCache()
     emit("step", "GET /openai/v1/models")
     const models = await listAiModels("opencode-go", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)

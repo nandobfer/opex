@@ -35,7 +35,7 @@ vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ pro
 vi.mock('@/lib/ai/opencode-go', () => ({
   createOpencodeGoModel: async (id: string, options: unknown) => {
     mocks.goModel(id, options)
-    return { model: { kind: 'opencode-go', id }, meter: { take: () => mocks.goCosts.shift() ?? null } }
+    return { model: { kind: 'opencode-go', id }, meter: { take: () => mocks.goCosts.shift() ?? null }, apiKeyId: 'key_go' }
   },
 }))
 
@@ -131,6 +131,8 @@ describe('streamAi', () => {
     expect(events.at(-1)).toMatchObject({ usage: { costUsd: 0.00002 } })
     expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({
       provider: 'opencode-go', model: 'deepseek-v4.1-flash', origin: 'task-summary', subject: 't1', costUsd: 0.00002,
+      // OPE-156: o consumo do Go é atribuído à chave do chaveiro usada na preparação (antes, null fixo).
+      apiKeyId: 'key_go',
       billing: { source: 'go', allowanceUsd: 0.00002, listCostUsd: 0.00003 },
     }))
   })

@@ -710,7 +710,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "Chave do OpenCode Go", description: "Chave oc_sk_… da assinatura Go (opencode.ai › Go). DeepSeek V4.1 Flash e V4 Pro exigem a região Global em Settings › Privacy", required: true }],
+        secretFields: [{ key: "apiKey", label: "Chave do OpenCode Go", description: "Chave oc_sk_… da assinatura Go (opencode.ai › Go); gerenciada na lista Chaves de API (uma ativa). DeepSeek V4.1 Flash e V4 Pro exigem a região Global em Settings › Privacy", required: true, keyRing: true }],
     },
     {
         id: "ai_jev",

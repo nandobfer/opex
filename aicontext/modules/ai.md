@@ -13,7 +13,7 @@ e opções na própria aba da página "Inteligência Artificial".
 | Anthropic | `ai_anthropic` | `@ai-sdk/anthropic` | Chaves de API do Claude Console (chaveiro, uma em uso) |
 | OpenAI | `ai_openai` | `@ai-sdk/openai` (API Responses) | Chaves de API da plataforma OpenAI (chaveiro, uma em uso) |
 | DeepSeek | `ai_deepseek` | `@ai-sdk/deepseek` | Chaves de API da plataforma DeepSeek (chaveiro, uma em uso) |
-| OpenCode Go | `ai_opencode_go` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, conforme o modelo) | Chave `oc_sk_…` da assinatura Go (segredo; uma só, fora do chaveiro); gateway fixo `https://opencode.ai/inference/go` |
+| OpenCode Go | `ai_opencode_go` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, conforme o modelo) | Chaves `oc_sk_…` da assinatura Go (chaveiro, uma em uso; OPE-156); gateway fixo `https://opencode.ai/inference/go` |
 | JEV | `ai_jev` | — (HTTP TypeSafe) | Chaves de API da TypeSafe (chaveiro, uma em uso); URL fixa `https://api.typesafe.ai` |
 
 - Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
@@ -91,8 +91,9 @@ e opções na própria aba da página "Inteligência Artificial".
 
 ## Chaves de API (chaveiro dos provedores, OPE-155)
 
-Gemini, Anthropic, OpenAI, DeepSeek e JEV têm **várias chaves de API nomeadas** e **uma em uso** por
-provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma chave de API.
+Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go (desde a OPE-156) e JEV têm **várias chaves de API
+nomeadas** e **uma em uso** por provedor. O OpenCode no host (`ai_opencode`) fica fora: ele usa a senha
+do `opencode serve`, não uma chave de API.
 
 - **Armazenamento**: no próprio documento da integração (`integration_configs`), em `apiKeys`
   (`{ id: "key_<hex>", name, secret (cifrado, secretBox), createdAt, updatedAt, createdBy }`) e
@@ -101,7 +102,7 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   `buildResolvedIntegration` resolve `values.apiKey` pela **chave em uso** (`activeApiKeyOf`), sem ler
   `secretValues`. Sem chave em uso, o segredo não existe e o provedor fica **"Não configurado"**, com
   as features que dependem dele indisponíveis. Trocar a chave em uso muda o `version` e derruba o cache
-  do catálogo. Os clientes (`gemini.ts`, `anthropic.ts`, `openai.ts`, `deepseek.ts` e `jev.ts`) leem a
+  do catálogo. Os clientes (`gemini.ts`, `anthropic.ts`, `openai.ts`, `deepseek.ts`, `opencode-go.ts` e `jev.ts`) leem a
   chave por `requireActiveAiProviderKey` (`src/lib/ai/api-keys.ts`), que devolve também o `id` dela.
   Sem chave: "X sem chave de API ativa: cadastre e ative uma chave em Integrações › …".
 - **Um só caminho de gravação**: as rotas `/api/ai/providers/[provider]/keys`. O PATCH genérico de
@@ -123,10 +124,12 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   `ChaveApiIA` registra nome, chave em uso e "(substituído)", nunca o valor.
 - **Efeitos quando a chave em uso muda** (ativar, substituir o segredo da que está em uso, primeira
   chave, remover a que está em uso):
-  - limpa o cache do catálogo e os testes de conexão em memória;
+  - limpa o cache do catálogo e os testes de conexão em memória (no OpenCode Go, também o cache do
+    catálogo próprio do Go, `clearOpencodeGoCatalogCache`);
   - depois da resposta, testa o provedor de novo (`runIntegrationTest`; só quando ainda há chave em
     uso);
-  - depois da resposta, reenvia ao Engramind (`syncEngramindProviderKey`; não vale para o JEV).
+  - depois da resposta, reenvia ao Engramind (`syncEngramindProviderKey`). Não vale para o JEV nem
+    para o OpenCode Go (`NOT_ENGRAMIND_SOURCES`): nenhum dos dois é fonte do Redator ou do embedding.
 
   Todo ato publica `ai-provider-keys-updated` (`{ provider }`) em `private-app`. O hook
   `useAiApiKeysRealtime` relê a lista, o status dos provedores, os modelos, o consumo e o detalhe da
@@ -141,7 +144,13 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   "**Chave principal**", já em uso (a caixa cifrada é reaproveitada). A migração **só copia**: o
   `secretValues.apiKey` legado fica intacto e é ignorado pelo código novo, porque as prévias usam o
   mesmo banco da produção e apagá-lo derrubaria a produção antiga. A remoção do legado fica para uma
-  limpeza futura. É idempotente: só altera o documento que ainda não tem `apiKeys`.
+  limpeza futura. É idempotente: só altera o documento que ainda não tem `apiKeys`. A lista de
+  integrações vem do catálogo (`KEY_RING_INTEGRATION_IDS`), então o OpenCode Go entrou sozinho na
+  OPE-156: no primeiro boot depois do deploy, a chave única dele vira "Chave principal" em uso. As
+  migrações rodam no `dbConnect()` antes de qualquer leitura de integração, então o Go não passa por
+  uma janela "Não configurado" (não há leitura da chave legada como reserva: removida a única chave, o
+  provedor fica sem chave). Se a chave do Go for trocada na versão antiga depois que uma prévia já
+  rodou a migração, o chaveiro fica com a cópia anterior: use "Substituir segredo".
 - **Consumo por chave**: a geração atribui o consumo à chave usada na **preparação** do modelo
   (`PreparedModel.apiKeyId`, `null` no OpenCode). Se a chave em uso trocar no meio de uma execução, o
   consumo continua indo para a chave certa. O valor é gravado em `apiKeyId` de `ai_consumption_logs`
@@ -206,8 +215,12 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   rotineiros (aceita as ferramentas do app); **não** é oferecido como sessão de agente
   (`supportsAgent: false`) nem nas features exclusivas do OpenCode de sessão.
 - **Integração** `ai_opencode_go` (filha de `ai`, `/integracoes/ia/opencode-go`): só o segredo
-  `apiKey` (cifrado, sem `env`); abas Configuração, Modelos e Consumo. Sem chave: `AiProviderError`
-  "OpenCode Go sem chave: configure…" antes de qualquer chamada.
+  `apiKey` (sem `env`), gerenciado pelo chaveiro desde a OPE-156 (card **Chaves de API**, uma em uso;
+  ver "Chaves de API"); abas Configuração, Modelos e Consumo. Listagem de modelos, conferência da chave
+  e geração usam a **chave em uso** (`requireActiveAiProviderKey`). Sem ela: `AiProviderError`
+  "OpenCode Go sem chave de API ativa: cadastre e ative uma chave em Integrações › …" antes de
+  qualquer chamada. `createOpencodeGoModel` devolve o `apiKeyId` da chave usada, e `prepareModel` o
+  repassa: o consumo do Go é atribuído à chave.
 - **Endpoints** (`src/lib/ai/endpoints.ts`): base `https://opencode.ai/inference/go`; Chat Completions
   e Responses em `/openai/v1`, Messages em `/anthropic/v1`, Generate Content em `/google/v1beta`.
   Toda requisição leva `Authorization: Bearer <chave>`, `x-opencode-session` (obrigatório: sem ele o Go
@@ -338,10 +351,9 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   quatro provedores diretos; OpenCode e JEV têm rotas próprias). O painel informa desde quando há
   medição do provedor. Em `/integracoes/ia/opencode-go` o card é o mesmo, mas **com a coluna Custo
   (USD)**: o Go informa o custo de cada resposta (cota + Extra Usage, ver "OpenCode Go"); a rota
-  também atende `opencode-go`. O Go tem uma única chave da assinatura, então o painel dele não tem o
-  filtro de chave.
-- **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek e
-  JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
+  também atende `opencode-go`. Desde a OPE-156 o painel do Go também tem o filtro de chave.
+- **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek,
+  OpenCode Go (OPE-156) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
   recebe o parâmetro `apiKey`. Opções:
   - **Todas as chaves** (padrão, não vai na query);
   - cada chave atual (a em uso marcada "(em uso)");
@@ -352,8 +364,8 @@ provedor. O OpenCode fica fora: ele usa a senha do `opencode serve`, não uma ch
   O recorte (`usageKeyMatch`, `src/features/ai/usage-key-filter.ts`) vale para os cards (JEV), a
   tabela por recurso, a linha **Total** e o aviso de totais parciais. A cobertura ("Medição iniciada
   em") continua sendo a do provedor. Um id que não existe mais no provedor (ou valor inválido) na URL
-  volta para "Todas". Os painéis do OpenCode (de sessão) e do OpenCode Go, que não usam chaveiro, não
-  têm o filtro.
+  volta para "Todas". O painel do OpenCode (de sessão), que não usa chaveiro, não tem o filtro. No Go,
+  o consumo anterior à OPE-156 aparece como "Sem chave identificada".
 - **Formatação do consumo**: os tokens das tabelas de consumo são abreviados com sufixo (`k`, `M`,
   `B`, `T`), até 3 casas decimais e sem zeros à direita, em pt-BR — `1000` → `1k`, `1234` →
   `1,234k`, `2_500_000` → `2,5M`; abaixo de mil o número aparece inteiro. O número completo fica no
@@ -726,7 +738,7 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`; `?kind=embedding` só Gemini/OpenAI, senão 422); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais e o filtro `apiKey` (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna) no mesmo contrato dos provedores diretos: `rows` por origem (`key`), `total`, `coverageFrom` e as contagens de métricas ausentes; métricas ausentes ficam `null` |
-| `GET/POST /api/ai/providers/[provider]/keys` | Chaves de API do provedor (Gemini, Anthropic, OpenAI, DeepSeek e JEV; outro → 404), sem segredo / nova chave `{ name, secret }` (a primeira já entra em uso). Devolve a lista |
+| `GET/POST /api/ai/providers/[provider]/keys` | Chaves de API do provedor (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e JEV; outro → 404), sem segredo / nova chave `{ name, secret }` (a primeira já entra em uso). Devolve a lista |
 | `PATCH/DELETE /api/ai/providers/[provider]/keys/[keyId]` | Renomeia `{ name }` e/ou substitui o segredo `{ secret }` / remove (a em uso só quando é a única: senão 409 `AI_API_KEY_ACTIVE`) |
 | `POST /api/ai/providers/[provider]/keys/[keyId]/activate` | Passa a usar esta chave no provedor |
 | `GET /api/ai/providers/[provider]/usage` | Consumo de Gemini, Anthropic, OpenAI ou DeepSeek por recurso (`from`/`to` ISO opcionais e `apiKey` = id, `none`, `removed` ou `all`; sessão interna) com `rows`, `total`, `coverageFrom` e as contagens `missingInputRequests`, `missingOutputRequests`, `missingTokenRequests` e `missingCostRequests`; outro provedor → 404; intervalo inválido → 400 |

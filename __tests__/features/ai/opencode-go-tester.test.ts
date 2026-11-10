@@ -37,7 +37,7 @@ describe('testOpencodeGo', () => {
 
   it('sem chave: falha sem chamar o Go', async () => {
     mocks.values = {}
-    await expect(run()).rejects.toThrow('Sem chave: cadastre a chave oc_sk_… do OpenCode Go em Campos privados')
+    await expect(run()).rejects.toThrow('Sem chave de API ativa: cadastre e ative uma chave oc_sk_… do OpenCode Go em Chaves de API')
     expect(mocks.models).not.toHaveBeenCalled()
   })
 

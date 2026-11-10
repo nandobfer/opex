@@ -6,8 +6,8 @@ import type { AiProviderId } from "@/lib/ai/providers"
  * API key tem várias chaves e **uma ativa**; o segredo nunca volta ao navegador (o DTO não o carrega).
  */
 
-/** Provedores com chaveiro: todos os de API key; o OpenCode usa a senha do `opencode serve` e fica fora. */
-export const AI_API_KEY_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "jev"] as const satisfies readonly AiProviderId[]
+/** Provedores com chaveiro: todos os de API key (OpenCode Go desde a OPE-156); o OpenCode no host usa a senha do `opencode serve` e fica fora. */
+export const AI_API_KEY_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "jev"] as const satisfies readonly AiProviderId[]
 export type AiApiKeyProviderId = (typeof AI_API_KEY_PROVIDER_IDS)[number]
 
 export function isAiApiKeyProviderId(value: string): value is AiApiKeyProviderId {
