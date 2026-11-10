@@ -111,11 +111,10 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
     }
     if (request.provider === "opencode-go") {
         const { createOpencodeGoModel } = await import("./opencode-go")
-        const { model, meter } = await createOpencodeGoModel(request.model, { session: request.session, signal: request.signal })
+        const { model, meter, apiKeyId } = await createOpencodeGoModel(request.model, { session: request.session, signal: request.signal })
         return {
             model,
-            // O Go usa uma única chave da assinatura: o consumo não é atribuído a uma chave do chaveiro.
-            apiKeyId: null,
+            apiKeyId,
             // O esforço vem da lista do próprio modelo (inclui `none` e `max`); a AI SDK traduz para cada API.
             reasoning: request.variant && isOpencodeGoReasoningLevel(request.variant) ? request.variant : undefined,
             takeStepCost: () => meter.take(),

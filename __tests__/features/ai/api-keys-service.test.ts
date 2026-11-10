@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
   test: vi.fn(async (...args: unknown[]) => ({ ok: true, args })),
   clearCatalog: vi.fn(),
   resetProbes: vi.fn(),
+  clearGoCatalog: vi.fn(),
   invalidate: vi.fn(),
 }))
 
@@ -59,6 +60,7 @@ vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task
 vi.mock('@/lib/integrations/store', () => ({ invalidateStoredIntegrations: mocks.invalidate, loadStoredIntegration: vi.fn() }))
 vi.mock('@/lib/ai/catalog', () => ({ clearAiCatalogCache: mocks.clearCatalog }))
 vi.mock('@/lib/ai/connection', () => ({ resetAiConnectionProbes: mocks.resetProbes }))
+vi.mock('@/lib/ai/opencode-go', () => ({ clearOpencodeGoCatalogCache: mocks.clearGoCatalog }))
 vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.test }))
 vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.sync }))
 
@@ -123,6 +125,33 @@ describe('chaveiro dos provedores de IA', () => {
     expect(mocks.sync).not.toHaveBeenCalled()
   })
 
+  it('OpenCode Go (OPE-156): várias chaves, troca da em uso limpa o catálogo do Go e testa de novo, sem alimentar o Engramind', async () => {
+    const [main] = await createAiApiKey('opencode-go', { name: 'Assinatura', secret: 'oc_sk_1' }, actor)
+    const keys = await createAiApiKey('opencode-go', { name: 'Reserva', secret: 'oc_sk_2' }, actor)
+    await flush()
+    vi.clearAllMocks()
+    const reserve = keys.find((key) => key.name === 'Reserva')!
+    await expect(removeAiApiKey('opencode-go', main!.id, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_ACTIVE' })
+
+    const after = await activateAiApiKey('opencode-go', reserve.id, actor)
+    await flush()
+    expect(after.map((key) => [key.name, key.active])).toEqual([['Reserva', true], ['Assinatura', false]])
+    expect(mocks.docs.get('ai_opencode_go')!.activeApiKeyId).toBe(reserve.id)
+    expect(mocks.clearGoCatalog).toHaveBeenCalledOnce()
+    expect(mocks.clearCatalog).toHaveBeenCalled()
+    expect(mocks.resetProbes).toHaveBeenCalled()
+    expect(mocks.test).toHaveBeenCalledWith('ai_opencode_go', { source: 'scheduler' })
+    expect(mocks.publish).toHaveBeenCalledWith('ai-provider-keys-updated', { provider: 'opencode-go' })
+    expect(mocks.sync).not.toHaveBeenCalled()
+    expect(JSON.stringify([after, mocks.audit.mock.calls, mocks.publish.mock.calls])).not.toContain('oc_sk_')
+  })
+
+  it('o catálogo do Go só é limpo na troca de chave do próprio Go', async () => {
+    await createAiApiKey('gemini', { name: 'A', secret: 'gm' }, actor)
+    await flush()
+    expect(mocks.clearGoCatalog).not.toHaveBeenCalled()
+  })
+
   it('nome repetido (sem diferenciar maiúsculas) é recusado', async () => {
     await createAiApiKey('anthropic', { name: 'Pessoal', secret: 'a' }, actor)
     await expect(createAiApiKey('anthropic', { name: ' pessoal ', secret: 'b' }, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_NAME_TAKEN' })
@@ -167,6 +196,7 @@ describe('chaveiro dos provedores de IA', () => {
     await expect(activateAiApiKey('gemini', 'key_000000000000000000', actor)).rejects.toMatchObject({ status: 404 })
     expect(() => keyRingProvider('opencode')).toThrow(DomainError)
     expect(keyRingProvider('jev')).toBe('jev')
+    expect(keyRingProvider('opencode-go')).toBe('opencode-go')
   })
 
   it('sem a chave de criptografia, recusa gravar com 409 acionável', async () => {

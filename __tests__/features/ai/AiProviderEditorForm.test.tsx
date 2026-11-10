@@ -124,7 +124,14 @@ describe("AiProviderEditorForm", () => {
         expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual(["Configuração", "Modelos", "Consumo"])
         fireEvent.click(screen.getByRole("tab", { name: "Consumo" }))
         expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-show-cost")).toBe("true")
-        // O Go tem uma única chave da assinatura, não o chaveiro: o painel não mostra o filtro de chave.
-        expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-key-filter")).toBe("")
+        // OPE-156: o Go usa o chaveiro, então o painel ganha o filtro "Chave de API".
+        expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-key-filter")).toBe("opencode-go")
+    })
+
+    it("OpenCode Go (OPE-156): Configuração mostra Chaves de API, sem a chave oc_sk_… em Campos privados", () => {
+        window.history.replaceState(null, "", "/integracoes/ia/opencode-go")
+        renderForm("ai_opencode_go")
+        expect(screen.getByTestId("api-keys-opencode-go")).toBeTruthy()
+        expect(screen.queryByText("Chave do OpenCode Go")).toBeNull()
     })
 })

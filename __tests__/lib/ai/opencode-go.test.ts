@@ -1,14 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
-/** OPE-154: provedor OpenCode Go (inferência pela API do gateway, sem sessão do OpenCode no host). */
+/** OPE-154: provedor OpenCode Go (inferência pela API do gateway, sem sessão do OpenCode no host).
+ * OPE-156: a chave vem do chaveiro (a chave em uso), e o modelo devolve o id dela para o consumo. */
 
 const mocks = vi.hoisted(() => ({
-  config: {} as Record<string, unknown>,
+  key: null as { id: string; name: string; apiKey: string } | null,
+  requireKey: vi.fn(),
   fetch: vi.fn(),
   warn: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async () => mocks.config) }))
+vi.mock('@/lib/ai/api-keys', async () => {
+  const { AiProviderError } = await import('@/lib/ai/errors')
+  return {
+    requireActiveAiProviderKey: mocks.requireKey.mockImplementation(async (integrationId: string, name: string) => {
+      if (integrationId !== 'ai_opencode_go' || !mocks.key) throw new AiProviderError(`${name} sem chave de API ativa: cadastre e ative uma chave em Integrações › Inteligência Artificial › ${name}`)
+      return mocks.key
+    }),
+  }
+})
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/lib/integrations/debug', () => ({
   integrationDebug: () => ({}),
@@ -50,7 +60,7 @@ beforeEach(() => {
   vi.useRealTimers()
   vi.clearAllMocks()
   clearOpencodeGoCatalogCache()
-  mocks.config = { apiKey: 'oc_sk_teste' }
+  mocks.key = { id: 'key_go_1', name: 'Chave principal', apiKey: 'oc_sk_teste' }
 })
 
 describe('listOpencodeGoModels', () => {
@@ -74,9 +84,12 @@ describe('listOpencodeGoModels', () => {
     expect((init.headers as Record<string, string>)['User-Agent']).toBe(OPENCODE_GO_USER_AGENT)
   })
 
-  it('sem chave: erro acionável em pt-BR e nenhuma chamada', async () => {
-    mocks.config = {}
-    await expect(listOpencodeGoModels()).rejects.toThrow('OpenCode Go sem chave: configure a chave oc_sk_… em Integrações › Inteligência Artificial › OpenCode Go')
+  it('sem chave em uso no chaveiro: erro acionável em pt-BR e nenhuma chamada (listagem, conferência e geração)', async () => {
+    mocks.key = null
+    const message = 'OpenCode Go sem chave de API ativa: cadastre e ative uma chave em Integrações › Inteligência Artificial › OpenCode Go'
+    await expect(listOpencodeGoModels()).rejects.toThrow(message)
+    await expect(verifyOpencodeGoKey()).rejects.toThrow(message)
+    await expect(createOpencodeGoModel('deepseek-v4.1-flash')).rejects.toThrow(message)
     expect(mocks.fetch).not.toHaveBeenCalled()
   })
 })
@@ -101,6 +114,21 @@ describe('verifyOpencodeGoKey', () => {
   })
 })
 
+describe('chaveiro do Go (OPE-156)', () => {
+  it('a troca da chave em uso vale na próxima chamada: listagem, conferência e geração usam a chave ativa e o modelo devolve o id dela', async () => {
+    mocks.fetch.mockImplementation(async (url: string) => (url.endsWith('/models') ? json(catalog) : json({ error: {} }, 400)))
+    await listOpencodeGoModels()
+    mocks.key = { id: 'key_go_2', name: 'Reserva', apiKey: 'oc_sk_reserva' }
+    await verifyOpencodeGoKey()
+    clearOpencodeGoCatalogCache()
+    const { apiKeyId } = await createOpencodeGoModel('deepseek-v4.1-flash')
+    expect(apiKeyId).toBe('key_go_2')
+    const auth = mocks.fetch.mock.calls.map(([, init]) => (init.headers instanceof Headers ? init.headers.get('authorization') : (init.headers as Record<string, string>).Authorization))
+    expect(auth).toEqual(['Bearer oc_sk_teste', 'Bearer oc_sk_reserva', 'Bearer oc_sk_reserva'])
+    expect(mocks.requireKey).toHaveBeenCalledWith('ai_opencode_go', 'OpenCode Go')
+  })
+})
+
 describe('createOpencodeGoModel', () => {
   it('Chat Completions: sessão estável, User-Agent próprio, chave Bearer, streaming e custo medido do usage do Go', async () => {
     mocks.fetch.mockImplementation(async (url: string) => {
@@ -115,7 +143,8 @@ describe('createOpencodeGoModel', () => {
         },
       ])
     })
-    const { model, meter } = await createOpencodeGoModel('deepseek-v4.1-flash', { session: 'opex-agent-abc' })
+    const { model, meter, apiKeyId } = await createOpencodeGoModel('deepseek-v4.1-flash', { session: 'opex-agent-abc' })
+    expect(apiKeyId).toBe('key_go_1')
     const result = streamText({ model, prompt: 'Diga ok', reasoning: 'max' })
     let text = ''
     let reasoning = ''

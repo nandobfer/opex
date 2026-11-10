@@ -218,6 +218,9 @@ describe('chaveiro dos provedores de IA (OPE-155)', () => {
     await expect(updateIntegration('ai_openai', { secrets: { apiKey: { action: 'set', value: 'sk-nova' } } }, actor)).rejects.toBeInstanceOf(IntegrationUpdateError)
     mocks.loadStoredIntegration.mockResolvedValue(stored('ai_jev'))
     await expect(updateIntegration('ai_jev', { secrets: { apiKey: { action: 'clear' } } }, actor)).rejects.toThrow(/Chaves de API/)
+    // OPE-156: o OpenCode Go também só grava a chave pela lista Chaves de API.
+    mocks.loadStoredIntegration.mockResolvedValue(stored('ai_opencode_go'))
+    await expect(updateIntegration('ai_opencode_go', { secrets: { apiKey: { action: 'set', value: 'oc_sk_nova' } } }, actor)).rejects.toThrow(/Chaves de API/)
     await flush()
     expect(mocks.updateOne).not.toHaveBeenCalled()
     expect(mocks.engramindSync).not.toHaveBeenCalled()

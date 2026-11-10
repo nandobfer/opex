@@ -1,8 +1,8 @@
 import type { LanguageModel } from "ai"
 import { randomUUID } from "node:crypto"
-import { getIntegrationConfig } from "@/lib/integrations/config"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { loggerFor } from "@/lib/logger"
+import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
 import { AiProviderError } from "./errors"
 import { opencodeGoStatusMessage } from "./opencode-go-errors"
 import { OPENCODE_GO_API_URL, OPENCODE_GO_USER_AGENT } from "./endpoints"
@@ -34,10 +34,9 @@ export function clearOpencodeGoCatalogCache(): void {
     catalogCache = null
 }
 
-async function getOpencodeGoApiKey(): Promise<string> {
-    const { apiKey } = await getIntegrationConfig("ai_opencode_go")
-    if (!apiKey) throw new AiProviderError("OpenCode Go sem chave: configure a chave oc_sk_… em Integrações › Inteligência Artificial › OpenCode Go")
-    return apiKey
+/** Chave **em uso** do chaveiro do Go (OPE-156); sem chave ativa, erro acionável antes de qualquer chamada. */
+function activeOpencodeGoKey(): Promise<ActiveAiProviderKey> {
+    return requireActiveAiProviderKey("ai_opencode_go", LABEL)
 }
 
 function networkError(error: unknown): AiProviderError {
@@ -47,7 +46,7 @@ function networkError(error: unknown): AiProviderError {
 /** Catálogo bruto do gateway (cache curto); a lista é pública, mas só é lida com a integração configurada. */
 async function loadCatalog(signal?: AbortSignal, fresh = false): Promise<OpencodeGoRawModel[]> {
     if (!fresh && catalogCache && Date.now() - catalogCache.at < CATALOG_CACHE_MS) return catalogCache.list
-    const apiKey = await getOpencodeGoApiKey()
+    const { apiKey } = await activeOpencodeGoKey()
     let res: Response
     try {
         res = await debugFetch(integrationDebug("ai_opencode_go"), LABEL, `${OPENCODE_GO_API_URL}/models`, {
@@ -103,7 +102,7 @@ export async function opencodeGoModelInputs(modelId: string, signal?: AbortSigna
  * volta 401 com chave inválida e 400 com chave aceita, sem consumir a cota.
  */
 export async function verifyOpencodeGoKey(signal?: AbortSignal): Promise<void> {
-    const apiKey = await getOpencodeGoApiKey()
+    const { apiKey } = await activeOpencodeGoKey()
     let res: Response
     try {
         res = await debugFetch(
@@ -174,6 +173,8 @@ function opencodeGoFetch(apiKey: string, session: string, onCost: (cost: AiStepC
 export interface OpencodeGoModel {
     model: LanguageModel
     meter: OpencodeGoMeter
+    /** Chave do chaveiro usada na preparação: o consumo é atribuído a ela (`apiKeyId` dos logs). */
+    apiKeyId: string
 }
 
 /**
@@ -181,7 +182,7 @@ export interface OpencodeGoModel {
  * e cache de prompt do Go); sem ele, cada geração ganha um id novo.
  */
 export async function createOpencodeGoModel(modelId: string, options: { session?: string | null; signal?: AbortSignal } = {}): Promise<OpencodeGoModel> {
-    const apiKey = await getOpencodeGoApiKey()
+    const { id: apiKeyId, apiKey } = await activeOpencodeGoKey()
     const session = options.session?.trim() || `opex-${randomUUID()}`
     let pending: AiStepCost | null = null
     const fetchImpl = opencodeGoFetch(apiKey, session, (cost) => {
@@ -202,16 +203,16 @@ export async function createOpencodeGoModel(modelId: string, options: { session?
     const common = { apiKey, baseURL, fetch: fetchImpl }
     if (api === "responses") {
         const { createOpenAI } = await import("@ai-sdk/openai")
-        return { model: createOpenAI(common).responses(modelId), meter }
+        return { model: createOpenAI(common).responses(modelId), meter, apiKeyId }
     }
     if (api === "messages") {
         const { createAnthropic } = await import("@ai-sdk/anthropic")
-        return { model: createAnthropic(common)(modelId), meter }
+        return { model: createAnthropic(common)(modelId), meter, apiKeyId }
     }
     if (api === "generate-content") {
         const { createGoogleGenerativeAI } = await import("@ai-sdk/google")
-        return { model: createGoogleGenerativeAI(common)(modelId), meter }
+        return { model: createGoogleGenerativeAI(common)(modelId), meter, apiKeyId }
     }
     const { createOpenAICompatible } = await import("@ai-sdk/openai-compatible")
-    return { model: createOpenAICompatible({ ...common, name: "opencodeGo", includeUsage: true })(modelId), meter }
+    return { model: createOpenAICompatible({ ...common, name: "opencodeGo", includeUsage: true })(modelId), meter, apiKeyId }
 }
