@@ -69,4 +69,15 @@ describe('EngramindPage', () => {
     expect(skeleton.closest('[data-network-fill-root]')).toBe(root)
     expect(screen.getByTestId('about-card-skeleton').closest('[data-network-fill-root]')).toBeNull()
   })
+
+  // OPE-157: a área da rede carrega com a cena do universo (lib ≥ 0.11.0), não com barras cinzas.
+  it('o carregamento da rede é a cena do universo, anunciada ao leitor de tela', () => {
+    connection.isLoading = true
+    render(<EngramindPage />)
+    const skeleton = screen.getByTestId('network-skeleton')
+    expect(skeleton.getAttribute('role')).toBe('status')
+    expect(skeleton.textContent).toContain('Carregando a rede de memórias…')
+    expect(skeleton.querySelector('[data-testid=network-loading-scene]')).not.toBeNull()
+    expect(skeleton.querySelectorAll('[data-testid=network-skeleton-agent]')).toHaveLength(1)
+  })
 })

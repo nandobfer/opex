@@ -320,10 +320,26 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   de baixo do card; `fillOutside` + `viewportFillHeight`). O que fica acima do card (cabeçalho da página, abas,
   interruptor de aprendizado) sai da tela ao rolar até ele. Mínimo `NETWORK_FILL_MIN_HEIGHT` (320 px); recalcula
   com a janela e com o próprio card (um aviso que aparece encolhe o canvas), reenquadrando só na primeira medida.
-  O skeleton de carregamento é o `NetworkSkeleton` interno do `AgentUniverse`, no mesmo modo e dentro do card.
+  O skeleton de carregamento é o `NetworkSkeleton` interno do `AgentUniverse`, no mesmo modo e dentro do card,
+  com a cena de carregamento (abaixo) e o ícone do próprio agente no centro.
   Antes (OPE-148) os cards usavam `fill` (a sobra da página) e a altura compacta `NETWORK_CANVAS_COMPACT_CLASS`,
   que deixavam o canvas no mínimo nas páginas de agente. A prévia da aba Visualização (`UniverseLayoutPreview`)
   continua com altura fixa.
+- **Carregamento das redes (OPE-157, lib ≥ 0.11.0):** em todas as telas da rede (`/engramind`, os
+  `AgentUniverseCard` e a aba Memórias dos rotineiros), o carregamento é uma **cena animada** do universo, e não
+  barras cinzas: o `NetworkSkeleton` mantém a altura, o fundo e o `fill` do canvas e desenha o nó do agente no
+  centro (o círculo do `CenterNode`, `UNIVERSE_CENTER_SIZE_CLASS`, com halo respirando), 12 partículas
+  convergindo de uma coroa (posições e atrasos determinísticos, 900 ms `easeInOut` como o `PathTraveler`), dois
+  pulsos saindo do centro e os anéis do universo bem tênues nos raios do layout configurado (`firstRadius` +
+  `ringGap`, até 3 anéis), encolhendo para caber em telas pequenas. O card de estatísticas recolhido mostra um
+  ponto pulsando e "Carregando…". Universos de agente passam `agent` e mostram o ícone dele (`agentIcon` do
+  `OpexEngramindProvider`); `/engramind` (visão geral) usa o robô. Só tokens do tema, só `transform`/`opacity`
+  (Framer Motion); um skeleton que substitui outro (o `PageSkeleton` do Opex e depois o da lib) continua o ciclo
+  em vez de reiniciar. Acessibilidade: `role="status"`, `aria-busy` e "Carregando a rede de memórias…" só para o
+  leitor de tela; com `prefers-reduced-motion`, a cena fica parada (nó, halo e anéis, sem partículas nem
+  pulsos). A cena aparece desde o primeiro frame (sem atraso nem tempo mínimo); quando os dados chegam, o canvas
+  entra com fade de 250 ms sobre o mesmo fundo (trocar de universo depois não repete o fade). Um refetch com a
+  rede em tela não volta ao skeleton (a espera por todas as páginas de memórias vale só na primeira carga).
 - **Pendências no Engramind** (para o modo app da lib, não para o Opex): o prazo de desuso e os pesos da
   busca em `get_consumer_settings`, o estado do webhook do próprio app para o token de app e a edição dos
   canais criados pelo app. A tarefa está em `docs/engramind-consumer-settings.md` do repositório da lib.
@@ -635,8 +651,8 @@ leva ao universo do canal).
 onde fica **Nova memória**; como nasce vazio, ele só entra nas redes quando ganhar a primeira memória. O aviso
 de canal inexistente espera a releitura da lista de canais (`channelsFetching`).
 
-Estados: skeleton com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
-`layout-classes.ts`; a distribuição padrão: agentes em volta do centro, cada um com canais em órbita), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
+Estados: carregamento com as dimensões e o fundo da rede (`NetworkSkeleton`, mesmas classes de
+`layout-classes.ts`; a cena animada do universo descrita em "Carregamento das redes", OPE-157), vazio (ícone + texto + Nova memória) e erro com Tentar novamente
 (`QueryBoundary`). Movimento reduzido desliga pulsos e viagens; números e cores se atualizam.
 
 ### Celular (`useIsMobile`, até 767 px)
