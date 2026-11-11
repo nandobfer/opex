@@ -147,7 +147,9 @@ do `opencode serve`, não uma chave de API.
   ativação está pendente); nome e sublabel ficam acima dele sem capturar clique. As ações ficam numa
   camada acima, sem botão dentro de botão, com `stopPropagation`: ocultas por opacidade, mas no DOM,
   aparecem com `group-hover`/`group-focus-within` e ficam sempre visíveis em telas sem hover. O item
-  em uso e o modo de renomear não têm o botão de ativar. O skeleton das listas usa
+  em uso e o modo de renomear não têm o botão de ativar. O selo "Em uso" fica logo à direita do nome
+  (o nome trunca; o selo, compacto, não encolhe), na mesma linha de altura fixa (`h-5`), para não deixar
+  vazio à direita com as ações ocultas nem mudar a altura do card. O skeleton das listas usa
   `ACTIVE_ITEM_ROW_SKELETON_CLASS`, a mesma altura do card.
 - **Migração** `migrate-ai-provider-api-keys`: a API key única de cada provedor vira a chave
   "**Chave principal**", já em uso (a caixa cifrada é reaproveitada). A migração **só copia**: o

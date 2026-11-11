@@ -33,7 +33,8 @@ const stop = (event: MouseEvent) => event.stopPropagation()
 
 /**
  * Card de uma lista "um item em uso" (contas dos providers do OpenCode, chaves de API dos provedores
- * de IA). O card inteiro ativa o item: um `<button>` real cobre o card (Tab + Enter/Espaço nativos) e
+ * de IA). O selo "Em uso" fica à direita do nome, compacto, sem mudar a altura da linha do nome
+ * (`h-5`). O card inteiro ativa o item: um `<button>` real cobre o card (Tab + Enter/Espaço nativos) e
  * as ações ficam numa camada acima dele, sem botão dentro de botão. As ações aparecem no hover ou no
  * foco do card (sempre visíveis em telas de toque) e continuam no DOM para o teclado.
  */
@@ -68,17 +69,19 @@ export function ActiveItemRow({ label, sublabel, active, activateLabel, activate
             {editing ?? (
                 <div className="pointer-events-none relative flex flex-wrap items-center gap-2">
                     <span className="min-w-0 flex-1">
-                        <span className="block truncate text-sm font-medium">{label}</span>
+                        <span data-slot="item-title" className="flex h-5 min-w-0 items-center gap-1.5">
+                            <span className="truncate text-sm font-medium">{label}</span>
+                            {active ? (
+                                <motion.span key="active" className="flex shrink-0" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.18 }}>
+                                    <Badge className="h-4 gap-0.5 px-1.5 py-0 text-[10px] leading-none">
+                                        <Check className="h-2.5 w-2.5" aria-hidden />
+                                        Em uso
+                                    </Badge>
+                                </motion.span>
+                            ) : null}
+                        </span>
                         {sublabel ? <span className="block text-[11px] text-muted-foreground">{sublabel}</span> : null}
                     </span>
-                    {active ? (
-                        <motion.span key="active" initial={{ scale: 0.8, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} transition={{ duration: 0.18 }}>
-                            <Badge className="gap-1">
-                                <Check className="h-3 w-3" aria-hidden />
-                                Em uso
-                            </Badge>
-                        </motion.span>
-                    ) : null}
                     <div
                         data-slot="item-actions"
                         onClick={stop}

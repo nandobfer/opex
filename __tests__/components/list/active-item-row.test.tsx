@@ -55,6 +55,18 @@ describe('ActiveItemRow (card de item em uso, OPE-159)', () => {
     expect(handlers.onActivate).not.toHaveBeenCalled()
   })
 
+  it('o selo "Em uso" fica à direita do nome, na linha do título de altura fixa, antes das ações', () => {
+    setup({ active: true })
+    const badge = screen.getByText('Em uso')
+    const title = badge.closest('[data-slot="item-title"]')!
+    expect(title).toBeTruthy()
+    expect(title.textContent).toBe('TrabalhoEm uso')
+    expect(title.classList.contains('h-5')).toBe(true)
+    const actions = screen.getByRole('button', { name: 'Renomear Trabalho' }).closest('[data-slot="item-actions"]')!
+    expect(actions.contains(badge)).toBe(false)
+    expect(title.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it('renomear, remover e ações extras não ativam o item', () => {
     const handlers = setup()
     fireEvent.click(screen.getByRole('button', { name: 'Renomear Trabalho' }))
