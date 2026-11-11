@@ -42,7 +42,8 @@ describe('ApiKeysCard (chaves de API nomeadas, OPE-155)', () => {
     const list = screen.getByRole('list', { name: 'Chaves de API do Gemini' })
     expect(within(list).getByText('Em uso')).toBeTruthy()
     expect(within(list).getAllByText(/Segredo definido/).length).toBe(2)
-    fireEvent.click(screen.getByRole('button', { name: 'Usar esta chave' }))
+    expect(screen.queryByRole('button', { name: 'Usar a chave Pessoal' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Usar a chave Empresa' }))
     expect(mocks.activate).toHaveBeenCalledWith('key_bbbbbbbbbbbbbbbbbb')
   })
 
