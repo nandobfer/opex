@@ -20,7 +20,7 @@ export function AccountItem({ integrationId, account }: { integrationId: string;
             label={account.label}
             sublabel={OPENCODE_METHOD_KIND_LABELS[account.method]}
             active={account.active}
-            activateLabel="Usar esta conta"
+            activateLabel={`Usar a conta ${account.label}`}
             activateDisabled={activate.isPending}
             onActivate={() => activate.mutate({ integrationId, accountId: account.id })}
             onRename={() => setRenaming(true)}
