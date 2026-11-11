@@ -1,6 +1,6 @@
 import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
 import type { TaskRefinementSettings } from "@/features/ai/schemas"
-import { resolveRefinementSkill } from "@/features/ai/refinement-skill"
+import { resolveRefinementSkill, type RefinementSkillLookup } from "@/features/ai/refinement-skill"
 import type { AiSkillDto } from "@/lib/ai/providers"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from "./constants"
@@ -17,10 +17,13 @@ import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from "./constants"
  */
 export type RefinementInstructionsPlan = { mode: "skill"; skill: AiSkillDto } | { mode: "text"; fallback: string | null }
 
-/** Decide a origem das instruções do turno. `skills === null`: o OpenCode não pôde ser consultado. */
-export function planRefinementInstructions(settings: Pick<TaskRefinementSettings, "instructionsSource" | "skill">, skills: readonly AiSkillDto[] | null): RefinementInstructionsPlan {
+/**
+ * Decide a origem das instruções do turno. `skills === null`: o OpenCode não pôde ser consultado;
+ * `lookup` (diretório da sessão) entra no motivo do fallback quando a skill não é encontrada.
+ */
+export function planRefinementInstructions(settings: Pick<TaskRefinementSettings, "instructionsSource" | "skill">, skills: readonly AiSkillDto[] | null, lookup?: RefinementSkillLookup): RefinementInstructionsPlan {
     if (settings.instructionsSource !== "skill") return { mode: "text", fallback: null }
-    const state = resolveRefinementSkill(settings.skill, skills)
+    const state = resolveRefinementSkill(settings.skill, skills, lookup)
     if (state.status === "ok" && state.skill) return { mode: "skill", skill: state.skill }
     return { mode: "text", fallback: state.message }
 }

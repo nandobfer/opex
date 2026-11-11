@@ -7,6 +7,8 @@ import { messageOf, routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
 import { previewBaseUrl } from "@/lib/instance"
+import { matchOpencodeSkill } from "@/lib/ai/opencode-skills"
+import { listOpencodeSkillsAt } from "@/lib/ai/opencode-skill-list"
 
 /**
  * Motor **OpenCode no host** (OPE-130): a sessão abre na pasta do agente no host (persistente entre
@@ -47,19 +49,24 @@ export function routineSessionPermissions(hostMcps: readonly string[], allowed: 
 
 /**
  * Skills do host (OPE-153): nega todas (`skill` + `*`, inclusive nativas, de projeto e as que surgirem) e
- * libera só as selecionadas que existem — a última regra que casa vence no OpenCode. Seleção por id ou nome.
+ * libera só as selecionadas que existem — a última regra que casa vence no OpenCode. Seleção por id ou nome
+ * (`matchOpencodeSkill`); a regra usa sempre o id do OpenCode.
  */
 export function routineSkillPermissions(hostSkills: readonly { id: string; name: string }[], allowed: readonly string[]): { rules: PermissionRule[]; missing: string[] } {
-    const wanted = new Set(allowed)
     const rules: PermissionRule[] = [{ action: "skill", resource: "*", effect: "deny" }]
-    const found = new Set<string>()
-    for (const skill of hostSkills) {
-        const key = wanted.has(skill.id) ? skill.id : wanted.has(skill.name) ? skill.name : null
-        if (!key) continue
-        found.add(key)
+    const granted = new Set<string>()
+    const missing: string[] = []
+    for (const name of allowed) {
+        const skill = matchOpencodeSkill(name, hostSkills)
+        if (!skill) {
+            missing.push(name)
+            continue
+        }
+        if (granted.has(skill.id)) continue
+        granted.add(skill.id)
         rules.push({ action: "skill", resource: skill.id, effect: "allow" })
     }
-    return { rules, missing: allowed.filter((name) => !found.has(name)) }
+    return { rules, missing }
 }
 
 /** Quanto a retomada espera o turno antigo da sessão parar depois de interrompê-lo. */
@@ -122,7 +129,8 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
         // Skills do host: sem a lista, a seleção não teria como ser aplicada com segurança — falha fechada.
         let hostSkills: { id: string; name: string }[]
         try {
-            hostSkills = ((await client.skill.list(location)).data ?? []).map((skill) => ({ id: skill.id, name: skill.name }))
+            // Diretório recém-aberto lista as skills aos poucos: espera as liberadas aparecerem (OPE-158).
+            hostSkills = (await listOpencodeSkillsAt(client, directory, { want: engine.enabledSkills ?? [] })).skills.map((skill) => ({ id: skill.id, name: skill.name }))
         } catch (error) {
             return { error: `Não foi possível listar as skills do host para aplicar as permissões da sessão: ${messageOf(error)}. Confira o OpenCode e dispare de novo.`, text, sessionId }
         }

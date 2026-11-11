@@ -89,17 +89,35 @@ ou agir num lado reflete no outro em tempo real (`refinement-updated` e `agentic
   | `unavailable`; `null` com origem "Texto", regra pura em `features/ai/refinement-skill.ts`). Fora
   de `ok`, o topo da aba mostra a mensagem: o refinamento vai usar as instruções de texto.
 - **No refinamento**: a cada execução de turno o servidor lista as skills **no diretório da sessão**
-  (a central do projeto; `client.skill.list`), decide o plano (`planRefinementInstructions`, puro, em
+  (`sessionDirectory ?? central.directory`; `listOpencodeSkillsAt` sobre `client.skill.list`), decide o plano (`planRefinementInstructions`, puro, em
   `prompt.ts`) e, com a skill disponível, **ativa a skill na sessão** (`client.session.skill`,
   `resume: false`) — **uma vez por sessão/skill** (`activeSkill { sessionId, skillId }` no documento;
   Continuar/consolidação na mesma sessão não reativam; Recomeçar, sessão recriada ou troca de skill
   ativam de novo; Reconectar não ativa nada e, sem a skill já ativa naquela sessão, mantém as instruções
 de texto). A entrada durável `opex-refinement` passa a levar só o
   aviso de que as instruções são as da skill + o **protocolo fixo**, que continua valendo.
+- **De onde vem a lista em cada caminho (OPE-158)**: a aba e o salvar leem `GET /api/skill` no
+  diretório da **integração** OpenCode (`listAiSkills` → `listOpencodeSkills`, com cache curto), sempre
+  carregado; o turno lê o diretório da **sessão**. O OpenCode carrega as skills de um diretório aos poucos
+  quando ele é aberto (ou reaberto depois de descarregado): as primeiras leituras voltam **sem nenhuma
+  skill** e depois **só com as nativas**, e a lista completa chega cerca de 1 s depois. Era por isso que a
+  aba dizia `ok` e o turno, criado logo depois de `session.create`, caía sempre em "não está instalada".
+  `listOpencodeSkillsAt` (`src/lib/ai/opencode-skill-list.ts`) repete a leitura a cada 300 ms (até 14
+  leituras, ≈ 4 s) e para assim que a skill configurada aparece; se ela não aparecer, para quando a lista
+  fica igual e não vazia por 4 leituras seguidas (a lista parcial das nativas já se repetiu em 2 leituras no host real). Erro de rede continua sendo "OpenCode sem listar".
+- **Casamento da skill** (`matchOpencodeSkill`, puro, `src/lib/ai/opencode-skills.ts`, usado pela aba, pelo
+  salvar, pelo turno e pelo motor OpenCode dos rotineiros): `id` exato → `name` exato → `id`/`name`
+  normalizados (sem espaços nas pontas, minúsculas, só o último segmento de id qualificado `a/b` ou
+  `a:b`). Mais de um candidato no passo normalizado não casa nada. `settings.skill` continua guardando o id
+  mostrado no seletor, e a ativação usa sempre o `id` devolvido pelo OpenCode.
 - **Fallback explícito**: skill ausente no diretório da sessão, vazia, OpenCode sem listar ou falha ao
   ativar → o turno usa as **instruções de texto + protocolo** (como a origem "Texto"), registra
-  `log.warn` e publica um aviso (`notice` warn) na saída do refinamento explicando o motivo. O
-  refinamento nunca quebra por causa da skill.
+  `log.warn` e publica um aviso (`notice` warn) na saída do refinamento explicando o motivo. Skill ausente
+  no turno tem motivo próprio, com o diretório consultado e as skills encontradas: "A skill "x" não foi
+  encontrada no OpenCode para o diretório da sessão (/caminho): o refinamento usa as instruções de texto.
+  Skills encontradas: a, b." (o log leva também `ids` e `attempts`). A aba mantém a mensagem "não está
+  instalada no OpenCode". O log da ativação registra a skill e o diretório. O refinamento nunca quebra
+  por causa da skill.
 - A aba traz um card **Diretório da sessão** explicando (e listando as centrais) que a sessão é
   criada no diretório da **central de desenvolvimento do projeto da tarefa** — não no diretório da
   integração OpenCode. Ver `modules/agentic-dev.md`.

@@ -6,7 +6,7 @@ import { AgenticCentral } from "@/lib/db/models/Agentic"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
 import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
-import { toOpencodeSkill } from "@/lib/ai/opencode-skills"
+import { listOpencodeSkillsAt, type SkillListAt } from "@/lib/ai/opencode-skill-list"
 import type { TaskRefinementSettings } from "@/features/ai/schemas"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
@@ -255,15 +255,16 @@ async function applyInstructions(client: OpencodeClient, sessionId: string, inst
  */
 async function resolveInstructionsPlan(client: OpencodeClient, doc: ITaskRefinement, settings: TaskRefinementSettings, sessionId: string, directory: string, attach: boolean): Promise<RefinementInstructionsPlan> {
     if (settings.instructionsSource !== "skill") return { mode: "text", fallback: null }
-    const skills = await client.skill
-        .list({ location: { directory } })
-        .then((result) => result.data.map(toOpencodeSkill))
-        .catch((error: unknown) => {
-            log.warn({ err: errorText(error), refinementId: String(doc._id) }, "[refinement] não foi possível listar as skills do OpenCode")
-            return null
-        })
-    const plan = planRefinementInstructions(settings, skills)
-    if (plan.mode !== "skill") return plan
+    // Diretório recém-aberto lista as skills aos poucos: a listagem espera carregar (OPE-158).
+    const listed: SkillListAt | null = await listOpencodeSkillsAt(client, directory, { want: settings.skill ? [settings.skill] : [] }).catch((error: unknown) => {
+        log.warn({ err: errorText(error), refinementId: String(doc._id), directory }, "[refinement] não foi possível listar as skills do OpenCode")
+        return null
+    })
+    const plan = planRefinementInstructions(settings, listed?.skills ?? null, listed ? { directory: listed.directory } : undefined)
+    if (plan.mode !== "skill") {
+        if (listed && plan.fallback) log.warn({ refinementId: String(doc._id), skill: settings.skill, directory: listed.directory, attempts: listed.attempts, ids: listed.skills.map((skill) => skill.id) }, "[refinement] skill configurada não pôde ser usada no diretório da sessão")
+        return plan
+    }
     const active = doc.activeSkill
     if (active?.sessionId === sessionId && active.skillId === plan.skill.id) return plan
     // Reconectar não ativa nada: sem a skill já ativa nesta sessão, o turno acompanhado segue com o texto.
@@ -271,7 +272,7 @@ async function resolveInstructionsPlan(client: OpencodeClient, doc: ITaskRefinem
     try {
         await client.session.skill({ sessionID: sessionId, id: plan.skill.id, resume: false })
         await TaskRefinement.updateOne({ _id: doc._id }, { $set: { activeSkill: { sessionId, skillId: plan.skill.id } } })
-        log.info({ refinementId: String(doc._id), skill: plan.skill.id }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: skill ativada na sessão`)
+        log.info({ refinementId: String(doc._id), skill: plan.skill.id, directory: listed?.directory ?? directory }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: skill ativada na sessão`)
         return plan
     } catch (error) {
         log.warn({ err: errorText(error), refinementId: String(doc._id), skill: plan.skill.id }, "[refinement] não foi possível ativar a skill na sessão")

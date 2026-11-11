@@ -97,6 +97,11 @@ vi.mock('@/features/ai/server/settings', () => ({
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
 vi.mock('@/features/agentic/server/live-chat', () => ({ liveChatEnabled: vi.fn(async () => mocks.liveChat), deliverLiveMessage: mocks.deliverLive }))
+// A espera entre leituras da lista de skills (diretório frio, OPE-158) não usa timer real nos testes.
+vi.mock('@/lib/ai/opencode-skill-list', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@/lib/ai/opencode-skill-list')>()
+    return { ...actual, listOpencodeSkillsAt: (client: Parameters<typeof actual.listOpencodeSkillsAt>[0], directory: string, options: Parameters<typeof actual.listOpencodeSkillsAt>[2] = {}) => actual.listOpencodeSkillsAt(client, directory, { ...options, wait: async () => undefined }) }
+})
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 // Vínculo com a mesa de trabalho (OPE-137): sem mesa por padrão; cada caso define a etapa dela.
@@ -334,6 +339,34 @@ describe('turno e conclusão', () => {
             expect(mocks.fakeClient.session.skill).not.toHaveBeenCalled()
             expect(instructionsValue()).toContain('Regras.')
             expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), expect.objectContaining({ type: 'notice', level: 'warn', message: expect.stringContaining('sumiu') }))
+        })
+
+        it('OPE-158: diretório da sessão ainda carregando (lista vazia, depois só nativas) espera a skill e a ativa sem aviso', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'grill-me' }
+            const native = { id: 'opencode', name: 'OpenCode', path: '/builtin/opencode.md', content: '# OpenCode' }
+            mocks.fakeClient.skill.list
+                .mockResolvedValueOnce({ location: { directory: '/repo/opex' }, data: [] })
+                .mockResolvedValueOnce({ location: { directory: '/repo/opex' }, data: [native] })
+                .mockResolvedValue({ location: { directory: '/repo/opex' }, data: [native, grill] })
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await startRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.skill).toHaveBeenCalledWith({ sessionID: 'sess-1', id: 'grill-me', resume: false }))
+            expect(mocks.fakeClient.skill.list).toHaveBeenCalledTimes(3)
+            expect(mocks.fakeClient.skill.list).toHaveBeenCalledWith({ location: { directory: '/repo/opex' } })
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(instructionsValue()).not.toContain('Regras.')
+            expect(mocks.publishWorkbenchEvent).not.toHaveBeenCalledWith('c'.repeat(24), expect.objectContaining({ type: 'notice' }))
+        })
+
+        it('OPE-158: skill genuinamente ausente cai no texto e o aviso cita o diretório consultado e as skills encontradas', async () => {
+            mocks.settings = { instructionsSource: 'skill', skill: 'refinar-issue' }
+            mocks.fakeClient.skill.list.mockResolvedValue({ location: { directory: '/repo/opex' }, data: [grill] })
+            mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+            await startRefinement('t1')
+            await vi.waitFor(() => expect(mocks.fakeClient.session.instructions.entry.put).toHaveBeenCalled())
+            expect(mocks.fakeClient.session.skill).not.toHaveBeenCalled()
+            expect(instructionsValue()).toContain('Regras.')
+            expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), expect.objectContaining({ type: 'notice', level: 'warn', message: expect.stringMatching(/refinar-issue.*\/repo\/opex.*Skills encontradas: grill-me/) }))
         })
 
         it('falha ao ativar (ou OpenCode sem listar) também cai no texto', async () => {
