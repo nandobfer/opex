@@ -3,6 +3,7 @@
 import { useState } from "react"
 import { AnimatePresence } from "framer-motion"
 import { KeyRound, Plus } from "lucide-react"
+import { ACTIVE_ITEM_ROW_SKELETON_CLASS } from "@/components/list/ActiveItemRow"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -13,9 +14,6 @@ import type { AiApiKeyDto, AiApiKeyProviderId } from "../../api-keys"
 import { useAiApiKeys, useAiApiKeysRealtime } from "../../hooks/useAiApiKeys"
 import { ApiKeyFormDialog } from "./ApiKeyFormDialog"
 import { ApiKeyItem } from "./ApiKeyItem"
-
-/** Altura de uma linha (o skeleton usa a mesma, para manter as dimensões). */
-const ROW_CLASS = "h-[54px] w-full rounded-md"
 
 /**
  * Chaves de API nomeadas do provedor (aba Configuração, OPE-155): várias chaves, **uma em uso**. Só a
@@ -46,8 +44,8 @@ export function ApiKeysCard({ provider, providerName }: { provider: AiApiKeyProv
             <CardContent>
                 {keys.isLoading ? (
                     <div className="space-y-2" role="status" aria-label="Carregando chaves de API">
-                        <Skeleton className={ROW_CLASS} />
-                        <Skeleton className={ROW_CLASS} />
+                        <Skeleton className={ACTIVE_ITEM_ROW_SKELETON_CLASS} />
+                        <Skeleton className={ACTIVE_ITEM_ROW_SKELETON_CLASS} />
                     </div>
                 ) : keys.isError ? (
                     <ErrorState title="Não foi possível carregar as chaves" description={apiErrorMessage(keys.error, "Tente novamente.")} onRetry={() => void keys.refetch()} />

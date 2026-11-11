@@ -41,7 +41,7 @@ export function ApiKeyItem({ provider, providerName, apiKey, hasOthers, onReplac
             label={apiKey.name}
             sublabel={`Segredo definido · criada em ${format(new Date(apiKey.createdAt), "dd/MM/yyyy", { locale: ptBR })}`}
             active={apiKey.active}
-            activateLabel="Usar esta chave"
+            activateLabel={`Usar a chave ${apiKey.name}`}
             activateDisabled={activate.isPending}
             onActivate={() => activate.mutate(apiKey.id)}
             onRename={() => setRenaming(true)}

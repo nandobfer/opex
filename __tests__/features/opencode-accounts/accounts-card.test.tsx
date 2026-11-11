@@ -67,7 +67,8 @@ describe("aba Contas do OpenCode", () => {
         inPage(<OpencodeAccountsCard dirty={false} />)
         fireEvent.click(screen.getByRole("button", { name: /Anthropic/ }))
         expect(screen.getByText("Em uso")).toBeTruthy()
-        fireEvent.click(screen.getByRole("button", { name: "Usar esta conta" }))
+        expect(screen.queryByRole("button", { name: "Usar a conta Pessoal" })).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "Usar a conta Trabalho" }))
         expect(mocks.activate).toHaveBeenCalledWith({ integrationId: "anthropic", accountId: "cred_b" })
     })
 

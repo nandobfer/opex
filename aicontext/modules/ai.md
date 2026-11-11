@@ -135,11 +135,20 @@ do `opencode serve`, não uma chave de API.
   `useAiApiKeysRealtime` relê a lista, o status dos provedores, os modelos, o consumo e o detalhe da
   integração.
 - **Tela**: card **Chaves de API** (`ApiKeysCard`, `src/features/ai/components/api-keys/`) na aba
-  Configuração. Cada linha tem o selo "Em uso" ou "Usar esta chave" (resposta otimista com reversão),
-  além de Substituir segredo, Renomear (em linha) e Remover. O diálogo de nova chave pede nome e segredo
-  (campo de senha). Nenhum `<form>` próprio: a página já é um formulário. A linha e o campo de
+  Configuração. Cada chave é um card (OPE-159): clicar em qualquer ponto do card ativa a chave
+  (rótulo acessível "Usar a chave <nome>", resposta otimista com reversão); a chave em uso tem o selo
+  "Em uso", borda e barra em `primary` e não ativa de novo. Substituir segredo, Renomear (em linha) e
+  Remover aparecem no hover ou no foco do card. O diálogo de nova chave pede nome e segredo
+  (campo de senha). Nenhum `<form>` próprio: a página já é um formulário. O card e o campo de
   renomear são compartilhados com a aba Contas do OpenCode (`ActiveItemRow` e `InlineRenameField` em
   `src/components/list/`).
+- **Card `ActiveItemRow`** (compartilhado, OPE-159): um `<button>` real cobre o card inteiro (Tab +
+  Enter/Espaço nativos, `aria-label` = `activateLabel`, desabilitado com `aria-busy` enquanto a
+  ativação está pendente); nome e sublabel ficam acima dele sem capturar clique. As ações ficam numa
+  camada acima, sem botão dentro de botão, com `stopPropagation`: ocultas por opacidade, mas no DOM,
+  aparecem com `group-hover`/`group-focus-within` e ficam sempre visíveis em telas sem hover. O item
+  em uso e o modo de renomear não têm o botão de ativar. O skeleton das listas usa
+  `ACTIVE_ITEM_ROW_SKELETON_CLASS`, a mesma altura do card.
 - **Migração** `migrate-ai-provider-api-keys`: a API key única de cada provedor vira a chave
   "**Chave principal**", já em uso (a caixa cifrada é reaproveitada). A migração **só copia**: o
   `secretValues.apiKey` legado fica intacto e é ignorado pelo código novo, porque as prévias usam o
@@ -393,7 +402,8 @@ Equivale ao TUI (Providers → provider → adicionar/selecionar conta), pelo `@
   Acima de 50 linhas, lista virtualizada. Recarrega ao focar a janela, por **Atualizar** e pelo evento
   `opencode-accounts-updated` (`private-app`, payload `{ integrationId }`); mudanças feitas direto no
   TUI não geram evento. Com alterações não salvas na Configuração, pede para salvar antes.
-- **Linha expandida**: contas com **Em uso**, **Usar esta conta** (otimista, reversão com toast),
+- **Linha expandida**: cada conta é um card (`ActiveItemRow`, OPE-159) com **Em uso** ou clique no card
+  inteiro para usar a conta ("Usar a conta <nome>", otimista, reversão com toast; ações no hover/foco),
   **Renomear** (em linha; Enter salva, Esc cancela) e **Remover** (confirmação; remover a conta em uso
   avisa que o provider fica sem conta). Conexões por variável de ambiente aparecem só como informação;
   `needs_auth` do OpenCode aparece como alerta. Métodos de tipo desconhecido (ex.: `external` do
