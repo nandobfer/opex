@@ -62,7 +62,7 @@ em ordem, e falha na primeira inconsistência:
 1. **Pré-requisitos locais:** confere que a chave, o `known_hosts`, o arquivo da imagem e os
    arquivos de Compose existem antes de tocar no servidor.
 2. **Pré-verificações remotas:** via SSH, confere `docker`, `docker compose`, a presença do `.env`
-   no diretório de produção e as redes externas exigidas (`mongodb-network`, `soketi-network`).
+   no diretório de produção e as redes externas exigidas (`mongodb-network`, `soketi-network`, `minio-network`).
 3. **Arquitetura:** compara `docker info` do servidor com a arquitetura derivada de
    `DEPLOY_PLATFORM` (`x86_64`/`aarch64`).
 4. **Diretório de release:** `mkdir -p` do diretório remoto.

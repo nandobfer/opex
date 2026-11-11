@@ -189,7 +189,7 @@ export function readConfig(env: NodeJS.ProcessEnv = process.env): DeployConfig {
     throw new DeployError('DEPLOY_COMPOSE_FILES não pode ser vazio')
   }
 
-  const requiredNetworks = readList(env, 'DEPLOY_REQUIRED_NETWORKS', ['mongodb-network', 'soketi-network'])
+  const requiredNetworks = readList(env, 'DEPLOY_REQUIRED_NETWORKS', ['mongodb-network', 'soketi-network', 'minio-network'])
 
   return {
     host: requireMatch(requireEnv(env, 'DEPLOY_HOST'), PATTERNS.host, 'DEPLOY_HOST'),
