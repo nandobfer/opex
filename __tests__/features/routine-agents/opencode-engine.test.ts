@@ -16,6 +16,9 @@ const holder = vi.hoisted(() => ({
   turnOutcome: { outcome: 'done' as string, message: null as string | null },
   listError: false,
   skillListError: false,
+  // Diretório "frio" (OPE-158): quantas leituras da lista de skills voltam vazias antes da lista completa.
+  coldSkillReads: 0,
+  skillReads: 0,
   hostSkills: [{ id: 'revisar-pr', name: 'revisar-pr' }, { id: 'customize-opencode', name: 'customize-opencode' }] as { id: string; name: string }[],
   updateError: false,
   runFilters: [] as unknown[],
@@ -47,6 +50,8 @@ vi.mock('@/lib/ai/opencode-client', () => ({
       skill: {
         list: async () => {
           if (holder.skillListError) throw new Error('skills fora do ar')
+          holder.skillReads++
+          if (holder.skillReads <= holder.coldSkillReads) return { data: [] }
           return { data: holder.hostSkills.map((skill) => ({ ...skill, path: `/x/${skill.id}`, content: '' })) }
         },
       },
@@ -70,6 +75,11 @@ vi.mock('@/lib/ai/opencode-client', () => ({
     }
   },
 }))
+// A espera entre leituras da lista de skills não usa timer real nos testes.
+vi.mock('@/lib/ai/opencode-skill-list', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/lib/ai/opencode-skill-list')>()
+  return { ...actual, listOpencodeSkillsAt: (client: Parameters<typeof actual.listOpencodeSkillsAt>[0], directory: string, options: Parameters<typeof actual.listOpencodeSkillsAt>[2] = {}) => actual.listOpencodeSkillsAt(client, directory, { ...options, wait: async () => undefined }) }
+})
 vi.mock('@/lib/ai/opencode-run', () => ({
   runAgentTurn: async (_client: unknown, args: unknown, hooks: { onStep: (usage: unknown) => void; onText: (delta: string) => void }) => {
     holder.calls.turns.push(args)
@@ -112,6 +122,8 @@ beforeEach(() => {
   holder.turnOutcome = { outcome: 'done', message: null }
   holder.listError = false
   holder.skillListError = false
+  holder.coldSkillReads = 0
+  holder.skillReads = 0
   holder.hostSkills = [{ id: 'revisar-pr', name: 'revisar-pr' }, { id: 'customize-opencode', name: 'customize-opencode' }]
   holder.updateError = false
   holder.runFilters = []
@@ -146,6 +158,15 @@ describe('routineSkillPermissions (OPE-153)', () => {
       ],
       missing: ['sumiu'],
     })
+  })
+
+  it('OPE-158: casa a skill liberada pelo nome normalizado ou id qualificado e libera pelo id do OpenCode', () => {
+    const host = [{ id: 'user/refinar-issue', name: 'Refinar Issue' }, { id: 'opencode', name: 'OpenCode' }]
+    expect(routineSkillPermissions(host, [' refinar-issue ', 'opencode', 'OpenCode']).rules).toEqual([
+      { action: 'skill', resource: '*', effect: 'deny' },
+      { action: 'skill', resource: 'user/refinar-issue', effect: 'allow' },
+      { action: 'skill', resource: 'opencode', effect: 'allow' },
+    ])
   })
 
   it('sem seleção, só a negação geral', () => {
@@ -257,6 +278,17 @@ describe('runOpencodeEngine', () => {
     expect(permissions).toContainEqual({ action: 'skill', resource: 'customize-opencode', effect: 'allow' })
     expect(permissions).not.toContainEqual(expect.objectContaining({ resource: 'revisar-pr' }))
     expect(activation.warnings).toContain('A skill "apagada" foi liberada mas não existe mais no OpenCode do host: a execução segue sem ela.')
+  })
+
+  it('OPE-158: diretório frio (lista vazia nas primeiras leituras) espera as skills e libera a selecionada sem aviso falso', async () => {
+    holder.coldSkillReads = 2
+    const { input, activation } = engineInput()
+    ;(input.run.snapshot.opencode as { enabledSkills?: string[] }).enabledSkills = ['customize-opencode']
+    await runOpencodeEngine(input)
+    const permissions = (holder.calls.create[0] as { permissions: unknown[] }).permissions
+    expect(permissions).toContainEqual({ action: 'skill', resource: 'customize-opencode', effect: 'allow' })
+    expect(activation.warnings.some((warning) => warning.includes('customize-opencode'))).toBe(false)
+    expect(holder.skillReads).toBe(3)
   })
 
   it('OPE-153: falha fechada — sem a lista de skills do host, a execução vira Erro sem abrir sessão nem registrar o MCP', async () => {

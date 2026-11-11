@@ -267,8 +267,11 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   effect: "deny" }` e depois `allow` para cada skill selecionada que existe no host
   (`routineSkillPermissions`; a última regra que casa vence no OpenCode). O curinga bloqueia também as
   nativas, as de projeto e as que surgirem. Falha fechada: sem conseguir listar as skills do host
-  (`client.skill.list`) → **Erro** acionável, antes de registrar o MCP da execução. Skill selecionada que
-  sumiu do host vira aviso e é ignorada. A sessão reaproveitada recebe as regras novas; sem conseguir
+  (`client.skill.list`) → **Erro** acionável, antes de registrar o MCP da execução. A lista é lida por
+  `listOpencodeSkillsAt` (`src/lib/ai/opencode-skill-list.ts`, OPE-158), que espera o diretório da execução
+  carregar as skills (diretório recém-aberto responde vazio e depois só com as nativas) até as selecionadas
+  aparecerem; a seleção casa por id ou nome (`matchOpencodeSkill`, ver `modules/refinement.md`) e o `allow`
+  usa sempre o id do OpenCode. Skill selecionada que sumiu do host vira aviso e é ignorada. A sessão reaproveitada recebe as regras novas; sem conseguir
   atualizá-las → sessão nova, com aviso (o mesmo caminho dos MCPs).
 - Limites conferidos a cada passo (tokens) e por temporizador (tempo ativo). Estourou → **Erro**.
 - **Teto técnico do turno** (`ROUTINE_TURN_TIMEOUT_MS`, 6 h, nos dois motores): sem "Tempo máximo
