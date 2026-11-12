@@ -37,4 +37,6 @@ registerMigrations(
     { name: "agent-metrics-tracking-start", run: () => startAgentMetricsTracking() },
     { name: "ensure-routine-agent-indexes", run: () => ensureRoutineAgentIndexes() },
     { name: "migrate-ai-provider-api-keys", run: () => migrateAiProviderApiKeys() },
+    // OPE-160: índice das conversas com os agentes rotineiros (`ensureOpexIndexes` é idempotente).
+    { name: "ensure-routine-chat-session-indexes", run: () => ensureOpexIndexes() },
 )

@@ -30,7 +30,10 @@ export const memoryTagsSchema = z.array(z.string().trim().min(1).max(40)).max(20
 export interface RoutineMemoryEnv {
     slug: string
     label: string
+    /** Execução dona do turno; vazio na conversa com o agente (OPE-160), que informa `sessionId`. */
     runId: string
+    /** Conversa com o agente (OPE-160): a auditoria registra `conversa` no lugar de `execucao`. */
+    sessionId?: string | null
     target: EngramindTarget
     /** Canais assinados e não arquivados (o primeiro é o próprio do agente). */
     allowed: readonly string[]
@@ -87,11 +90,14 @@ async function call<T>(env: RoutineMemoryEnv, method: "GET" | "POST" | "PATCH", 
         if (code === "MEMORY_DUPLICATE") throw new DomainError(409, "Já existe uma memória com o mesmo texto neste canal: atualize aquela em vez de criar outra.", "MEMORY_DUPLICATE")
         if (code !== "AUTH_INVALID") throw error
         const message = "O Engramind recusou o token do agente rotineiro: a operação usou a credencial do Opex, restrita ao mesmo canal. Use \"Reprovisionar\" para emitir outro token."
-        routineLog.warn({ slug: env.slug, runId: env.runId, method, path: request.path }, `[routine-agents] ${message}`)
+        routineLog.warn({ slug: env.slug, ...originOf(env), method, path: request.path }, `[routine-agents] ${message}`)
         env.warn?.(message)
         return engramindCall<T>(method, request)
     }
 }
+
+/** De onde veio a operação: a execução ou a conversa com o agente (OPE-160). */
+const originOf = (env: Pick<RoutineMemoryEnv, "runId" | "sessionId">): { execucao: string } | { conversa: string } => (env.sessionId ? { conversa: env.sessionId } : { execucao: env.runId })
 
 async function audit(env: RoutineMemoryEnv, memory: EngramindMemory, acao: (typeof AcaoAuditoria)[keyof typeof AcaoAuditoria], extra: Record<string, unknown>) {
     await recordAudit({
@@ -99,7 +105,7 @@ async function audit(env: RoutineMemoryEnv, memory: EngramindMemory, acao: (type
         entidade: AI_MEMORY_AUDIT_ENTITY,
         entidadeId: memory.id,
         acao,
-        depois: { canal: memory.channel, ...(memory.key ? { chave: memory.key } : {}), rotineiro: env.slug, ator: "agente:rotineiro", execucao: env.runId, ...extra },
+        depois: { canal: memory.channel, ...(memory.key ? { chave: memory.key } : {}), rotineiro: env.slug, ator: "agente:rotineiro", ...originOf(env), ...extra },
     }).catch((error: unknown) => routineLog.warn({ err: error, memoryId: memory.id }, "[routine-agents] auditoria da memória falhou"))
     await publishToChannels([integrationChannel("ai")], AI_MEMORIES_UPDATED_EVENT, { agentId: "routine", routineSlug: env.slug }).catch(() => undefined)
 }

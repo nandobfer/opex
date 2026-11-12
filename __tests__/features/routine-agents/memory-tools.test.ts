@@ -180,3 +180,14 @@ describe('instruções da execução (D13)', () => {
     expect(text).toContain('update_memory')
   })
 })
+
+describe('conversa com o agente (OPE-160)', () => {
+  it('a auditoria registra a conversa no lugar da execução', async () => {
+    engramind.handler = () => ({ memory: memory('m_1'), duplicate: false, created: true, similar: [] })
+    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador · conversa', runId: '', sessionId: 'sess_1', target: AGENT, allowed: ALLOWED })
+    const remember = list.find((tool) => tool.name === 'remember') as OpexTool
+    await remember.execute(remember.input.parse({ texto: 'fato dito na conversa' }), { sessionId: 'sess_1', actorId: 'local' })
+    expect(audits[0]?.depois).toMatchObject({ conversa: 'sess_1', rotineiro: 'indexador' })
+    expect(audits[0]?.depois).not.toHaveProperty('execucao')
+  })
+})

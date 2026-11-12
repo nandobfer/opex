@@ -11,12 +11,12 @@ import { encryptSecret } from "@/lib/crypto/secretBox"
 import { recordAiConsumption } from "@/lib/ai/consumption"
 import { routineIdentityOf } from "@/features/ai/agents"
 import { RoutineAgent, RoutineRun, type IRoutineRun } from "@/lib/db/models/RoutineAgent"
-import { LIVE_WAIT_OVERFLOW_HIBERNATE_MINUTES, ROUTINE_CONSUMPTION_ORIGIN, routineChannelOf } from "../constants"
+import { LIVE_WAIT_OVERFLOW_HIBERNATE_MINUTES, ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
 import { ACTIVE_LIMIT_MESSAGE, ROUTINE_STOP_GRACE_MS, ROUTINE_TURN_TIMEOUT_MS, TOKEN_LIMIT_MESSAGE, TURN_TIMEOUT_MESSAGE, remainingActiveMs } from "../limits"
 import { activationMessage, routineInstructions } from "../run-prompt"
 import { freeSlots } from "../slots"
 import { ROUTINE_SLOT_STATUSES, isFinalRunStatus, type RoutineRunStatus, type RoutineTriggerOrigin } from "../status"
-import { activeRoutineChannels, baseRoutineChannels, routineAgentTarget } from "./engramind"
+import { routineAgentTarget, routineMemoryChannels } from "./engramind"
 import { addUsage, beginActivation, endActivation, stopActivation, type Activation } from "./hub"
 import { ensureHeartbeat } from "./heartbeat"
 import { INSTANCE_ID } from "@/lib/instance"
@@ -163,21 +163,14 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         const agent = await loadAgentDoc(String(run.agentId))
         const target = await routineAgentTarget(agent.engramindToken).catch(() => null)
         if (!target) throw new Error("Token do agente rotineiro indisponível no Engramind: use \"Reprovisionar\" na configuração do agente")
-        const subscribed = [...baseRoutineChannels(agent.slug), ...(agent.provisioning?.extras ?? []).map((item) => item.channel)]
-        // Canal arquivado no Engramind depois do provisionamento sai do contexto e da lista de memória (D13).
-        const channels = await activeRoutineChannels(subscribed, target).then(
-            ({ active, archived }) => {
-                if (archived.length) activation.warnings.push(`Canal arquivado no Engramind, fora desta execução: ${archived.join(", ")}. Restaure-o na rede ou use "Reprovisionar".`)
-                return active
-            },
-            (error: unknown) => {
-                // Sem a lista, segue com os assinados: o Engramind continua recusando escrita em canal arquivado.
-                routineLog.warn({ err: error, runId }, "[routine-agents] não foi possível conferir os canais arquivados")
-                return subscribed
-            },
+        // Canal arquivado no Engramind depois do provisionamento sai do contexto e da lista de memória (D13);
+        // as ferramentas de memória leem e gravam nos ativos, o próprio primeiro.
+        const { channels, memoryChannels } = await routineMemoryChannels(
+            agent,
+            target,
+            (message) => activation.warnings.push(message),
+            (error) => routineLog.warn({ err: error, runId }, "[routine-agents] não foi possível conferir os canais arquivados"),
         )
-        // Canais em que as ferramentas de memória leem e gravam (D13): o próprio primeiro.
-        const memoryChannels = [routineChannelOf(agent.slug), ...channels.filter((channel) => channel !== routineChannelOf(agent.slug))]
         const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
         const memory = await getAgentMemoryContext(routineIdentityOf(agent.slug), channels, { target, focus: [agent.objective, run.request ?? ""].join("\n").slice(0, 1_000) })
         if (memory.source === "none" && memory.reason) throw new Error(`Engramind indisponível (${memory.reason}). Confira a integração Engramind e dispare de novo.`)

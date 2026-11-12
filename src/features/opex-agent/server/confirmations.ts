@@ -12,7 +12,7 @@ import { assertClientOpexEnabled, assertClientToolAllowed } from "./client-confi
 import { findOpexClientServerTool } from "./client-tools/registry"
 import { OWNER_SCOPE, type OpexServerScope } from "./scope"
 import { compactToolOutput, stringifyForDisplay } from "./tool-runtime"
-import { OpexToolError, toolErrorMessage, type OpexTool } from "./tools/define"
+import { OpexToolError, toolErrorMessage, type OpexTool, type OpexToolContext } from "./tools/define"
 import { findOpexTool } from "./tools/registry"
 
 /** Ação pendente expira depois disso (o card some como "Expirada"). */
@@ -123,12 +123,19 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
             // Revalida o cliente, o vínculo e a ferramenta na hora de executar (a configuração pode ter
             // mudado depois do card) e devolve o ator atualizado para o contexto.
             let executionScope = scope
+            let secrets: OpexToolContext["secrets"]
             if (scope.kind === "client") {
                 await assertClientOpexEnabled(scope.actor)
                 const actor = await assertClientToolAllowed(claimed.toolName, scope.actor, target.mcpServerId)
                 executionScope = { kind: "client", actor }
+            } else if (scope.agent === "routine" && scope.routineAgentId) {
+                // Conversa com um agente rotineiro (OPE-160): a ferramenta precisa continuar liberada para o
+                // agente (falha fechada) e recebe os segredos dele (Chamada HTTP).
+                const { assertRoutineChatToolAllowed, routineChatSecrets } = await import("@/features/routine-agents/server/chat/turn")
+                await assertRoutineChatToolAllowed(scope.routineAgentId, claimed.toolName, target.mcpServerId)
+                secrets = await routineChatSecrets(scope)
             }
-            output = compactToolOutput(await target.execute(target.input.parse(openInput(claimed.input)), { sessionId, actorId, scope: executionScope }))
+            output = compactToolOutput(await target.execute(target.input.parse(openInput(claimed.input)), { sessionId, actorId, scope: executionScope, ...(secrets ? { secrets } : {}) }))
             final = (await OpexPendingAction.findByIdAndUpdate(claimed._id, { $set: { result: JSON.stringify(output ?? null), input: null } }, { new: true }).lean<ActionDoc>())!
             followUp = `O usuário CONFIRMOU a ação "${claimed.summary}" (actionId ${actionId}) e ela foi executada. Resultado: ${JSON.stringify(output)}`
         } catch (error) {

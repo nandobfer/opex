@@ -34,6 +34,10 @@ vi.mock('@/features/opex-agent/hooks/useOpexSkills', () => ({
   useOpexSkillsRealtime: () => {},
 }))
 
+vi.mock('@/features/routine-agents/components/chat/RoutineChatColumn', () => ({
+  useRoutineChatCollapsed: () => ({ collapsed: false, setCollapsed: () => {} }),
+  RoutineChatColumn: () => <aside data-testid="routine-chat" />,
+}))
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(), usePathname: () => '/' }))

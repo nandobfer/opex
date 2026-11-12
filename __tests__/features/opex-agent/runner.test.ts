@@ -21,6 +21,10 @@ const mocks = vi.hoisted(() => ({
   ownerSkillsForTurn: vi.fn(),
   prepareModel: vi.fn(),
   stepCosts: [] as unknown[],
+  refreshTitleWith: vi.fn(async () => {}),
+  routineModel: vi.fn(),
+  prepareRoutine: vi.fn(),
+  routineClose: vi.fn(async () => {}),
 }))
 
 vi.mock('ai', () => ({
@@ -110,7 +114,8 @@ vi.mock('@/features/opex-agent/server/settings', () => ({
   loadOpexSettings: async () => ({ settings, isDefault: false, updatedAt: null }),
   opexAvailability: async () => (mocks.available ? { available: true, reason: null } : { available: false, reason: 'Agente desativado' }),
 }))
-vi.mock('@/features/opex-agent/server/titler', () => ({ refreshSessionTitle: mocks.refreshSessionTitle }))
+vi.mock('@/features/opex-agent/server/titler', () => ({ refreshSessionTitle: mocks.refreshSessionTitle, refreshSessionTitleWith: mocks.refreshTitleWith }))
+vi.mock('@/features/routine-agents/server/chat/turn', () => ({ routineChatTurnModel: mocks.routineModel, prepareRoutineChatTurn: mocks.prepareRoutine }))
 vi.mock('@/features/opex-agent/server/confirmations', () => ({
   requestConfirmation: vi.fn(),
   refreshConfirmations: async (parts: unknown[]) => parts,
@@ -452,5 +457,108 @@ describe('runner no portal do cliente', () => {
     const scope = { kind: 'client', actor: clientActor } as never
     expect(instructionsFor(settings as never, scope)).not.toContain('schedule_job')
     expect(instructionsFor(settings as never, scope, '', { jobs: true })).toContain('schedule_job')
+  })
+})
+
+describe('conversa com um agente rotineiro (OPE-160)', () => {
+  const ROUTINE_SCOPE = { kind: 'owner' as const, agent: 'routine' as const, routineAgentId: 'ag1' }
+  const rememberTool = { ...fakeTool, name: 'remember', group: 'routine-agents', label: 'Gravar memória' }
+
+  async function newRoutineSession(): Promise<string> {
+    const doc = await sessions().create({ title: 'Nova sessão', summary: '', titleSource: 'auto', status: 'idle', nextSeq: 1, messageCount: 0, lastMessageAt: new Date(), clientId: null, userId: 'local', agent: 'routine', routineAgentId: 'ag1' })
+    return String(doc._id)
+  }
+
+  function prepared(extra: Record<string, unknown> = {}) {
+    mocks.prepareRoutine.mockImplementation(async (input: { sessionId: string; userText: string; signal: AbortSignal; scope: unknown }) => ({
+      tools: [fakeTool, rememberTool],
+      overrides: {},
+      lookup: new Map([[rememberTool.name, rememberTool]]),
+      instructions: 'SÓ AS MEMÓRIAS DO ROTINEIRO',
+      history: [{ role: 'user', content: input.userText }],
+      toolContext: { sessionId: input.sessionId, actorId: 'local', signal: input.signal, scope: input.scope },
+      notices: ['Engramind indisponível: cache'],
+      providerSession: `opex-routine-chat-${input.sessionId}`,
+      title: 'Vagas',
+      close: mocks.routineClose,
+      ...extra,
+    }))
+  }
+
+  async function runRoutineTurn(sessionId: string, text: string): Promise<OpexStreamLine[]> {
+    const lines: OpexStreamLine[] = []
+    const ended = new Promise<void>((resolve) => {
+      const unsubscribe = subscribeSession(sessionId, (line) => {
+        lines.push(line)
+        if (line.type === 'turn-end') {
+          unsubscribe()
+          resolve()
+        }
+      })
+    })
+    await sendMessage(sessionId, { text }, 'local', ROUTINE_SCOPE)
+    await ended
+    return lines
+  }
+
+  beforeEach(() => {
+    mocks.routineModel.mockResolvedValue({ provider: 'openai', model: 'gpt-x', variant: null })
+    prepared()
+  })
+
+  it('usa o modelo e o turno do agente: só o prompt digitado (sem contexto de data), consumo e título próprios', async () => {
+    const sessionId = await newRoutineSession()
+    mocks.parts = [
+      { type: 'text-delta', id: 'x', text: 'Oi!' },
+      { type: 'finish', finishReason: 'stop', totalUsage: { inputTokens: 5, outputTokens: 2, totalTokens: 7 } },
+    ]
+    mocks.responseMessages = [{ role: 'assistant', content: 'Oi!' }]
+
+    const lines = await runRoutineTurn(sessionId, 'Olá, agente')
+
+    expect(mocks.routineModel).toHaveBeenCalledWith(ROUTINE_SCOPE)
+    const options = mocks.streamText.mock.calls[0]![0] as { messages: unknown[]; instructions: string; tools: Record<string, unknown> }
+    expect(options.instructions).toBe('SÓ AS MEMÓRIAS DO ROTINEIRO')
+    expect(options.messages).toEqual([{ role: 'user', content: 'Olá, agente' }])
+    expect(Object.keys(options.tools)).toEqual(['list_tasks', 'remember'])
+    // Nada do Agente Opex: nem MCPs dele, nem memórias, nem skills ligadas.
+    expect(mocks.loadMcpTools).not.toHaveBeenCalled()
+    expect(mocks.ownerSkillsForTurn).not.toHaveBeenCalled()
+    expect(mocks.prepareModel).toHaveBeenCalledWith(expect.objectContaining({ provider: 'openai', model: 'gpt-x', session: `opex-routine-chat-${sessionId}`, title: 'Vagas' }))
+    expect(lines.find((line) => line.type === 'text-delta')).toEqual({ type: 'text-delta', text: '> Engramind indisponível: cache\n\n' })
+    const assistant = messages().docs.find((doc) => doc.role === 'assistant')!
+    expect(assistant).toMatchObject({ status: 'complete', model: 'openai/gpt-x' })
+    await vi.waitFor(() => expect(mocks.recordAiConsumption).toHaveBeenCalled())
+    expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'routine-agent-chat', subject: sessionId, provider: 'openai', model: 'gpt-x', totalTokens: 7 }))
+    await vi.waitFor(() => expect(mocks.refreshTitleWith).toHaveBeenCalled())
+    expect(mocks.refreshTitleWith).toHaveBeenCalledWith(sessionId, expect.objectContaining({ provider: 'openai', model: 'gpt-x', origin: 'routine-agent-chat-title' }), expect.objectContaining({ userText: 'Olá, agente' }))
+    expect(mocks.refreshSessionTitle).not.toHaveBeenCalled()
+    expect(mocks.routineClose).toHaveBeenCalled()
+  })
+
+  it('agente indisponível (pausado, sem provisionamento, OpenCode) recusa sem reservar a conversa', async () => {
+    const sessionId = await newRoutineSession()
+    const { DomainError } = await import('@/lib/api/route')
+    mocks.routineModel.mockRejectedValueOnce(new DomainError(409, 'Retome o agente', 'ROUTINE_AGENT_PAUSED'))
+    await expect(sendMessage(sessionId, { text: 'oi' }, 'local', ROUTINE_SCOPE)).rejects.toMatchObject({ status: 409, code: 'ROUTINE_AGENT_PAUSED' })
+    expect(messages().docs).toHaveLength(0)
+    expect(sessions().docs[0]).toMatchObject({ status: 'idle', messageCount: 0 })
+  })
+
+  it('não aceita anexos', async () => {
+    const sessionId = await newRoutineSession()
+    await expect(sendMessage(sessionId, { text: 'oi', fileIds: ['f1'] }, 'local', ROUTINE_SCOPE)).rejects.toMatchObject({ status: 400, code: 'ROUTINE_CHAT_FILES_UNSUPPORTED' })
+    expect(messages().docs).toHaveLength(0)
+  })
+
+  it('teto técnico: o turno fecha como erro mesmo com o motor parado (folga)', async () => {
+    const sessionId = await newRoutineSession()
+    prepared({ timeout: { ms: 20, message: 'Passou do teto técnico', graceMs: 10 } })
+    mocks.gate = new Promise<void>(() => {})
+    const lines = await runRoutineTurn(sessionId, 'trabalho longo')
+    expect(lines.at(-1)).toMatchObject({ type: 'turn-end', status: 'error', error: 'Passou do teto técnico' })
+    expect(sessions().docs[0]).toMatchObject({ status: 'error', lastError: 'Passou do teto técnico' })
+    expect(isTurnActive(sessionId)).toBe(false)
+    expect(mocks.routineClose).toHaveBeenCalled()
   })
 })

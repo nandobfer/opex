@@ -42,6 +42,8 @@ export const ROUTINE_WORKDIR_ROOT = "opex-rotineiros"
 /** Aba de configuração em `/integracoes/ia`. */
 export const ROUTINE_SETTINGS_TAB = "rotineiros"
 export const routineSettingsHref = (agentId?: string) => `/integracoes/ia?aba=${ROUTINE_SETTINGS_TAB}${agentId ? `&agente=${agentId}` : ""}`
+/** Lista dos agentes rotineiros (seta de voltar da página do agente, OPE-160). */
+export const ROUTINE_AGENTS_PATH = "/agentes-rotineiros"
 export const routineAgentHref = (agentId: string, runId?: string) => `/agentes-rotineiros/${agentId}${runId ? `?aba=execucoes&execucao=${runId}` : ""}`
 
 /** Ferramentas internas da execução (sempre liberadas, nos dois motores). */

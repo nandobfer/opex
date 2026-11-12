@@ -11,8 +11,8 @@ import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionSt
  * `ensure-opex-indexes`.
  */
 
-/** Agente dono de uma sessão (as coleções `opex_*` guardam os dois). */
-export type OpexAgentKind = "opex" | "maddox"
+/** Agente dono de uma sessão (as coleções `opex_*` guardam os três; `routine` = conversa com um agente rotineiro, OPE-160). */
+export type OpexAgentKind = "opex" | "maddox" | "routine"
 
 /** Pedido do OpenCode em aberto numa sessão do Agente Maddox. */
 export interface IMaddoxPendingRequest {
@@ -42,6 +42,8 @@ export interface IOpexSession {
     userId: string
     /** Agente da sessão; ausente = Agente Opex (sessões anteriores ao Agente Maddox). */
     agent?: OpexAgentKind
+    /** Conversa com um agente rotineiro (`agent: "routine"`, OPE-160): id do agente. */
+    routineAgentId?: string | null
     /** Agente Maddox: sessão do OpenCode que guarda a conversa (criada no primeiro turno). */
     opencodeSessionId?: string | null
     /** Agente Maddox: modelo trocado só nesta sessão (`null` = padrão da configuração). */
@@ -134,7 +136,8 @@ const OpexSessionSchema = new Schema<IOpexSession>(
         nextSeq: { type: Number, default: 1 },
         clientId: { type: String, default: null },
         userId: { type: String, default: "" },
-        agent: { type: String, enum: ["opex", "maddox"], default: "opex" },
+        agent: { type: String, enum: ["opex", "maddox", "routine"], default: "opex" },
+        routineAgentId: { type: String, default: null },
         opencodeSessionId: { type: String, default: null },
         modelOverride: { type: Schema.Types.Mixed, default: null },
         pendingRequests: { type: Schema.Types.Mixed, default: [] },
@@ -147,6 +150,8 @@ OpexSessionSchema.index({ clientId: 1, userId: 1, archived: 1, lastMessageAt: -1
 // Agente Maddox: sessões por agente e a busca pela sessão do OpenCode (servidor MCP do Opex).
 OpexSessionSchema.index({ agent: 1, clientId: 1, userId: 1, lastMessageAt: -1 })
 OpexSessionSchema.index({ opencodeSessionId: 1 }, { sparse: true })
+// Conversas com um agente rotineiro (OPE-160).
+OpexSessionSchema.index({ agent: 1, routineAgentId: 1, lastMessageAt: -1 })
 
 const OpexMessageSchema = new Schema<IOpexMessage>(
     {

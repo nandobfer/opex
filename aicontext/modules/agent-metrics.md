@@ -225,7 +225,8 @@ ambas marcadas.
   `resumed`, `retried`, `correction` (`plan`/`preview`/`pr`), `ci-failed`, `ci-fixed`, `conflict`,
   `pr-review-replanned`, `refinement-started`/`-questions`/`-completed`/`-abandoned` e
   `budget-correction-requested`.
-- `agent_conversations`: estatística durável de cada conversa do Opex e do Maddox (mensagens,
+- `agent_conversations`: estatística durável de cada conversa do Opex e do Maddox — as conversas com os
+  agentes rotineiros (`agent: "routine"`, OPE-160) ficam de fora (mensagens,
   respostas com erro, ferramentas, confirmações, tokens); antes de a retenção (ou a exclusão) apagar a
   conversa, a estatística é gravada e marcada com `purgedAt`.
 - `agent_usage_days`: resumo diário de uso por agente, dia (São Paulo), cliente e repositório

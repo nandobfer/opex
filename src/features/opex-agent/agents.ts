@@ -7,6 +7,9 @@
 export const CHAT_AGENT_IDS = ["opex", "maddox"] as const
 export type ChatAgentId = (typeof CHAT_AGENT_IDS)[number]
 
+/** Agentes que usam a interface de chat: os do item da barra lateral e a conversa com um agente rotineiro (OPE-160). */
+export type ChatAgentKind = ChatAgentId | "routine"
+
 export function isChatAgentId(value: unknown): value is ChatAgentId {
     return typeof value === "string" && (CHAT_AGENT_IDS as readonly string[]).includes(value)
 }

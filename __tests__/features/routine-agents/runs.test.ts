@@ -60,6 +60,14 @@ vi.mock('@/features/routine-agents/server/engramind', () => ({
   baseRoutineChannels: (slug: string) => ['opex', 'agentes/rotineiros/global', `agentes/rotineiros/${slug}`],
   routineAgentTarget: async () => ({ baseUrl: 'http://engramind', token: 'agent-token' }),
   activeRoutineChannels: async (channels: string[]) => ({ active: channels.filter((channel) => !holder.archivedChannels.includes(channel)), archived: channels.filter((channel) => holder.archivedChannels.includes(channel)) }),
+  routineMemoryChannels: async (agent: { slug: string; provisioning?: { extras?: { channel: string }[] } | null }, _target: unknown, warn: (message: string) => void) => {
+    const subscribed = ['opex', 'agentes/rotineiros/global', `agentes/rotineiros/${agent.slug}`, ...(agent.provisioning?.extras ?? []).map((item) => item.channel)]
+    const archived = subscribed.filter((channel) => holder.archivedChannels.includes(channel))
+    if (archived.length) warn(`Canal arquivado no Engramind, fora desta execução: ${archived.join(', ')}. Restaure-o na rede ou use "Reprovisionar".`)
+    const channels = subscribed.filter((channel) => !holder.archivedChannels.includes(channel))
+    const own = `agentes/rotineiros/${agent.slug}`
+    return { channels, memoryChannels: [own, ...channels.filter((channel) => channel !== own)] }
+  },
 }))
 vi.mock('@/features/engramind/server/memory-context', () => ({ getAgentMemoryContext: async () => ({ block: '', source: 'live', cachedAt: null, counts: { full: 0, titles: 0, overflow: 0 }, reason: null }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (name: string) => holder.catalog.get(name) }))

@@ -144,3 +144,30 @@ export async function routineAgentTarget(stored: IRoutineAgentToken | null | und
     const base = await engramindTarget()
     return { baseUrl: base.baseUrl, token }
 }
+
+/**
+ * Canais da memória de um turno (execução ou conversa, OPE-160): os assinados (`opex`, o global, o
+ * próprio e os extras do provisionamento) menos os arquivados no Engramind (D13), e a lista em que as
+ * ferramentas de memória leem e gravam, com o próprio primeiro. Sem conseguir conferir os arquivados,
+ * segue com os assinados (o Engramind continua recusando escrita em canal arquivado).
+ */
+export async function routineMemoryChannels(
+    agent: { slug: string; provisioning?: { extras?: readonly { channel: string }[] } | null },
+    target: EngramindTarget,
+    warn: (message: string) => void,
+    onCheckFailed: (error: unknown) => void,
+): Promise<{ channels: string[]; memoryChannels: string[] }> {
+    const subscribed = [...baseRoutineChannels(agent.slug), ...(agent.provisioning?.extras ?? []).map((item) => item.channel)]
+    const channels = await activeRoutineChannels(subscribed, target).then(
+        ({ active, archived }) => {
+            if (archived.length) warn(`Canal arquivado no Engramind, fora desta execução: ${archived.join(", ")}. Restaure-o na rede ou use "Reprovisionar".`)
+            return active
+        },
+        (error: unknown) => {
+            onCheckFailed(error)
+            return subscribed
+        },
+    )
+    const own = routineChannelOf(agent.slug)
+    return { channels, memoryChannels: [own, ...channels.filter((channel) => channel !== own)] }
+}

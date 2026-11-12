@@ -14,6 +14,9 @@ export interface AgentPageFrameProps {
     title: string
     description: string
     settingsHref?: string
+    /** Seta de voltar antes do ícone (OPE-160) e o rótulo acessível dela. */
+    backHref?: string
+    backLabel?: string
     /** "Configurar" sem navegar (abre o editor na própria página). */
     onSettings?: () => void
     /** Ações à direita do Configurar. */
@@ -34,11 +37,11 @@ export interface AgentPageFrameProps {
  * (`OptionTabs`) e o conteúdo da aba com troca animada. Usada pela `AgentPage` (agentes do catálogo) e
  * pela página de cada agente rotineiro; o estado da aba (URL) fica com quem usa.
  */
-export function AgentPageFrame({ id, icon, title, description, settingsHref, onSettings, actions, notice, tabs, tab, onTabChange, filters, children }: AgentPageFrameProps) {
+export function AgentPageFrame({ id, icon, title, description, settingsHref, backHref, backLabel, onSettings, actions, notice, tabs, tab, onTabChange, filters, children }: AgentPageFrameProps) {
     const reduceMotion = useReducedMotion()
     return (
         <motion.section initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-4">
-            <AgentPageHeader icon={icon} title={title} description={description} settingsHref={settingsHref} onSettings={onSettings}>
+            <AgentPageHeader icon={icon} title={title} description={description} settingsHref={settingsHref} onSettings={onSettings} backHref={backHref} backLabel={backLabel}>
                 {actions}
             </AgentPageHeader>
             {notice}

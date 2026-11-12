@@ -4,7 +4,7 @@ import { useMemo, type ReactNode } from "react"
 import { unwrapApi } from "@/lib/api"
 import { checkFiles, createChatUploads, type ChatUploadEndpoints, type ChatUploadItem, type ChatUploadStatus } from "@/hooks/useChatUploads"
 import type { ApiResponse } from "@/lib/types/api"
-import type { ChatAgentId } from "../agents"
+import type { ChatAgentKind } from "../agents"
 import type { OpexFileDto, OpexFileReservationDto } from "../types"
 import { useOpexScope, type OpexUiScope } from "../components/OpexScopeProvider"
 
@@ -19,9 +19,11 @@ export { checkFiles }
 export type OpexUploadStatus = ChatUploadStatus
 export type OpexUploadItem = ChatUploadItem
 
-const uploads: Record<ChatAgentId, ReturnType<typeof createChatUploads>> = {
+const uploads: Record<ChatAgentKind, ReturnType<typeof createChatUploads>> = {
     opex: createChatUploads(null, "Opex"),
     maddox: createChatUploads(null, "Maddox"),
+    // Conversa com um agente rotineiro (OPE-160): sem anexos, a fila fica inerte (sem provider).
+    routine: createChatUploads(null, "Rotineiro", { optional: true }),
 }
 
 /** `scope`: o escopo do agente da fila (padrão: o do contexto). */

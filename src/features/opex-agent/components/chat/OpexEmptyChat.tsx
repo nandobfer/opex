@@ -11,9 +11,13 @@ import { useOpexScope } from "../OpexScopeProvider"
 export function OpexEmptyChat({ onPick, disabled }: { onPick: (text: string) => void; disabled?: boolean }) {
     const { kind, clientName, agent } = useOpexScope()
     const maddox = agent.id === "maddox"
+    const routine = agent.id === "routine"
     const AgentIcon = agent.icon
-    const suggestions = maddox ? (kind === "client" ? MADDOX_CLIENT_SUGGESTIONS : MADDOX_SUGGESTIONS) : kind === "client" ? OPEX_CLIENT_SUGGESTIONS : OPEX_SUGGESTIONS
-    const description = maddox
+    // Conversa com um agente rotineiro (OPE-160): sem sugestões — a primeira mensagem é a que o dono digitar.
+    const suggestions = routine ? [] : maddox ? (kind === "client" ? MADDOX_CLIENT_SUGGESTIONS : MADDOX_SUGGESTIONS) : kind === "client" ? OPEX_CLIENT_SUGGESTIONS : OPEX_SUGGESTIONS
+    const description = routine
+        ? "Converse com o agente: ele usa só as ferramentas e as memórias dele, sem o objetivo nem as instruções da rotina. Conversar não dispara uma execução."
+        : maddox
         ? kind === "client"
             ? `Rodo no OpenCode e ajudo a acompanhar as tarefas${clientName ? ` de ${clientName}` : ""}, abrir pedidos e consultar o andamento. Peça em linguagem natural.`
             : "Rodo no OpenCode, na sua máquina: uso o terminal, os arquivos, as skills e os MCPs do OpenCode, além das ferramentas do Opex. Peça em linguagem natural."

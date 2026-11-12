@@ -43,7 +43,15 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
   para a página.
 - As abas abertas ficam no `localStorage` (`opex:opex-agent:tabs:v1`, `usePersistentState` + Zod).
 - As sessões guardam o agente (`opex_sessions.agent`; ausente = Agente Opex): o Agente Opex nunca vê as
-  sessões do Maddox (404) e os jobs não usam sessão do Maddox.
+  sessões do Maddox (404) e os jobs não usam sessão do Maddox. Desde a OPE-160 as coleções guardam também
+  as conversas com os agentes rotineiros (`agent: "routine"` + `routineAgentId`, ver
+  `modules/routine-agents.md`, "Conversa com o agente"): todo filtro de sessões do Agente Opex passa por
+  `opexSessionAgentFilter` (`src/features/opex-agent/session-filter.ts`, `$nin: ["maddox", "routine"]`) —
+  lista, jobs, retenção e métricas. O runner monta o turno por perfil (`PreparedChatTurn`): o do Agente
+  Opex (`prepareOpexTurn`) ou o da conversa com um rotineiro (`prepareRoutineChatTurn`); o resto (reserva,
+  stream, gravação, título, confirmações) é o mesmo. O miolo do popover (`AgentChatBody` + `useAgentChat`)
+  também é usado pela conversa com o rotineiro; o descritor do agente tem `attachments` (sem anexos, o
+  campo esconde o anexar). O histórico do modelo vem de `loadSessionHistory` (`server/turn-history.ts`).
 - **Sessões** abre a lista de todas: busca tolerante (fuse.js) por título e resumo, filtro das
   arquivadas, renomear, arquivar e excluir (com `AlertDialog`) e lista virtualizada acima de 50.
 - A primeira mensagem de uma "Nova sessão" cria a sessão.
