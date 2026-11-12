@@ -1,6 +1,6 @@
 "use client"
 
-import { useCallback, useId, useRef, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useRef, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Menu } from "lucide-react"
@@ -47,7 +47,8 @@ interface AppShellProps {
 /**
  * Casca das telas: sidebar + conteúdo (sem cabeçalho; no celular, botão flutuante abre o menu) com
  * transição de página (Framer Motion, respeitando movimento reduzido). Segue o Shell do DS Sipal:
- * "Pular para o conteúdo" como primeiro foco, gaveta abaixo de 1024px que fecha com Esc/fundo/link,
+ * "Pular para o conteúdo" como primeiro foco, gaveta abaixo de 1024px que fecha com Esc/fundo/link
+ * (e a cada troca de rota),
  * devolve o foco ao botão de menu e deixa o resto da tela inerte enquanto aberta.
  */
 export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [], persistentHrefs = [], evenPaddingHrefs = [], ownerName, version, sidebarFooterItems, sidebarItemPanels, children }: AppShellProps) {
@@ -68,6 +69,11 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
         requestAnimationFrame(() => menuButtonRef.current?.focus())
     }, [closeMobile])
     useDrawerFocus(drawerOpen, closeDrawer, drawerRef)
+    // Links que não são itens do menu (ex.: atalho de configuração no painel "Servidor e quota")
+    // não recebem `onNavigate`: a gaveta fecha pela troca de rota.
+    useEffect(() => {
+        closeMobile()
+    }, [pathname, closeMobile])
 
     const sidebarNode = (
         <AppSidebar
