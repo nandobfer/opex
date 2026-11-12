@@ -62,7 +62,7 @@ em ordem, e falha na primeira inconsistência:
 1. **Pré-requisitos locais:** confere que a chave, o `known_hosts`, o arquivo da imagem e os
    arquivos de Compose existem antes de tocar no servidor.
 2. **Pré-verificações remotas:** via SSH, confere `docker`, `docker compose`, a presença do `.env`
-   no diretório de produção e as redes externas exigidas (`mongodb-network`, `soketi-network`, `minio-network`).
+   no diretório de produção e as redes externas exigidas (ver "Redes externas").
 3. **Arquitetura:** compara `docker info` do servidor com a arquitetura derivada de
    `DEPLOY_PLATFORM` (`x86_64`/`aarch64`).
 4. **Diretório de release:** `mkdir -p` do diretório remoto.
@@ -81,6 +81,25 @@ em ordem, e falha na primeira inconsistência:
 Em falha, o script informa a **imagem anterior** em execução (para rollback) e encerra com código
 não zero. `docker restart` não é usado porque **não troca a imagem** de um container existente — o
 container precisa ser recriado.
+
+## Redes externas
+
+O `docker-compose.yml` declara redes `external: true` que o pipeline **não** cria: elas precisam
+existir no servidor. O script de deploy confere cada uma antes de tocar em qualquer coisa
+(`DEPLOY_REQUIRED_NETWORKS`, com o padrão abaixo) e falha com mensagem clara quando falta.
+
+| Rede | Para quê |
+|---|---|
+| `mongodb-network` | Banco (`mongodb`) |
+| `soketi-network` | Pusher/Soketi |
+| `minio-network` | Armazenamento de anexos do Agente Opex |
+| `mcp` | MCPs em container — hoje o **Playwright MCP**, em `http://playwright:8931/mcp`, para os agentes do motor `opex` (que rodam no container) |
+
+Criar uma vez no servidor: `docker network create mcp`. Só o serviço `app` entra na rede `mcp`
+(nem `app-dev` nem o portal precisam dela); o `docker-compose.deploy.yml` não mexe em redes, então o
+container publicado herda a lista do `docker-compose.yml`. O compose do Playwright MCP não vive neste
+repositório: ele roda como projeto Compose próprio (`/home/burgos/mcp/playwright`) e só entra na rede
+`mcp` como `external`.
 
 ## Configuração (GitHub)
 

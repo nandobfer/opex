@@ -120,7 +120,7 @@ describe('readConfig', () => {
     expect(config.platform).toBe('linux/amd64')
     expect(config.expectedArchitecture).toBe('x86_64')
     expect(config.composeFiles).toEqual(['docker-compose.yml', 'docker-compose.deploy.yml'])
-    expect(config.requiredNetworks).toEqual(['mongodb-network', 'soketi-network', 'minio-network'])
+    expect(config.requiredNetworks).toEqual(['mongodb-network', 'soketi-network', 'minio-network', 'mcp'])
     expect(config.cleanupArchive).toBe(true)
   })
 

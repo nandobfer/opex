@@ -29,6 +29,8 @@ services:
       - mongodb-network
       - soketi-network
       - minio-network
+      # Rede compartilhada dos MCPs em container (Playwright MCP na porta 8931).
+      - mcp
     deploy:
       resources:
         limits:
@@ -107,4 +109,6 @@ networks:
   soketi-network:
     external: true
   minio-network:
+    external: true
+  mcp:
     external: true
