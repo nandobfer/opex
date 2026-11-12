@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
 
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("next/navigation", () => ({ usePathname: () => "/tarefas" }))
+const nav = vi.hoisted(() => ({ pathname: "/tarefas" }))
+vi.mock("next/navigation", () => ({ usePathname: () => nav.pathname }))
 vi.mock("next/link", () => ({
     default: ({ children, href, ...props }: { children: React.ReactNode; href: string } & Record<string, unknown>) => (
         <a href={href} {...props}>
@@ -16,21 +17,25 @@ vi.mock("next/link", () => ({
 }))
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
 
+import Link from "next/link"
 import { AppShell } from "@/features/layout/components/AppShell"
 import { APP_NAV } from "@/features/layout/navigation"
 
+const shell = (footer?: (collapsed: boolean) => React.ReactNode) => (
+    <AppShell brand={{ name: "Acme", homeHref: "/tarefas" }} sections={APP_NAV} navLabel="Menu principal" ownerName="Ana" sidebarFooterItems={footer}>
+        <p>conteúdo</p>
+    </AppShell>
+)
+
 function renderShell() {
-    return render(
-        <AppShell brand={{ name: "Acme", homeHref: "/tarefas" }} sections={APP_NAV} navLabel="Menu principal" ownerName="Ana">
-            <p>conteúdo</p>
-        </AppShell>,
-    )
+    return render(shell())
 }
 
 const flushFrames = () => act(() => new Promise<void>((resolve) => requestAnimationFrame(() => resolve())))
 
 beforeEach(() => {
     window.innerWidth = 500
+    nav.pathname = "/tarefas"
 })
 afterEach(cleanup)
 
@@ -76,5 +81,25 @@ describe("AppShell — gaveta do menu e atalho (padrão Shell do DS Sipal)", () 
         fireEvent.click(screen.getByRole("button", { name: "Abrir menu" }))
         fireEvent.click(screen.getByTestId("sidebar-drawer-backdrop"))
         expect(screen.queryByRole("dialog")).toBeNull()
+    })
+
+    it("OPE-161: fecha quando a rota muda por um link fora dos itens do menu (atalho de um painel do rodapé)", () => {
+        const footer = () => (
+            <li>
+                <Link href="/integracoes/ia/opencode" data-testid="footer-shortcut">
+                    Configurar OpenCode no host
+                </Link>
+            </li>
+        )
+        const { rerender } = render(shell(footer))
+        fireEvent.click(screen.getByRole("button", { name: "Abrir menu" }))
+        expect(screen.getByRole("dialog", { name: "Menu principal" })).toBeTruthy()
+        fireEvent.click(screen.getByTestId("footer-shortcut"))
+        expect(screen.getByRole("dialog", { name: "Menu principal" })).toBeTruthy()
+
+        nav.pathname = "/integracoes/ia/opencode"
+        rerender(shell(footer))
+        expect(screen.queryByRole("dialog")).toBeNull()
+        expect(screen.getByRole("button", { name: "Abrir menu" }).getAttribute("aria-expanded")).toBe("false")
     })
 })

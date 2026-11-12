@@ -48,6 +48,9 @@ export const OPENCODE_QUOTA_STALE_MS = 30 * 60_000
 /** Faixas de cor pelo percentual usado (as mesmas de todas as barras de consumo). */
 export { USAGE_CRITICAL_PERCENT as QUOTA_CRITICAL_PERCENT, USAGE_WARNING_PERCENT as QUOTA_WARNING_PERCENT } from "@/components/metrics/usage-level"
 
+/** Atalho de configuração do painel: página do OpenCode no host (Integrações › Inteligência Artificial). */
+export const OPENCODE_SETTINGS_HREF = "/integracoes/ia/opencode"
+
 /** Preferência do painel (recolhido/expandido) no navegador. */
 export const OPENCODE_QUOTA_PANEL_KEY = "opex:opencode-quota-panel:v1"
 

@@ -37,7 +37,9 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 ## Componentes (`src/features/layout/`)
 
 - `AppLayoutShell`: marca "Opex", `APP_NAV`, "Menu principal".
-- `AppShell`: sidebar (desktop) ou gaveta (< 1024px), `RealtimeStatusBanner` e
+- `AppShell`: sidebar (desktop) ou gaveta (< 1024px; fecha por Esc, fundo, link do menu e também a
+  cada troca de rota, para links que não são itens do menu, como o atalho "Configurar OpenCode no
+  host" do painel "Servidor e quota"), `RealtimeStatusBanner` e
   `<main id="main-content">` com transição de página (Framer Motion). No desktop a sidebar é
   **sempre recolhida** (68px): não há botão de recolher/expandir. A chave da transição é
   `pageTransitionKey(pathname, persistentHrefs)`: telas com sub-rotas que são a mesma tela

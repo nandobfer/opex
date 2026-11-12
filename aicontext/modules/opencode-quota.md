@@ -85,6 +85,13 @@ OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal�
   `opex:opencode-quota-panel:v1`, `usePersistentState`; nasce expandido; o formato antigo
   `{ collapsed }` continua válido). O título é só "Quota do OpenCode"; o card recolhe/expande
   pelo título ou pela seta (botão de ícone "Recolher quota"/"Expandir quota").
+- **Cabeçalho** (OPE-161), da esquerda para a direita: título, selo "Desatualizado" (quando há),
+  "Atualizar" (`RefreshIconButton`), **atalho de configuração** e a seta. O atalho é um link
+  (`next/link`, ícone `Settings`, `aria-label`/`title` "Configurar OpenCode no host",
+  `data-testid="opencode-quota-config"`) para `OPENCODE_SETTINGS_HREF` (`/integracoes/ia/opencode`,
+  aba padrão Configuração), com o mesmo tamanho e anel de foco da seta. É um irmão dos botões de
+  recolher: clicar nele navega sem recolher o card nem pedir a quota. Aparece nos dois consumidores
+  (coluna Tarefas de `/desenvolvimento` e painel "Servidor e quota" da barra lateral).
 - **Janela-resumo** (`summaryWindows`): uma por conta do provedor, na ordem do snapshot — a primeira
   com % (quase sempre a de 5h) ou, sem nenhuma, a primeira linha de valor; conta só com erro não entra.
 - **Card expandido**: cada provedor tem cabeçalho próprio ("Recolher/Expandir {provedor}", seta,
