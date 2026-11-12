@@ -9,6 +9,7 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { ROUTINE_AGENT_UPDATED_EVENT, ROUTINE_RUN_ATTENTION_EVENT, ROUTINE_RUN_UPDATED_EVENT, routineAgentHref } from "../constants"
 import { ROUTINE_RUN_STATUS_LABELS } from "../status"
 import type { RoutineAgentUpdatedPayload, RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
+import { routineChatQueryPrefix } from "../chat"
 import { routineKeys } from "./keys"
 
 /**
@@ -25,6 +26,8 @@ export function useRoutineRealtime(enabled = true): void {
             void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "list"] })
             if (payload?.id) void queryClient.invalidateQueries({ queryKey: routineKeys.agent(payload.id) })
             if (payload?.id) void queryClient.invalidateQueries({ queryKey: routineKeys.secrets(payload.id) })
+            // Conversa com o agente (OPE-160): modelo e disponibilidade mudam ao editar, pausar ou reprovisionar.
+            if (payload?.id) void queryClient.invalidateQueries({ queryKey: [routineChatQueryPrefix(payload.id), "status"] })
             // Uma entrada global gravada num agente muda a lista de todos os outros (OPE-149).
             void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "entries"] })
             if (payload?.id === "settings") void queryClient.invalidateQueries({ queryKey: routineKeys.settings })

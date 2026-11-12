@@ -21,7 +21,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/hooks/useInstanceInfo', () => ({ useInstanceInfo: () => ({ data: undefined }) }))
 vi.mock('@/features/routine-agents/components/chat/RoutineChatColumn', () => ({
   useRoutineChatCollapsed: () => ({ collapsed: false, setCollapsed: () => {} }),
-  RoutineChatColumn: () => <aside data-testid="routine-chat" />,
+  RoutineChatColumn: ({ agent }: { agent: { id: string; title: string } }) => <aside data-testid="routine-chat" data-agent-id={agent.id} data-agent-title={agent.title} />,
 }))
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }), useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }))
@@ -211,7 +211,11 @@ describe('OPE-160: voltar, "Conversar" e a conversa na Visão geral', () => {
     fireEvent.click(screen.getByRole('button', { name: /Conversar/ }))
     const layout = screen.getByTestId('routine-overview-layout')
     expect(layout.textContent).toContain('visão geral')
-    expect(layout.contains(screen.getByTestId('routine-chat'))).toBe(true)
+    const chat = screen.getByTestId('routine-chat')
+    expect(layout.contains(chat)).toBe(true)
+    // A coluna recebe o id do agente da página (as rotas da conversa usam o id, nunca o slug).
+    expect(chat.getAttribute('data-agent-id')).toBe('Indexador')
+    expect(chat.getAttribute('data-agent-title')).toBe('Agente Indexador')
   })
 
   it('"Conversar" desabilitado com o motivo no motor OpenCode e com o agente pausado', () => {

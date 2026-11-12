@@ -14,6 +14,7 @@ vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: mocks.available
 import { useRoutineRealtime } from '@/features/routine-agents/hooks/useRoutineRealtime'
 import { routineKeys } from '@/features/routine-agents/hooks/keys'
 import { ROUTINE_AGENT_UPDATED_EVENT } from '@/features/routine-agents/constants'
+import { routineChatQueryPrefix } from '@/features/routine-agents/chat'
 
 const AGENT_A = 'a'.repeat(24)
 const AGENT_B = 'b'.repeat(24)
@@ -41,6 +42,18 @@ describe('useRoutineRealtime', () => {
 
     expect(client.getQueryState(routineKeys.entries(AGENT_A))?.isInvalidated).toBe(true)
     expect(client.getQueryState(routineKeys.entries(AGENT_B))?.isInvalidated).toBe(true)
+  })
+
+  it('routine-agent-updated invalida o status da conversa do agente (modelo e disponibilidade, OPE-160)', () => {
+    const client = new QueryClient()
+    client.setQueryData([routineChatQueryPrefix(AGENT_A), 'status'], { available: true, modelLabel: 'OpenAI · antigo' })
+    client.setQueryData([routineChatQueryPrefix(AGENT_B), 'status'], { available: true, modelLabel: 'OpenAI · outro' })
+    const wrapper = ({ children }: { children: React.ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    renderHook(() => useRoutineRealtime(), { wrapper })
+    const bound = mocks.bind.mock.calls.find(([event]) => event === ROUTINE_AGENT_UPDATED_EVENT)
+    ;(bound![1] as (payload: { id: string }) => void)({ id: AGENT_A })
+    expect(client.getQueryState([routineChatQueryPrefix(AGENT_A), 'status'])?.isInvalidated).toBe(true)
+    expect(client.getQueryState([routineChatQueryPrefix(AGENT_B), 'status'])?.isInvalidated).toBe(false)
   })
 
   it('desfaz a assinatura e libera o canal ao desmontar', () => {
