@@ -63,6 +63,11 @@ describe('extractTechnicalSpec', () => {
     expect(extractTechnicalSpec('##### Especificação técnica\nnada')).toBeNull()
   })
 
+  it('menção em prosa precedida de espaço, mesmo com separador, não sobrepõe a especificação válida', () => {
+    expect(extractTechnicalSpec('## Especificação técnica\n\n- critério\n\nAtualizei a seção ## Especificação técnica: ok.')).toBe('- critério\n\nAtualizei a seção ## Especificação técnica: ok.')
+    expect(extractTechnicalSpec('## Especificação técnica\n\n- critério\n\nVeja a ## Especificação técnica (v3)')).toBe('- critério\n\nVeja a ## Especificação técnica (v3)')
+  })
+
   it('só preâmbulo (sem título) ou título colado com corpo vazio devolve null', () => {
     expect(extractTechnicalSpec('Segue a especificação consolidada:')).toBeNull()
     expect(extractTechnicalSpec('Segue:## Especificação técnica\n\n  ')).toBeNull()

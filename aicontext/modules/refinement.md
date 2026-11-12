@@ -154,7 +154,7 @@ de texto). A entrada durável `opex-refinement` passa a levar só o
    da tarefa** (`updateTask`) — a cada rodada e no fim do turno. O extrator também reconhece o título
    **colado a um texto anterior** na mesma linha (`Segue a especificação:## Especificação técnica` — o
    preâmbulo é descartado) e com **sufixo iniciado por separador** (`— OPE-1`, `: resumo`, `(v2)`);
-   menção em prosa, entre crases ou com sufixo sem separador (`## Especificação técnica do módulo`) não
+   "colado" é sem espaço antes dos `#`; menção em prosa (precedida de espaço), entre crases ou com sufixo sem separador (`## Especificação técnica do módulo`) não
    conta. O protocolo continua pedindo o título exato. Quando a gravação só funcionou pela tolerância, o
    serviço registra um `log.info` por turno (`taskId`, `refinementId`). Os blocos de texto do turno
    chegam separados por linha em branco (runner `opencode-run.ts`, `modules/agentic-dev.md`), sem
