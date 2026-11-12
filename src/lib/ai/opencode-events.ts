@@ -62,7 +62,8 @@ export interface OpencodeRetry {
 }
 
 export type OpencodeSessionEvent =
-    | { kind: "text"; delta: string }
+    /** `block`: parte de texto de origem (`assistantMessageID:ordinal`), quando o evento informa. */
+    | { kind: "text"; delta: string; block?: string }
     | { kind: "reasoning"; delta?: string }
     | { kind: "tool-start"; id: string; name: string }
     | { kind: "tool-called"; id: string; input: Record<string, unknown> }
@@ -176,7 +177,10 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
     switch (event.type) {
         case "session.text.delta": {
             const delta = str(data.delta)
-            return delta ? { kind: "text", delta } : null
+            if (!delta) return null
+            const messageId = str(data.assistantMessageID)
+            const ordinal = typeof data.ordinal === "number" ? data.ordinal : null
+            return messageId && ordinal !== null ? { kind: "text", delta, block: `${messageId}:${ordinal}` } : { kind: "text", delta }
         }
         case "session.reasoning.started":
             return { kind: "reasoning" }

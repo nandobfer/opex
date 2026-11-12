@@ -31,7 +31,7 @@ import { getTask } from "@/features/tasks/server/service"
 import { updateTask } from "@/features/tasks/server/service"
 import { availabilityOfTaskRefinement, loadTaskRefinementSettings } from "@/features/ai/server/settings"
 import { REFINEMENT_AUDIT_ENTITY, REFINEMENT_INSTRUCTIONS_KEY, REFINEMENT_MAX_RECOVERY_ATTEMPTS, REFINEMENT_SPEC_MISSING_ERROR, REFINEMENT_SPEC_SAVE_ERROR, REFINEMENT_STAGE_LABEL, REFINEMENT_UPDATED_EVENT, REFINEMENT_WORKBENCH_ADVANCED_REASON, refinementFilesOwner } from "../constants"
-import { extractTechnicalSpec, refinementConcluded } from "../logic"
+import { extractTechnicalSpec, extractTechnicalSpecDetail, refinementConcluded } from "../logic"
 import {
     buildRefinementFinalizePrompt,
     buildRefinementFreshContinuePrompt,
@@ -217,14 +217,26 @@ export async function getRefinementState(taskId: string): Promise<TaskRefinement
  * não traz a especificação. Uma falha ao gravar é propagada, para o turno não marcar como esclarecido
  * sem persistir.
  */
-async function saveSpec(taskId: string, text: string): Promise<boolean> {
-    const spec = extractTechnicalSpec(text)
-    if (!spec) return false
+async function saveSpec(taskId: string, text: string, tolerance?: SpecToleranceLog): Promise<boolean> {
+    const extracted = extractTechnicalSpecDetail(text)
+    if (!extracted) return false
+    const { spec } = extracted
     const current = await TaskRefinement.findOne({ taskId }).select({ spec: 1 }).lean()
-    if ((current as { spec?: string | null } | null)?.spec === spec) return true
-    await updateTask(taskId, { technicalSpec: spec }, actorId())
-    await TaskRefinement.updateOne({ taskId }, { $set: { spec } })
+    if ((current as { spec?: string | null } | null)?.spec !== spec) {
+        await updateTask(taskId, { technicalSpec: spec }, actorId())
+        await TaskRefinement.updateOne({ taskId }, { $set: { spec } })
+    }
+    if (extracted.tolerant && tolerance && !tolerance.logged) {
+        tolerance.logged = true
+        log.info({ taskId, refinementId: tolerance.refinementId }, "[refinement] especificação extraída com título fora do padrão (texto colado antes ou sufixo)")
+    }
     return true
+}
+
+/** Log único por turno quando a especificação só foi reconhecida pela tolerância do extrator. */
+interface SpecToleranceLog {
+    refinementId: string
+    logged: boolean
 }
 
 /** Id do refinamento da tarefa (para o stream de eventos). `null` quando não há. */
@@ -296,6 +308,7 @@ function turnHooks(doc: ITaskRefinement) {
     const changed = () => publishRefinement(doc.taskId)
     // Texto acumulado do turno (para extrair a especificação a cada rodada).
     const accumulated = { text: "" }
+    const tolerance: SpecToleranceLog = { refinementId: String(doc._id), logged: false }
     return {
         hooks: {
             onPermission: async (permission: OpencodePermissionDto) => {
@@ -314,7 +327,7 @@ function turnHooks(doc: ITaskRefinement) {
                 await TaskRefinement.updateOne(filter, { $push: { pendingForms: form } })
                 refinementMetric(doc, "refinement-questions", { dedupKey: `refinement-questions:${String(doc._id)}:${form.id}`, data: { questions: form.fields?.length ?? 1 } })
                 // Rodada concluída: a especificação atualizada é gravada na tarefa.
-                await saveSpec(doc.taskId, accumulated.text).catch((error) => log.warn({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação"))
+                await saveSpec(doc.taskId, accumulated.text, tolerance).catch((error) => log.warn({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação"))
                 await changed()
             },
             onFormClosed: async (formId: string) => {
@@ -332,6 +345,7 @@ function turnHooks(doc: ITaskRefinement) {
             },
         },
         accumulated,
+        tolerance,
     }
 }
 
@@ -412,7 +426,7 @@ async function executeTurn(id: string, text: string, controller: AbortController
     let textOut = ""
     let specSaved = false
     for (let attempt = 0; ; attempt++) {
-        const { hooks, accumulated } = turnHooks(doc)
+        const { hooks, accumulated, tolerance } = turnHooks(doc)
         // O attach vale só para o primeiro turno: as consolidações são turnos novos normais.
         const attachThisTurn = attach && attempt === 0
         log.info({ refinementId: id, agent: agent.agent, model: agent.model, attempt, attach: attachThisTurn }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
@@ -440,7 +454,7 @@ async function executeTurn(id: string, text: string, controller: AbortController
         // Só marca como esclarecido quando a especificação DESTE turno existe e foi gravada de fato.
         if (extractTechnicalSpec(textOut)) {
             try {
-                specSaved = await saveSpec(doc.taskId, textOut)
+                specSaved = await saveSpec(doc.taskId, textOut, tolerance)
             } catch (error) {
                 log.error({ err: errorText(error), taskId: doc.taskId }, "[refinement] falha ao salvar a especificação")
                 specSaved = false

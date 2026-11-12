@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => {
         link: null as { id: string; centralId: string; stage: string; refinementModel: { model: string; variant: string | null } | null } | null,
         sync: vi.fn(),
         delegate: vi.fn(async () => undefined),
+        log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
     }
 })
 
@@ -103,7 +104,7 @@ vi.mock('@/lib/ai/opencode-skill-list', async (importOriginal) => {
     return { ...actual, listOpencodeSkillsAt: (client: Parameters<typeof actual.listOpencodeSkillsAt>[0], directory: string, options: Parameters<typeof actual.listOpencodeSkillsAt>[2] = {}) => actual.listOpencodeSkillsAt(client, directory, { ...options, wait: async () => undefined }) }
 })
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/lib/logger', () => ({ loggerFor: () => mocks.log }))
 // Vínculo com a mesa de trabalho (OPE-137): sem mesa por padrão; cada caso define a etapa dela.
 vi.mock('@/features/refinement/server/workbench-link', () => ({
     linkedWorkbench: vi.fn(async () => mocks.link),
@@ -269,6 +270,26 @@ describe('turno e conclusão', () => {
             expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'idle', resolved: true }) })),
         )
         await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
+    })
+
+    it('OPE-162: preâmbulo colado ao título da especificação ainda grava a especificação e conclui sem consolidar', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: 'Segue a especificação consolidada:## Especificação técnica\n\n- critério', message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() =>
+            expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'idle', resolved: true, error: null }) })),
+        )
+        expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério' }, 'local')
+        expect(mocks.run).toHaveBeenCalledTimes(1)
+        const tolerantLogs = mocks.log.info.mock.calls.filter((call) => String(call[1]).includes('título fora do padrão'))
+        expect(tolerantLogs).toHaveLength(1)
+        expect(tolerantLogs[0]![0]).toEqual({ taskId: 't1', refinementId: 'c'.repeat(24) })
+    })
+
+    it('título no padrão não registra o log de tolerância', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalled())
+        expect(mocks.log.info.mock.calls.some((call) => String(call[1]).includes('título fora do padrão'))).toBe(false)
     })
 
     it('aplica as instruções e o protocolo como entrada durável da sessão', async () => {

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from '@/features/refinement/constants'
-import { extractTechnicalSpec, refinementWaitingReason } from '@/features/refinement/logic'
+import { extractTechnicalSpec, extractTechnicalSpecDetail, refinementWaitingReason } from '@/features/refinement/logic'
 import { buildRefinementFinalizePrompt, buildRefinementInstructions, buildRefinementPrompt, buildRefinementResumePrompt } from '@/features/refinement/prompt'
 import { DEFAULT_TASK_REFINEMENT_SETTINGS } from '@/features/ai/schemas'
 import type { TaskDetailDto } from '@/features/tasks/types'
@@ -32,6 +32,47 @@ describe('extractTechnicalSpec', () => {
     // `### Especificação técnica` termina no próximo `## ` (nível igual ou mais alto).
     const text = '### Especificação técnica\n\nespecificação\n\n## Outra seção\nignorar'
     expect(extractTechnicalSpec(text)).toBe('especificação')
+  })
+
+  it('título colado ao preâmbulo (blocos do turno na mesma linha): o preâmbulo não entra no corpo', () => {
+    expect(extractTechnicalSpec('Aqui está a especificação consolidada:## Especificação técnica\n\n- critério')).toBe('- critério')
+    expect(extractTechnicalSpec('Pronto.#### Especificação técnica\nalgo\n#### Fim\nfora')).toBe('algo')
+  })
+
+  it('aceita sufixo depois de "técnica" iniciado por separador; o corpo começa na linha seguinte', () => {
+    expect(extractTechnicalSpec('## Especificação técnica — DND-56\n\ncorpo')).toBe('corpo')
+    expect(extractTechnicalSpec('## Especificação técnica: resumo\ncorpo')).toBe('corpo')
+    expect(extractTechnicalSpec('## Especificação técnica (v2)\ncorpo')).toBe('corpo')
+    expect(extractTechnicalSpec('## Especificação técnica - x\ncorpo')).toBe('corpo')
+  })
+
+  it('preâmbulo colado, sufixo e nível 3 ao mesmo tempo, parando no próximo ###', () => {
+    const text = 'Segue:### Especificacao Tecnica — OPE-162\n\n# Tarefa\n- a\n\n### Outra\nfora'
+    expect(extractTechnicalSpec(text)).toBe('# Tarefa\n- a')
+  })
+
+  it('várias ocorrências coladas: vale a última, sem vazar o preâmbulo da anterior', () => {
+    const text = 'Intro:## Especificação técnica\n\nantiga\n\nAtualizei:## Especificação técnica\n\nnova\n\nQualquer dúvida, me avise.'
+    expect(extractTechnicalSpec(text)).toBe('nova\n\nQualquer dúvida, me avise.')
+  })
+
+  it('não trata menção em prosa, entre crases ou sufixo sem separador como título', () => {
+    expect(extractTechnicalSpec('Vou escrever a seção `## Especificação técnica` abaixo.\nnada')).toBeNull()
+    expect(extractTechnicalSpec('## Especificação técnicas\nnada')).toBeNull()
+    expect(extractTechnicalSpec('### Especificação técnica do módulo\nnada')).toBeNull()
+    expect(extractTechnicalSpec('##### Especificação técnica\nnada')).toBeNull()
+  })
+
+  it('só preâmbulo (sem título) ou título colado com corpo vazio devolve null', () => {
+    expect(extractTechnicalSpec('Segue a especificação consolidada:')).toBeNull()
+    expect(extractTechnicalSpec('Segue:## Especificação técnica\n\n  ')).toBeNull()
+  })
+
+  it('extractTechnicalSpecDetail indica quando o título só foi reconhecido pela tolerância', () => {
+    expect(extractTechnicalSpecDetail(`${REFINEMENT_SPEC_HEADING}\n\nalgo`)).toEqual({ spec: 'algo', tolerant: false })
+    expect(extractTechnicalSpecDetail('Segue:## Especificação técnica\nalgo')).toEqual({ spec: 'algo', tolerant: true })
+    expect(extractTechnicalSpecDetail('## Especificação técnica: resumo\nalgo')).toEqual({ spec: 'algo', tolerant: true })
+    expect(extractTechnicalSpecDetail('sem seção')).toBeNull()
   })
 
   it('sem a seção ou com corpo vazio, devolve null', () => {

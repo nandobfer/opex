@@ -1,5 +1,6 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
 import { recordAiConsumption } from "@/lib/ai/consumption"
+import { appendTextDelta, joinTextBlocks } from "@/lib/ai/opencode-text"
 import {
     describeToolInput,
     isProviderLimitError,
@@ -149,11 +150,11 @@ async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceM
         const items = [...(response.data ?? [])].reverse()
         const relevant = sinceMs > 0 ? items.filter((item) => (item.time?.created ?? 0) >= sinceMs) : []
         const chosen = relevant.length ? relevant : items.slice(-1)
-        return chosen
+        const parts = chosen
             .flatMap((item) => (item.type === "assistant" ? (item.content ?? []) : []))
             .filter((part) => part.type === "text")
             .map((part) => part.text)
-            .join("")
+        return joinTextBlocks(parts)
     } catch {
         return ""
     }
@@ -247,6 +248,10 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     if (!attach) publish({ type: "turn", stage: request.stage, title: request.title, agent: request.agent.agent, model: request.agent.model })
 
     let text = ""
+    // Bloco de texto atual: um delta de outra parte/mensagem, ou depois de um evento que não é texto,
+    // começa em linha nova no texto do turno (a saída publicada segue com o delta original).
+    let lastTextBlock: string | null = null
+    let textBoundary = false
     let costUsd = 0
     const toolNames = new Map<string, string>()
     const toolInputs = new Map<string, string | null>()
@@ -364,12 +369,18 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     const handle = async (raw: unknown) => {
         const event = normalizeOpencodeEvent(raw, sessionId)
         if (!event) return
+        if (event.kind !== "text") textBoundary = true
         switch (event.kind) {
-            case "text":
-                text += event.delta
+            case "text": {
+                const newBlock = event.block ? event.block !== lastTextBlock : textBoundary
+                const appended = appendTextDelta(text, event.delta, newBlock)
+                text = appended.text
+                if (event.block) lastTextBlock = event.block
+                textBoundary = false
                 publish({ type: "text", text: event.delta })
-                await hooks.onText?.(event.delta)
+                await hooks.onText?.(appended.piece)
                 break
+            }
             case "reasoning":
                 publish(event.delta ? { type: "reasoning", text: event.delta } : { type: "reasoning" })
                 break

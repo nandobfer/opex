@@ -151,7 +151,14 @@ de texto). A entrada durável `opex-refinement` passa a levar só o
 4. Ao final de **cada rodada** o agente reescreve a especificação técnica completa sob o título
    exato `## Especificação técnica`. O servidor **extrai** esse trecho (`extractTechnicalSpec`,
    `logic.ts`, puro — tolerante a nível de título, caixa e acento) e **grava no campo `technicalSpec`
-   da tarefa** (`updateTask`) — a cada rodada e no fim do turno.
+   da tarefa** (`updateTask`) — a cada rodada e no fim do turno. O extrator também reconhece o título
+   **colado a um texto anterior** na mesma linha (`Segue a especificação:## Especificação técnica` — o
+   preâmbulo é descartado) e com **sufixo iniciado por separador** (`— OPE-1`, `: resumo`, `(v2)`);
+   menção em prosa, entre crases ou com sufixo sem separador (`## Especificação técnica do módulo`) não
+   conta. O protocolo continua pedindo o título exato. Quando a gravação só funcionou pela tolerância, o
+   serviço registra um `log.info` por turno (`taskId`, `refinementId`). Os blocos de texto do turno
+   chegam separados por linha em branco (runner `opencode-run.ts`, `modules/agentic-dev.md`), sem
+   mudar o que a tela mostra (OPE-162).
 5. O ciclo continua até o agente julgar a especificação esclarecida ou o usuário parar. O protocolo
    fixo garante que a especificação cubra **critérios de aceite**, **localização da mudança**
    (rotas/URLs, telas, módulos, integrações, arquivos) e **casos de borda**.
