@@ -1,12 +1,14 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ChevronDown, Gauge } from "lucide-react"
+import Link from "next/link"
+import { ChevronDown, Gauge, Settings } from "lucide-react"
 import { RefreshIconButton } from "@/components/metrics/RefreshIconButton"
 import { StaleBadge } from "@/components/metrics/StaleBadge"
 import { useNow } from "@/hooks/useNow"
 import { apiErrorMessage } from "@/lib/api"
 import { useOpencodeQuota, useOpencodeQuotaRealtime, useRefreshOpencodeQuota } from "../hooks/useOpencodeQuota"
+import { OPENCODE_SETTINGS_HREF } from "../constants"
 import { isQuotaStale } from "../logic"
 import { useQuotaPanelPrefs } from "../hooks/useQuotaPanelPrefs"
 import { QuotaCompactList } from "./QuotaCompactList"
@@ -16,7 +18,8 @@ import { QuotaPanelBody } from "./QuotaPanelBody"
  * Quota do OpenCode (plugin opencode-quota) na coluna Tarefas de /desenvolvimento e no painel
  * "Servidor e quota" da barra lateral (mesma query, preferência e evento). Expandido, todos
  * os provedores (cada um recolhível); recolhido, a primeira janela de cada provedor expandido.
- * Atualiza pelo tempo real.
+ * Atualiza pelo tempo real. O cabeçalho tem Atualizar, o atalho para a configuração do OpenCode no
+ * host (`/integracoes/ia/opencode`) e a seta de recolher.
  */
 export function OpencodeQuotaPanel() {
     const query = useOpencodeQuota()
@@ -53,6 +56,15 @@ export function OpencodeQuotaPanel() {
                 </button>
                 {stale && <StaleBadge title="O opencode-quota não consulta nenhum provedor há mais de 30 min. Confira se o OpenCode está rodando com o plugin atualizado." />}
                 <RefreshIconButton onClick={() => refresh.mutate()} disabled={refresh.isPending} busy={busy} ariaLabel="Atualizar quota do OpenCode" />
+                <Link
+                    href={OPENCODE_SETTINGS_HREF}
+                    aria-label="Configurar OpenCode no host"
+                    title="Configurar OpenCode no host"
+                    data-testid="opencode-quota-config"
+                    className="flex h-6 w-6 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                    <Settings className="h-3.5 w-3.5" aria-hidden />
+                </Link>
                 <button
                     type="button"
                     onClick={toggleCollapsed}

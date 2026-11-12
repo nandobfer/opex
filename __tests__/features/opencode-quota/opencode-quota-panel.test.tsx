@@ -13,7 +13,7 @@ vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: mocks.post } }))
 
 import { OpencodeQuotaPanel } from '@/features/opencode-quota/components/OpencodeQuotaPanel'
-import { OPENCODE_QUOTA_PANEL_KEY } from '@/features/opencode-quota/constants'
+import { OPENCODE_QUOTA_PANEL_KEY, OPENCODE_SETTINGS_HREF } from '@/features/opencode-quota/constants'
 
 const ok = (data: unknown) => ({ data: { success: true, data } })
 const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000 + 30_000).toISOString()
@@ -156,6 +156,45 @@ describe('OpencodeQuotaPanel', () => {
   it('export antigo ganha o selo "Desatualizado"', async () => {
     renderPanel(quota({ exportedAt: new Date(Date.now() - 31 * 60_000).toISOString() }))
     expect(await screen.findByText('Desatualizado')).toBeTruthy()
+  })
+
+  it('OPE-161: atalho de configuração entre Atualizar e a seta, levando ao OpenCode no host', async () => {
+    renderPanel(quota())
+    await screen.findAllByRole('progressbar')
+    const link = screen.getByTestId('opencode-quota-config')
+    expect(link.tagName).toBe('A')
+    expect(OPENCODE_SETTINGS_HREF).toBe('/integracoes/ia/opencode')
+    expect(link.getAttribute('href')).toBe('/integracoes/ia/opencode')
+    expect(link.getAttribute('aria-label')).toBe('Configurar OpenCode no host')
+    expect(link.getAttribute('title')).toBe('Configurar OpenCode no host')
+    expect(link.classList.contains('focus-visible:ring-2')).toBe(true)
+    expect(link.classList.contains('h-6')).toBe(true)
+    expect(link.classList.contains('w-6')).toBe(true)
+    const refresh = screen.getByRole('button', { name: 'Atualizar quota do OpenCode' })
+    const chevron = screen.getByRole('button', { name: 'Recolher quota' })
+    expect(refresh.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(link.compareDocumentPosition(chevron) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(link.parentElement).toBe(chevron.parentElement)
+  })
+
+  it('OPE-161: clicar no atalho não recolhe o card nem pede a quota', async () => {
+    renderPanel(quota())
+    await screen.findAllByRole('progressbar')
+    fireEvent.click(screen.getByTestId('opencode-quota-config'))
+    expect(screen.getByRole('button', { name: 'Recolher quota' }).getAttribute('aria-expanded')).toBe('true')
+    expect(screen.getAllByRole('progressbar')).toHaveLength(3)
+    expect(window.localStorage.getItem(OPENCODE_QUOTA_PANEL_KEY)).toBeNull()
+    expect(mocks.post).not.toHaveBeenCalled()
+  })
+
+  it('OPE-161: com o card recolhido o atalho continua visível e Atualizar continua pedindo a quota', async () => {
+    window.localStorage.setItem(OPENCODE_QUOTA_PANEL_KEY, JSON.stringify({ collapsed: true, collapsedProviders: [] }))
+    mocks.post.mockResolvedValue(ok(quota()))
+    renderPanel(quota())
+    await waitFor(() => expect(screen.getAllByRole('progressbar')).toHaveLength(2))
+    expect(screen.getByTestId('opencode-quota-config').getAttribute('href')).toBe('/integracoes/ia/opencode')
+    fireEvent.click(screen.getByRole('button', { name: 'Atualizar quota do OpenCode' }))
+    await waitFor(() => expect(mocks.post).toHaveBeenCalledWith('/opencode/quota/refresh'))
   })
 
   it('sem provedores com dados mostra o estado vazio', async () => {

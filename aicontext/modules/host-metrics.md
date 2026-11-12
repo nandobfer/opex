@@ -72,7 +72,8 @@ recursos do PC (Builder Machine), histórico/minigráfico, Prometheus/node_expor
   `bg-warning`, `bg-destructive`) ou `bg-muted-foreground` sem dado confiável. Ficam vivas com o painel
   fechado (relógio de 5 s para o "desatualizado").
 - **Painel**: `HostMetricsPanel` em cima e o próprio `OpencodeQuotaPanel` embaixo (mesma query, cache,
-  preferência e evento de `/desenvolvimento`).
+  preferência e evento de `/desenvolvimento`), com o atalho "Configurar OpenCode no host"
+  (`/integracoes/ia/opencode`, OPE-161); ao navegar, o painel fecha pela troca de rota.
 - **Bloco Servidor** (`HostMetricsPanel`): cabeçalho "Servidor", "Atualizado às HH:mm:ss", selo
   "Desatualizado" (`StaleBadge`) e botão "Atualizar" (`RefreshIconButton`); linhas `UsageBar` na ordem
   CPU (só %), RAM, Swap ("Sem swap" sem swap) e Disco, com "usado / total" em texto pequeno. Falha sem

@@ -134,6 +134,20 @@ describe('ServerQuotaSidebarItem (OPE-145)', () => {
     expect(sections.indexOf('Servidor')).toBeLessThan(sections.indexOf('Quota do OpenCode'))
   })
 
+  it('OPE-161: a quota do painel lateral também leva o atalho para a configuração do OpenCode', async () => {
+    serve(host(), quota([20]))
+    renderWith(<ServerQuotaSidebarItem collapsed={false} />)
+    fireEvent.click(screen.getByRole('button', { name: 'Servidor e quota' }))
+    const panel = await screen.findByTestId('sidebar-server-quota-panel')
+    const link = await waitFor(() => {
+      const found = panel.querySelector('[data-testid="opencode-quota-config"]')
+      expect(found).toBeTruthy()
+      return found!
+    })
+    expect(link.getAttribute('href')).toBe('/integracoes/ia/opencode')
+    expect(link.getAttribute('aria-label')).toBe('Configurar OpenCode no host')
+  })
+
   it('na gaveta mostra a linha "Servidor" com as bolinhas', async () => {
     serve(host(), quota([20]))
     renderWith(<ServerQuotaSidebarItem collapsed={false} />)
