@@ -6,6 +6,7 @@ import { loggerFor } from "@/lib/logger"
 import { agentAuditEntity } from "../constants"
 import { isTurnActive } from "./hub"
 import { opexDb, publishSessionUpdated, purgeSession } from "./sessions"
+import { opexSessionAgentFilter } from "../session-filter"
 
 /**
  * Limpeza das sessões dos agentes (Agente Opex e Agente Maddox) sem interação há X dias — rotinas
@@ -40,7 +41,8 @@ export function retentionCutoff(days: number, now: Date): Date {
 
 function agentFilter(agent: OpexAgentKind): Record<string, unknown> {
     // Sessões antigas sem o campo `agent` são do Agente Opex.
-    return agent === "maddox" ? { agent: "maddox" } : { agent: { $ne: "maddox" } }
+    // Conversas dos agentes rotineiros (OPE-160) ficam fora da limpeza: o dono as exclui.
+    return agent === "maddox" ? { agent: "maddox" } : { agent: opexSessionAgentFilter() }
 }
 
 /** Sessões vinculadas a jobs ainda ativos do agente (não podem sumir debaixo do job). */

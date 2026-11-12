@@ -38,13 +38,13 @@ export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: str
     }
 
     return (
-        <OpexDropZone onFiles={attach} disabled={Boolean(disabledReason)}>
+        <OpexDropZone onFiles={attach} disabled={Boolean(disabledReason) || !agent.attachments}>
             {disabledReason && <OpexUnavailable reason={disabledReason} />}
             <OpexEmptyChat onPick={start} disabled={Boolean(disabledReason) || create.isPending} />
             <OpexComposer
                 ref={composerRef}
                 onSend={start}
-                attachments={{ items: [], onFiles: attach, onRetry: () => undefined, onRemove: () => undefined }}
+                attachments={{ items: [], onFiles: attach, onRetry: () => undefined, onRemove: () => undefined, enabled: agent.attachments }}
                 onStop={() => undefined}
                 running={false}
                 sending={create.isPending}

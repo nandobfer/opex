@@ -7,6 +7,8 @@ const mocks = vi.hoisted(() => ({
   execute: vi.fn(async (input: { id: string }) => ({ deleted: input.id })),
   recordAudit: vi.fn(async () => {}),
   resolveMcpTool: vi.fn(),
+  routineAllowed: vi.fn(async () => {}),
+  routineSecrets: vi.fn(async () => ({ list: () => [], value: () => 'segredo', markUsed: () => {} })),
 }))
 
 const store = vi.hoisted(() => ({ messages: null as unknown, actions: null as unknown }))
@@ -30,6 +32,7 @@ vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.que
 vi.mock('ai', () => ({ dynamicTool: (def: unknown) => def }))
 const tool = { name: 'delete_thing', group: 'tasks', label: 'Excluir', risk: 'destructive', description: 'd', input: z.object({ id: z.string() }), summarize: (input: { id: string }) => `Excluir ${input.id}`, execute: mocks.execute }
 vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ resolveMcpTool: mocks.resolveMcpTool }))
+vi.mock('@/features/routine-agents/server/chat/turn', () => ({ assertRoutineChatToolAllowed: mocks.routineAllowed, routineChatSecrets: mocks.routineSecrets }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (name: string) => (name === tool.name ? tool : undefined) }))
 
 import { decideAction, requestConfirmation } from '@/features/opex-agent/server/confirmations'
@@ -116,5 +119,25 @@ describe('confirmações do Agente Opex', () => {
     const result = await decideAction(confirmation.actionId, 'confirm', 'local')
     expect(result.status).toBe('failed')
     expect(result.error).toContain('O MCP desta ferramenta foi desabilitado')
+  })
+})
+
+describe('conversa com um agente rotineiro (OPE-160)', () => {
+  const ROUTINE = { kind: 'owner' as const, agent: 'routine' as const, routineAgentId: 'ag1' }
+
+  it('confirmar revalida a ferramenta para o agente e entrega os segredos dele', async () => {
+    const actionId = await pending()
+    await decideAction(actionId, 'confirm', 'local', ROUTINE)
+    expect(mocks.routineAllowed).toHaveBeenCalledWith('ag1', 'delete_thing', undefined)
+    expect(mocks.execute).toHaveBeenCalledWith({ id: 'x1' }, expect.objectContaining({ scope: ROUTINE, secrets: expect.objectContaining({ value: expect.any(Function) }) }))
+  })
+
+  it('ferramenta que deixou de ser liberada ao agente não executa (falha fechada)', async () => {
+    mocks.routineAllowed.mockRejectedValueOnce(new Error('Esta ferramenta não está mais liberada para o agente rotineiro.'))
+    const actionId = await pending()
+    const result = await decideAction(actionId, 'confirm', 'local', ROUTINE)
+    expect(result.status).toBe('failed')
+    expect(mocks.execute).not.toHaveBeenCalled()
+    expect(mocks.queueFollowUp).toHaveBeenCalledWith(SESSION, expect.objectContaining({ text: expect.stringContaining('não está mais liberada') }))
   })
 })

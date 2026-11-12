@@ -2,6 +2,7 @@ import type { ClientActor } from "@/features/auth/server/context"
 import { clientActorFor } from "@/features/auth/server/context"
 import { getLocalUser } from "@/lib/local-user"
 import type { IOpexSession, OpexAgentKind } from "@/lib/db/models/Opex"
+import { opexSessionAgentFilter } from "../session-filter"
 
 /**
  * Escopo do Agente Opex no servidor (SOMENTE servidor): dono ou usuário do portal.
@@ -13,6 +14,8 @@ import type { IOpexSession, OpexAgentKind } from "@/lib/db/models/Opex"
 export type OpexServerScope = ({ kind: "owner" } | { kind: "client"; actor: ClientActor }) & {
     /** Agente das sessões do escopo; ausente = Agente Opex. */
     agent?: OpexAgentKind
+    /** Conversa com um agente rotineiro (`agent: "routine"`, OPE-160): o agente das sessões. */
+    routineAgentId?: string
 }
 
 export const OWNER_SCOPE: OpexServerScope = { kind: "owner" }
@@ -31,8 +34,11 @@ export function actorNameOf(scope: OpexServerScope): string {
 /** Filtro das sessões visíveis no escopo (o dono vê as antigas, sem `clientId`). */
 export function sessionFilterOf(scope: OpexServerScope): Record<string, unknown> {
     const owner = scope.kind === "owner" ? { clientId: null } : { clientId: String(scope.actor.client._id), userId: scope.actor.userId }
-    // Sessões antigas não têm `agent`: tudo que não é do Maddox é do Agente Opex.
-    return { ...owner, agent: agentOf(scope) === "maddox" ? "maddox" : { $ne: "maddox" } }
+    const agent = agentOf(scope)
+    // Conversa com um agente rotineiro (OPE-160): só do dono e só as daquele agente.
+    if (agent === "routine") return { clientId: null, agent: "routine", routineAgentId: scope.routineAgentId ?? "" }
+    // Sessões antigas não têm `agent`: as do Agente Opex são as que não são do Maddox nem de rotineiro.
+    return { ...owner, agent: agent === "maddox" ? "maddox" : opexSessionAgentFilter() }
 }
 
 export function agentOf(scope: OpexServerScope): OpexAgentKind {
@@ -45,8 +51,9 @@ export function withAgent<S extends OpexServerScope>(scope: S, agent: OpexAgentK
 }
 
 /** Reconstrói o escopo de uma sessão gravada (usado nos follow-ups e na confirmação). */
-export async function sessionScopeOf(session: Pick<IOpexSession, "clientId" | "userId" | "agent">): Promise<OpexServerScope> {
+export async function sessionScopeOf(session: Pick<IOpexSession, "clientId" | "userId" | "agent" | "routineAgentId">): Promise<OpexServerScope> {
     const agent = session.agent ?? "opex"
+    if (agent === "routine") return { ...OWNER_SCOPE, agent, routineAgentId: session.routineAgentId ?? "" }
     if (!session.clientId) return { ...OWNER_SCOPE, agent }
     return { kind: "client", actor: await clientActorFor(session.userId, session.clientId), agent }
 }

@@ -19,6 +19,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/hooks/useInstanceInfo', () => ({ useInstanceInfo: () => ({ data: undefined }) }))
+vi.mock('@/features/routine-agents/components/chat/RoutineChatColumn', () => ({
+  useRoutineChatCollapsed: () => ({ collapsed: false, setCollapsed: () => {} }),
+  RoutineChatColumn: ({ agent }: { agent: { id: string; title: string } }) => <aside data-testid="routine-chat" data-agent-id={agent.id} data-agent-title={agent.title} />,
+}))
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }), useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }))
 vi.mock('@/components/metrics/UsageByDateChart', () => ({ UsageByDateChart: ({ points }: { points: { runs: number }[] }) => <div data-testid="usage-chart">{points.reduce((sum, point) => sum + point.runs, 0)}</div> }))
@@ -46,6 +50,7 @@ vi.mock('@/features/routine-agents/components/editor/RoutineAgentEditor', () => 
     ) : null,
 }))
 vi.mock('@/features/routine-agents/components/runs/RoutineRunDetailSheet', () => ({ RoutineRunDetailSheet: () => null }))
+vi.mock('@/features/routine-agents/components/page/secrets/RoutineSecretsTab', () => ({ RoutineSecretsTab: () => <div>segredos</div> }))
 vi.mock('@/features/routine-agents/components/page/RoutineOverviewTab', () => ({ RoutineOverviewTab: () => <div>visão geral</div> }))
 
 import { RoutineAgentsPage } from '@/features/routine-agents/components/page/RoutineAgentsPage'
@@ -181,5 +186,48 @@ describe('critério aprovado (OPE-130, D19/D20): cabeçalho e Configurar da pág
     fireEvent.click(screen.getByRole('button', { name: 'Fechar editor' }))
     expect(screen.queryByRole('dialog', { name: 'Editor do agente' })).toBeNull()
     expect(window.location.search).not.toContain('configurar')
+  })
+})
+
+describe('OPE-160: voltar, "Conversar" e a conversa na Visão geral', () => {
+  it('a seta de voltar fica antes do ícone e leva para a lista dos rotineiros', () => {
+    window.history.replaceState(null, '', '/agentes-rotineiros/Indexador')
+    render(<RoutineAgentPage id="Indexador" />)
+    const back = screen.getByRole('link', { name: 'Voltar para os agentes rotineiros' })
+    expect(back.getAttribute('href')).toBe('/agentes-rotineiros')
+    const header = back.closest('header')!
+    expect(header.firstElementChild?.contains(back)).toBe(true)
+  })
+
+  it('sem backHref o cabeçalho não muda', () => {
+    render(<AgentPageHeader icon={Bot} title="A" description="d" />)
+    expect(screen.queryByTestId('agent-page-back')).toBeNull()
+  })
+
+  it('a Visão geral tem as métricas e a conversa; "Conversar" volta para ela a partir de outra aba', () => {
+    window.history.replaceState(null, '', '/agentes-rotineiros/Indexador?aba=segredos')
+    render(<RoutineAgentPage id="Indexador" />)
+    expect(screen.queryByTestId('routine-chat')).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Conversar/ }))
+    const layout = screen.getByTestId('routine-overview-layout')
+    expect(layout.textContent).toContain('visão geral')
+    const chat = screen.getByTestId('routine-chat')
+    expect(layout.contains(chat)).toBe(true)
+    // A coluna recebe o id do agente da página (as rotas da conversa usam o id, nunca o slug).
+    expect(chat.getAttribute('data-agent-id')).toBe('Indexador')
+    expect(chat.getAttribute('data-agent-title')).toBe('Agente Indexador')
+  })
+
+  it('"Conversar" desabilitado com o motivo no motor OpenCode e com o agente pausado', () => {
+    mocks.agents = [agent('Host', { engine: 'opencode' }), agent('Parado', { status: 'paused' })]
+    window.history.replaceState(null, '', '/agentes-rotineiros/Host')
+    render(<RoutineAgentPage id="Host" />)
+    let button = screen.getByRole('button', { name: /Conversar/ })
+    expect(button.hasAttribute('disabled')).toBe(true)
+    expect(button.getAttribute('title')).toMatch(/só no motor Opex/)
+    cleanup()
+    render(<RoutineAgentPage id="Parado" />)
+    button = screen.getByRole('button', { name: /Conversar/ })
+    expect(button.getAttribute('title')).toBe('Retome o agente para conversar')
   })
 })

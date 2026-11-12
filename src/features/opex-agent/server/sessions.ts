@@ -61,22 +61,27 @@ export function assertSessionId(id: string): void {
     if (!Types.ObjectId.isValid(id)) throw new DomainError(404, "Sessão não encontrada", "OPEX_SESSION_NOT_FOUND")
 }
 
+/** Payload do evento: `{ id }`; na conversa com um rotineiro (OPE-160), também o agente. */
+function sessionEventPayload(id: string, doc: Pick<IOpexSession, "agent" | "routineAgentId"> | null | undefined): { id: string; agentId?: string } {
+    return doc?.agent === "routine" && doc.routineAgentId ? { id, agentId: doc.routineAgentId } : { id }
+}
+
 /**
  * Avisa o dono (`private-app`) ou o usuário dono da sessão no portal
  * (`private-opex-{clientId}-{userId}`), conforme o escopo gravado na sessão.
  */
 export async function publishSessionUpdated(id: string): Promise<void> {
-    const doc = await OpexSession.findById(id).select({ clientId: 1, userId: 1, agent: 1 }).lean<Pick<IOpexSession, "clientId" | "userId" | "agent">>()
+    const doc = await OpexSession.findById(id).select({ clientId: 1, userId: 1, agent: 1, routineAgentId: 1 }).lean<Pick<IOpexSession, "clientId" | "userId" | "agent" | "routineAgentId">>()
     const event = agentSessionEvents(doc?.agent).updated
     if (doc?.clientId && doc.userId) await publishToChannels([opexChannel(doc.clientId, doc.userId)], event, { id })
-    else await publishAppEvent(event, { id })
+    else await publishAppEvent(event, sessionEventPayload(id, doc))
 }
 
 /** Mesma escolha de canal do `publishSessionUpdated`, para a exclusão (evento do agente da sessão). */
-async function publishSessionDeleted(session: Pick<IOpexSession, "clientId" | "userId" | "agent">, id: string): Promise<void> {
+async function publishSessionDeleted(session: Pick<IOpexSession, "clientId" | "userId" | "agent" | "routineAgentId">, id: string): Promise<void> {
     const event = agentSessionEvents(session.agent).deleted
     if (session.clientId && session.userId) await publishToChannels([opexChannel(session.clientId, session.userId)], event, { id })
-    else await publishAppEvent(event, { id })
+    else await publishAppEvent(event, sessionEventPayload(id, session))
 }
 
 /**
@@ -149,6 +154,7 @@ export async function createSession(actorId: string, scope: OpexServerScope = OW
         clientId: scope.kind === "client" ? String(scope.actor.client._id) : null,
         userId: scope.kind === "client" ? scope.actor.userId : actorId,
         agent: agentOf(scope),
+        ...(agentOf(scope) === "routine" ? { routineAgentId: scope.routineAgentId ?? null } : {}),
         ...(extra ?? {}),
     })
     await recordAudit({ userId: actorId, entidade: agentAuditEntity(agentOf(scope)), entidadeId: doc._id.toString(), acao: AcaoAuditoria.CRIAR, depois: { titulo: doc.title } })
@@ -211,7 +217,7 @@ export async function deleteSession(id: string, actorId: string, scope: OpexServ
  * da sessão. Usada pelo `deleteSession` e pela rotina de limpeza das sessões arquivadas.
  */
 export async function purgeSession(
-    session: Pick<SessionDoc, "_id" | "title" | "messageCount" | "agent" | "opencodeSessionId" | "clientId" | "userId">,
+    session: Pick<SessionDoc, "_id" | "title" | "messageCount" | "agent" | "opencodeSessionId" | "clientId" | "userId" | "routineAgentId">,
     actorId: string,
     extraAudit?: Record<string, unknown>,
 ): Promise<void> {

@@ -26,6 +26,8 @@ export interface OpexComposerAttachments {
     onFiles: (files: File[]) => void
     onRetry: (localId: string) => void
     onRemove: (localId: string) => void
+    /** Anexos ligados (padrão). Desligado, o botão de anexar e a colagem de arquivos somem (OPE-160). */
+    enabled?: boolean
 }
 
 interface OpexComposerProps {
@@ -74,7 +76,10 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
     const canSend = !blocked && !running && !sending && !uploading && !failed && hasContent
     const sendHint = uploading ? "Aguarde o envio dos arquivos" : failed ? "Remova ou reenvie os arquivos com erro" : "Enviar (Enter)"
 
-    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => pasteFiles(event, attachments.onFiles, blocked)
+    const canAttach = attachments.enabled !== false
+    const onPaste = (event: ClipboardEvent<HTMLTextAreaElement>) => {
+        if (canAttach) pasteFiles(event, attachments.onFiles, blocked)
+    }
 
     const submit = () => {
         if (!canSend) return
@@ -93,7 +98,7 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
         <div className="border-t bg-background/60 px-3 pb-3 pt-2.5">
             <OpexAttachmentChips items={attachments.items} onRetry={attachments.onRetry} onRemove={attachments.onRemove} />
             <div className={cn("flex items-end gap-2 rounded-xl border bg-card px-3 py-2 shadow-sm transition-colors focus-within:border-primary/60", blocked && "opacity-70")}>
-                <AttachButton onFiles={attachments.onFiles} disabled={blocked} title="Anexar arquivos (ou cole/arraste no chat)" />
+                {canAttach && <AttachButton onFiles={attachments.onFiles} disabled={blocked} title="Anexar arquivos (ou cole/arraste no chat)" />}
                 <ReplyTextarea
                     ref={textareaRef}
                     vim={false}
@@ -126,7 +131,7 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
                     )}
                 </AnimatePresence>
             </div>
-            <p className="mt-1.5 px-1 text-[10px] text-muted-foreground/70">Enter envia · Shift+Enter quebra linha · cole ou arraste arquivos · ações destrutivas pedem sua confirmação</p>
+            <p className="mt-1.5 px-1 text-[10px] text-muted-foreground/70">Enter envia · Shift+Enter quebra linha{canAttach ? " · cole ou arraste arquivos" : ""} · ações destrutivas pedem sua confirmação</p>
         </div>
     )
 })

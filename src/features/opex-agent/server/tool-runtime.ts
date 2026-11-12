@@ -18,6 +18,12 @@ export interface ToolRuntimeHooks {
      * na hora). Ausente = confia no catálogo montado no início do turno (dono).
      */
     authorize?: (tool: OpexTool) => Promise<void>
+    /**
+     * Decide se a ferramenta pede confirmação (padrão: `needsConfirmation` com os ajustes). A conversa com
+     * um agente rotineiro (OPE-160) usa o switch "confirmar ações irreversíveis" do agente e nunca confirma
+     * as ferramentas internas (memória, skills).
+     */
+    shouldConfirm?: (tool: OpexTool) => boolean
 }
 
 export interface ToolRuntime {
@@ -43,7 +49,7 @@ export function buildToolRuntime(list: readonly OpexTool[], context: OpexToolCon
                 const startedAt = Date.now()
                 try {
                     await hooks.authorize?.(def)
-                    if (needsConfirmation(def, confirmationOverrides)) {
+                    if (hooks.shouldConfirm ? hooks.shouldConfirm(def) : needsConfirmation(def, confirmationOverrides)) {
                         const confirmation = await hooks.requestConfirmation(def, input, options.toolCallId)
                         confirmations.set(options.toolCallId, confirmation)
                         return {

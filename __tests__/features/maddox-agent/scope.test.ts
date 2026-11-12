@@ -24,7 +24,7 @@ beforeEach(() => {
 
 describe('sessões separadas por agente', () => {
   it('o filtro trata a ausência de `agent` como Agente Opex', () => {
-    expect(sessionFilterOf(OWNER_SCOPE)).toEqual({ clientId: null, agent: { $ne: 'maddox' } })
+    expect(sessionFilterOf(OWNER_SCOPE)).toEqual({ clientId: null, agent: { $nin: ['maddox', 'routine'] } })
     expect(sessionFilterOf(MADDOX)).toEqual({ clientId: null, agent: 'maddox' })
   })
 

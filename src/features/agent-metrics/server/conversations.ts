@@ -49,7 +49,9 @@ export function conversationStats(messages: readonly { role: string; kind?: stri
  */
 export async function syncConversations(options: { from?: Date; sessionIds?: readonly string[] } = {}): Promise<number> {
     await dbConnect()
-    const filter = options.sessionIds ? { _id: { $in: [...options.sessionIds] } } : { updatedAt: { $gte: options.from ?? new Date(0) } }
+    const base = options.sessionIds ? { _id: { $in: [...options.sessionIds] } } : { updatedAt: { $gte: options.from ?? new Date(0) } }
+    // Conversas com os agentes rotineiros (OPE-160) não são execução nem conversa do Opex/Maddox: ficam fora.
+    const filter = { ...base, agent: { $ne: "routine" as const } }
     const sessions = await OpexSession.find(filter).select({ agent: 1, clientId: 1, userId: 1, title: 1, createdAt: 1, lastMessageAt: 1 }).lean()
     for (const session of sessions) {
         const messages = await OpexMessage.find({ sessionId: session._id }).select({ role: 1, kind: 1, status: 1, usage: 1, parts: 1 }).lean()

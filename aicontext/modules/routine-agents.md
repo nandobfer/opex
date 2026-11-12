@@ -217,6 +217,62 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   inteiro ocupa a altura visível da tela (`fill="viewport"`, ver `aicontext/modules/engramind.md`, "Altura dos
   universos").
 
+## Conversa com o agente (OPE-160)
+
+Na Visão geral da página do agente, o dono **conversa** com o agente sem disparar uma execução: o turno
+carrega só as ferramentas e as memórias dele e **nenhuma instrução** além do que o dono digita.
+
+- **Não é execução**: não cria `routine_runs`, não entra na fila nem ocupa vaga, não consome nem estoura
+  os limites de tempo e tokens, não muda última execução nem próximo disparo e não aparece em Execuções
+  nem nas métricas das execuções (nem nas conversas das métricas do Opex/Maddox).
+- **Sessões**: várias por agente, nas coleções do Agente Opex (`opex_sessions.agent = "routine"` +
+  `routineAgentId`, índice `{ agent, routineAgentId, lastMessageAt }`, migração
+  `ensure-routine-chat-session-indexes`). O filtro "sessões do Agente Opex" (`opexSessionAgentFilter`,
+  `src/features/opex-agent/session-filter.ts`) exclui `maddox` e `routine`: a conversa de rotineiro nunca
+  aparece na lista, nos jobs, na retenção nem nas métricas do Agente Opex. Sessão de outro agente → 404.
+  A retenção automática não arquiva nem exclui essas conversas: o dono as exclui na lista de sessões.
+- **Turno** (`server/chat/turn.ts`, `prepareRoutineChatTurn`), montado para o runner do Agente Opex (o mesmo
+  stream NDJSON, gravação, título e confirmações; perfil de turno `PreparedChatTurn` em `runner.ts`):
+  - modelo e provedor da **configuração atual** do agente (motor Opex);
+  - ferramentas liberadas (`appToolsFor`: menos as desligadas pelo dono no Agente Opex e os grupos
+    proibidos), MCPs liberados (`mcpToolsFor`), skills da seleção (`routineSkillsForRun`) e a memória
+    (`remember`, `update_memory`, `list_my_memories`, mesmas regras de canal e no máximo 5 gravações por
+    turno; a auditoria registra `conversa` no lugar de `execucao`);
+  - contexto de memórias com o **token do agente** (`getAgentMemoryContext(..., { target })`, canais por
+    `routineMemoryChannels`: `opex`, o global, o próprio e os extras ativos), com o foco na mensagem;
+    Engramind fora do ar sem cache → erro acionável na resposta; com cache → aviso no chat;
+  - prompt de sistema = `routineChatInstructions` (`src/features/routine-agents/chat.ts`, puro): só o bloco
+    de memórias, o catálogo das skills e, com a Chamada HTTP liberada, os **nomes** dos segredos aceitos em
+    `{{secret:NOME}}`. Objetivo, instruções do dono, "Como trabalhar", canais graváveis, data/hora e as
+    ferramentas `finish`/`hibernate`/`wait`/`request_confirmation` não entram;
+  - avisos (ferramenta removida/desligada, skill indisponível, canal arquivado, cache) aparecem no início da
+    resposta, nunca no prompt;
+  - **confirmação**: com "confirmar ações irreversíveis" ligado, as ferramentas que pedem confirmação no
+    Agente Opex (mesma mescla de ajustes dos MCPs e do dono) mostram o card Confirmar/Cancelar no chat;
+    desligado, executam direto. Memória e skills nunca pedem confirmação. Antes de cada ferramenta e antes
+    de executar uma ação confirmada, a política é conferida de novo (`assertRoutineChatToolAllowed`: ainda
+    liberada, não desligada, fora dos grupos proibidos, MCP ainda liberado; falha fechada), e a ação
+    confirmada recebe os segredos do agente;
+  - **teto técnico** do turno: 30 min (`ROUTINE_CHAT_TURN_TIMEOUT_MS`); estourou → erro, e o turno fecha
+    15 s depois mesmo se o motor não parar;
+  - consumo com a origem `routine-agent-chat` (título: `routine-agent-chat-title`, pelo subagente de título
+    do Agente Opex ou, sem modelo dele, o do agente).
+- **Disponibilidade** (`chatDisabledReason`/`assertRoutineChatAvailable`): pausado/arquivado (409
+  `ROUTINE_AGENT_PAUSED`), sem provisionamento (409 `ROUTINE_AGENT_NOT_PROVISIONED`), motor OpenCode (409
+  `ROUTINE_CHAT_ENGINE_UNSUPPORTED`, "A conversa está disponível só no motor Opex por enquanto") e provedor
+  inválido (409 `ROUTINE_ENGINE_PROVIDER_INVALID`). Sem anexos (400 `ROUTINE_CHAT_FILES_UNSUPPORTED`).
+- **Interface**: o mesmo chat do Agente Opex/Maddox (`AgentChatBody` + `useAgentChat`, extraídos do
+  `AgentChatPanel`) num `OpexScopeProvider` do agente (`routineChatUiScope`: rotas
+  `/api/routine-agents/[id]/chat`, eventos `routine-chat-session-*`, cache e abas por agente, descritor
+  `id: "routine"`, `attachments: false`). Cabeçalho com o agente e o modelo (`ActiveAgent`), Sessões,
+  Nova sessão e **Recolher**. Sem sugestões no estado vazio: a primeira mensagem é a do dono.
+- **Coluna recolhível** (`RoutineChatColumn`): a partir de `lg` fica à direita das métricas (440 px, presa
+  ao topo com a altura da área visível); recolhida vira um contêiner compacto de 56 px (`RoutineChatRail`)
+  com Expandir, o avatar com a situação (`chatRailStatus`: aguardando confirmação > respondendo > erro da
+  sessão ativa), o número de sessões aguardando confirmação, Nova sessão e Sessões. A largura é animada
+  com Framer Motion (movimento reduzido respeitado) e a escolha fica no navegador
+  (`opex:routine-chat:collapsed:v1`). Abaixo de `lg`, a conversa fica abaixo das métricas (recolhida = barra).
+
 ## Execução
 
 | Status | Significado | O que dispara |
@@ -351,12 +407,16 @@ Roda só no Opex original (na prévia o agendador fica desligado).
     o tempo real invalida a chave em `routine-run-updated`;
   - vazio sem agentes leva a `?aba=rotineiros&agente=novo`; vazio com filtros oferece "Limpar filtros";
     mais de 50 agentes → `VirtualStack`.
-- `/agentes-rotineiros/[id]`: `AgentPageFrame` (moldura extraída da `AgentPage`), com **Configurar** (abre o
-  `RoutineAgentEditor` na própria página, `?configurar=1`, D20) e **"Executar agora"**, na linha do título
-  (D19), (diálogo com "Solicitação desta execução"; desabilitado pausado ou sem
-  provisionamento). Abas na URL (`?aba=`): **Visão geral** (KPIs execuções, concluídas, com erro,
-  tempo médio, tokens e custo, gráficos por dia, filtro de período compartilhado —
-  `GET /api/routine-agents/[id]/metrics?periodo=`), **Execuções** (lista ao vivo, detalhe em
+- `/agentes-rotineiros/[id]`: `AgentPageFrame` (moldura extraída da `AgentPage`), com a **seta de voltar**
+  antes do ícone (para `/agentes-rotineiros`, prop `backHref` do `AgentPageHeader`, OPE-160), **Configurar**
+  (abre o `RoutineAgentEditor` na própria página, `?configurar=1`, D20), **"Conversar"** (OPE-160: vai para a
+  Visão geral e expande a conversa; desabilitado com o motivo, como o "Executar agora", e no motor OpenCode)
+  e **"Executar agora"**, na linha do título (D19), (diálogo com "Solicitação desta execução"; desabilitado
+  pausado ou sem provisionamento). Abas na URL (`?aba=`): **Visão geral** em duas colunas (OPE-160,
+  `RoutineOverviewLayout`): à esquerda o filtro de período compartilhado, os KPIs (execuções, concluídas,
+  com erro, tempo médio, tokens e custo) e os gráficos por dia (`GET /api/routine-agents/[id]/metrics?periodo=`);
+  à direita a conversa com o agente, recolhível (ver "Conversa com o agente"). O carregamento da página
+  (`RoutineAgentPageSkeleton`) tem o cabeçalho, as abas e as duas colunas. **Execuções** (lista ao vivo, detalhe em
   `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas**,
   **Memórias** e **Segredos**.
 - **Memórias** (`RoutineMemoriesTab`, D10/D11): um card "Rede de memórias" com o `AgentUniverse` da lib
@@ -389,6 +449,12 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `GET/POST .../entries`, `.../memories`, `GET /api/routine-agents/runs/[runId]` e
   `POST .../confirm|reject|cancel`, `GET/PUT /api/routine-agents/settings`,
   `GET /api/routine-agents/opencode-options`.
+- Conversa (OPE-160, dono): `GET .../chat/status` (`{ enabled, available, reason, modelLabel, files }`),
+  `GET/POST .../chat/sessions` (POST com `text` opcional já envia a primeira mensagem),
+  `GET/PATCH/DELETE .../chat/sessions/[sessionId]`, `POST .../chat/sessions/[sessionId]/messages`,
+  `GET .../chat/sessions/[sessionId]/stream` (NDJSON), `POST .../chat/sessions/[sessionId]/interrupt` e
+  `POST .../chat/actions/[actionId]` (`{ decision: "confirm" | "cancel" }`). Mesmos contratos das rotas do
+  Agente Opex.
 - Pública: `POST /api/v1/routine-agents/{id}/runs` (escopo `api:v1:routine-agents`), corpo opcional
   `{ request?, payload? }` (POST sem corpo, inclusive `Content-Length: 0`, vale como `{}`; JSON inválido → 400
   `INVALID_JSON`) (payload até 64 KB, senão 400 `PAYLOAD_TOO_LARGE`). Respostas: 201
@@ -448,6 +514,8 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
 - Pusher em `private-app`: `routine-agent-updated` (`{ id }`), `routine-run-updated`
   (`{ id, agentId, status }`) e `routine-run-attention` (`{ id, agentId, kind, status, agentName }`).
   As telas invalidam o TanStack Query (`useRoutineRealtime`).
+- Conversa (OPE-160): `routine-chat-session-updated` / `routine-chat-session-deleted` em `private-app`
+  (`{ id, agentId }`); a resposta ao vivo vai pelo NDJSON. Sessões auditadas em `ConversaAgenteRotineiro`.
 
 ## Limitações conhecidas
 

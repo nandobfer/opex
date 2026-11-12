@@ -80,12 +80,13 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
         onFiles: (files) => uploads.enqueue(sessionId, files, limits),
         onRetry: uploads.retry,
         onRemove: uploads.remove,
+        enabled: agent.attachments,
     }
 
     return (
         // Cada linha das respostas tem "Citar no campo de resposta" (insere `> linha` no campo do chat).
         <ReplyTargetProvider>
-        <OpexDropZone onFiles={attachments.onFiles} disabled={Boolean(disabledReason)}>
+        <OpexDropZone onFiles={attachments.onFiles} disabled={Boolean(disabledReason) || !agent.attachments}>
             <AnimatePresence initial={false}>
                 {!stream.connected && stream.status !== null && (
                     <motion.p key="offline" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-center justify-center gap-1.5 overflow-hidden bg-muted/60 text-[11px] text-muted-foreground" role="status">

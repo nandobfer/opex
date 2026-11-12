@@ -1,14 +1,14 @@
 import { Bot, Orbit, type LucideIcon } from "lucide-react"
 import { MADDOX_AI_TAB, MADDOX_LABEL, MADDOX_TABS_STORAGE_KEY, isMaddoxShortcut } from "@/features/maddox-agent/constants"
 import { AGENT_SESSION_EVENTS_BY_ID } from "../../agent-events"
-import type { ChatAgentId } from "../../agents"
+import type { ChatAgentId, ChatAgentKind } from "../../agents"
 import { OPEX_AI_TAB, OPEX_TABS_STORAGE_KEY, isOpexShortcut } from "../../constants"
 
 type ShortcutEvent = Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">
 
 /** O que muda entre os agentes no item, no popover e nos hooks (o resto é compartilhado). */
 export interface ChatAgentDescriptor {
-    id: ChatAgentId
+    id: ChatAgentKind
     label: string
     icon: LucideIcon
     /** Prefixo das rotas (a partir de `/api`) no app do dono e no portal. */
@@ -26,6 +26,8 @@ export interface ChatAgentDescriptor {
     modelPicker: boolean
     /** Jobs agendados (só o Agente Opex). */
     jobs: boolean
+    /** Anexos no chat (a conversa com um agente rotineiro não aceita, OPE-160). */
+    attachments: boolean
 }
 
 export const CHAT_AGENTS: Record<ChatAgentId, ChatAgentDescriptor> = {
@@ -43,6 +45,7 @@ export const CHAT_AGENTS: Record<ChatAgentId, ChatAgentDescriptor> = {
         isShortcut: isOpexShortcut,
         modelPicker: false,
         jobs: true,
+        attachments: true,
     },
     maddox: {
         id: "maddox",
@@ -58,5 +61,6 @@ export const CHAT_AGENTS: Record<ChatAgentId, ChatAgentDescriptor> = {
         isShortcut: isMaddoxShortcut,
         modelPicker: true,
         jobs: false,
+        attachments: true,
     },
 }

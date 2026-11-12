@@ -81,8 +81,8 @@ export function AgentSwitcherHeader({ listOpen, onToggleList, onNew, maximized, 
     )
 }
 
-/** Agente ativo: avatar na cor dele, nome e a linha do modelo (seletor da sessão no Maddox). */
-function ActiveAgent({ sessionModel }: { sessionModel: SessionModelChoice | null }) {
+/** Agente ativo: avatar na cor dele, nome e a linha do modelo (seletor da sessão no Maddox). Também no cabeçalho da conversa com um rotineiro (OPE-160). */
+export function ActiveAgent({ sessionModel }: { sessionModel: SessionModelChoice | null }) {
     const { agent } = useOpexScope()
     const view = useOpexView()
     const Icon = agent.icon
@@ -173,7 +173,8 @@ function OtherAgentButton({ id }: { id: ChatAgentId }) {
     )
 }
 
-function HeaderButton({ label, onClick, active, children }: { label: string; onClick: () => void; active?: boolean; children: ReactNode }) {
+/** Botão de ícone dos cabeçalhos de chat (com dica); compartilhado com a conversa de um rotineiro (OPE-160). */
+export function HeaderButton({ label, onClick, active, side = "bottom", children }: { label: string; onClick: () => void; active?: boolean; side?: "top" | "bottom" | "left" | "right"; children: ReactNode }) {
     return (
         <TooltipProvider delayDuration={300}>
             <Tooltip>
@@ -188,7 +189,7 @@ function HeaderButton({ label, onClick, active, children }: { label: string; onC
                         {children}
                     </button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">{label}</TooltipContent>
+                <TooltipContent side={side}>{label}</TooltipContent>
             </Tooltip>
         </TooltipProvider>
     )

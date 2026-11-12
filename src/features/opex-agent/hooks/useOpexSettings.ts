@@ -53,9 +53,11 @@ const maddoxLabel = (model: string | null | undefined, variant: string | null | 
 export function useOpexView(): { data: OpexView | undefined; isLoading: boolean } {
     const { kind, agent } = useOpexScope()
     const maddox = agent.id === "maddox"
-    const settings = useOpexSettings(kind === "owner" && !maddox)
+    // Conversa com um agente rotineiro (OPE-160): disponibilidade e modelo pelo `status` da conversa.
+    const routine = agent.id === "routine"
+    const settings = useOpexSettings(kind === "owner" && !maddox && !routine)
     const maddoxSettings = useMaddoxSettings(kind === "owner" && maddox)
-    const status = useOpexStatus(kind === "client")
+    const status = useOpexStatus(kind === "client" || routine)
     if (kind === "owner" && maddox) {
         const data = maddoxSettings.data
         return {
@@ -71,7 +73,7 @@ export function useOpexView(): { data: OpexView | undefined; isLoading: boolean 
             isLoading: maddoxSettings.isLoading,
         }
     }
-    if (kind === "owner") {
+    if (kind === "owner" && !routine) {
         const data = settings.data
         return {
             data: data

@@ -10,7 +10,7 @@ import { SidebarTooltip } from "@/features/layout/components/sidebar/SidebarTool
 import { SidebarItemSurface } from "@/features/layout/components/sidebar/SidebarItemSurface"
 import { SIDEBAR_FOCUS_RING } from "@/features/layout/components/sidebar/sidebar-styles"
 import { agentColorStyle } from "@/features/maddox-agent/colors"
-import { CHAT_AGENT_IDS, type ChatAgentId } from "../../agents"
+import { CHAT_AGENT_IDS, isChatAgentId, type ChatAgentId } from "../../agents"
 import { useOpexRealtime, useOpexSessions } from "../../hooks/useOpexSessions"
 import { useOpexJobNotifications } from "../../hooks/useOpexJobs"
 import { OpexUploadsProvider } from "../../hooks/useOpexUploads"
@@ -76,8 +76,10 @@ function AgentActivity() {
     useOpexJobNotifications(agent.jobs)
     const busy = (sessions.data ?? []).some((session) => session.status === "running" || session.status === "awaiting_confirmation")
     useEffect(() => {
-        reportBusy(agent.id, busy)
-        return () => reportBusy(agent.id, false)
+        const id = agent.id
+        if (!isChatAgentId(id)) return
+        reportBusy(id, busy)
+        return () => reportBusy(id, false)
     }, [agent.id, busy, reportBusy])
     return null
 }

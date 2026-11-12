@@ -94,17 +94,23 @@ export const OPEX_SESSION_DELETED_EVENT = "opex-session-deleted"
 /** Agente Maddox: mesmos canais, eventos próprios (as sessões dos dois agentes não se misturam). */
 export const MADDOX_SESSION_UPDATED_EVENT = "maddox-session-updated"
 export const MADDOX_SESSION_DELETED_EVENT = "maddox-session-deleted"
+/** Conversa com um agente rotineiro (OPE-160): `private-app`, payload `{ id, agentId }`. */
+export const ROUTINE_CHAT_SESSION_UPDATED_EVENT = "routine-chat-session-updated"
+export const ROUTINE_CHAT_SESSION_DELETED_EVENT = "routine-chat-session-deleted"
 
 /** Eventos de sessão do agente (ausente = Agente Opex). */
-export function agentSessionEvents(agent: "opex" | "maddox" | null | undefined): { updated: string; deleted: string } {
+export function agentSessionEvents(agent: "opex" | "maddox" | "routine" | null | undefined): { updated: string; deleted: string } {
+    if (agent === "routine") return { updated: ROUTINE_CHAT_SESSION_UPDATED_EVENT, deleted: ROUTINE_CHAT_SESSION_DELETED_EVENT }
     return agent === "maddox" ? { updated: MADDOX_SESSION_UPDATED_EVENT, deleted: MADDOX_SESSION_DELETED_EVENT } : { updated: OPEX_SESSION_UPDATED_EVENT, deleted: OPEX_SESSION_DELETED_EVENT }
 }
 
 export const OPEX_AUDIT_ENTITY = "AgenteOpex"
 export const MADDOX_AUDIT_ENTITY = "AgenteMaddox"
+export const ROUTINE_CHAT_AUDIT_ENTITY = "ConversaAgenteRotineiro"
 
 /** Entidade de auditoria das sessões do agente. */
-export function agentAuditEntity(agent: "opex" | "maddox" | null | undefined): string {
+export function agentAuditEntity(agent: "opex" | "maddox" | "routine" | null | undefined): string {
+    if (agent === "routine") return ROUTINE_CHAT_AUDIT_ENTITY
     return agent === "maddox" ? MADDOX_AUDIT_ENTITY : OPEX_AUDIT_ENTITY
 }
 /**

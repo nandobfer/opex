@@ -59,7 +59,7 @@ export async function appToolsFor(names: readonly string[], disabledTools: reado
     return tools
 }
 
-async function mcpToolsFor(ids: readonly string[], signal: AbortSignal, warnings: string[]): Promise<McpTurnTools | null> {
+export async function mcpToolsFor(ids: readonly string[], signal: AbortSignal, warnings: string[]): Promise<McpTurnTools | null> {
     if (!ids.length) return null
     const { loadEnabledMcpServers } = await import("@/features/opex-agent/server/mcp/service")
     const present = new Set((await loadEnabledMcpServers(ids)).map((server) => server._id.toString()))

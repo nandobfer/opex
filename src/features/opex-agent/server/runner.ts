@@ -1,4 +1,4 @@
-import { isLoopFinished, streamText, type ModelMessage } from "ai"
+import { isLoopFinished, streamText } from "ai"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { recordAiConsumption } from "@/lib/ai/consumption"
@@ -6,7 +6,7 @@ import { describeAiError, prepareModel, samplingOptions, type PreparedModel } fr
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CLIENT_JOBS_INSTRUCTION, OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
-import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from "../history"
+import { redactToolCalls } from "../history"
 import { closeRunningTools, partsText } from "../live-message"
 import type { OpexAgentSettings } from "../schemas"
 import type { OpexTool, OpexToolContext } from "./tools/define"
@@ -14,22 +14,21 @@ import type { OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, Op
 import { refreshConfirmations, requestConfirmation } from "./confirmations"
 import { beginTurn, endTurn, enqueueFollowUp, isTurnActive, liveMessageOf, publishLine, takeFollowUp, abortTurn, type OpexFollowUp } from "./hub"
 import { OpexMessage, OpexSession, type IOpexFileRef, type IOpexMessage } from "@/lib/db/models/Opex"
-import { claimOpexFiles, fileMarkers, resolveFileMarkers } from "./files"
-import { opencodeGoFileKinds, type OpexFileKind } from "../files"
+import { claimOpexFiles, fileMarkers } from "./files"
 import { addStepCost, type AiStepCost } from "@/lib/ai/provider-cost"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
-import { refreshSessionTitle } from "./titler"
+import { refreshSessionTitle, refreshSessionTitleWith, type TitleTurn } from "./titler"
+import { ROUTINE_CHAT_CONSUMPTION_ORIGIN, ROUTINE_CHAT_TITLE_CONSUMPTION_ORIGIN } from "@/features/routine-agents/chat"
 import { memoriesSection, memoryCacheNotice } from "@/features/ai/memories-prompt"
 import { selfMemoryInstructions } from "@/features/ai/self-memory"
 import type { MemoryTurn } from "@/features/ai/agents"
-import type { McpTurnTools } from "./mcp/tools"
-import { buildToolRuntime, redactToolInput, stringifyForDisplay } from "./tool-runtime"
+import { buildToolRuntime, redactToolInput, stringifyForDisplay, type ToolRuntimeHooks } from "./tool-runtime"
 import { assertClientOpexEnabled, assertClientToolAllowed, enabledClientToolNamesFor } from "./client-config"
 import { clientActorFor } from "@/features/auth/server/context"
 import { enabledClientOpexServerTools, findOpexClientServerTool } from "./client-tools/registry"
-import { OWNER_SCOPE, actorIdOf, sessionScopeOf, type OpexServerScope } from "./scope"
-import { nowContext } from "./tools/context"
+import { OWNER_SCOPE, actorIdOf, agentOf, sessionScopeOf, type OpexServerScope } from "./scope"
+import { loadSessionHistory } from "./turn-history"
 import { enabledOpexTools, findOpexTool } from "./tools/registry"
 import { skillsCatalogBlock, type OpexSkillCatalogItem } from "../skills"
 
@@ -115,11 +114,6 @@ function findTool(scope: OpexServerScope, name: string, extra?: TurnToolMap): Op
     return (scope.kind === "owner" ? findOpexTool(name) : findOpexClientServerTool(name)) ?? extra?.get(name)
 }
 
-function turnContext(notices: readonly string[] = []): string {
-    const now = nowContext()
-    return [`Contexto do turno: agora é ${now.local} (${now.timeZone}; ${now.iso}).`, ...notices].join(" ")
-}
-
 const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => redactToolInput(findTool(scope, toolName, extra), input)
 
 const numberOrNull = (value: unknown) => (typeof value === "number" && Number.isFinite(value) ? value : null)
@@ -131,8 +125,18 @@ const numberOrNull = (value: unknown) => (typeof value === "number" && Number.is
 async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexMessageDto> {
     if (scope.kind === "client") await assertClientOpexEnabled(scope.actor)
     const settings = (await loadOpexSettings()).settings
-    const availability = await opexAvailability(settings)
-    if (!availability.available) throw new DomainError(409, availability.reason ?? "O Agente Opex não está disponível", "OPEX_UNAVAILABLE")
+    let model: TurnModel
+    if (agentOf(scope) === "routine") {
+        // Conversa com um agente rotineiro (OPE-160): disponível pelo agente (ativo, provisionado, motor
+        // Opex), com o modelo da configuração atual dele; sem anexos.
+        if (followUp.fileIds?.length) throw new DomainError(400, "A conversa com o agente rotineiro não aceita anexos", "ROUTINE_CHAT_FILES_UNSUPPORTED")
+        const { routineChatTurnModel } = await import("@/features/routine-agents/server/chat/turn")
+        model = await routineChatTurnModel(scope)
+    } else {
+        const availability = await opexAvailability(settings)
+        if (!availability.available) throw new DomainError(409, availability.reason ?? "O Agente Opex não está disponível", "OPEX_UNAVAILABLE")
+        model = { provider: settings.main.provider!, model: settings.main.model!, variant: settings.main.variant, temperature: settings.main.temperature, maxOutputTokens: settings.main.maxOutputTokens }
+    }
     await loadSession(sessionId, scope)
     const now = new Date()
     const claimed = await OpexSession.findOneAndUpdate(
@@ -173,7 +177,7 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
     })
     await publishSessionUpdated(sessionId)
     const userText = files.length ? `${text}${text ? "\n" : ""}(arquivos: ${files.map((file) => file.name).join(", ")})` : text
-    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, actorId, scope, userText, jobId: followUp.job?.id ?? null })
+    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, model, actorId, scope, userText, jobId: followUp.job?.id ?? null })
     return toMessageDto(userDoc.toObject() as IOpexMessage & { _id: Types.ObjectId })
 }
 
@@ -252,12 +256,22 @@ export async function interruptSession(sessionId: string, scope: OpexServerScope
     }
 }
 
+/** Modelo do turno: o principal do Agente Opex ou o do agente rotineiro na conversa (OPE-160). */
+export interface TurnModel {
+    provider: OpexProviderId
+    model: string
+    variant: string | null
+    temperature?: number | null
+    maxOutputTokens?: number | null
+}
+
 interface TurnArgs {
     sessionId: string
     assistantId: Types.ObjectId
     seq: number
     controller: AbortController
     settings: OpexAgentSettings
+    model: TurnModel
     actorId: string
     scope: OpexServerScope
     userText: string
@@ -265,68 +279,62 @@ interface TurnArgs {
     jobId: string | null
 }
 
-/** Tipos de arquivo que o modelo lê: no OpenCode Go vêm do catálogo (por modelo); nos demais, do provedor. */
-async function acceptedFileKinds(provider: OpexProviderId, model: string, signal?: AbortSignal): Promise<ReadonlySet<OpexFileKind> | undefined> {
-    if (provider !== "opencode-go") return undefined
-    const { opencodeGoModelInputs } = await import("@/lib/ai/opencode-go")
-    return opencodeGoFileKinds(await opencodeGoModelInputs(model, signal))
+/**
+ * Turno montado: o que muda entre o Agente Opex e a conversa com um agente rotineiro (OPE-160). O resto
+ * (reserva da sessão, stream, gravação, título, confirmações) é o mesmo.
+ */
+export interface PreparedChatTurn {
+    tools: OpexTool[]
+    overrides: Record<string, boolean>
+    /** Ferramentas fora do registro do Agente Opex (MCPs, memória, skills), para os rótulos. */
+    lookup: TurnToolMap
+    instructions: string
+    history: Awaited<ReturnType<typeof loadSessionHistory>>
+    toolContext: OpexToolContext
+    /** Avisos exibidos no início da resposta (ex.: memórias em cache, ferramenta indisponível). */
+    notices: string[]
+    hooks?: Pick<ToolRuntimeHooks, "authorize" | "shouldConfirm">
+    /** Identificador da sessão no provedor (cache do prompt). */
+    providerSession: string
+    title?: string
+    /** Teto técnico do turno: estourou → erro com a mensagem (e o turno fecha mesmo se o motor não parar). */
+    timeout?: { ms: number; message: string; graceMs: number }
+    close: () => Promise<void>
 }
 
-async function loadHistory(sessionId: string, summary: string, provider: OpexProviderId, model: string, notices: readonly string[] = [], signal?: AbortSignal): Promise<ModelMessage[]> {
-    const stored = await OpexMessage.find({ sessionId: new Types.ObjectId(sessionId) }).sort({ seq: 1 }).select({ role: 1, modelMessages: 1 }).lean<Pick<IOpexMessage, "role" | "modelMessages">[]>()
-    const turns = stored.map((item) => ({ role: item.role, modelMessages: parseModelMessages(item.modelMessages) }))
-    // Os arquivos entram só nos turnos que couberam no orçamento, no formato que o provedor atual lê.
-    const messages = await resolveFileMarkers(stripPastReasoning(selectHistory(turns, summary).messages), provider, await acceptedFileKinds(provider, model, signal))
-    // A data e a hora do turno vão só no envio, ao fim da mensagem do usuário, para o prompt de sistema não mudar.
-    return withTurnContext(messages, turnContext(notices)) as ModelMessage[]
+export interface PrepareTurnInput {
+    sessionId: string
+    assistantId: string
+    scope: OpexServerScope
+    actorId: string
+    userText: string
+    model: TurnModel
+    signal: AbortSignal
 }
 
-function parseModelMessages(json: string): unknown[] {
+/** Turno do Agente Opex (dono ou portal). */
+async function prepareOpexTurn(args: TurnArgs): Promise<PreparedChatTurn> {
+    const { sessionId, assistantId, controller, settings, scope, model } = args
+    const session = await loadSession(sessionId, scope)
+    const { tools: appTools, overrides: appOverrides } = await toolsForTurn(scope, settings)
+    // MCPs habilitados (no portal, os liberados ao cliente): falha de um MCP vira aviso no contexto.
+    const mcp = await (await import("./mcp/tools")).loadMcpTools(scope, controller.signal)
     try {
-        const parsed: unknown = JSON.parse(json)
-        return Array.isArray(parsed) ? parsed : []
-    } catch {
-        return []
-    }
-}
-
-async function executeTurn(args: TurnArgs): Promise<void> {
-    const { sessionId, assistantId, controller, settings, scope } = args
-    const startedAt = Date.now()
-    const main = settings.main
-    let prepared: PreparedModel | null = null
-    let errorMessage: string | null = null
-    let aborted = false
-    let usage: OpexUsageDto | null = null
-    let cost: AiStepCost | null = null
-    let responseMessages: unknown[] | null = null
-    const toolNames: string[] = []
-    let mcp: McpTurnTools | null = null
-    let lookup: TurnToolMap | undefined
-
-    try {
-        const session = await loadSession(sessionId, scope)
-        const { tools: appTools, overrides: appOverrides } = await toolsForTurn(scope, settings)
-        // MCPs habilitados (no portal, os liberados ao cliente): falha de um MCP vira aviso no contexto.
-        mcp = await (await import("./mcp/tools")).loadMcpTools(scope, controller.signal)
-        const mcpTools = new Map(mcp.tools.map((tool) => [tool.name, tool]))
+        const lookup = new Map(mcp.tools.map((tool) => [tool.name, tool]))
         const memory = await memoriesForTurn(scope, sessionId, `opex:${sessionId}:${assistantId.toString()}`, args.actorId, settings.disabledTools, args.userText)
         const selfNames = new Set(memory.selfTools.map((tool) => tool.name))
         // Skills (OPE-153): só o Agente Opex do dono, com as ligadas no início do turno (portal e Maddox fora).
         const skills = scope.kind === "owner" ? await (await import("./skills/turn")).ownerSkillsForTurn() : { catalog: [], tools: [] }
         const appNames = new Set([...appTools.map((tool) => tool.name), ...selfNames])
         const tools = [...appTools, ...memory.selfTools, ...skills.tools.filter((tool) => !appNames.has(tool.name)), ...mcp.tools.filter((tool) => !appNames.has(tool.name))]
-        if (memory.notice) publishLine(sessionId, { type: "text-delta", text: `> ${memory.notice}\n\n` })
         const overrides = { ...mcp.overrides, ...appOverrides }
-        const history = await loadHistory(sessionId, session.summary, main.provider!, main.model!, mcp.notices, controller.signal)
+        const history = await loadSessionHistory(sessionId, session.summary, model.provider, model.model, { notices: mcp.notices, signal: controller.signal })
         // O escopo é mutável: a revalidação antes de cada ferramenta troca o ator pelo atual (papel
         // pode ter mudado no meio do turno). As ferramentas leem sempre `context.scope`.
         const toolContext: OpexToolContext = { sessionId, actorId: args.actorId, signal: controller.signal, scope }
-        for (const tool of [...memory.selfTools, ...skills.tools]) mcpTools.set(tool.name, tool)
-        lookup = mcpTools
-        const runtime = buildToolRuntime(tools, toolContext, overrides, {
-            requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
-            ...(scope.kind === "client"
+        for (const tool of [...memory.selfTools, ...skills.tools]) lookup.set(tool.name, tool)
+        const hooks: PreparedChatTurn["hooks"] =
+            scope.kind === "client"
                 ? {
                       authorize: async (tool: OpexTool) => {
                           const current = toolContext.scope
@@ -342,20 +350,93 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                           toolContext.scope = { kind: "client", actor }
                       },
                   }
-                : {}),
+                : undefined
+        return {
+            tools,
+            overrides,
+            lookup,
+            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts, skills: skills.catalog }),
+            history,
+            toolContext,
+            notices: memory.notice ? [memory.notice] : [],
+            hooks,
+            providerSession: `opex-agent-${sessionId}`,
+            close: () => mcp.close(),
+        }
+    } catch (error) {
+        await mcp.close().catch(() => undefined)
+        throw error
+    }
+}
+
+/**
+ * Espera o turno; com o teto técnico estourado (a resposta já foi abortada), se o motor não parar na
+ * folga (provedor ou ferramenta que ignoram o sinal), segue mesmo assim para fechar o turno.
+ */
+function untilSettled(work: Promise<void>, signal: AbortSignal, graceMs: () => number | null): Promise<void> {
+    let grace: ReturnType<typeof setTimeout> | null = null
+    let onAbort: (() => void) | null = null
+    const stopped = new Promise<void>((resolve) => {
+        onAbort = () => {
+            const ms = graceMs()
+            if (ms !== null) grace = setTimeout(resolve, ms)
+        }
+        if (signal.aborted) onAbort()
+        else signal.addEventListener("abort", onAbort, { once: true })
+    })
+    return Promise.race([work, stopped]).finally(() => {
+        if (grace) clearTimeout(grace)
+        if (onAbort) signal.removeEventListener("abort", onAbort)
+    })
+}
+
+async function executeTurn(args: TurnArgs): Promise<void> {
+    const { sessionId, assistantId, controller, scope, model } = args
+    const startedAt = Date.now()
+    let prepared: PreparedModel | null = null
+    let turn: PreparedChatTurn | null = null
+    let errorMessage: string | null = null
+    let aborted = false
+    let timedOut = false
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let usage: OpexUsageDto | null = null
+    let cost: AiStepCost | null = null
+    let responseMessages: unknown[] | null = null
+    const toolNames: string[] = []
+    let lookup: TurnToolMap | undefined
+
+    const work = async () => {
+        turn =
+            agentOf(scope) === "routine"
+                ? await (await import("@/features/routine-agents/server/chat/turn")).prepareRoutineChatTurn({ sessionId, assistantId: assistantId.toString(), scope, actorId: args.actorId, userText: args.userText, model, signal: controller.signal })
+                : await prepareOpexTurn(args)
+        const current = turn
+        lookup = current.lookup
+        if (current.timeout) {
+            const { ms, message } = current.timeout
+            timer = setTimeout(() => {
+                timedOut = true
+                errorMessage = message
+                controller.abort(new Error(message))
+            }, ms)
+        }
+        for (const notice of current.notices) publishLine(sessionId, { type: "text-delta", text: `> ${notice}\n\n` })
+        const runtime = buildToolRuntime(current.tools, current.toolContext, current.overrides, {
+            requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
+            ...(current.hooks ?? {}),
         })
-        prepared = await prepareModel({ provider: main.provider!, model: main.model!, variant: main.variant, session: `opex-agent-${sessionId}`, signal: controller.signal })
+        prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant, session: current.providerSession, ...(current.title ? { title: current.title } : {}), signal: controller.signal })
         const meteredModel = prepared
         const result = streamText({
             model: prepared.model,
-            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts, skills: skills.catalog }),
-            messages: history,
+            instructions: current.instructions,
+            messages: current.history,
             tools: runtime.tools,
             stopWhen: isLoopFinished(),
             abortSignal: controller.signal,
             providerOptions: prepared.providerOptions,
             ...(prepared.reasoning ? { reasoning: prepared.reasoning } : {}),
-            ...samplingOptions({ provider: main.provider!, variant: main.variant, temperature: main.temperature, maxOutputTokens: main.maxOutputTokens }),
+            ...samplingOptions({ provider: model.provider, variant: model.variant, temperature: model.temperature, maxOutputTokens: model.maxOutputTokens }),
         })
         for await (const part of result.fullStream) {
             switch (part.type) {
@@ -405,7 +486,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     cost = addStepCost(cost, meteredModel.takeStepCost(part.providerMetadata))
                     break
                 case "error":
-                    errorMessage = describeAiError(part.error, main.provider!, main.model)
+                    errorMessage = describeAiError(part.error, model.provider, model.model)
                     break
                 case "abort":
                     aborted = true
@@ -417,18 +498,32 @@ async function executeTurn(args: TurnArgs): Promise<void> {
             }
         }
         if (!aborted && !errorMessage) responseMessages = redactToolCalls(await result.responseMessages, (name, input) => redactInput(scope, name, input, lookup))
+    }
+
+    try {
+        // Só a conversa com um rotineiro tem teto técnico; no teto, a folga fecha o turno mesmo com o motor parado.
+        await untilSettled(work(), controller.signal, () => (turn as PreparedChatTurn | null)?.timeout?.graceMs ?? null)
     } catch (error) {
         if (controller.signal.aborted) aborted = true
         else {
-            errorMessage = describeAiError(error, main.provider ?? undefined, main.model)
-            log.warn({ sessionId, provider: main.provider, model: main.model, err: errorMessage }, "[opex] falha no turno")
+            errorMessage = describeAiError(error, model.provider, model.model)
+            log.warn({ sessionId, provider: model.provider, model: model.model, err: errorMessage }, "[opex] falha no turno")
         }
     } finally {
-        await prepared?.dispose().catch(() => undefined)
-        await mcp?.close().catch(() => undefined)
+        if (timer) clearTimeout(timer)
+        await (prepared as PreparedModel | null)?.dispose().catch(() => undefined)
+        await (turn as PreparedChatTurn | null)?.close().catch(() => undefined)
     }
+    // Teto técnico: o turno vira erro com o motivo (não "interrompido pelo usuário").
+    if (timedOut) aborted = false
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames, apiKeyId: prepared?.apiKeyId ?? null })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames, apiKeyId: (prepared as PreparedModel | null)?.apiKeyId ?? null })
+}
+
+/** Título da conversa com um rotineiro: o subagente de título do Agente Opex; sem modelo dele, o do agente. */
+async function refreshRoutineChatTitle(sessionId: string, settings: OpexAgentSettings, model: TurnModel, turn: TitleTurn): Promise<void> {
+    const title = settings.title.provider && settings.title.model ? settings.title : { provider: model.provider, model: model.model, variant: model.variant }
+    await refreshSessionTitleWith(sessionId, { provider: title.provider, model: title.model, variant: title.variant, instructions: settings.titleInstructions, origin: ROUTINE_CHAT_TITLE_CONSUMPTION_ORIGIN }, turn)
 }
 
 interface TurnOutcome {
@@ -472,7 +567,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             error,
             usage: outcome.usage,
             durationMs: Date.now() - outcome.startedAt,
-            model: settings.main.model ? `${settings.main.provider}/${settings.main.model}` : null,
+            model: `${args.model.provider}/${args.model.model}`,
         })
         const pending = parts.some((part) => part.type === "tool" && part.confirmation?.status === "pending")
         pendingConfirmation = pending
@@ -486,13 +581,15 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
     await publishSessionUpdated(sessionId)
     if (args.jobId) await settleJobTurn(args.jobId, { status, error, pendingConfirmation })
 
-    if (outcome.usage && settings.main.provider && settings.main.model) {
+    const routine = agentOf(scope) === "routine"
+    if (outcome.usage) {
         await recordAiConsumption({
             dedupKey: `opex:${assistantId.toString()}`,
-            provider: settings.main.provider,
-            origin: scope.kind === "client" ? OPEX_CLIENT_CONSUMPTION_ORIGIN : OPEX_CONSUMPTION_ORIGIN,
+            provider: args.model.provider,
+            // Conversa com um rotineiro (OPE-160): origem própria, fora das execuções do agente.
+            origin: routine ? ROUTINE_CHAT_CONSUMPTION_ORIGIN : scope.kind === "client" ? OPEX_CLIENT_CONSUMPTION_ORIGIN : OPEX_CONSUMPTION_ORIGIN,
             subject: sessionId,
-            model: settings.main.model,
+            model: args.model.model,
             ...outcome.usage,
             costUsd: outcome.cost?.costUsd ?? null,
             billing: outcome.cost?.billing ?? null,
@@ -500,7 +597,9 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
         })
     }
     if (status !== "interrupted" || text) {
-        await refreshSessionTitle(sessionId, settings, { userText: args.userText, assistantText: text, tools: outcome.toolNames }, scope).catch((titleError: unknown) =>
+        const titleTurn = { userText: args.userText, assistantText: text, tools: outcome.toolNames }
+        const titled = routine ? refreshRoutineChatTitle(sessionId, settings, args.model, titleTurn) : refreshSessionTitle(sessionId, settings, titleTurn, scope)
+        await titled.catch((titleError: unknown) =>
             log.warn({ err: titleError, sessionId }, "[opex] falha no subagente de título"),
         )
     }

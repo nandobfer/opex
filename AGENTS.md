@@ -219,6 +219,9 @@ sem pedido explícito.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
   ao criar, renomear, substituir o segredo, ativar ou remover uma chave (ver `aicontext/modules/ai.md`,
   "Chaves de API").
+- Conversa com um agente rotineiro (OPE-160): `routine-chat-session-updated` / `routine-chat-session-deleted`
+  (`{ id, agentId }`) em `private-app`; a resposta ao vivo vai pelo NDJSON
+  (`GET /api/routine-agents/[id]/chat/sessions/[sessionId]/stream`).
 - Agentes rotineiros: `routine-agent-updated` (`{ id }`), `routine-run-updated` (`{ id, agentId, status }`) e
   `routine-run-attention` (`{ id, agentId, kind: "confirmation" | "finished", status, agentName }`, que alimenta o
   toast "Abrir execução" em qualquer tela) em `private-app` (ver `aicontext/modules/routine-agents.md`).
