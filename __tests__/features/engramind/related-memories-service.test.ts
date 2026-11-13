@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * OPE-164: cache das similares das memórias. Fonte (decisão do dono): o `similar` de `GET /v1/memories/{id}`
@@ -58,7 +58,7 @@ vi.mock('@/features/engramind/server/shared', () => ({
 }))
 
 import { DomainError } from '@/lib/api/route'
-import { computeRelated, getRelatedMemories, onRelatedMemoryEvent, RELATED_BATCH_SIZE, RELATED_CONCURRENCY, relatedFillDone } from '@/features/engramind/server/related-memories'
+import { computeRelated, fillRelatedMemories, getRelatedMemories, onRelatedMemoryEvent, RELATED_BATCH_SIZE, RELATED_CONCURRENCY, RELATED_REFILL_MS, relatedFillDone } from '@/features/engramind/server/related-memories'
 
 const ids = (total: number) => Array.from({ length: total }, (_, index) => `m_${index}`)
 let memories: { id: string; channel: string; similar: { id: string; channel: string; score: number }[] }[] = []
@@ -181,5 +181,47 @@ describe('similares das memórias (OPE-164)', () => {
     mocks.docs.set('m_x', { _id: 'm_x', channel: 'eng', related: [], memoryVersion: 1, computedAt: new Date(), failedAt: null })
     expect(await computeRelated('m_x')).toBe('gone')
     expect(mocks.docs.has('m_x')).toBe(false)
+  })
+
+  describe('reenchimento e nova tentativa', () => {
+    const computedIds = () => mocks.call.mock.calls.map(([, request]) => (request as { path: string }).path).filter((path) => path !== '/v1/memories').map((path) => path.split('/').pop())
+    const old = () => new Date(Date.now() - RELATED_REFILL_MS - 1_000)
+    const recent = () => new Date(Date.now() - 1_000)
+    const doc = (id: string, fields: Partial<Doc>): Doc => ({ _id: id, channel: 'eng', related: [], memoryVersion: 1, computedAt: null, failedAt: null, ...fields })
+
+    afterEach(() => vi.useRealTimers())
+
+    it('memória com falha antiga é recalculada; com falha recente e já calculada, não', async () => {
+      mocks.docs.set('m_0', doc('m_0', { failedAt: old() }))
+      mocks.docs.set('m_1', doc('m_1', { failedAt: recent() }))
+      mocks.docs.set('m_2', doc('m_2', { computedAt: recent(), related: [{ id: 'm_3', score: 0.9 }] }))
+      await fillRelatedMemories()
+      expect(computedIds().sort()).toEqual(['m_0', 'm_3'])
+      expect(mocks.docs.get('m_0')).toMatchObject({ failedAt: null, related: [{ id: 'm_1', score: 0.9 }] })
+      expect(mocks.docs.get('m_1')?.computedAt).toBeNull()
+    })
+
+    it('completedAt antigo dispara novo preenchimento; recente, não', async () => {
+      mocks.state = { relatedMemories: { requestedAt: old(), completedAt: recent() } }
+      await getRelatedMemories()
+      await relatedFillDone()
+      expect(mocks.call).not.toHaveBeenCalled()
+      mocks.state = { relatedMemories: { requestedAt: old(), completedAt: old() } }
+      await getRelatedMemories()
+      await relatedFillDone()
+      expect(computedIds().sort()).toEqual(['m_0', 'm_1', 'm_2', 'm_3'])
+    })
+
+    it('429 espera e repete uma vez: o sucesso seguinte grava as similares', async () => {
+      vi.useFakeTimers()
+      mocks.call
+        .mockRejectedValueOnce(new DomainError(429, 'limitado', 'ENGRAMIND_RATE_LIMITED'))
+        .mockResolvedValueOnce({ id: 'm_0', channel: 'eng', version: 3, similar: [{ id: 'm_1', channel: 'eng', score: 0.8 }] })
+      const result = computeRelated('m_0')
+      await vi.advanceTimersByTimeAsync(2_000)
+      expect(await result).toBe('ok')
+      expect(mocks.call).toHaveBeenCalledTimes(2)
+      expect(mocks.docs.get('m_0')).toMatchObject({ related: [{ id: 'm_1', score: 0.8 }], memoryVersion: 3 })
+    })
   })
 })
