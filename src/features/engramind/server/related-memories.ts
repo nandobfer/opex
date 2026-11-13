@@ -28,10 +28,16 @@ const LIST_PAGE = 200
 const RATE_LIMIT_WAIT_MS = 2_000
 const EVENT_IDS_LIMIT = 50
 
-interface MemoryDetail {
-    memory: Pick<EngramindMemory, "id" | "channel" | "version">
+/**
+ * Resposta de `GET /v1/memories/{id}`: o `MemoryDetail` do Engramind é PLANO (`allOf [Memory, { similar }]`),
+ * com `id`, `channel` e `version` no topo, ao lado de `similar`, sem envelope `memory`.
+ */
+type MemoryDetail = Partial<Pick<EngramindMemory, "id" | "channel" | "version">> & {
     similar?: { id?: unknown; channel?: unknown; score?: unknown }[]
 }
+
+/** Só a memória inexistente sai do cache; outro 404 (rota, proxy) é falha e não apaga nada. */
+const MEMORY_NOT_FOUND = "ENGRAMIND_MEMORY_NOT_FOUND"
 
 type FillGlobal = typeof globalThis & { __opexRelatedFill?: Promise<void> | null }
 const fill = globalThis as FillGlobal
@@ -57,14 +63,14 @@ export async function fetchRelated(id: string): Promise<{ channel: string; versi
     try {
         detail = await engramindCall<MemoryDetail>("GET", { path: `/v1/memories/${encodeURIComponent(id)}` })
     } catch (error) {
-        if (error instanceof DomainError && error.status === 404) return null
+        if (error instanceof DomainError && error.status === 404 && error.code === MEMORY_NOT_FOUND) return null
         if (error instanceof DomainError && error.status === 429) {
             await wait(RATE_LIMIT_WAIT_MS)
             detail = await engramindCall<MemoryDetail>("GET", { path: `/v1/memories/${encodeURIComponent(id)}` })
         } else throw error
     }
-    if (!detail?.memory) return null
-    const channel = detail.memory.channel
+    if (!detail || typeof detail.channel !== "string" || (detail.id !== undefined && detail.id !== id)) throw new Error("resposta inesperada do Engramind para a memória")
+    const channel = detail.channel
     const seen = new Set<string>()
     const related: { id: string; score: number }[] = []
     for (const hit of detail.similar ?? []) {
@@ -74,7 +80,7 @@ export async function fetchRelated(id: string): Promise<{ channel: string; versi
         seen.add(hit.id)
         related.push({ id: hit.id, score: hit.score })
     }
-    return { channel, version: typeof detail.memory.version === "number" ? detail.memory.version : null, related }
+    return { channel, version: typeof detail.version === "number" ? detail.version : null, related }
 }
 
 /** Tira a memória do cache e das listas das outras. */

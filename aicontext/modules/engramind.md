@@ -422,8 +422,12 @@ novas posições e o quadro se reenquadra).
     memórias do evento (as que apontam para uma editada ficam até o próprio recálculo; memória movida de canal
     sai das listas do canal antigo) e `memory.deleted` tira a memória do cache e das listas das outras;
     `memory.archived` não muda nada (a lib descarta as inativas);
-  - erro, 404 ou lentidão do Engramind nunca quebram a rede: a memória fica sem arestas, com aviso no log (Pino)
-    e `failedAt`. A leitura é um `GET` sem corpo: nenhum texto de memória vai ao debug.
+  - a resposta é o `MemoryDetail` **plano** do Engramind (`allOf [Memory, { similar }]`): `id`, `channel`,
+    `version` e `similar` no topo, sem envelope `memory`. Só o 404 `MEMORY_NOT_FOUND` tira a memória do cache;
+    erro, outro 404 (rota, proxy), resposta inesperada (sem `channel` no topo ou de outro `id`) ou lentidão do
+    Engramind nunca quebram a rede nem apagam o cache: a memória fica sem arestas novas, com aviso no log
+    (Pino) e `failedAt`, e é tentada de novo no próximo preenchimento. A leitura é um `GET` sem corpo: nenhum
+    texto de memória vai ao debug.
 - O hook invalida a consulta com `engramind-updated` `related-memories` ou `memory.*`; com `links = center`
   nada é consultado.
 

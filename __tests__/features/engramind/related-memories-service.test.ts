@@ -77,12 +77,13 @@ beforeEach(() => {
     if (request.path === '/v1/memories') return { memories: memories.map(({ id }) => ({ id, text: 'nunca guardado' })), next_cursor: null }
     const id = decodeURIComponent(request.path.split('/').pop()!)
     const memory = memories.find((item) => item.id === id)
-    if (!memory) throw new DomainError(404, 'Memória não encontrada', 'ENGRAMIND_NOT_FOUND')
+    if (!memory) throw new DomainError(404, 'Memória não encontrada', 'ENGRAMIND_MEMORY_NOT_FOUND')
     active += 1
     maxActive = Math.max(maxActive, active)
     await new Promise((resolve) => setTimeout(resolve, 1))
     active -= 1
-    return { memory: { id, channel: memory.channel, version: 2, text: 'texto' }, similar: memory.similar }
+    // `MemoryDetail` real do Engramind: plano (`allOf [Memory, { similar }]`), sem envelope `memory`.
+    return { id, channel: memory.channel, version: 2, text: 'texto', status: 'active', similar: memory.similar }
   })
 })
 
@@ -155,7 +156,28 @@ describe('similares das memórias (OPE-164)', () => {
     expect(mocks.call).not.toHaveBeenCalled()
   })
 
-  it('memória que não existe mais (404) sai do cache', async () => {
+  it('regressão (MemoryDetail plano): grava computedAt e as similares lidas do topo da resposta', async () => {
+    expect(await computeRelated('m_0')).toBe('ok')
+    expect(mocks.docs.get('m_0')).toMatchObject({ channel: 'eng', related: [{ id: 'm_1', score: 0.9 }], memoryVersion: 2, failedAt: null })
+    expect(mocks.docs.get('m_0')?.computedAt).toBeInstanceOf(Date)
+  })
+
+  it('regressão: resposta sem channel no topo (o envelope antigo) é falha e não apaga o cache', async () => {
+    mocks.docs.set('m_0', { _id: 'm_0', channel: 'eng', related: [{ id: 'm_1', score: 0.9 }], memoryVersion: 1, computedAt: new Date(), failedAt: null })
+    mocks.call.mockResolvedValueOnce({ memory: { id: 'm_0', channel: 'eng', version: 2 }, similar: [] })
+    expect(await computeRelated('m_0')).toBe('failed')
+    expect(mocks.docs.get('m_0')).toMatchObject({ related: [{ id: 'm_1', score: 0.9 }] })
+    expect(mocks.docs.get('m_0')?.failedAt).toBeInstanceOf(Date)
+  })
+
+  it('regressão: 404 que não é MEMORY_NOT_FOUND (rota, proxy) é falha e não apaga o cache', async () => {
+    mocks.docs.set('m_0', { _id: 'm_0', channel: 'eng', related: [{ id: 'm_1', score: 0.9 }], memoryVersion: 1, computedAt: new Date(), failedAt: null })
+    mocks.call.mockRejectedValueOnce(new DomainError(404, 'rota não encontrada', 'ENGRAMIND_ROUTE_NOT_FOUND'))
+    expect(await computeRelated('m_0')).toBe('failed')
+    expect(mocks.docs.has('m_0')).toBe(true)
+  })
+
+  it('memória que não existe mais (404 MEMORY_NOT_FOUND) sai do cache', async () => {
     mocks.docs.set('m_x', { _id: 'm_x', channel: 'eng', related: [], memoryVersion: 1, computedAt: new Date(), failedAt: null })
     expect(await computeRelated('m_x')).toBe('gone')
     expect(mocks.docs.has('m_x')).toBe(false)
