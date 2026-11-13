@@ -205,7 +205,10 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
   - `list_my_memories` (`canal?`, `chave?`, `formato`, `cursor?`, `limite`): texto inteiro (sem corte),
     `titulos` com `fields=title` (até 200 por página; 50 no completo), `parcial` + `proximoCursor` + aviso
     quando há mais páginas (D15).
-  - No máximo 5 gravações por turno (`remember` + `update_memory` juntos).
+  - Sem limite de gravações por turno: `remember` e `update_memory` gravam quantas o trabalho exigir (o
+    teto de 5 caiu na OPE-163; a memória própria dos outros agentes mantém o `SELF_MEMORY_TURN_LIMIT`).
+    Decisão do dono no planejamento da OPE-163: **não** há configuração de limite (nem nas configurações do
+    Engramind); as travas contra laço são as que já existem (tokens, tempo ativo e teto técnico do turno).
   - Token do agente recusado (`AUTH_INVALID`, pelo código): repete com a credencial do Opex no mesmo
     canal (já conferido na lista), com aviso no log e na execução. Escrita negada no canal
     (`SCOPE_REQUIRED`/`CHANNEL_NOT_SUBSCRIBED`) → `ROUTINE_CHANNEL_FORBIDDEN` (reprovisionar); outros
@@ -236,8 +239,8 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   - modelo e provedor da **configuração atual** do agente (motor Opex);
   - ferramentas liberadas (`appToolsFor`: menos as desligadas pelo dono no Agente Opex e os grupos
     proibidos), MCPs liberados (`mcpToolsFor`), skills da seleção (`routineSkillsForRun`) e a memória
-    (`remember`, `update_memory`, `list_my_memories`, mesmas regras de canal e no máximo 5 gravações por
-    turno; a auditoria registra `conversa` no lugar de `execucao`);
+    (`remember`, `update_memory`, `list_my_memories`, mesmas regras de canal e sem limite de gravações
+    por turno; a auditoria registra `conversa` no lugar de `execucao`);
   - contexto de memórias com o **token do agente** (`getAgentMemoryContext(..., { target })`, canais por
     `routineMemoryChannels`: `opex`, o global, o próprio e os extras ativos), com o foco na mensagem;
     Engramind fora do ar sem cache → erro acionável na resposta; com cache → aviso no chat;

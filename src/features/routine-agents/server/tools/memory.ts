@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { defineTool, OpexToolError, type OpexTool } from "@/features/opex-agent/server/tools/define"
+import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
 import { routineChannelOf, ROUTINE_GLOBAL_CHANNEL } from "../../constants"
 import { listInChannel, memoryKeySchema, memoryTagsSchema, memoryTitleSchema, rememberInChannel, updateInChannel, type RoutineMemoryEnv } from "../memory-channels"
 
@@ -7,19 +7,12 @@ import { listInChannel, memoryKeySchema, memoryTagsSchema, memoryTitleSchema, re
  * Memória própria da execução (OPE-130, D13–D15): o agente rotineiro grava, edita e lista, com o
  * **próprio token**, em qualquer canal que assina (o próprio `agentes/rotineiros/<slug>`, o global dos
  * rotineiros e os extras do provisionamento). `chave` torna a gravação idempotente: uma entrada por item,
- * atualizada nas execuções seguintes. No máximo `MAX_WRITES` gravações (criar + editar) por ativação.
+ * atualizada nas execuções seguintes. Sem limite de gravações por turno (OPE-163).
  */
 
-export const MAX_ROUTINE_MEMORY_WRITES = 5
-
 export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
-    let writes = 0
     const own = routineChannelOf(env.slug)
     const channelOf = (input: { canal?: string; lista?: "agent" | "global" }) => input.canal ?? (input.lista === "global" ? ROUTINE_GLOBAL_CHANNEL : own)
-    const spend = () => {
-        if (writes >= MAX_ROUTINE_MEMORY_WRITES) throw new OpexToolError(`Limite de ${MAX_ROUTINE_MEMORY_WRITES} gravações de memória por turno atingido (criar e editar contam juntos): deixe o resto para a próxima execução`)
-        writes++
-    }
     const canal = z.string().trim().min(1).optional().describe(`Canal da memória (um dos assinados: ${env.allowed.join(", ")}). Padrão: ${own}`)
     return [
         defineTool({
@@ -39,7 +32,6 @@ export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
                 lista: z.enum(["agent", "global"]).optional().describe("Compatibilidade: \"global\" = canal dos rotineiros; prefira `canal`"),
             }),
             execute: async (input) => {
-                spend()
                 const result = await rememberInChannel(env, { ...input, canal: channelOf(input) })
                 if (!input.chave && !result.duplicada && result.similares.some((item) => item.similaridade >= 0.9))
                     return { ...result, aviso: `Há memória quase igual (${result.similares[0]!.id}): para não duplicar, use update_memory com esse id ou grave com chave fixa.` }
@@ -61,7 +53,6 @@ export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
                 versao: z.number().int().positive().optional(),
             }),
             execute: async (input) => {
-                spend()
                 return updateInChannel(env, input)
             },
         }),
