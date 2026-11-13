@@ -687,10 +687,19 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   recebe no turno (dono e portal). O Arquiteto em provedor direto (sem MCP) não as anuncia. O catálogo do MCP é
   único por diretório (não muda por sessão): com o aprendizado desligado, a instrução diz para não chamar
   as de gravação e, no Maddox, as regras da sessão as negam (`selfMemorySessionPermissions(…, { write: false })`).
-- **Duas camadas (OPE-117, decisão do dono: não restringir)**: o desenvolvedor (e o Adversário) gravam o
-  que percebem em `developer-global`/`developer-central`; o Agente Mentor é a segunda camada, vê as
-  memórias da lista de destino (inclusive as recém-gravadas pelo agente na cadeia) e grava só o que passou
-  batido, fundindo em vez de duplicar (`MENTOR_TWO_LAYERS` no redator).
+- **Desenvolvedor somente leitura com o Mentor (OPE-165, decisão do dono)**: quando o Agente Mentor aprende
+  na central (Mentor ativo, "Aprender ao concluir a mesa" ligado e a central no escopo — `mentorLearnsOnDone`,
+  lido por `developerReadOnly` em `agentic/server/developer-memories.ts`), o agente desenvolvedor da mesa e
+  dos forks **não grava memória em nenhum turno**: a instrução sai só com o bloco de leitura e o motivo
+  (`readOnlyReason` de `selfMemoryInstructions`, sem o checklist de fim de turno) e o MCP recusa as
+  ferramentas de gravação (`MENTOR_WRITES_REFUSAL` em `callSelfMemoryTool`); contexto, `get_hints`,
+  `search_memories` e `get_memory` continuam. **A escrita é do Mentor**, uma vez por conclusão da mesa, a
+  partir da transcrição inteira (cria, atualiza, funde e arquiva; nunca exclui). O Adversário (revisões)
+  continua com o aprendizado autônomo dele. Na dúvida (banco fora), vale a chave de aprendizado autônomo.
+- **Duas camadas (OPE-117)**, quando o Mentor não aprende na central: o desenvolvedor (e o Adversário)
+  gravam o que percebem em `developer-global`/`developer-central`; ao concluir a mesa, o Agente Mentor vê as
+  memórias da lista de destino (inclusive as gravadas pelo agente) e grava só o que passou batido, fundindo
+  em vez de duplicar.
 - **Adoção (OPE-117)**: o card do `SelfMemorySwitch` mostra gravações em 7 dias, última gravação, último
   contexto lido e a última entrega (`AgentMemoryActivity`); ver `modules/engramind.md`, "Contratos 0.11.0 e OPE-117".
 

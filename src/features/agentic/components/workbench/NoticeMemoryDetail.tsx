@@ -14,7 +14,10 @@ function RefDetail({ memoryRef }: { memoryRef: WorkbenchNoticeMemoryRef }) {
     return memoryRef.kind === "suggestion" ? <MentorSuggestionDetail suggestion={memoryRef} /> : <MemoryDetailCard memoryRef={memoryRef} />
 }
 
-/** Conteúdo do painel: uma memória, ou abas "Principal" e "Parte separada" (lição dividida pelo Mentor). */
+/**
+ * Conteúdo do painel: uma memória, ou uma aba por memória (o aprendizado do Mentor cita várias; os avisos
+ * antigos, a principal e a parte separada).
+ */
 function NoticeMemoryPanel({ memories }: { memories: WorkbenchNoticeMemoryRef[] }) {
     const [index, setIndex] = useState("0")
     if (memories.length === 1) return <RefDetail memoryRef={memories[0]!} />
@@ -24,7 +27,7 @@ function NoticeMemoryPanel({ memories }: { memories: WorkbenchNoticeMemoryRef[] 
             <OptionTabs
                 aria-label="Memória do aviso"
                 size="xs"
-                options={memories.map((_, position) => ({ value: String(position), label: position === 0 ? "Principal" : "Parte separada" }))}
+                options={memories.map((_, position) => ({ value: String(position), label: `Memória ${position + 1}` }))}
                 value={index}
                 onChange={setIndex}
                 className="mr-6"

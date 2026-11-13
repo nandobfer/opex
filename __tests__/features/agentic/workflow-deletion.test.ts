@@ -85,6 +85,7 @@ vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi
 import { AgenticWorkbench, type IPreviewBackup } from '@/lib/db/models/Agentic'
 import { defaultCentralConfig, DEFAULT_AGENTIC_SETTINGS } from '@/features/agentic/schemas'
 import { deleteWorkbench, retry } from '@/features/agentic/server/workflow'
+import { mentorOnDone } from '@/features/adversarial-agent/server/workflow-hook'
 
 const model = AgenticWorkbench as unknown as {
   docs: Record<string, unknown>[]
@@ -185,6 +186,8 @@ describe('exclusão com limpeza de ambiente', () => {
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ acao: 'EXCLUIR' }))
     // A tarefa e o PR não são tocados.
     expect(mocks.moveTask).not.toHaveBeenCalled()
+    // OPE-165: excluir não é concluir — o Agente Mentor não aprende com a mesa excluída.
+    expect(vi.mocked(mentorOnDone)).not.toHaveBeenCalled()
   })
 
   it('não apaga a mesa enquanto a limpeza não confirmar a remoção dos recursos', async () => {

@@ -114,7 +114,7 @@ describe("NoticeMemoryDetail", () => {
         expect(panel().textContent).toContain("Definida ao gravar")
     })
 
-    it("duas memórias (lição dividida): abas Principal e Parte separada", async () => {
+    it("várias memórias (aprendizado do Mentor): uma aba por memória", async () => {
         routes["/ai/agents/developer-global/memories/m_1"] = () => ok(MEMORY)
         routes[`/agentic/centrals/${C}/memories/m_2`] = () => ok({ ...MEMORY, id: "m_2", resumo: "Parte da central", texto: "Texto da central." })
         renderNotice([
@@ -123,7 +123,7 @@ describe("NoticeMemoryDetail", () => {
         ])
         open()
         await waitFor(() => expect(within(panel()).getByText("Rodar só os testes afetados")).toBeTruthy())
-        fireEvent.click(within(panel()).getByRole("radio", { name: "Parte separada" }))
+        fireEvent.click(within(panel()).getByRole("radio", { name: "Memória 2" }))
         await waitFor(() => expect(within(panel()).getByText("Parte da central")).toBeTruthy())
     })
 

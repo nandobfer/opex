@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { MENTOR_LEVELS } from '@/features/adversarial-agent/mentor/constants'
-import { mentorThreshold, parseDeciderAnswer, parseWriterAnswer, passesThreshold, resolveWriterAction } from '@/features/adversarial-agent/mentor/decision'
+import { mentorThreshold, parseDeciderAnswer, passesThreshold } from '@/features/adversarial-agent/mentor/decision'
 
 describe('decisões do Agente Mentor', () => {
   it('limiar sobe do Generoso ao Implacável; a nota no limiar passa', () => {
@@ -18,19 +18,6 @@ describe('decisões do Agente Mentor', () => {
     expect(parseDeciderAnswer('{"score": 3}')).toBeNull()
     expect(parseDeciderAnswer('sem json')).toBeNull()
   })
-
-  it('lê create, update e skip do redator', () => {
-    expect(parseWriterAnswer('{"action":"create","text":"Regra nova","reason":"novo"}')).toEqual({ action: 'create', text: 'Regra nova', reason: 'novo' })
-    expect(parseWriterAnswer('{"action":"update","memoryId":"m1","text":"Regra fundida"}')).toMatchObject({ action: 'update', memoryId: 'm1' })
-    expect(parseWriterAnswer('{"action":"skip","reason":"já coberta"}')).toEqual({ action: 'skip', reason: 'já coberta' })
-    expect(parseWriterAnswer('{"action":"update","text":"sem id"}')).toBeNull()
-    expect(parseWriterAnswer('{"action":"apagar"}')).toBeNull()
-  })
-
-  it('update de memória que não existe mais vira create', () => {
-    expect(resolveWriterAction({ action: 'update', memoryId: 'm1', text: 'R', reason: '' }, ['m1'])).toEqual({ action: 'update', memoryId: 'm1', text: 'R' })
-    expect(resolveWriterAction({ action: 'update', memoryId: 'm9', text: 'R', reason: '' }, ['m1'])).toEqual({ action: 'create', memoryId: null, text: 'R' })
-  })
 })
 
 describe('Triador do Agente Mentor (OPE-97)', () => {
@@ -45,10 +32,6 @@ describe('Triador do Agente Mentor (OPE-97)', () => {
     expect(routerChoiceOf('developer-global', enabled)).toBe('developer-global')
     expect(routerChoiceOf('developer-central', enabled)).toBeNull()
   })
-
-  it('fusão com id de outra lista vira memória nova', () => {
-    expect(resolveWriterAction({ action: 'update', memoryId: 'de-outra-lista', text: 'Regra fundida.', reason: '' }, ['g1'])).toEqual({ action: 'create', memoryId: null, text: 'Regra fundida.' })
-  })
 })
 
 describe('skip do redator por cobertura (OPE-132)', () => {
@@ -58,15 +41,13 @@ describe('skip do redator por cobertura (OPE-132)', () => {
     expect(checkWriterSkip({ kind: 'covered', memoryId: 'g1' }, ['g1'], ['c1'])).toBeNull()
     const other = checkWriterSkip({ kind: 'covered', memoryId: 'c1' }, ['g1'], ['c1'])
     expect(other).toContain('outra lista')
-    expect(other).toContain('split')
+    expect(other).toContain('generalize')
     expect(checkWriterSkip({ kind: 'covered' }, ['g1'], [])).toContain('memoryId')
     expect(checkWriterSkip({ kind: 'covered', memoryId: 'm_desconhecida' }, ['g1'], [])).toContain('memoryId')
   })
 
   it('skip sem kind é recusado; no_lesson não pode citar memória; covered aceita o id citado no motivo', async () => {
     const { checkWriterSkip } = await import('@/features/adversarial-agent/mentor/decision')
-    expect(parseWriterAnswer('{"action":"skip","reason":"nada a aprender"}')).toEqual({ action: 'skip', reason: 'nada a aprender' })
-    expect(parseWriterAnswer('{"action":"skip","kind":"covered","memoryId":"m1","reason":"já coberta"}')).toMatchObject({ kind: 'covered', memoryId: 'm1' })
     expect(checkWriterSkip({ reason: 'nada a aprender' }, ['g1'], [])).toContain('kind')
     expect(checkWriterSkip({ kind: 'no_lesson', memoryId: 'm_ba153a21' }, ['g1'], ['m_ba153a21'])).toContain('não deve citar memória')
     expect(checkWriterSkip({ kind: 'no_lesson', reason: 'já coberta pela m_ba153a21' }, ['g1'], ['m_ba153a21'])).toContain('não deve citar memória')

@@ -1,27 +1,26 @@
 "use client"
 
-import { Controller, type UseFormReturn } from "react-hook-form"
+import type { UseFormReturn } from "react-hook-form"
 import { RotateCcw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Field } from "@/components/ui/field"
-import { OptionTabs } from "@/components/ui/option-tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { AI_TEXT_PROVIDER_IDS, type AiProviderStatusDto } from "@/lib/ai/providers"
 import { NumberField } from "@/features/pr-review/components/NumberField"
-import { DEFAULT_MENTOR_WRITER_INSTRUCTIONS, MENTOR_TIMEOUT_MAX, MENTOR_TIMEOUT_MIN, type MentorSaveMode } from "../../mentor/constants"
+import { DEFAULT_MENTOR_WRITER_INSTRUCTIONS, MENTOR_TIMEOUT_MAX, MENTOR_TIMEOUT_MIN } from "../../mentor/constants"
 import type { MentorSettings } from "../../mentor/schemas"
 import { MentorModelFields } from "./MentorModelFields"
 
-/** Redator (escreve a regra para a lista escolhida pelo Triador e funde com memórias parecidas), a gravação e o tempo máximo. */
+/** Redator (operações na lista escolhida pelo Triador para cada caso) e o tempo máximo das chamadas do funil. */
 export function MentorWriterCard({ form, providers }: { form: UseFormReturn<MentorSettings>; providers: AiProviderStatusDto[] }) {
     const errors = form.formState.errors
     return (
         <Card>
             <CardHeader>
-                <CardTitle className="text-base">Redator e gravação</CardTitle>
+                <CardTitle className="text-base">Redator e sanitizador</CardTitle>
                 <CardDescription>
-                    O redator transforma o caso numa regra para a lista escolhida pelo Triador (para o revisor: classe de erro, como detectar e que teste a teria pegado; para o desenvolvedor: o que fazer ou evitar), compara com as memórias dessa lista e decide criar, fundir ou não gravar — o não gravar por cobertura só vale para uma memória da própria lista. Quando a lição tem uma parte global e uma só do projeto, ele separa as duas (a parte global e a da central). Em seguida o sanitizador recusa a regra que citar projeto, repositório, rota, URL, tarefa ou issue (nas memórias da central, caminhos e rotas do projeto são aceitos), com uma nova tentativa. O título da memória é gerado pelo Redator do Engramind.
+                    Para cada caso, o redator vê a lista escolhida pelo Triador (com id, versão e autor de cada memória) e responde com as operações nela: criar, atualizar, fundir (as absorvidas são arquivadas) ou arquivar o que ficou obsoleto — tudo aplicado na hora, sem aprovação. Nunca exclui; memória do dono pode ser atualizada ou receber uma fusão, mas nunca é arquivada. O não gravar por cobertura só vale para uma memória da própria lista. Em seguida o sanitizador recusa o texto que citar projeto, repositório, rota, URL, tarefa ou issue (nas memórias da central, caminhos e rotas do projeto são aceitos) ou copiar as mensagens do dono, com uma nova tentativa. O título da memória é gerado pelo Redator do Engramind.
                 </CardDescription>
             </CardHeader>
             <CardContent className="space-y-5">
@@ -33,24 +32,6 @@ export function MentorWriterCard({ form, providers }: { form: UseFormReturn<Ment
                             <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Restaurar padrão
                         </Button>
                     </div>
-                </Field>
-                <Field id="mentor-save-mode" label="Gravação">
-                    <Controller
-                        control={form.control}
-                        name="saveMode"
-                        render={({ field }) => (
-                            <OptionTabs<MentorSaveMode>
-                                id="mentor-save-mode"
-                                options={[
-                                    { value: "direct", label: "Gravar direto" },
-                                    { value: "suggest", label: "Sugerir e aguardar aprovação" },
-                                ]}
-                                value={field.value}
-                                onChange={field.onChange}
-                                className="w-full"
-                            />
-                        )}
-                    />
                 </Field>
                 <NumberField<MentorSettings>
                     control={form.control}

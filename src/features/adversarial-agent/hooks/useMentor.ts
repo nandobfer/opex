@@ -12,7 +12,7 @@ import { isGoneError } from "@/features/ai/hooks/useMemoryDetail"
 import { MENTOR_FEATURE, MENTOR_HISTORY_LIMIT, MENTOR_TARGET_LABELS, MENTOR_UPDATED_EVENT, type MentorTarget } from "../mentor/constants"
 import type { MentorRunListParams } from "../mentor/filters"
 import type { MentorSettings } from "../mentor/schemas"
-import type { MentorRunDto, MentorRunListDto, MentorRunMemoryDto, MentorSettingsDto } from "../mentor/types"
+import type { MentorLearningRunDto, MentorRunDto, MentorRunListDto, MentorRunMemoryDto, MentorSettingsDto } from "../mentor/types"
 
 /** Consultas e mutações do Agente Mentor (parte do Agente Adversário). */
 
@@ -128,13 +128,35 @@ export function useMentorRealtime(enabled = true): void {
     }, [enabled, queryClient])
 }
 
-/** Uma execução do Mentor, lida quando o painel da sugestão (aviso da mesa, OPE-139) abre. */
+/** Uma execução do Mentor (com os casos, no aprendizado), lida quando o detalhe ou o painel da sugestão abre. */
 export function useMentorRun(id: string | null, enabled: boolean) {
     return useQuery({
         queryKey: [...MENTOR_RUNS_KEY, "one", id],
-        queryFn: () => get<MentorRunDto>(`/adversarial/mentor/runs/${id}`),
+        queryFn: () => get<MentorLearningRunDto>(`/adversarial/mentor/runs/${id}`),
         enabled: enabled && id !== null,
         staleTime: 15_000,
         retry: (count, error) => !isGoneError(error) && count < 2,
+    })
+}
+
+/** Execuções de aprendizado de uma mesa, com os casos (aba "Aprendizado", OPE-165). */
+export function useWorkbenchMentorRuns(workbenchId: string) {
+    return useQuery({
+        queryKey: [...MENTOR_RUNS_KEY, "workbench", workbenchId],
+        queryFn: () => get<MentorLearningRunDto[]>(`/adversarial/workbenches/${workbenchId}/mentor-runs`),
+        staleTime: 10_000,
+    })
+}
+
+/** Tentar novamente uma execução de aprendizado que falhou (nova tentativa da mesma conclusão). */
+export function useRetryMentorRun() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (id: string) => unwrapApi((await api.post<ApiResponse<{ id: string }>>(`/adversarial/mentor/runs/${id}/retry`, {})).data),
+        onSuccess: () => {
+            void queryClient.invalidateQueries({ queryKey: MENTOR_RUNS_KEY })
+            toast.success("O Agente Mentor vai aprender com esta mesa de novo")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível tentar novamente")),
     })
 }

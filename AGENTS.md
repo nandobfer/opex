@@ -200,7 +200,8 @@ sem pedido explícito.
   avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON
   (`GET /api/architect/diagrams/[id]/stream`), não pelo Pusher (ver `aicontext/modules/architect-agent.md`).
 - Agente Mentor: `adversarial-mentor-updated` (`{ runId }`) e `adversarial-mentor-reorg-updated`
-  (`{ reorgId }`) em `private-app` — execuções e reorganização do acervo (ver
+  (`{ reorgId }`) em `private-app` — execuções (o aprendizado na conclusão da mesa, OPE-165: na fila, ao
+  iniciar, avançar, concluir e falhar; alimenta a aba "Aprendizado" da mesa) e reorganização do acervo (ver
   `aicontext/modules/adversarial-agent.md`, "Agente Mentor" e "Reorganização do acervo").
 - Métricas dos agentes: `agent-metrics-updated` (`{ agents }`) em `private-app` quando a rotina
   `agent-usage-daily` grava execuções ou resumos; as páginas `/agente-<nome>` também reagem aos eventos

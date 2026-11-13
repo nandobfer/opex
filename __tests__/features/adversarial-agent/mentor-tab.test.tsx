@@ -87,8 +87,7 @@ const SAVED: MentorSettings = {
   level: 'selective',
   router: { ...DEFAULT_MENTOR_SETTINGS.router, provider: 'jev', model: 'jev-latest' },
   writer: { ...DEFAULT_MENTOR_SETTINGS.writer, provider: 'anthropic', model: 'claude', variant: 'medium' },
-  saveMode: 'suggest',
-  context: { ...DEFAULT_MENTOR_SETTINGS.context, approvedPlan: true },
+  digest: { ...DEFAULT_MENTOR_SETTINGS.digest, provider: 'gemini', model: 'flash', budgetUsd: 0.4 },
 }
 const dto = (settings: MentorSettings): MentorSettingsDto => ({ settings, isDefault: false, availability: { available: true, reason: null }, updatedAt: '2026-10-29T12:00:00.000Z' })
 
@@ -127,25 +126,31 @@ describe('aba Agente Mentor com a configuração salva', () => {
   it('monta a tela inteira com provedor, modelo e variante salvos, sem nascer alterada', () => {
     const { onDirtyChange } = renderTab()
     expectSavedValuesShown()
-    expect(screen.getByText('Gatilhos')).toBeTruthy()
-    expect(screen.getByText('Redator e gravação')).toBeTruthy()
-    expect((screen.getByRole('radio', { name: 'Sugerir e aguardar aprovação' }) as HTMLElement).getAttribute('aria-checked')).toBe('true')
+    // OPE-165: sem cards de gatilho, de contexto nem o modo Sugerir; com o funcionamento na conclusão e o digestor.
+    expect(screen.queryByText('Gatilhos')).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'Contexto' })).toBeNull()
+    expect(screen.queryByRole('radio', { name: 'Sugerir e aguardar aprovação' })).toBeNull()
+    expect(screen.getByText('Aprendizado na conclusão da mesa')).toBeTruthy()
+    expect(screen.getByText('Redator e sanitizador')).toBeTruthy()
+    expect(trigger('mentor-digest-model').textContent).toContain('Gemini Flash')
+    expect((screen.getByLabelText(/Orçamento por execução/) as HTMLInputElement).value).toBe('0.4')
     expect(dirtyCalls(onDirtyChange)).toEqual([])
     expect(saveButton().disabled).toBe(true)
   })
 
   it('salvar envia os valores salvos intactos e, com a resposta, volta ao estado limpo mostrando os mesmos valores', async () => {
-    const next = { ...SAVED, triggers: { ...SAVED.triggers, ai: { ...SAVED.triggers.ai, adversarial_review: true } } }
+    const next = { ...SAVED, digest: { ...SAVED.digest, budgetUsd: 0.5 } }
     mocks.mutateAsync.mockResolvedValue(dto(next))
     const { onDirtyChange } = renderTab()
-    const reviews = screen.getByLabelText(/^Revisões do adversário$/) as HTMLInputElement
-    fireEvent.click(reviews)
-    expect(reviews.checked).toBe(true)
+    const budget = screen.getByLabelText(/Orçamento por execução/) as HTMLInputElement
+    fireEvent.change(budget, { target: { value: '0.5' } })
+    expect(budget.value).toBe('0.5')
     await vi.waitFor(() => expect(saveButton().disabled).toBe(false))
     await act(async () => {
       fireEvent.click(saveButton())
     })
-    expect(mocks.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ decider: SAVED.decider, writer: SAVED.writer, level: 'selective', triggers: expect.objectContaining({ ai: expect.objectContaining({ adversarial_review: true }) }) }))
+    expect(mocks.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ decider: SAVED.decider, writer: SAVED.writer, level: 'selective', learnOnDone: true, digest: expect.objectContaining({ provider: 'gemini', budgetUsd: 0.5 }) }))
+    expect(mocks.mutateAsync.mock.calls[0]![0]).not.toHaveProperty('triggers')
     expect(onDirtyChange.mock.calls.at(-1)).toEqual([false])
     expect(saveButton().disabled).toBe(true)
     expectSavedValuesShown()
@@ -159,11 +164,8 @@ describe('aba Agente Mentor com a configuração salva', () => {
     expect(jev.getAttribute('title') ?? '').not.toContain('não conectado')
   })
 
-  it('seções Contexto e Execuções montam com o estado salvo', () => {
+  it('a seção Execuções monta com o estado salvo', () => {
     renderTab()
-    fireEvent.click(screen.getByRole('radio', { name: 'Contexto' }))
-    expect((screen.getByLabelText(/^Plano aprovado/) as HTMLInputElement).checked).toBe(true)
-    expect((screen.getByLabelText(/^Mensagem do usuário/) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(screen.getByRole('radio', { name: 'Execuções' }))
     expect(screen.getByText('Nenhuma execução ainda')).toBeTruthy()
   })

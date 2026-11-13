@@ -18,7 +18,7 @@ export function MentorRunsSection() {
         <Card>
             <CardHeader>
                 <CardTitle className="text-base">Execuções</CardTitle>
-                <CardDescription>As {MENTOR_HISTORY_LIMIT} avaliações mais recentes do Mentor, com a nota do decisor, a decisão do redator e a memória gravada. No modo Sugerir, abra a execução para aprovar ou descartar.</CardDescription>
+                <CardDescription>As {MENTOR_HISTORY_LIMIT} execuções mais recentes do Mentor: o aprendizado de cada mesa concluída, com os casos e as operações. As sugestões antigas (do modo Sugerir) ainda podem ser aprovadas ou descartadas.</CardDescription>
             </CardHeader>
             <CardContent>
                 {query.isLoading ? (
@@ -26,7 +26,7 @@ export function MentorRunsSection() {
                 ) : query.isError ? (
                     <ErrorState title="Não foi possível carregar as execuções" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
                 ) : !query.data?.length ? (
-                    <EmptyState icon={GraduationCap} title="Nenhuma execução ainda" description="As avaliações aparecem aqui quando um turno da mesa dispara o Mentor (ex.: uma correção pedida por você)." />
+                    <EmptyState icon={GraduationCap} title="Nenhuma execução ainda" description="As execuções aparecem aqui quando uma mesa conclui com o Mentor ativo." />
                 ) : (
                     <MentorRunList items={query.data} />
                 )}

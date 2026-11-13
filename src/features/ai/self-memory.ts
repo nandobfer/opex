@@ -121,9 +121,11 @@ export interface SelfMemoryInstructionOptions {
     write?: boolean
     /** Bloco de leitura (`get_hints`/`get_memory`/`search_memories` disponíveis). Padrão: `true`. */
     read?: boolean
+    /** Por que só leitura (sem ele: "O aprendizado autônomo está desligado"). */
+    readOnlyReason?: string
 }
 
-/** Agentes das mesas com o Agente Mentor como segunda camada (OPE-117). */
+/** Agentes das mesas cujo trabalho o Agente Mentor relê ao concluir a mesa (OPE-117; OPE-165: na conclusão). */
 const MENTORED: readonly MemoryConsumer[] = ["desenvolvedor", "adversario"]
 
 function outsideLine(counts: SelfMemoryTurnCounts | null | undefined): string | null {
@@ -153,7 +155,7 @@ export function selfMemoryInstructions(consumer: MemoryConsumer, turn: MemoryTur
             ...(outside ? [outside] : []),
             `Se um título da faixa \`<titles>\` parecer relevante para o pedido, chame ${tool("get_hints")} com a mensagem ou a cena atual e leia a escolhida com ${tool("get_memory")}. Quando as dicas vierem vazias, use ${tool("search_memories")} com os termos do título. Não despeje todas as memórias no prompt e não invente uma memória que não existe: se não encontrar, siga sem ela.`,
             // Com o aprendizado desligado, o MCP ainda anuncia as de gravação (catálogo único por diretório): o servidor as recusa.
-            ...(write ? [] : [`O aprendizado autônomo está desligado: use só ${tool("get_hints")}, ${tool("get_memory")} e ${tool("search_memories")}. Não chame as ferramentas de gravação (${SELF_MEMORY_WRITE_TOOL_NAMES.map((name) => tool(name)).join(", ")}): elas são recusadas.`]),
+            ...(write ? [] : [`${options.readOnlyReason ?? "O aprendizado autônomo está desligado"}: use só ${tool("get_hints")}, ${tool("get_memory")} e ${tool("search_memories")}. Não chame as ferramentas de gravação (${SELF_MEMORY_WRITE_TOOL_NAMES.map((name) => tool(name)).join(", ")}): elas são recusadas.`]),
         )
     }
     if (write) {
@@ -168,7 +170,7 @@ export function selfMemoryInstructions(consumer: MemoryConsumer, turn: MemoryTur
             "4. Uma preferência foi confirmada (o dono aprovou ou pediu explicitamente)? Grave a preferência.",
             `Se nenhum gatilho bateu, não grave nada. Antes de gravar, confira ${tool("list_my_memories")}; quando a resposta trouxer \`similares\`, prefira ${tool("update_my_memory")} e funda o conteúdo em vez de duplicar. Com muitas memórias fora do contexto, consolide: funda as parecidas e inative (${tool("set_my_memory_active")}) ou exclua (${tool("forget_my_memory")}) o que ficou superado. Essas duas podem pedir a confirmação do dono (ou ser recusadas quando não há chat); se forem recusadas, edite a memória em vez de insistir.`,
             "Cada memória é um fato durável e autossuficiente (quem lê não tem o contexto desta conversa), na categoria certa: escreva o fato, não a conversa. Pode registrar códigos de tarefa, URLs, rotas, nomes, tokens e chaves quando forem úteis, mas grave cada memória na lista mais específica que couber: as listas globais só recebem o que vale em qualquer contexto.",
-            ...(MENTORED.includes(consumer) ? ["Duas camadas: grave o que você percebeu, sem esperar por ninguém. O Agente Mentor revisa a cadeia depois e grava só o que passou batido (ele vê as suas memórias e funde em vez de duplicar)."] : []),
+            ...(MENTORED.includes(consumer) ? ["Duas camadas: grave o que você percebeu, sem esperar por ninguém. Quando a mesa conclui, o Agente Mentor relê a transcrição inteira e grava só o que passou batido (ele vê as suas memórias e funde em vez de duplicar)."] : []),
             "Listas que você grava:",
             ...listGuide(consumer, turn),
             `Memórias escritas pelo dono (\`doDono\`) você pode editar, mas não excluir nem inativar. Não grave o estado passageiro do trabalho atual. No máximo ${SELF_MEMORY_TURN_LIMIT} gravações por turno.`,

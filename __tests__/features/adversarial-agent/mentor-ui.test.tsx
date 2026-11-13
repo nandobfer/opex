@@ -6,7 +6,7 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), runs: [] as unknown[] }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), retry: vi.fn(), runs: [] as unknown[], detail: null as unknown }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false }) }))
@@ -15,19 +15,23 @@ vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
   useMentorRealtime: vi.fn(),
   useMentorRunDecision: () => ({ mutate: mocks.mutate, isPending: false }),
   useMentorRunMemory: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
+  useMentorRun: () => ({ data: mocks.detail, isLoading: false, isError: false, refetch: vi.fn() }),
+  useRetryMentorRun: () => ({ mutate: mocks.retry, isPending: false }),
 }))
 
 import { MentorDeciderCard } from '@/features/adversarial-agent/components/mentor/MentorDeciderCard'
 import { MentorRouterCard } from '@/features/adversarial-agent/components/mentor/MentorRouterCard'
-import { MentorTriggersCard } from '@/features/adversarial-agent/components/mentor/MentorTriggersCard'
+import { MentorHowItWorksCard } from '@/features/adversarial-agent/components/mentor/MentorHowItWorksCard'
+import { MentorDigestCard } from '@/features/adversarial-agent/components/mentor/MentorDigestCard'
 import { MentorRunsSection } from '@/features/adversarial-agent/components/mentor/MentorRunsSection'
 import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
-import type { MentorRunDto } from '@/features/adversarial-agent/mentor/types'
+import type { MentorLearningRunDto, MentorRunDto } from '@/features/adversarial-agent/mentor/types'
 
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
   mocks.runs = []
+  mocks.detail = null
 })
 
 function WithForm({ children }: { children: (form: ReturnType<typeof useForm<MentorSettings>>) => React.ReactNode }) {
@@ -37,6 +41,17 @@ function WithForm({ children }: { children: (form: ReturnType<typeof useForm<Men
 
 const run = (overrides: Partial<MentorRunDto> = {}): MentorRunDto => ({
   id: 'r1',
+  kind: 'legacy',
+  completedAt: null,
+  attempt: null,
+  completionKind: null,
+  transcript: null,
+  digestModel: null,
+  caseCount: null,
+  operationCounts: null,
+  budgetUsd: null,
+  abortReason: null,
+  canRetry: false,
   workbenchId: 'w1',
   centralId: 'c1',
   taskId: 't1',
@@ -81,14 +96,20 @@ describe('aba do Agente Mentor', () => {
     expect(screen.getByRole('slider').getAttribute('aria-valuetext')).toBe('Seletivo')
   })
 
-  it('gatilhos: mensagens do usuário ligadas, turnos da IA (inclusive as revisões do adversário) desligados; sem a porta do opex-lesson', () => {
-    render(<WithForm>{(form) => <MentorTriggersCard form={form} />}</WithForm>)
-    const checked = (name: RegExp) => (screen.getByLabelText(name) as HTMLInputElement).checked
-    expect(checked(/Correção da prévia/)).toBe(true)
-    expect(checked(/^Implementação e correções$/)).toBe(false)
-    expect(checked(/^Revisões do adversário$/)).toBe(false)
-    expect(screen.queryByText(/Pedidos do desenvolvedor/)).toBeNull()
-    expect(screen.queryByText(/opex-lesson/)).toBeNull()
+  it('OPE-165: sem cards de gatilho; o funcionamento na conclusão e a chave "Aprender ao concluir" (ligada por padrão)', () => {
+    render(<WithForm>{(form) => <MentorHowItWorksCard form={form} />}</WithForm>)
+    expect(screen.getByText('Aprendizado na conclusão da mesa')).toBeTruthy()
+    expect(screen.getByRole('switch', { name: /Aprender ao concluir a mesa/ }).getAttribute('aria-checked')).toBe('true')
+    expect(screen.queryByText(/Mensagens do usuário/)).toBeNull()
+    expect(screen.queryByText(/Turnos da IA/)).toBeNull()
+    expect(screen.queryByText(/Chat ao vivo/)).toBeNull()
+  })
+
+  it('OPE-165: digestor com orçamento, limiar de compactação e tempo máximo', () => {
+    render(<WithForm>{(form) => <MentorDigestCard form={form} providers={[]} />}</WithForm>)
+    expect((screen.getByLabelText(/Orçamento por execução/) as HTMLInputElement).value).toBe('0.3')
+    expect((screen.getByLabelText(/Compactar a transcrição acima de/) as HTMLInputElement).value).toBe('400000')
+    expect((screen.getByLabelText(/Tempo máximo do digestor/) as HTMLInputElement).value).toBe('300')
   })
 
   it('execuções: sugestão abre com o texto editável; aprovar envia o texto editado', () => {
@@ -136,5 +157,41 @@ describe('aba do Agente Mentor', () => {
     fireEvent.click(screen.getByRole('button', { name: /Ver a execução/ }))
     expect(screen.getByText('Gemini fora do ar')).toBeTruthy()
     expect(screen.queryByRole('button', { name: /Aprovar/ })).toBeNull()
+  })
+
+  it('OPE-165: aprendizado abre com a transcrição, os casos, as operações e o erro com Tentar novamente', () => {
+    const learning: MentorLearningRunDto = {
+      ...run({ kind: 'learning', status: 'failed', error: 'Orçamento de US$ 0.30 excedido', proposal: null, target: null, sources: ['done'], trigger: null, userMessage: null }),
+      completedAt: new Date().toISOString(),
+      attempt: 1,
+      completionKind: 'merge',
+      transcript: { originalChars: 900000, sentChars: 380000, compacted: true, level: 2, aboveThreshold: false, eventCount: 1200, forkCount: 1 },
+      digestModel: 'gemini/flash',
+      caseCount: 1,
+      operationCounts: { create: 1 },
+      budgetUsd: 0.3,
+      abortReason: 'budget',
+      canRetry: true,
+      cases: [
+        {
+          id: 'k1', index: 0, lesson: 'Extraia o componente antes de reaproveitar', evidence: ['Não copie o markup'], nature: 'negative', scope: 'this_project', detection: 'Markup duplicado no diff',
+          status: 'applied', score: 0.9, deciderReason: null, target: 'developer-central', routerReason: null, writerReason: null, skipKind: null, coveredBy: null, rejection: null, error: null,
+          operations: [{ op: 'create', target: 'developer-central', centralId: 'c1', memoryId: 'm_novo', absorbed: [], text: 'Regra', reason: 'nova', status: 'applied', error: null }],
+        },
+      ],
+    }
+    mocks.runs = [learning]
+    mocks.detail = learning
+    render(<MentorRunsSection />)
+    expect(screen.getByText('1 caso · 1 operação')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Ver a execução/ }))
+    expect(screen.getByText('900.000 caracteres')).toBeTruthy()
+    expect(screen.getByText(/compactada para 380.000 caracteres/)).toBeTruthy()
+    expect(screen.getByText('Extraia o componente antes de reaproveitar')).toBeTruthy()
+    expect(screen.getByText('m_novo')).toBeTruthy()
+    expect(screen.getByText('Interrompida pelo orçamento')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/ }))
+    fireEvent.click(screen.getAllByRole('button', { name: /Tentar novamente/ }).at(-1)!)
+    expect(mocks.retry).toHaveBeenCalledWith('r1')
   })
 })

@@ -83,6 +83,7 @@ vi.mock('@/features/local-docker/server/agentic-hooks', () => ({ teardownForClea
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 import { retry, setWorkbenchStage } from '@/features/agentic/server/workflow'
+import { mentorOnDone } from '@/features/adversarial-agent/server/workflow-hook'
 
 const model = AgenticWorkbench as unknown as {
   docs: Record<string, unknown>[]
@@ -231,5 +232,44 @@ describe('transições inválidas', () => {
   it('recusa a mesa em exclusão', async () => {
     const wb = await createWorkbench({ stage: 'finishing', deletionRequestedAt: new Date() })
     await expect(setWorkbenchStage(wb._id, { stage: 'done', reason: 'Concluir' })).rejects.toMatchObject({ status: 409, code: 'WORKBENCH_DELETING' })
+  })
+})
+
+describe('Agente Mentor na conclusão (OPE-165)', () => {
+  const mentor = () => vi.mocked(mentorOnDone)
+
+  it('concluir dispara UMA execução, com a data da conclusão como chave e o tipo manual', async () => {
+    const wb = await createWorkbench()
+    await setWorkbenchStage(wb._id, { stage: 'done', reason: 'Já resolvido' })
+    await vi.waitFor(() => expect(mentor()).toHaveBeenCalledTimes(1))
+    const sent = mentor().mock.calls[0]![0] as { workbenchId: string; completedAt: Date; completionKind: string; repo: string | null; projectName: string | null }
+    expect(sent).toMatchObject({ workbenchId: wb._id, completionKind: 'manual', repo: 'org/app', projectName: 'App' })
+    expect(sent.completedAt.getTime()).toBe((model.docs[0]!.completedAt as Date).getTime())
+  })
+
+  it('com limpeza: só a conclusão chama o Mentor (o turno de limpeza não)', async () => {
+    const wb = await createWorkbench({ stage: 'preview', previewUrl: 'http://host:4010', port: 4010, worktreePath: '/home/u/app/worktrees/ope-88', branch: 'feat/ope-88' })
+    await setWorkbenchStage(wb._id, { stage: 'done', reason: 'Não precisa mais' })
+    await vi.waitFor(() => expect(model.docs[0]!.stage).toBe('done'))
+    await vi.waitFor(() => expect(mentor()).toHaveBeenCalledTimes(1))
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(mentor()).toHaveBeenCalledTimes(1)
+  })
+
+  it('definir outra etapa (cancelar a prévia, voltar ao plano) não chama o Mentor', async () => {
+    const wb = await createWorkbench({ stage: 'preview', previewUrl: 'http://host:4010' })
+    await setWorkbenchStage(wb._id, { stage: 'plan_review', reason: 'Replanejar' })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(mentor()).not.toHaveBeenCalled()
+  })
+
+  it('falha do Mentor não muda a etapa da mesa', async () => {
+    mentor().mockRejectedValueOnce(new Error('Mentor caiu'))
+    const wb = await createWorkbench()
+    const saved = await setWorkbenchStage(wb._id, { stage: 'done', reason: 'Resolvido' })
+    await vi.waitFor(() => expect(mentor()).toHaveBeenCalled())
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(saved.stage).toBe('done')
+    expect([model.docs[0]!.stage, model.docs[0]!.runState]).toEqual(['done', 'idle'])
   })
 })

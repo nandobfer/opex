@@ -2,32 +2,31 @@ import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
 import { MENTOR_FEATURE } from "../../mentor/constants"
-import { DEFAULT_MENTOR_SETTINGS, enabledTargets, mentorSettingsSchema, type MentorSettings } from "../../mentor/schemas"
+import { DEFAULT_MENTOR_SETTINGS, effectiveTargets, mentorSettingsSchema, type MentorSettings } from "../../mentor/schemas"
 import type { MentorSettingsDto } from "../../mentor/types"
 import { loadAdversarialSettings } from "../settings"
 
 /**
  * Configuração salva antes de um campo novo existir recebe o padrão dele antes de validar. O Triador
- * (OPE-97) de uma configuração antiga nasce com o provedor e o modelo do decisor, para o Mentor seguir
- * funcionando sem ação do dono.
+ * (OPE-97) de uma configuração antiga nasce com o provedor e o modelo do decisor; o digestor (OPE-165),
+ * com o provedor e o modelo do redator. Os campos que saíram na OPE-165 (`triggers`, `context`,
+ * `saveMode`) são descartados.
  */
 export function withMentorDefaults(saved: unknown): unknown {
     if (!saved || typeof saved !== "object" || Array.isArray(saved)) return saved
-    const value = saved as Partial<MentorSettings>
+    const value = { ...(saved as Partial<MentorSettings>) }
+    for (const legacy of ["triggers", "context", "saveMode"]) delete (value as Record<string, unknown>)[legacy]
     const defaults = DEFAULT_MENTOR_SETTINGS
+    const writer = { ...defaults.writer, ...(value.writer ?? {}) }
     return {
         ...defaults,
         ...value,
         scope: { ...defaults.scope, ...(value.scope ?? {}) },
-        triggers: {
-            user: { ...defaults.triggers.user, ...(value.triggers?.user ?? {}) },
-            ai: { ...defaults.triggers.ai, ...(value.triggers?.ai ?? {}) },
-        },
+        digest: value.digest ? { ...defaults.digest, ...value.digest } : { ...defaults.digest, provider: writer.provider, model: writer.model, variant: writer.variant },
         decider: { ...defaults.decider, ...(value.decider ?? {}) },
         router: value.router ? { ...defaults.router, ...value.router } : { ...defaults.router, ...(value.decider ?? {}), instructions: "" },
         targets: { ...defaults.targets, ...(value.targets ?? {}) },
-        writer: { ...defaults.writer, ...(value.writer ?? {}) },
-        context: { ...defaults.context, ...(value.context ?? {}) },
+        writer,
     }
 }
 
@@ -35,16 +34,26 @@ export async function loadMentorSettings(): Promise<{ settings: MentorSettings; 
     return loadFeature<MentorSettings>(MENTOR_FEATURE, z.preprocess(withMentorDefaults, mentorSettingsSchema), DEFAULT_MENTOR_SETTINGS)
 }
 
-/** Pode rodar? Mentor ativo, Agente Adversário ativo e os modelos (decisor, Triador quando há mais de um destino, redator) conectados. */
+/**
+ * Pode rodar? Mentor ativo e os modelos (digestor, decisor, Triador quando há mais de um destino que vale
+ * e redator) conectados. Desde a OPE-165 o Agente Adversário só é exigido para o destino dele: sem ele,
+ * o Mentor segue com as listas do desenvolvedor (o aviso aparece, mas não bloqueia).
+ */
 export async function mentorAvailability(settings: MentorSettings, adversaryEnabled: boolean): Promise<AiFeatureAvailability> {
-    if (settings.enabled && !adversaryEnabled) return { available: false, reason: "O Agente Mentor grava memórias do Agente Adversário: ative o Agente Adversário na aba dele" }
+    const targets = effectiveTargets(settings.targets, adversaryEnabled)
+    if (settings.enabled && !targets.length) return { available: false, reason: "O único destino ligado é o Agente Adversário, que está desativado: ative-o ou ligue uma lista do desenvolvedor" }
+    const digest = await availability({ enabled: settings.enabled, provider: settings.digest.provider, model: settings.digest.model }, '"Agente Mentor" (digestor)')
+    if (!digest.available) return digest
     const decider = await availability({ enabled: settings.enabled, provider: settings.decider.provider, model: settings.decider.model }, '"Agente Mentor"')
     if (!decider.available) return decider
-    if (enabledTargets(settings.targets).length > 1) {
+    if (targets.length > 1) {
         const router = await availability({ enabled: settings.enabled, provider: settings.router.provider, model: settings.router.model }, '"Agente Mentor" (Triador)')
         if (!router.available) return router
     }
-    return availability({ enabled: settings.enabled, provider: settings.writer.provider, model: settings.writer.model }, '"Agente Mentor"')
+    const writer = await availability({ enabled: settings.enabled, provider: settings.writer.provider, model: settings.writer.model }, '"Agente Mentor"')
+    if (!writer.available) return writer
+    if (settings.enabled && settings.targets.adversarial && !adversaryEnabled) return { available: true, reason: "O Agente Adversário está desativado: o Mentor grava só nas listas do desenvolvedor até ele voltar" }
+    return writer
 }
 
 export async function getMentorSettings(): Promise<MentorSettingsDto> {
@@ -57,16 +66,17 @@ export function normalizeMentorSettings(input: MentorSettings): MentorSettings {
     return {
         ...input,
         scope: { all: input.scope.all, centralIds: input.scope.all ? [] : [...new Set(input.scope.centralIds)] },
+        digest: model(input.digest),
         decider: model(input.decider),
         router: model(input.router),
         writer: model(input.writer),
     }
 }
 
-/** Salva conferindo no catálogo os modelos do decisor, do Triador e do redator. */
+/** Salva conferindo no catálogo os modelos do digestor, do decisor, do Triador e do redator. */
 export async function saveMentorSettings(input: MentorSettings, actorId: string): Promise<MentorSettingsDto> {
     const next = normalizeMentorSettings(input)
-    for (const part of [next.decider, next.router, next.writer]) {
+    for (const part of [next.digest, next.decider, next.router, next.writer]) {
         if (part.provider) await assertCatalog({ enabled: next.enabled, provider: part.provider, model: part.model, agent: null, variant: part.variant, temperature: null, maxOutputTokens: null })
     }
     const before = await loadMentorSettings()
@@ -75,13 +85,14 @@ export async function saveMentorSettings(input: MentorSettings, actorId: string)
 }
 
 /**
- * Configuração do Mentor quando ele vale para a central: Agente Adversário ativo, Mentor ativo e a
- * central no escopo. `null` caso contrário. Nunca lança (na dúvida, a mesa segue sem ele).
+ * Configuração do Mentor quando ele aprende na central (OPE-165): Mentor ativo, aprendizado na conclusão
+ * ligado e a central no escopo — o Agente Adversário NÃO é exigido. `null` caso contrário. Nunca lança (na
+ * dúvida, a mesa segue sem ele).
  */
 export async function mentorSettingsFor(centralId: string): Promise<MentorSettings | null> {
     try {
-        const [{ settings }, adversary] = await Promise.all([loadMentorSettings(), loadAdversarialSettings()])
-        if (!settings.enabled || !adversary.settings.enabled) return null
+        const { settings } = await loadMentorSettings()
+        if (!settings.enabled || !settings.learnOnDone) return null
         return settings.scope.all || settings.scope.centralIds.includes(centralId) ? settings : null
     } catch {
         return null

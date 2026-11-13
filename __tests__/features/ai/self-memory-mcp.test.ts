@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   overrides: {} as Record<string, boolean>,
   disabled: [] as string[],
   remove: vi.fn(async () => ({ id: 'm_1', texto: 'x', resumo: 'x', categoria: 'PROJECT_RULES', fixada: false, ativa: true, doDono: false, autor: null, versao: 1 })),
+  readOnly: false,
 }))
+vi.mock('@/features/agentic/server/developer-memories', () => ({ developerReadOnly: async () => mocks.readOnly }))
 const lean = (value: unknown) => ({ select: () => ({ lean: async () => value }), lean: async () => value })
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
 vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-derivado-de-teste') }))
@@ -51,6 +53,7 @@ beforeEach(() => {
   mocks.enabled = true
   mocks.overrides = {}
   mocks.disabled = []
+  mocks.readOnly = false
 })
 
 describe('MCP de memórias', () => {
@@ -114,6 +117,18 @@ describe('MCP de memórias', () => {
     expect(text(result as never)).toContain('m_9')
     expect(engramind.call).toHaveBeenCalledWith('POST', expect.objectContaining({ path: '/v1/hints', body: expect.objectContaining({ channels: ['opex', 'agentes/desenvolvedor/global', `agentes/desenvolvedor/central/${C}`] }) }), expect.objectContaining({ target: { baseUrl: 'http://eng', token: 'tk-dev' } }))
     expect(text((await callSelfMemoryTool('remember', { lista: 'developer-global', texto: 'x' }, meta('ses_mesa'))) as never)).toContain('só as ferramentas de leitura')
+  })
+
+  it('OPE-165: com o Agente Mentor aprendendo na central, o desenvolvedor só lê (gravar é recusado, ler atende)', async () => {
+    mocks.readOnly = true
+    expect(text((await callSelfMemoryTool('remember', { lista: 'developer-central', texto: 'Use pnpm.' }, meta('ses_mesa'))) as never)).toContain('quem grava as memórias é o Agente Mentor')
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect((await callSelfMemoryTool('get_hints', { text: 'lint' }, meta('ses_mesa'))).isError).toBeFalsy()
+    // O Adversário (revisão) não é afetado.
+    mocks.workbench = null
+    mocks.review = { _id: 'r1', sessionId: 'ses_rev', workbenchId: 'w1', taskCode: 'OPE-1' }
+    await callSelfMemoryTool('remember', { lista: 'adversarial', texto: 'F2 é intencional neste repositório.' }, meta('ses_rev'))
+    expect(mocks.create).toHaveBeenCalledWith('adversarial', expect.any(String), 'local', expect.anything())
   })
 
   it('registro: adiciona o servidor por diretório uma vez; falha vira { ok: false } sem lançar', async () => {

@@ -5,7 +5,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
-const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], builds: [] as { id: string }[], refetch: vi.fn(), rounds: 0, diagrams: 0 }))
+const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], builds: [] as { id: string }[], refetch: vi.fn(), rounds: 0, diagrams: 0, learning: 0 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }))
@@ -36,6 +36,11 @@ vi.mock('@/features/architect-agent/components/workbench/ArchitectTab', () => ({
   ArchitectTab: () => <p>diagrama do arquiteto</p>,
 }))
 
+vi.mock('@/features/adversarial-agent/components/workbench/MentorLearningTab', () => ({
+  useMentorLearningTab: () => ({ visible: mocks.learning > 0, count: mocks.learning }),
+  MentorLearningTab: () => <p>aprendizado do mentor</p>,
+}))
+
 import { WorkbenchView } from '@/features/agentic/components/workbench/WorkbenchView'
 import type { CentralDto, WorkbenchDto } from '@/features/agentic/types'
 
@@ -61,6 +66,7 @@ beforeEach(() => {
   mocks.builds = []
   mocks.rounds = 0
   mocks.diagrams = 0
+  mocks.learning = 0
   mocks.useTaskDetail.mockReturnValue(taskQuery())
 })
 
@@ -137,5 +143,16 @@ describe('WorkbenchView — abas Descrição e Especificação', () => {
     expect(tabNames()).toEqual(['Descrição', 'Especificação', 'Saída da IA', 'Plano', 'Adversário (1)', 'Arquitetura (3)'])
     fireEvent.click(tab('Arquitetura (3)'))
     expect(screen.getByText('diagrama do arquiteto')).toBeTruthy()
+  })
+})
+
+describe('WorkbenchView — aba Aprendizado (OPE-165)', () => {
+  it('aparece só com execuções do Agente Mentor na mesa e abre o aprendizado', () => {
+    render(<WorkbenchView workbench={workbench({ stage: 'done' })} central={central} />)
+    expect(tabNames()).not.toContain('Aprendizado (0)')
+    mocks.learning = 2
+    render(<WorkbenchView workbench={workbench({ stage: 'done' })} central={central} />)
+    fireEvent.click(screen.getAllByRole('tab', { name: 'Aprendizado (2)' })[0]!)
+    expect(screen.getByText('aprendizado do mentor')).toBeTruthy()
   })
 })

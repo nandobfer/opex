@@ -1,7 +1,8 @@
 /**
  * Constantes do Agente Mentor (parte do Agente Adversário; módulo puro: tela e servidor).
- * O Mentor observa os turnos das mesas e os pedidos do agente desenvolvedor e transforma lições
- * relevantes em memórias do Agente Adversário. Ver `aicontext/modules/adversarial-agent.md`.
+ * Desde a OPE-165 o Mentor aprende UMA vez por conclusão da mesa: lê a transcrição inteira, extrai os
+ * casos (digestor) e cria, atualiza, funde ou arquiva memórias do desenvolvedor (globais e da central) e
+ * do Agente Adversário. Ver `aicontext/modules/adversarial-agent.md`.
  */
 
 /** Configuração salva em `ai_feature_settings` (`feature: "adversarial-mentor"`). */
@@ -55,7 +56,10 @@ export const MENTOR_LEVEL_DEFS: Record<MentorLevel, { label: string; threshold: 
     },
 }
 
-/** Mensagens do usuário que podem disparar o Mentor (ao fim do turno que elas originaram). */
+/**
+ * Gatilhos por mensagem do usuário (até a OPE-165): só para exibir e filtrar o histórico. Desde a
+ * OPE-165 o Mentor roda uma vez por conclusão da mesa e lê a transcrição inteira.
+ */
 export const MENTOR_USER_TRIGGERS = ["plan_revision", "implement_info", "preview_correction", "pr_feedback", "reopen", "adversarial_guidance", "live_chat"] as const
 export type MentorUserTrigger = (typeof MENTOR_USER_TRIGGERS)[number]
 
@@ -69,37 +73,25 @@ export const MENTOR_USER_TRIGGER_LABELS: Record<MentorUserTrigger, { label: stri
     live_chat: { label: "Chat ao vivo", description: "Mensagens enviadas durante a execução de um turno" },
 }
 
-/** Turnos da IA que o Mentor pode observar: etapas do agente da mesa e as rodadas do Agente Adversário. */
-export const MENTOR_AI_STAGES = ["planning", "implementing", "adversarial_review"] as const
-export type MentorAiStage = (typeof MENTOR_AI_STAGES)[number]
-
-export const MENTOR_AI_STAGE_LABELS: Record<MentorAiStage, string> = {
-    planning: "Planejamento",
-    implementing: "Implementação e correções",
-    adversarial_review: "Revisões do adversário",
-}
-
-/** Gravar direto ou sugerir e aguardar aprovação na aba Execuções. */
-export const MENTOR_SAVE_MODES = ["direct", "suggest"] as const
-export type MentorSaveMode = (typeof MENTOR_SAVE_MODES)[number]
-
 /** De onde veio a execução (pode juntar mais de uma no mesmo turno). */
-export const MENTOR_SOURCES = ["user", "ai", "developer"] as const
+export const MENTOR_SOURCES = ["done", "user", "ai", "developer"] as const
 export type MentorSource = (typeof MENTOR_SOURCES)[number]
 
 export const MENTOR_SOURCE_LABELS: Record<MentorSource, string> = {
+    done: "Conclusão da mesa",
     user: "Mensagem do usuário",
     ai: "Turno da IA",
     // Execuções anteriores à OPE-104 (o bloco opex-lesson saiu: o desenvolvedor aprende sozinho).
     developer: "Pedido do desenvolvedor",
 }
 
-export const MENTOR_RUN_STATUSES = ["queued", "running", "skipped", "discarded", "suggested", "created", "updated", "failed"] as const
+export const MENTOR_RUN_STATUSES = ["queued", "running", "learned", "skipped", "discarded", "suggested", "created", "updated", "failed"] as const
 export type MentorRunStatus = (typeof MENTOR_RUN_STATUSES)[number]
 
 export const MENTOR_RUN_STATUS_LABELS: Record<MentorRunStatus, string> = {
     queued: "Na fila",
     running: "Avaliando",
+    learned: "Aprendizado aplicado",
     skipped: "Não gravou",
     discarded: "Descartada",
     suggested: "Sugestão",
@@ -112,21 +104,51 @@ export const MENTOR_TIMEOUT_MIN = 15
 export const MENTOR_TIMEOUT_MAX = 600
 export const MENTOR_TIMEOUT_DEFAULT = 120
 
+/** Tempo máximo de cada chamada do digestor (segundos): a transcrição é longa. */
+export const MENTOR_DIGEST_TIMEOUT_MIN = 30
+export const MENTOR_DIGEST_TIMEOUT_MAX = 900
+export const MENTOR_DIGEST_TIMEOUT_DEFAULT = 300
+/** Orçamento por execução (US$), conferido depois de cada chamada. */
+export const MENTOR_BUDGET_MIN = 0.01
+export const MENTOR_BUDGET_MAX = 20
+export const MENTOR_BUDGET_DEFAULT = 0.3
+/** Limiar de compactação da transcrição (caracteres). */
+export const MENTOR_COMPACT_MIN = 20_000
+export const MENTOR_COMPACT_MAX = 4_000_000
+export const MENTOR_COMPACT_DEFAULT = 400_000
+/** Batimento de uma execução em andamento; sem batimento por este tempo, ela é dada como perdida. */
+export const MENTOR_HEARTBEAT_MS = 15_000
+export const MENTOR_HEARTBEAT_STALE_MS = 90_000
+
+/** Operações que o Mentor aplica nas memórias (nunca exclui). */
+export const MENTOR_OPERATIONS = ["create", "update", "merge", "archive"] as const
+export type MentorOperation = (typeof MENTOR_OPERATIONS)[number]
+export const MENTOR_OPERATION_LABELS: Record<MentorOperation, string> = { create: "Criada", update: "Atualizada", merge: "Fundida", archive: "Arquivada" }
+
+/** Situação de um caso extraído da transcrição. */
+export const MENTOR_CASE_STATUSES = ["pending", "skipped", "applied", "partial", "discarded", "failed"] as const
+export type MentorCaseStatus = (typeof MENTOR_CASE_STATUSES)[number]
+export const MENTOR_CASE_STATUS_LABELS: Record<MentorCaseStatus, string> = {
+    pending: "Aguardando",
+    skipped: "Não gravou",
+    applied: "Aplicado",
+    partial: "Aplicado em parte",
+    discarded: "Descartado",
+    failed: "Falhou",
+}
+
 /** Execuções exibidas na aba. */
 export const MENTOR_HISTORY_LIMIT = 100
 /** Execuções por página na página do Agente Mentor. */
 export const MENTOR_PAGE_LIMIT = 20
 export const MENTOR_PAGE_LIMIT_MAX = 100
-/** Resposta do agente enviada ao decisor/redator (o fim, quando passar). */
-export const MENTOR_RESPONSE_MAX = 12_000
-/** Mensagem do usuário enviada ao decisor/redator. */
-export const MENTOR_MESSAGE_MAX = 8_000
 
 export const MENTOR_UPDATED_EVENT = "adversarial-mentor-updated"
 export const MENTOR_AUDIT_ENTITY = "MentorAgenteAdversario"
 export const MENTOR_DECISION_CONSUMPTION_ORIGIN = "adversarial-mentor-decision"
 export const MENTOR_WRITER_CONSUMPTION_ORIGIN = "adversarial-mentor-writer"
 export const MENTOR_ROUTER_CONSUMPTION_ORIGIN = "adversarial-mentor-router"
+export const MENTOR_DIGEST_CONSUMPTION_ORIGIN = "adversarial-mentor-digest"
 
 /**
  * Destinos das memórias do Mentor (OPE-97): os ids são as listas do catálogo de memórias dos agentes.
@@ -221,6 +243,6 @@ export const MENTOR_REORG_ITEM_STATUS_LABELS: Record<MentorReorgItemStatus, stri
 }
 
 export const DEFAULT_MENTOR_WRITER_INSTRUCTIONS = [
-    "Prefira regras curtas e acionáveis, escritas como instrução direta ao revisor.",
-    "Quando a lição for parecida com uma memória existente, funda as duas numa só (update).",
+    "Prefira regras curtas e acionáveis, escritas como instrução direta ao agente que vai lê-las.",
+    "Quando a lição for parecida com uma memória existente, atualize ou funda em vez de criar outra.",
 ].join("\n")

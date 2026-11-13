@@ -5,4 +5,4 @@
 export { adversaryApplies, adversaryModel } from "./settings"
 export { runAdversaryRound, type AdversaryRoundInput, type AdversaryRoundOutcome } from "./review"
 export { failOrphanReviews, prepareUserFix, recordRerun, recordSkip, removeWorkbenchReviewSessions, restoreAwaiting } from "./reviews"
-export { mentorAdversarialTurn, mentorAfterTurns, mentorDiscardLiveMessages, mentorRecordLiveMessage, type MentorAfterTurnsInput, type MentorTurnRecord } from "./mentor/hooks"
+export { mentorOnDone, type MentorOnDoneInput } from "./mentor/hooks"

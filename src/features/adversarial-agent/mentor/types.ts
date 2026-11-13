@@ -1,5 +1,5 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
-import type { MentorLevel, MentorReorgAction, MentorReorgItemStatus, MentorReorgStatus, MentorRunStatus, MentorSkipKind, MentorSource, MentorTarget, MentorUserTrigger } from "./constants"
+import type { MentorCaseStatus, MentorLevel, MentorOperation, MentorReorgAction, MentorReorgItemStatus, MentorReorgStatus, MentorRunStatus, MentorSkipKind, MentorSource, MentorTarget, MentorUserTrigger } from "./constants"
 import type { MentorSettings } from "./schemas"
 import type { AgentCentralOption } from "../types"
 
@@ -21,8 +21,72 @@ export interface MentorCoveredBy {
     target: MentorTarget
 }
 
+/** Transcrição lida pelo aprendizado (OPE-165): tamanhos e compactação. */
+export interface MentorTranscriptInfoDto {
+    originalChars: number
+    sentChars: number
+    compacted: boolean
+    level: number
+    aboveThreshold: boolean
+    eventCount: number
+    forkCount: number
+}
+
+/** Operação de um caso, com a referência da memória (o texto da memória é lido do Engramind ao abrir). */
+export interface MentorCaseOperationDto {
+    op: MentorOperation
+    target: MentorTarget
+    centralId: string | null
+    memoryId: string | null
+    absorbed: string[]
+    text: string | null
+    reason: string
+    status: "applied" | "failed"
+    error: string | null
+}
+
+/** Caso extraído da transcrição e o que o funil fez com ele. */
+export interface MentorRunCaseDto {
+    id: string
+    index: number
+    lesson: string
+    evidence: string[]
+    nature: string
+    scope: string
+    detection: string | null
+    status: MentorCaseStatus
+    score: number | null
+    deciderReason: string | null
+    target: MentorTarget | null
+    routerReason: string | null
+    writerReason: string | null
+    skipKind: MentorSkipKind | null
+    coveredBy: string | null
+    rejection: string | null
+    operations: MentorCaseOperationDto[]
+    error: string | null
+}
+
+/** Execução de aprendizado com os casos (aba "Aprendizado" da mesa e detalhe). */
+export interface MentorLearningRunDto extends MentorRunDto {
+    cases: MentorRunCaseDto[]
+}
+
 export interface MentorRunDto {
     id: string
+    /** `learning`: aprendizado na conclusão (OPE-165); `legacy`: execução antiga, por cadeia de turnos. */
+    kind: "learning" | "legacy"
+    completedAt: string | null
+    attempt: number | null
+    completionKind: "merge" | "manual" | null
+    transcript: MentorTranscriptInfoDto | null
+    digestModel: string | null
+    caseCount: number | null
+    operationCounts: Partial<Record<MentorOperation | "failed", number>> | null
+    budgetUsd: number | null
+    abortReason: "budget" | null
+    /** Falha mais recente da conclusão, sem outra tentativa em andamento: aceita Tentar novamente. */
+    canRetry: boolean
     workbenchId: string
     centralId: string
     taskId: string

@@ -146,17 +146,28 @@ export function summarizeReviews(reviews: readonly ReviewFacts[], exactSince: nu
 
 // ── Mentor ───────────────────────────────────────────────────────────────────
 
-export function summarizeMentor(runs: readonly { status: string; target: string | null }[]) {
+/**
+ * Execuções do Mentor. As antigas gravam uma memória cada (`created`/`updated`); o aprendizado na conclusão
+ * (OPE-165, `learned`) aplica várias operações: as contagens vêm de `operations` e o destino de `targetCounts`.
+ */
+export function summarizeMentor(runs: readonly { status: string; target: string | null; operations?: Partial<Record<string, number>> | null; targetCounts?: Record<string, number> | null }[]) {
     const finished = runs.filter((run) => !["queued", "running"].includes(run.status))
-    const lessons = finished.filter((run) => run.status === "created" || run.status === "updated")
+    const lessons = finished.filter((run) => run.status === "created" || run.status === "updated" || run.status === "learned")
     const dropped = finished.filter((run) => run.status === "discarded" || run.status === "skipped")
+    const targets = new Map<string, number>()
+    for (const run of lessons) {
+        const counts = run.status === "learned" ? Object.entries(run.targetCounts ?? {}) : [[run.target ?? "adversarial", 1] as const]
+        for (const [key, count] of counts) targets.set(key, (targets.get(key) ?? 0) + count)
+    }
+    const sum = (pick: (run: (typeof finished)[number]) => number) => finished.reduce((total, run) => total + pick(run), 0)
     return {
         base: finished.length,
         lessonPercent: pct(lessons.length, lessons.length + dropped.length),
-        created: finished.filter((run) => run.status === "created").length,
-        updated: finished.filter((run) => run.status === "updated").length,
+        created: sum((run) => (run.status === "created" ? 1 : (run.operations?.create ?? 0))),
+        updated: sum((run) => (run.status === "updated" ? 1 : (run.operations?.update ?? 0) + (run.operations?.merge ?? 0))),
+        archived: sum((run) => (run.operations?.archive ?? 0)),
         failurePercent: pct(finished.filter((run) => run.status === "failed").length, finished.length),
-        targets: countBy(lessons, (run) => run.target ?? "adversarial"),
+        targets: [...targets.entries()].map(([key, count]) => ({ key, count })).sort((a, b) => b.count - a.count || a.key.localeCompare(b.key)),
     }
 }
 

@@ -84,7 +84,7 @@ export async function developerMetrics(ctx: MetricsContext): Promise<AgentMetric
     const [reviews, mentorRuns] = ids.length
         ? await Promise.all([
               AdversarialReview.find({ workbenchId: { $in: ids } }).select({ workbenchId: 1, findings: 1 }).lean(),
-              MentorRun.find({ workbenchId: { $in: ids }, status: { $in: ["created", "updated"] } }).select({ workbenchId: 1 }).lean(),
+              MentorRun.find({ workbenchId: { $in: ids }, status: { $in: ["created", "updated", "learned"] } }).select({ workbenchId: 1 }).lean(),
           ])
         : [[], []]
 

@@ -1,93 +1,123 @@
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import { MENTOR_UPDATED_EVENT } from "../../mentor/constants"
+import { MENTOR_HEARTBEAT_MS, MENTOR_HEARTBEAT_STALE_MS, MENTOR_UPDATED_EVENT, type MentorTarget } from "../../mentor/constants"
 import { mentorThreshold } from "../../mentor/decision"
 import type { MentorSettings } from "../../mentor/schemas"
+import { processMentorLearning, type MentorLearningInput } from "./learn"
 import { MentorRun, mentorDb } from "./models"
-import { processMentorRun, type MentorRunInput } from "./run"
 
 /**
  * Fila do Agente Mentor: as execuções de uma mesa rodam uma de cada vez, em segundo plano (a mesa
- * nunca espera). O registro fica em `adversarial_mentor_runs`; o que estava na fila ou rodando quando
- * o app reiniciou vira `failed` ("interrompida") no primeiro uso do processo.
+ * nunca espera). O registro fica em `adversarial_mentor_runs`. Desde a OPE-165 a execução viva é
+ * decidida por batimento no banco (`heartbeatAt`, a cada 15 s): sem batimento por 90 s ela vira `failed`
+ * ("interrompida") — nunca pelo mapa em memória, porque outra instância (prévia) pode usar o mesmo banco.
  */
 
 const log = loggerFor({ module: "adversarial-agent", feature: "mentor" })
 
 interface MentorQueueState {
     chains: Map<string, Promise<unknown>>
-    startedAt: Date
-    recovered: Promise<void> | null
+    lastRecovery: number
 }
 
 const globalForMentor = globalThis as typeof globalThis & { __opexMentorQueue?: MentorQueueState }
-const state = (globalForMentor.__opexMentorQueue ??= { chains: new Map(), startedAt: new Date(), recovered: null })
+const state = (globalForMentor.__opexMentorQueue ??= { chains: new Map(), lastRecovery: 0 })
 
-/** Execuções órfãs (de antes deste processo) viram `failed`. Uma vez por processo. */
-export function recoverOrphanMentorRuns(): Promise<void> {
-    state.recovered ??= (async () => {
+const RECOVERY_INTERVAL_MS = 60_000
+
+/**
+ * Execuções sem batimento recente viram `failed` (e podem ser repetidas). As antigas (sem `kind`), que
+ * não são mais criadas, saem do `queued`/`running` de vez. No máximo uma vez por minuto por processo.
+ */
+export async function recoverOrphanMentorRuns(now = new Date()): Promise<number> {
+    if (now.getTime() - state.lastRecovery < RECOVERY_INTERVAL_MS) return 0
+    state.lastRecovery = now.getTime()
+    try {
         await mentorDb()
+        const cutoff = new Date(now.getTime() - MENTOR_HEARTBEAT_STALE_MS)
         const result = await MentorRun.updateMany(
-            { status: { $in: ["queued", "running"] }, createdAt: { $lt: state.startedAt } },
-            { $set: { status: "failed", error: "Execução interrompida: o app reiniciou antes de terminar", finishedAt: new Date() } },
+            {
+                status: { $in: ["queued", "running"] },
+                $or: [{ kind: "learning", $or: [{ heartbeatAt: { $lt: cutoff } }, { heartbeatAt: null, createdAt: { $lt: cutoff } }] }, { kind: { $in: [null] } }],
+            },
+            { $set: { status: "failed", error: "Execução interrompida: o processo parou antes de terminar. Use Tentar novamente.", finishedAt: now } },
         )
         if (result.modifiedCount) {
-            log.warn({ count: result.modifiedCount }, "[adversarial-agent] Execuções do Agente Mentor interrompidas pelo reinício")
+            log.warn({ count: result.modifiedCount }, "[adversarial-agent] Execuções do Agente Mentor interrompidas")
             await publishAppEvent(MENTOR_UPDATED_EVENT, {}).catch(() => undefined)
         }
-    })().catch((error: unknown) => {
-        state.recovered = null
+        return result.modifiedCount
+    } catch (error) {
+        state.lastRecovery = 0
         log.warn({ err: error }, "[adversarial-agent] Não foi possível recuperar as execuções do Agente Mentor")
-    })
-    return state.recovered
+        return 0
+    }
 }
 
-function record(input: MentorRunInput, settings: MentorSettings, extra: { status: "queued" | "failed"; error?: string }) {
-    return MentorRun.create({
-        workbenchId: input.workbenchId,
-        centralId: input.centralId,
-        taskId: input.taskId,
-        taskCode: input.taskCode,
-        taskTitle: input.taskTitle,
-        sources: input.case.sources,
-        trigger: input.case.trigger,
-        userMessage: input.case.userMessage ? input.case.userMessage.slice(0, 500) : null,
-        lessonCount: 0,
-        level: settings.level,
-        threshold: mentorThreshold(settings.level),
-        status: extra.status,
-        error: extra.error ?? null,
-        ...(extra.status === "failed" ? { finishedAt: new Date(), durationMs: 0 } : {}),
-    })
+const isDuplicateKey = (error: unknown) => typeof error === "object" && error !== null && (error as { code?: unknown }).code === 11000
+
+export interface EnqueueLearningOptions {
+    attempt?: number
+    retryOf?: string | null
 }
 
-/** Registra a execução e a enfileira na corrente da mesa. Devolve o id (a avaliação segue sozinha). */
-export async function enqueueMentorRun(input: MentorRunInput, settings: MentorSettings): Promise<string> {
+/**
+ * Registra a execução de aprendizado de UMA conclusão e a enfileira na corrente da mesa. Idempotente
+ * por `{ workbenchId, completedAt, attempt }`: a segunda chamada para a mesma conclusão devolve `null`.
+ */
+export async function enqueueMentorLearning(input: MentorLearningInput, settings: MentorSettings, targets: readonly MentorTarget[], options: EnqueueLearningOptions = {}): Promise<string | null> {
     await recoverOrphanMentorRuns()
     await mentorDb()
-    const created = await record(input, settings, { status: "queued" })
-    const runId = String(created._id)
+    let runId: string
+    try {
+        const created = await MentorRun.create({
+            kind: "learning",
+            workbenchId: input.workbenchId,
+            centralId: input.centralId,
+            taskId: input.taskId,
+            taskCode: input.taskCode,
+            taskTitle: input.taskTitle,
+            completedAt: input.completedAt,
+            completionKind: input.completionKind,
+            attempt: options.attempt ?? 1,
+            retryOf: options.retryOf ?? null,
+            sources: ["done"],
+            trigger: null,
+            userMessage: null,
+            lessonCount: 0,
+            level: settings.level,
+            threshold: mentorThreshold(settings.level),
+            budgetUsd: settings.digest.budgetUsd,
+            status: "queued",
+            heartbeatAt: new Date(),
+        })
+        runId = String(created._id)
+    } catch (error) {
+        if (isDuplicateKey(error)) return null
+        throw error
+    }
     await publishAppEvent(MENTOR_UPDATED_EVENT, { runId }).catch(() => undefined)
+    // Batimento desde a fila: a espera atrás de outra execução da mesa não parece perdida.
+    const beat = setInterval(() => void MentorRun.updateOne({ _id: runId, status: { $in: ["queued", "running"] } }, { $set: { heartbeatAt: new Date() } }).catch(() => undefined), MENTOR_HEARTBEAT_MS)
+    beat.unref?.()
     const previous = state.chains.get(input.workbenchId) ?? Promise.resolve()
     const next = previous
         .catch(() => undefined)
-        .then(() => processMentorRun(runId, input, settings))
+        .then(() => processMentorLearning(runId, input, settings, targets))
         .finally(() => {
+            clearInterval(beat)
             if (state.chains.get(input.workbenchId) === next) state.chains.delete(input.workbenchId)
         })
     state.chains.set(input.workbenchId, next)
     return runId
 }
 
-/** Registra uma execução que já nasce falha (ex.: bloco de lição inválido), visível na aba. */
-export async function recordFailedMentorRun(input: MentorRunInput, settings: MentorSettings, error: string): Promise<string> {
-    await mentorDb()
-    const created = await record(input, settings, { status: "failed", error })
-    await publishAppEvent(MENTOR_UPDATED_EVENT, { runId: String(created._id) }).catch(() => undefined)
-    return String(created._id)
-}
-
 /** Para os testes: espera as execuções enfileiradas da mesa terminarem. */
 export function mentorChainOf(workbenchId: string): Promise<unknown> {
     return state.chains.get(workbenchId) ?? Promise.resolve()
+}
+
+/** Para os testes: libera a recuperação na próxima chamada. */
+export function resetMentorRecovery(): void {
+    state.lastRecovery = 0
 }

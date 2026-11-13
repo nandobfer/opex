@@ -7,6 +7,7 @@ import { MENTOR_RUN_STATUS_LABELS, MENTOR_TARGET_LABELS, type MentorRunStatus, t
 const TONE: Record<MentorRunStatus, string> = {
     queued: "bg-muted text-muted-foreground",
     running: "bg-primary/15 text-primary",
+    learned: "bg-emerald-500/15 text-emerald-300",
     skipped: "bg-muted text-muted-foreground",
     discarded: "bg-muted text-muted-foreground",
     suggested: "bg-amber-500/15 text-amber-300",

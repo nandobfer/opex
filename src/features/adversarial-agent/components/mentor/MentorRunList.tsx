@@ -9,11 +9,17 @@ import { Eye } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { listItem } from "@/components/motion/presets"
 import { workbenchPath } from "@/features/agentic/constants"
-import { MENTOR_SOURCE_LABELS } from "../../mentor/constants"
+import { MENTOR_OPERATIONS, MENTOR_SOURCE_LABELS } from "../../mentor/constants"
 import type { MentorRunDto } from "../../mentor/types"
 import { formatCost } from "../ReviewBadges"
 import { MentorRunBadge, MentorTargetBadge, formatScore } from "./MentorRunBadge"
 import { MentorRunDialog } from "./MentorRunDialog"
+
+/** Resumo do aprendizado na lista: casos e operações aplicadas. */
+function learningSummary(run: MentorRunDto): string {
+    const applied = MENTOR_OPERATIONS.reduce((sum, op) => sum + (run.operationCounts?.[op] ?? 0), 0)
+    return `${run.caseCount ?? 0} ${run.caseCount === 1 ? "caso" : "casos"} · ${applied} ${applied === 1 ? "operação" : "operações"}`
+}
 
 /**
  * Execuções do Agente Mentor (aba Execuções da configuração e página `/agente-mentor`): tarefa,
@@ -34,7 +40,7 @@ export function MentorRunList({ items }: { items: readonly MentorRunDto[] }) {
                             <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground" title={run.taskTitle}>
                                 {run.sources.map((source) => MENTOR_SOURCE_LABELS[source]).join(" · ") || "—"}
                             </span>
-                            <span className="text-xs tabular-nums text-muted-foreground">{formatScore(run.score, run.threshold)}</span>
+                            <span className="text-xs tabular-nums text-muted-foreground">{run.kind === "learning" ? learningSummary(run) : formatScore(run.score, run.threshold)}</span>
                             <MentorRunBadge status={run.status} />
                             {run.target && <MentorTargetBadge target={run.target} />}
                             <span className="text-xs tabular-nums text-muted-foreground">

@@ -84,6 +84,17 @@ describe('Adversário e Mentor', () => {
     expect(summary.lessonPercent).toBeCloseTo(66.67, 1)
     expect(summary.targets.map((item) => item.key).sort()).toEqual(['adversarial', 'developer-global'])
   })
+
+  it('OPE-165: o aprendizado na conclusão conta como lição e soma as operações por tipo e por destino', () => {
+    const summary = summarizeMentor([
+      { status: 'learned', target: null, operations: { create: 2, update: 1, merge: 1, archive: 3, failed: 1 }, targetCounts: { 'developer-global': 2, 'developer-central': 5 } },
+      { status: 'created', target: 'developer-global' },
+      { status: 'skipped', target: null },
+    ])
+    expect(summary).toMatchObject({ base: 3, created: 3, updated: 2, archived: 3 })
+    expect(summary.lessonPercent).toBeCloseTo(66.67, 1)
+    expect(summary.targets).toEqual([{ key: 'developer-central', count: 5 }, { key: 'developer-global', count: 3 }])
+  })
 })
 
 describe('Revisor', () => {
