@@ -45,11 +45,15 @@ export async function mentorOnDone(input: MentorOnDoneInput): Promise<string | n
 }
 
 /**
- * O Mentor aprende nesta central (ativo, aprendizado na conclusão ligado, central no escopo)? Aí o agente
+ * O Mentor aprende nesta central (ativo, aprendizado na conclusão ligado, central no escopo e ao menos um
+ * destino que vale)? Aí o agente
  * desenvolvedor fica somente leitura. Na dúvida (banco fora), `false`: vale a chave de aprendizado autônomo.
  */
 export async function mentorLearnsOnDone(centralId: string): Promise<boolean> {
-    return (await mentorSettingsFor(centralId)) !== null
+    const settings = await mentorSettingsFor(centralId)
+    if (!settings) return false
+    // Sem nenhum destino que valha (só o Adversário ligado e ele desativado), o Mentor não roda: o desenvolvedor segue gravando.
+    return (await targetsFor(settings)).length > 0
 }
 
 /**

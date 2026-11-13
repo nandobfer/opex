@@ -18,8 +18,11 @@ export interface WriterMemory {
     owner: boolean
 }
 
-/** Operações por caso: teto técnico contra resposta descontrolada. */
-export const MENTOR_WRITER_MAX_OPERATIONS = 10
+/**
+ * Operações por caso: proteção folgada contra resposta descontrolada (não é limite de memórias; o digestor
+ * separa as lições em casos). Passar dele não descarta em silêncio: volta ao redator com o motivo.
+ */
+export const MENTOR_WRITER_MAX_OPERATIONS = 40
 
 const reason = z.string().trim().max(2000).optional().default("")
 const text = z.string().trim().min(3)
@@ -34,7 +37,7 @@ const operationSchema = z.discriminatedUnion("op", [
 export type WriterOperationAnswer = z.infer<typeof operationSchema>
 
 const answerSchema = z.object({
-    operations: z.array(operationSchema).max(MENTOR_WRITER_MAX_OPERATIONS).optional().default([]),
+    operations: z.array(operationSchema).optional().default([]),
     skip: z.object({ kind: z.enum(MENTOR_SKIP_KINDS).optional(), memoryId: id.optional(), reason }).nullish(),
 })
 export type WriterOpsAnswer = z.infer<typeof answerSchema>
@@ -70,6 +73,9 @@ const ownerArchive = (memory: WriterMemory) => `A memória ${memory.id} foi escr
  */
 export function resolveWriterOps(answer: WriterOpsAnswer, memories: readonly WriterMemory[], otherIds: readonly string[] = []): WriterResolution {
     const byId = new Map(memories.map((memory) => [memory.id, memory]))
+    if (answer.operations.length > MENTOR_WRITER_MAX_OPERATIONS) {
+        return { kind: "rejected", rejection: `A resposta trouxe ${answer.operations.length} operações; o máximo por caso é ${MENTOR_WRITER_MAX_OPERATIONS}. Consolide (funda as memórias parecidas numa só operação) e responda de novo.` }
+    }
     if (!answer.operations.length) {
         if (!answer.skip) return { kind: "rejected", rejection: 'Responda com "operations" (ao menos uma) ou com "skip".' }
         const refused = checkWriterSkip(answer.skip, [...byId.keys()], otherIds)

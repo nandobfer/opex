@@ -27,15 +27,16 @@ const integrationLabel = (target: string | undefined) => (target && target in FO
 
 const iso = (value: Date | string | null | undefined) => (value ? new Date(value).toISOString() : null)
 
-/** Eventos gravados de uma conversa (mesa ou fork), em ordem. */
-async function eventsOf(conversationId: string): Promise<Record<string, unknown>[]> {
-    const { AgenticEvent } = await import("@/lib/db/models/Agentic")
+type AgenticModels = typeof import("@/lib/db/models/Agentic")
+type ReviewModels = typeof import("../models")
+
+/** Eventos gravados de uma conversa (mesa ou fork), em ordem. Os modelos vêm importados uma vez só. */
+async function eventsOf(AgenticEvent: AgenticModels["AgenticEvent"], conversationId: string): Promise<Record<string, unknown>[]> {
     const rows = await AgenticEvent.find({ workbenchId: conversationId }).sort({ seq: 1 }).select({ payload: 1 }).lean()
     return rows.map((row) => (row.payload ?? {}) as Record<string, unknown>)
 }
 
-async function reviewsOf(workbenchId: string): Promise<TranscriptReview[]> {
-    const { AdversarialReview } = await import("../models")
+async function reviewsOf(AdversarialReview: ReviewModels["AdversarialReview"], workbenchId: string): Promise<TranscriptReview[]> {
     const rows = await AdversarialReview.find({ workbenchId }).sort({ startedAt: 1 }).lean()
     return rows.map((row, index) => {
         // A situação de cada achado vem da rodada seguinte (resolvido, sem solução, contestação aceita).
@@ -56,11 +57,12 @@ export async function loadTranscriptInput(task: TranscriptTask): Promise<{ input
     const { flushWorkbenchEvents } = await import("@/features/agentic/server/hub")
     // O aviso "Mesa concluída" pode ainda estar no buffer do hub.
     await flushWorkbenchEvents(task.workbenchId).catch(() => undefined)
-    const { AgenticFork, AgenticWorkbench } = await import("@/lib/db/models/Agentic")
+    // Imports sob demanda feitos UMA vez, antes das leituras em paralelo.
+    const [{ AgenticEvent, AgenticFork, AgenticWorkbench }, { AdversarialReview }] = await Promise.all([import("@/lib/db/models/Agentic"), import("../models")])
     const doc = await AgenticWorkbench.findById(task.workbenchId).select({ plans: 1, pr: 1, manualCompletion: 1 }).lean()
     if (!doc) throw new Error("A mesa não existe mais")
     const forks = await AgenticFork.find({ workbenchId: task.workbenchId, status: "integrated" }).sort({ number: 1 }).lean()
-    const [main, reviews, forkEvents] = await Promise.all([eventsOf(task.workbenchId), reviewsOf(task.workbenchId), Promise.all(forks.map((fork) => eventsOf(String(fork._id))))])
+    const [main, reviews, forkEvents] = await Promise.all([eventsOf(AgenticEvent, task.workbenchId), reviewsOf(AdversarialReview, task.workbenchId), Promise.all(forks.map((fork) => eventsOf(AgenticEvent, String(fork._id))))])
     const input: TranscriptInput = {
         header: {
             task: { code: task.taskCode, title: task.taskTitle },

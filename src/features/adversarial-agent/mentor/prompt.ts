@@ -52,7 +52,7 @@ export interface TargetSummaries {
 }
 
 const ROUTER_QUESTION =
-    "Este caso de uma mesa de desenvolvimento já foi aprovado para virar uma memória permanente. Em qual lista ela deve ser gravada? Escolha UMA. O destino é decidido pela NATUREZA da lição: se ela só faz sentido neste projeto (convenção, comando, caminho, pasta, componente ou preferência da central), é da central; se continua útil num projeto diferente, é global. Na dúvida entre o revisor e o desenvolvedor, prefira o desenvolvedor (previne o erro na origem); nunca as duas."
+    "Este caso de uma mesa de desenvolvimento já foi aprovado para virar uma memória permanente. Em qual lista ela deve ser gravada? Escolha UMA. O destino é decidido pela NATUREZA da lição: se ela só faz sentido neste projeto (convenção, comando, caminho, pasta, componente ou preferência da central), é da central; se continua útil num projeto diferente, é global. Na dúvida entre o revisor e o desenvolvedor, prefira o desenvolvedor (previne o erro na origem); nunca as duas. Quando o caso trouxer a lista sugerida pelo digestor (ele separa a lição em um caso por lista e aponta a lista da memória obsoleta), siga a sugestão salvo se ela contrariar a natureza da lição."
 
 const routerExtra = (extra: string) => (extra.trim() ? `\nInstruções adicionais:\n${extra.trim()}` : "")
 

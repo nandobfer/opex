@@ -59,6 +59,8 @@ const isDuplicateKey = (error: unknown) => typeof error === "object" && error !=
 export interface EnqueueLearningOptions {
     attempt?: number
     retryOf?: string | null
+    /** Prazo total da execução (testes; padrão `MENTOR_RUN_MAX_MS`). */
+    maxMs?: number
 }
 
 /**
@@ -103,7 +105,7 @@ export async function enqueueMentorLearning(input: MentorLearningInput, settings
     const previous = state.chains.get(input.workbenchId) ?? Promise.resolve()
     const next = previous
         .catch(() => undefined)
-        .then(() => processMentorLearning(runId, input, settings, targets))
+        .then(() => processMentorLearning(runId, input, settings, targets, { maxMs: options.maxMs }))
         .finally(() => {
             clearInterval(beat)
             if (state.chains.get(input.workbenchId) === next) state.chains.delete(input.workbenchId)

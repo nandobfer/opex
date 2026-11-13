@@ -34,6 +34,8 @@ export interface IMentorRun {
     /** Modelo do digestor usado. */
     digestModel?: string | null
     caseCount?: number | null
+    /** Casos do digestor que saíram (inválidos ou acima do teto técnico). */
+    digestDiscarded?: number | null
     operationCounts?: Partial<Record<MentorOperation | "failed", number>> | null
     /** Operações aplicadas por lista de destino (métricas do Mentor). */
     targetCounts?: Record<string, number> | null
@@ -96,6 +98,7 @@ const MentorRunSchema = new Schema<IMentorRun>(
         transcript: { type: Schema.Types.Mixed, default: null },
         digestModel: { type: String, default: null },
         caseCount: { type: Number, default: null },
+        digestDiscarded: { type: Number, default: null },
         operationCounts: { type: Schema.Types.Mixed, default: null },
         targetCounts: { type: Schema.Types.Mixed, default: null },
         budgetUsd: { type: Number, default: null },

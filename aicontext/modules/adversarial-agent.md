@@ -240,7 +240,8 @@ Não existe agente novo ("Agente Sonhador" descartado): o Mentor é o veículo.
   desenvolvedor; sem nenhum destino que valha, nada roda. Disponibilidade (`mentorAvailability`): digestor,
   decisor, Triador (com mais de um destino que vale) e redator conectados; com o Adversário desativado e o
   destino dele ligado, só avisa (`available: true` com o motivo).
-- **Desenvolvedor somente leitura**: com o Mentor aprendendo na central (`mentorLearnsOnDone`), o agente
+- **Desenvolvedor somente leitura**: com o Mentor aprendendo na central (`mentorLearnsOnDone`: gate e ao
+  menos um destino que vale — só o Adversário ligado e desativado não conta, e o desenvolvedor segue gravando), o agente
   desenvolvedor (mesa e forks) não grava memória: a instrução sai sem o "Checklist de fim de turno"
   (`readOnlyReason` em `selfMemoryInstructions`) e o MCP `opex_memorias` recusa as ferramentas de gravação
   (`MENTOR_WRITES_REFUSAL`); contexto, dicas, busca e leitura por id continuam (`modules/ai.md`).
@@ -262,8 +263,14 @@ Não existe agente novo ("Agente Sonhador" descartado): o Mentor é o veículo.
   texto, de preferência barato e de contexto longo): extrai os **casos** em JSON validado por Zod —
   `lesson`, `evidence` (trechos citados, obrigatórios), `nature` (`positive`/`negative`), `scope`
   (`any_project`/`this_project`) e `detection` (como detectar de novo, nas negativas). Proibido inferir
-  regra de hipótese abandonada, de achado recusado/contestado ou de tentativa desfeita. Casos inválidos são
-  ignorados (teto técnico de 40 por execução, não é limite de memórias); lista vazia → `skipped`.
+  regra de hipótese abandonada, de achado recusado/contestado ou de tentativa desfeita. O digestor recebe,
+  depois da transcrição, as memórias de cada lista que vale (id e resumo) e é instruído a escrever **um
+  caso por lista de destino** (a parte global, a do projeto e a do revisor em casos separados, com o
+  `target` sugerido) e casos de **obsolescência** (o id da memória que ficou errada, o que mudou e a
+  evidência, na lista dela). A sugestão chega ao Triador (`listaSugeridaPeloDigestor`), que a segue salvo se
+  contrariar a natureza da lição. Textos longos são **cortados, não recusados** (lição 3.000, cada evidência
+  1.500, até 8 evidências); casos inválidos ou acima da proteção folgada de 100 por execução saem e são
+  contados em `digestDiscarded` (chip "N casos descartados" na execução). Lista vazia → `skipped`.
 - **Funil por caso** (em sequência; cada caso em `adversarial_mentor_run_cases`):
   - **Decisor** (rigor): JEV (pergunta `noul` `lesson`) ou provedor de texto (`{score, reason}`), origem
     `adversarial-mentor-decision`, sobre o estado do caso (`buildCaseState`). **Rigor da curadoria**:
@@ -280,7 +287,8 @@ Não existe agente novo ("Agente Sonhador" descartado): o Mentor é o veículo.
     e `archive` (obsoleta, com motivo); ou `skip` (`covered` com o id de uma memória **da lista de destino**,
     ou `no_lesson`). **Excluir não existe.** `resolveWriterOps` confere tudo com a **versão lida** (nunca a
     do modelo): `update` com id inexistente vira `create`; id fora da lista, a mesma memória em duas
-    operações, **memória do dono arquivada ou absorvida** → recusa com o motivo e nova tentativa
+    operações, mais de 40 operações num caso (proteção folgada, `MENTOR_WRITER_MAX_OPERATIONS`), **memória
+    do dono arquivada ou absorvida** → recusa com o motivo e nova tentativa
     (`MENTOR_WRITER_ATTEMPTS`); recusado de novo, o caso fica `discarded`. Memória do dono pode ser
     atualizada e receber uma fusão. Sem cap de quantidade (decisão do dono): o rigor e a preferência por
     atualizar/fundir seguram o acúmulo.
@@ -295,7 +303,10 @@ Não existe agente novo ("Agente Sonhador" descartado): o Mentor é o veículo.
     Depois de cada caso aplicado, a lista do destino é relida para o próximo caso.
 - **Orçamento** (`digest.budgetUsd`, padrão US$ 0,30, faixa 0,01–20): conferido depois de cada chamada; passar
   dele interrompe a execução (`failed`, `abortReason: "budget"`, "Orçamento de US$ X excedido"), mantendo o
-  que já foi aplicado. O custo do JEV não é somado (a resposta não traz custo).
+  que já foi aplicado. **Prazo total** (`MENTOR_RUN_MAX_MS`, 60 min): uma etapa que não responde (Engramind,
+  banco, provedor) faz a execução falhar com o motivo, para o batimento e libera a fila da mesa; o que ainda
+  rodar em segundo plano não grava nem aplica mais nada. Em qualquer interrupção (orçamento, prazo, erro),
+  os casos ainda pendentes viram `failed` "Não processado: <motivo>" (nunca ficam "Aguardando"). O custo do JEV não é somado (a resposta não traz custo).
 - **Execução** (`adversarial_mentor_runs`, `kind: "learning"`): mesa, código, `completedAt`,
   `completionKind`, `attempt`/`retryOf`, transcrição (`originalChars`, `sentChars`, `compacted`, `level`,
   `aboveThreshold`, `eventCount`, `forkCount`), `digestModel`, `caseCount`, `operationCounts` (por operação e

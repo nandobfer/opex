@@ -8,6 +8,7 @@ import {
     MENTOR_DECISION_CONSUMPTION_ORIGIN,
     MENTOR_DIGEST_CONSUMPTION_ORIGIN,
     MENTOR_ROUTER_CONSUMPTION_ORIGIN,
+    MENTOR_RUN_MAX_MS,
     MENTOR_UPDATED_EVENT,
     MENTOR_WRITER_ATTEMPTS,
     MENTOR_WRITER_CONSUMPTION_ORIGIN,
@@ -57,6 +58,17 @@ export interface MentorLearningInput {
     completionKind: "merge" | "manual"
 }
 
+/** Prazo total da execução estourado (uma dependência que não responde não prende a fila da mesa). */
+export class MentorRunTimeout extends Error {
+    constructor(maxMs: number) {
+        super(`A execução passou do tempo máximo de ${Math.round(maxMs / 60_000)} min e foi interrompida (alguma etapa não respondeu).`)
+        this.name = "MentorRunTimeout"
+    }
+}
+
+/** A execução já terminou (prazo): as etapas que ainda estavam rodando em segundo plano param. */
+class MentorRunAborted extends Error {}
+
 export class MentorBudgetExceeded extends Error {
     constructor(budget: number, spent: number) {
         super(`Orçamento de US$ ${budget.toFixed(2)} excedido (gasto US$ ${spent.toFixed(4)}): a execução foi interrompida.`)
@@ -71,7 +83,7 @@ async function setRun(runId: string, set: Partial<IMentorRun>, notify = true): P
     if (notify) await publish(runId)
 }
 
-const setCase = (caseId: IMentorRunCase["_id"], set: Partial<IMentorRunCase>) => MentorRunCase.updateOne({ _id: caseId }, { $set: set })
+const writeCase = (caseId: IMentorRunCase["_id"], set: Partial<IMentorRunCase>) => MentorRunCase.updateOne({ _id: caseId }, { $set: set })
 
 /** Orçamento: lança `MentorBudgetExceeded` quando o custo acumulado passa do configurado. */
 export function assertBudget(usage: StepUsage, budgetUsd: number): void {
@@ -141,6 +153,8 @@ class TargetLists {
 
 interface CaseContext {
     runId: string
+    /** `finished`: a execução já foi encerrada (prazo); nada mais é gravado nem aplicado. */
+    state: { finished: boolean }
     input: MentorLearningInput
     settings: MentorSettings
     targets: readonly MentorTarget[]
@@ -173,6 +187,10 @@ const caseStatusOf = (operations: readonly IMentorCaseOperation[]): MentorCaseSt
 /** Um caso pelo funil. Erros de etapa viram `failed` no caso; o orçamento sobe para abortar a execução. */
 async function processCase(ctx: CaseContext, doc: IMentorRunCase, item: MentorDigestCase): Promise<{ status: MentorCaseStatus; operations: IMentorCaseOperation[] }> {
     const { settings, usage } = ctx
+    const setCase = (caseId: IMentorRunCase["_id"], set: Partial<IMentorRunCase>) => {
+        if (ctx.state.finished) throw new MentorRunAborted()
+        return writeCase(caseId, set)
+    }
     const budget = settings.digest.budgetUsd
     const subject = ctx.input.taskCode
     try {
@@ -221,7 +239,10 @@ async function processCase(ctx: CaseContext, doc: IMentorRunCase, item: MentorDi
                 continue
             }
             const applied: IMentorCaseOperation[] = []
-            for (const operation of resolved.operations) applied.push(await applyOperation(ctx.apply, target, operation as ResolvedOperation))
+            for (const operation of resolved.operations) {
+                if (ctx.state.finished) throw new MentorRunAborted()
+                applied.push(await applyOperation(ctx.apply, target, operation as ResolvedOperation))
+            }
             ctx.lists.invalidate(target)
             const reasons = resolved.operations.map((operation) => operation.reason).filter(Boolean)
             const status = caseStatusOf(applied)
@@ -231,10 +252,10 @@ async function processCase(ctx: CaseContext, doc: IMentorRunCase, item: MentorDi
         await setCase(doc._id, { status: "discarded", rejection })
         return { status: "discarded", operations: [] }
     } catch (error) {
-        if (error instanceof MentorBudgetExceeded) throw error
+        if (error instanceof MentorBudgetExceeded || error instanceof MentorRunAborted) throw error
         const message = error instanceof Error ? error.message : String(error)
         log.warn({ err: error, runId: ctx.runId, case: doc.index }, "[adversarial-agent] Agente Mentor: caso falhou")
-        await setCase(doc._id, { status: "failed", error: message })
+        await writeCase(doc._id, { status: "failed", error: message })
         return { status: "failed", operations: [] }
     }
 }
@@ -275,12 +296,32 @@ async function noticeOnWorkbench(workbenchId: string, operations: readonly IMent
     }
 }
 
-/** Executa uma execução de aprendizado já registrada (`queued`). Nunca lança: falha vira `failed`. */
-export async function processMentorLearning(runId: string, input: MentorLearningInput, settings: MentorSettings, targets: readonly MentorTarget[]): Promise<MentorRunStatus> {
+/** Casos que não chegaram ao fim (a execução foi interrompida) deixam de aparecer como "Aguardando". */
+async function closePendingCases(runId: string, reason: string): Promise<void> {
+    await MentorRunCase.updateMany({ runId, status: "pending" }, { $set: { status: "failed", error: `Não processado: ${reason}` } }).catch(() => undefined)
+}
+
+export interface MentorLearningOptions {
+    /** Prazo total da execução (padrão `MENTOR_RUN_MAX_MS`). */
+    maxMs?: number
+}
+
+/**
+ * Executa uma execução de aprendizado já registrada (`queued`). Nunca lança: falha vira `failed`. Tem
+ * prazo total: se alguma etapa (Engramind, banco, provedor) não responder, a execução falha com o motivo,
+ * os casos pendentes são fechados e a corrente da mesa é liberada; o que ainda rodar em segundo plano não
+ * grava mais nada.
+ */
+export async function processMentorLearning(runId: string, input: MentorLearningInput, settings: MentorSettings, targets: readonly MentorTarget[], options: MentorLearningOptions = {}): Promise<MentorRunStatus> {
     const startedAt = Date.now()
+    const maxMs = options.maxMs ?? MENTOR_RUN_MAX_MS
     const usage: StepUsage = { costUsd: 0 }
     const operations: IMentorCaseOperation[] = []
+    const state = { finished: false }
+    const progress = (set: Partial<IMentorRun>) => (state.finished ? Promise.resolve() : setRun(runId, set))
     const finish = async (status: MentorRunStatus, set: Partial<IMentorRun> = {}) => {
+        if (state.finished) return status
+        state.finished = true
         await setRun(runId, { status, ...set, costUsd: usage.costUsd, operationCounts: countOperations(operations), targetCounts: countTargets(operations), durationMs: Date.now() - startedAt, finishedAt: new Date(), heartbeatAt: new Date() })
         await recordAudit({
             userId: getLocalUser().id,
@@ -291,26 +332,30 @@ export async function processMentorLearning(runId: string, input: MentorLearning
         })
         return status
     }
-    try {
+    const run = async (): Promise<MentorRunStatus> => {
         await mentorDb()
-        await setRun(runId, { status: "running", startedAt: new Date(), heartbeatAt: new Date() })
+        await progress({ status: "running", startedAt: new Date(), heartbeatAt: new Date() })
         const transcript = await loadWorkbenchTranscript({ workbenchId: input.workbenchId, taskCode: input.taskCode, taskTitle: input.taskTitle, projectName: input.projectName, completedAt: input.completedAt }, settings.digest.compactThresholdChars)
-        await setRun(runId, {
+        await progress({
             transcript: { originalChars: transcript.originalChars, sentChars: transcript.sentChars, compacted: transcript.compacted, level: transcript.level, aboveThreshold: transcript.aboveThreshold, eventCount: transcript.eventCount, forkCount: transcript.forkCount },
         })
         if (!transcript.hasConversation) throw new Error("Transcrição vazia: a mesa não tem mensagens do dono nem texto do agente gravados")
 
         const { provider, model, variant } = settings.digest
         if (!provider || !model) throw new Error("O digestor do Agente Mentor não tem provedor e modelo configurados")
-        await setRun(runId, { digestModel: `${provider}/${model}` })
+        await progress({ digestModel: `${provider}/${model}` })
+        const lists = new TargetLists(targets, input.centralId)
+        // O digestor vê o que cada lista já tem: separa a lição em um caso por lista e acha o que ficou obsoleto.
+        const digestLists = await Promise.all(targets.map(async (target) => ({ target, memories: (await lists.get(target)).map((memory) => ({ id: memory.id, summary: memory.summary })) })))
         const answer = await generate(
-            { provider, model, variant, instructions: MENTOR_DIGEST_INSTRUCTIONS, prompt: buildDigestPrompt(transcript.text), timeoutSeconds: settings.digest.timeoutSeconds, origin: MENTOR_DIGEST_CONSUMPTION_ORIGIN, subject: input.taskCode },
+            { provider, model, variant, instructions: MENTOR_DIGEST_INSTRUCTIONS, prompt: buildDigestPrompt(transcript.text, digestLists), timeoutSeconds: settings.digest.timeoutSeconds, origin: MENTOR_DIGEST_CONSUMPTION_ORIGIN, subject: input.taskCode },
             usage,
         )
         assertBudget(usage, settings.digest.budgetUsd)
-        const cases = parseDigestAnswer(answer)
-        if (!cases) throw new Error("O digestor do Agente Mentor respondeu sem o JSON esperado")
-        await setRun(runId, { caseCount: cases.length, costUsd: usage.costUsd, lessonCount: cases.length })
+        const digested = parseDigestAnswer(answer)
+        if (!digested) throw new Error("O digestor do Agente Mentor respondeu sem o JSON esperado")
+        const cases = digested.cases
+        await progress({ caseCount: cases.length, digestDiscarded: digested.discarded, costUsd: usage.costUsd, lessonCount: cases.length })
         if (!cases.length) return await finish("skipped", { deciderReason: "O digestor não encontrou lições nesta mesa" })
 
         const docs = await MentorRunCase.insertMany(
@@ -318,29 +363,47 @@ export async function processMentorLearning(runId: string, input: MentorLearning
         )
         const ctx: CaseContext = {
             runId,
+            state,
             input,
             settings,
             targets,
-            lists: new TargetLists(targets, input.centralId),
+            lists,
             usage,
             transcript,
             apply: { runId, workbenchId: input.workbenchId, taskCode: input.taskCode, centralId: input.centralId, actorId: getLocalUser().id },
         }
         let failedCases = 0
         for (const [index, doc] of docs.entries()) {
+            if (state.finished) throw new MentorRunAborted()
             const result = await processCase(ctx, doc as unknown as IMentorRunCase, cases[index]!)
             operations.push(...result.operations)
             if (result.status === "failed") failedCases++
-            await setRun(runId, { costUsd: usage.costUsd, operationCounts: countOperations(operations) })
+            await progress({ costUsd: usage.costUsd, operationCounts: countOperations(operations) })
         }
         await noticeOnWorkbench(input.workbenchId, operations, input.centralId)
         if (operations.some((operation) => operation.status === "applied")) return await finish("learned")
         if (failedCases) return await finish("failed", { error: `${failedCases} ${failedCases === 1 ? "caso falhou" : "casos falharam"} e nenhuma memória foi gravada: veja os casos` })
         return await finish("skipped")
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new MentorRunTimeout(maxMs)), maxMs)
+        timer.unref?.()
+    })
+    const body = run()
+    // O corpo que perdeu a corrida para o prazo não pode virar rejeição sem tratamento.
+    body.catch(() => undefined)
+    try {
+        return await Promise.race([body, deadline])
     } catch (error) {
+        if (state.finished) return "failed"
         const message = error instanceof Error ? error.message : String(error)
         log.warn({ err: error, runId, workbenchId: input.workbenchId }, "[adversarial-agent] Agente Mentor: aprendizado falhou")
+        const status = finish("failed", { error: message, ...(error instanceof MentorBudgetExceeded ? { abortReason: "budget" as const } : {}) }).catch(() => "failed" as const)
+        await closePendingCases(runId, error instanceof MentorBudgetExceeded ? "orçamento excedido" : error instanceof MentorRunTimeout ? "tempo máximo da execução" : "execução interrompida")
         await noticeOnWorkbench(input.workbenchId, operations, input.centralId)
-        return finish("failed", { error: message, ...(error instanceof MentorBudgetExceeded ? { abortReason: "budget" as const } : {}) }).catch(() => "failed" as const)
+        return status
+    } finally {
+        clearTimeout(timer)
     }
 }

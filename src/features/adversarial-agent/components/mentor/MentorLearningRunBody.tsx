@@ -57,6 +57,7 @@ export function MentorLearningRunBody({ run }: { run: MentorLearningRunDto }) {
                 <div className="flex flex-wrap gap-1.5">
                     {run.digestModel && <MentorRunChip label="Modelo do digestor">{run.digestModel}</MentorRunChip>}
                     {run.caseCount !== null && <MentorRunChip>{`${run.caseCount} ${run.caseCount === 1 ? "caso" : "casos"}`}</MentorRunChip>}
+                    {(run.digestDiscarded ?? 0) > 0 && <MentorRunChip label="Casos do digestor inválidos ou acima do teto técnico">{`${run.digestDiscarded} ${run.digestDiscarded === 1 ? "caso descartado" : "casos descartados"}`}</MentorRunChip>}
                     <MentorRunChip label="Custo da execução">{`${formatCost(run.costUsd)}${run.budgetUsd !== null ? ` de ${formatCost(run.budgetUsd)}` : ""}`}</MentorRunChip>
                     {run.abortReason === "budget" && <MentorRunChip>Interrompida pelo orçamento</MentorRunChip>}
                     <MentorOperationChips counts={run.operationCounts} />

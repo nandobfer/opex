@@ -63,7 +63,7 @@ export function checkWriterSkip(answer: { kind?: MentorSkipKind | null; memoryId
     if (ids.some((id) => destinationIds.includes(id))) return null
     const other = ids.find((id) => otherIds.includes(id))
     if (other) {
-        return `A memória ${other} citada é de outra lista. Cobertura em outra lista não dispensa gravar a lição: generalize-a para a lista de destino (a outra lista recebe a parte dela em outro caso).`
+        return `A memória ${other} citada é de outra lista. Cobertura em outra lista não dispensa gravar a lição: generalize-a para a lista de destino (o digestor escreve um caso para cada lista; a parte da outra lista vai no caso dela).`
     }
     return 'Para não gravar por cobertura, cite em "memoryId" o id de uma memória DESTA lista que já cobre a lição. Cobertura em outra lista não é motivo para não gravar.'
 }

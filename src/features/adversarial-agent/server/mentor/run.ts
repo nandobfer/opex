@@ -44,6 +44,7 @@ export function toMentorRunDto(run: IMentorRun, canRetry = false): MentorRunDto 
         transcript: run.transcript ?? null,
         digestModel: run.digestModel ?? null,
         caseCount: run.caseCount ?? null,
+        digestDiscarded: run.digestDiscarded ?? null,
         operationCounts: run.operationCounts ?? null,
         budgetUsd: run.budgetUsd ?? null,
         abortReason: run.abortReason ?? null,

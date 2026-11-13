@@ -28,7 +28,7 @@ afterEach(() => {
 const learning = (overrides: Partial<MentorLearningRunDto> = {}): MentorLearningRunDto => ({
   id: 'r1', kind: 'learning', completedAt: '2026-11-13T15:00:00.000Z', attempt: 1, completionKind: 'manual',
   transcript: { originalChars: 52000, sentChars: 52000, compacted: false, level: 0, aboveThreshold: false, eventCount: 310, forkCount: 0 },
-  digestModel: 'gemini/flash', caseCount: 1, operationCounts: { update: 1, archive: 1 }, budgetUsd: 0.3, abortReason: null, canRetry: false,
+  digestModel: 'gemini/flash', caseCount: 1, digestDiscarded: 2, operationCounts: { update: 1, archive: 1 }, budgetUsd: 0.3, abortReason: null, canRetry: false,
   workbenchId: 'w1', centralId: 'c1', taskId: 't1', taskCode: 'OPE-9', taskTitle: 'Tarefa', sources: ['done'], trigger: null, userMessage: null, lessonCount: 1,
   status: 'learned', level: 'balanced', score: null, threshold: 0.65, deciderReason: null, target: null, routerConfidence: null, routerReason: null, routerProbabilities: null,
   writerAction: null, writerReason: null, writerSkipKind: null, writerCoveredBy: null, skipRejection: null, splitRejection: null, sanitizerReason: null, proposal: null, extraProposal: null,
@@ -61,6 +61,7 @@ describe('aba Aprendizado da mesa', () => {
     expect(screen.getByText('52.000 caracteres')).toBeTruthy()
     expect(screen.getByText('enviada inteira')).toBeTruthy()
     expect(screen.getByText('gemini/flash')).toBeTruthy()
+    expect(screen.getByText('2 casos descartados')).toBeTruthy()
     expect(screen.getByText('Conclusão manual')).toBeTruthy()
     expect(screen.getByText('O comportamento do filtro mudou: a busca agora ignora acentos')).toBeTruthy()
     expect(screen.getByText('Atualizada')).toBeTruthy()

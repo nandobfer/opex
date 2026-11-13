@@ -688,7 +688,8 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   único por diretório (não muda por sessão): com o aprendizado desligado, a instrução diz para não chamar
   as de gravação e, no Maddox, as regras da sessão as negam (`selfMemorySessionPermissions(…, { write: false })`).
 - **Desenvolvedor somente leitura com o Mentor (OPE-165, decisão do dono)**: quando o Agente Mentor aprende
-  na central (Mentor ativo, "Aprender ao concluir a mesa" ligado e a central no escopo — `mentorLearnsOnDone`,
+  na central (Mentor ativo, "Aprender ao concluir a mesa" ligado, a central no escopo e ao menos um destino
+  que vale — `mentorLearnsOnDone`,
   lido por `developerReadOnly` em `agentic/server/developer-memories.ts`), o agente desenvolvedor da mesa e
   dos forks **não grava memória em nenhum turno**: a instrução sai só com o bloco de leitura e o motivo
   (`readOnlyReason` de `selfMemoryInstructions`, sem o checklist de fim de turno) e o MCP recusa as

@@ -100,6 +100,16 @@ describe('gatilho na conclusão da mesa', () => {
     mocks.settingsFor.mockResolvedValue(null)
     expect(await mentorLearnsOnDone('c1')).toBe(false)
   })
+
+  it('F6: só o Adversário ligado e ele desativado: o Mentor não roda, então o desenvolvedor NÃO fica somente leitura', async () => {
+    const settings = enabled()
+    settings.targets = { adversarial: true, 'developer-global': false, 'developer-central': false }
+    mocks.settingsFor.mockResolvedValue(settings)
+    mocks.adversary.mockResolvedValue({ settings: { enabled: false } })
+    expect(await mentorLearnsOnDone('c1')).toBe(false)
+    mocks.adversary.mockResolvedValue({ settings: { enabled: true } })
+    expect(await mentorLearnsOnDone('c1')).toBe(true)
+  })
 })
 
 describe('Tentar novamente', () => {

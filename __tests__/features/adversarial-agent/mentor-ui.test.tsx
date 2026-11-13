@@ -48,6 +48,7 @@ const run = (overrides: Partial<MentorRunDto> = {}): MentorRunDto => ({
   transcript: null,
   digestModel: null,
   caseCount: null,
+  digestDiscarded: null,
   operationCounts: null,
   budgetUsd: null,
   abortReason: null,

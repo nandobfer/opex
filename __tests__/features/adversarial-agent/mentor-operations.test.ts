@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseWriterOps, resolveWriterOps, type WriterMemory } from '@/features/adversarial-agent/mentor/operations'
+import { MENTOR_WRITER_MAX_OPERATIONS, parseWriterOps, resolveWriterOps, type WriterMemory } from '@/features/adversarial-agent/mentor/operations'
 
 /** OPE-165: operações do redator (criar, atualizar, fundir, arquivar) e a proteção da memória do dono. */
 
@@ -52,5 +52,14 @@ describe('operações do redator do Agente Mentor', () => {
     expect(resolve({ operations: [], skip: { kind: 'covered', memoryId: 'm_outra' } }).kind).toBe('rejected')
     expect(resolve({ operations: [], skip: { kind: 'no_lesson' } })).toMatchObject({ kind: 'skip', skipKind: 'no_lesson', memoryId: null })
     expect(resolve({ operations: [] }).kind).toBe('rejected')
+  })
+
+  it('F3: acima do teto folgado de operações, volta ao redator com o motivo (nunca descarta em silêncio)', () => {
+    const many = Array.from({ length: MENTOR_WRITER_MAX_OPERATIONS + 1 }, (_, index) => ({ op: 'create', text: `Regra ${index}` }))
+    expect(parseWriterOps(JSON.stringify({ operations: many }))).not.toBeNull()
+    const result = resolve({ operations: many })
+    expect(result.kind).toBe('rejected')
+    if (result.kind === 'rejected') expect(result.rejection).toContain(`o máximo por caso é ${MENTOR_WRITER_MAX_OPERATIONS}`)
+    expect(resolve({ operations: many.slice(0, 11) }).kind).toBe('operations')
   })
 })

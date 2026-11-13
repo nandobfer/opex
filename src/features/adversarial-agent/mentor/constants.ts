@@ -119,6 +119,8 @@ export const MENTOR_COMPACT_DEFAULT = 400_000
 /** Batimento de uma execução em andamento; sem batimento por este tempo, ela é dada como perdida. */
 export const MENTOR_HEARTBEAT_MS = 15_000
 export const MENTOR_HEARTBEAT_STALE_MS = 90_000
+/** Prazo total de uma execução de aprendizado: passou, ela falha, para o batimento e libera a fila da mesa. */
+export const MENTOR_RUN_MAX_MS = 60 * 60_000
 
 /** Operações que o Mentor aplica nas memórias (nunca exclui). */
 export const MENTOR_OPERATIONS = ["create", "update", "merge", "archive"] as const

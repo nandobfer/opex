@@ -93,8 +93,8 @@ const memory = (id: string, resumo: string, overrides: Record<string, unknown> =
 const GLOBAL_RULE = 'Antes de usar um componente que depende de provider, confira se a árvore o envolve e cubra com um teste de render.'
 const CENTRAL_RULE = 'Neste projeto, os providers da tela ficam em src/app/providers.tsx.'
 
-async function learn(s = settings(), targets = TARGETS, i = input()) {
-  const id = await enqueueMentorLearning(i, s, targets)
+async function learn(s = settings(), targets = TARGETS, i = input(), maxMs?: number) {
+  const id = await enqueueMentorLearning(i, s, targets, maxMs ? { maxMs } : {})
   await mentorChainOf(i.workbenchId)
   return runs().docs.find((doc) => String(doc._id) === id)!
 }
@@ -205,6 +205,9 @@ describe('aprendizado na conclusão da mesa', () => {
     expect(doc).toMatchObject({ status: 'failed', abortReason: 'budget', operationCounts: { create: 1 } })
     expect(doc.error).toContain('Orçamento de US$ 0.30 excedido')
     expect(mocks.streamAi).toHaveBeenCalledTimes(5)
+    // F2: o caso que estava em andamento não fica "Aguardando" para sempre.
+    expect(cases().docs.map((item) => item.status)).toEqual(['applied', 'failed'])
+    expect(cases().docs[1]).toMatchObject({ error: 'Não processado: orçamento excedido' })
   })
 
   it('transcrição vazia, falha do provedor ou JSON inválido do digestor: execução falha com o erro (a mesa não muda)', async () => {
@@ -262,5 +265,72 @@ describe('idempotência e recuperação', () => {
     await recoverOrphanMentorRuns(now)
     expect(runs().docs.find((doc) => doc._id === 'velha')).toMatchObject({ status: 'failed', error: expect.stringContaining('interrompida') })
     expect(runs().docs.find((doc) => doc._id === 'viva')).toMatchObject({ status: 'running' })
+  })
+})
+
+describe('rodada de revisão adversária (F1, F3, F5)', () => {
+  it('F1: um mesmo digest grava nas globais, atualiza a central e arquiva no Adversário, na mesma execução', async () => {
+    mocks.streamAi
+      .mockReturnValueOnce(
+        reply({
+          cases: [
+            lesson({ target: 'developer-global' }),
+            lesson({ lesson: 'A pasta de providers deste projeto mudou para src/app/providers', scope: 'this_project', nature: 'positive', detection: null, target: 'developer-central' }),
+            lesson({ lesson: 'A memória m_adv ficou obsoleta: o provider agora é obrigatório pelo tipo', scope: 'any_project', target: 'adversarial' }),
+          ],
+        }),
+      )
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'developer-global' }))
+      .mockReturnValueOnce(reply({ operations: [{ op: 'create', text: GLOBAL_RULE }] }))
+      .mockReturnValueOnce(reply({ score: 0.8 }))
+      .mockReturnValueOnce(reply({ target: 'developer-central' }))
+      .mockReturnValueOnce(reply({ operations: [{ op: 'update', memoryId: 'm_c1', text: CENTRAL_RULE }] }))
+      .mockReturnValueOnce(reply({ score: 0.8 }))
+      .mockReturnValueOnce(reply({ target: 'adversarial' }))
+      .mockReturnValueOnce(reply({ operations: [{ op: 'archive', memoryId: 'm_adv', reason: 'o tipo já obriga o provider' }] }))
+    const doc = await learn()
+    expect(doc).toMatchObject({ status: 'learned', operationCounts: { create: 1, update: 1, archive: 1 }, targetCounts: { 'developer-global': 1, 'developer-central': 1, adversarial: 1 } })
+    // O digestor recebeu as memórias de cada lista (para separar a lição e achar o obsoleto).
+    const digestPrompt = mocks.streamAi.mock.calls[0]![0].prompt as string
+    expect(digestPrompt).toContain('- m_adv · Providers')
+    expect(digestPrompt).toContain('- m_c1 · Pasta de providers')
+    // A lista sugerida pelo digestor chega ao Triador.
+    expect(mocks.streamAi.mock.calls[2]![0].prompt).toContain('listaSugeridaPeloDigestor')
+    expect(mocks.update).toHaveBeenCalledWith('adversarial', 'm_adv', { ativa: false, versao: 2 }, 'local', expect.anything())
+  })
+
+  it('F3: casos descartados pelo digestor ficam contados na execução', async () => {
+    mocks.streamAi.mockReturnValueOnce(reply({ cases: [lesson({ evidence: [] }), { lixo: true }] }))
+    expect(await learn()).toMatchObject({ status: 'skipped', caseCount: 0, digestDiscarded: 2 })
+  })
+
+  it('F5: uma dependência que nunca responde estoura o prazo, falha a execução e libera a fila da mesa', async () => {
+    mocks.transcript.mockImplementationOnce(() => new Promise(() => undefined))
+    const stuck = await learn(settings(), TARGETS, input(), 50)
+    expect(stuck).toMatchObject({ status: 'failed', error: expect.stringContaining('tempo máximo') })
+    mocks.streamAi.mockReturnValueOnce(reply({ cases: [] }))
+    const next = await learn(settings(), TARGETS, input({ completedAt: new Date('2026-11-20T00:00:00Z') }))
+    expect(next).toMatchObject({ status: 'skipped' })
+  })
+
+  it('F5: estourado o prazo no meio de um caso, nada mais é aplicado e os casos pendentes são fechados', async () => {
+    let release: () => void = () => undefined
+    mocks.streamAi
+      .mockReturnValueOnce(reply({ cases: [lesson(), lesson()] }))
+      .mockReturnValueOnce(reply({ score: 0.9 }))
+      .mockReturnValueOnce(reply({ target: 'developer-global' }))
+      .mockImplementationOnce(() => (async function* () {
+        await new Promise<void>((resolve) => (release = resolve))
+        yield { type: 'delta', text: JSON.stringify({ operations: [{ op: 'create', text: GLOBAL_RULE }] }) }
+        yield { type: 'done', finishReason: 'stop', usage: { costUsd: 0 }, durationMs: 1 }
+      })())
+    const doc = await learn(settings(), TARGETS, input(), 50)
+    expect(doc).toMatchObject({ status: 'failed', error: expect.stringContaining('tempo máximo') })
+    expect(cases().docs.every((item) => item.status === 'failed')).toBe(true)
+    release()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(mocks.create).not.toHaveBeenCalled()
+    expect(runs().docs.find((item) => item._id === doc._id)).toMatchObject({ status: 'failed' })
   })
 })

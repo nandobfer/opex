@@ -82,6 +82,8 @@ export interface MentorRunDto {
     transcript: MentorTranscriptInfoDto | null
     digestModel: string | null
     caseCount: number | null
+    /** Casos do digestor que saíram (inválidos ou acima do teto técnico). */
+    digestDiscarded: number | null
     operationCounts: Partial<Record<MentorOperation | "failed", number>> | null
     budgetUsd: number | null
     abortReason: "budget" | null
