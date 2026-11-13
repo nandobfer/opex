@@ -207,6 +207,8 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
     quando há mais páginas (D15).
   - Sem limite de gravações por turno: `remember` e `update_memory` gravam quantas o trabalho exigir (o
     teto de 5 caiu na OPE-163; a memória própria dos outros agentes mantém o `SELF_MEMORY_TURN_LIMIT`).
+    Decisão do dono no planejamento da OPE-163: **não** há configuração de limite (nem nas configurações do
+    Engramind); as travas contra laço são as que já existem (tokens, tempo ativo e teto técnico do turno).
   - Token do agente recusado (`AUTH_INVALID`, pelo código): repete com a credencial do Opex no mesmo
     canal (já conferido na lista), com aviso no log e na execução. Escrita negada no canal
     (`SCOPE_REQUIRED`/`CHANNEL_NOT_SUBSCRIBED`) → `ROUTINE_CHANNEL_FORBIDDEN` (reprovisionar); outros
