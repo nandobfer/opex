@@ -6,7 +6,7 @@ import type { UniverseLayoutConfig } from "@engramind/client"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { buildSampleUniverse, SAMPLE_UNIVERSE_LIMITS } from "../../../network/sample-universe"
+import { buildSampleRelated, buildSampleUniverse, SAMPLE_AGENT, SAMPLE_UNIVERSE_LIMITS } from "../../../network/sample-universe"
 import { opexEngramindSource } from "../../OpexEngramindProvider"
 import { Section } from "../../shared/Section"
 
@@ -34,6 +34,8 @@ export function UniverseLayoutPreview({ config }: { config: UniverseLayoutConfig
     const [center, setCenter] = useState<"agent" | "channel">("agent")
     const sample = useMemo(() => buildSampleUniverse(count, channels), [count, channels])
     const colors = useMemo(() => channelColors(sample.channels), [sample.channels])
+    // Similares fictícias (OPE-164): a prévia mostra "Entre similares" sem consultar o Engramind.
+    const related = useMemo(() => buildSampleRelated(sample.memories), [sample.memories])
     const memories = useMemo(() => (center === "channel" ? sample.memories.filter((memory) => memory.channel === sample.channels[0]) : sample.memories), [center, sample])
     return (
         <Section title="Prévia" description="Memórias de exemplo, com os valores ainda não salvos. Nada aqui vem do Engramind.">
@@ -60,12 +62,13 @@ export function UniverseLayoutPreview({ config }: { config: UniverseLayoutConfig
             <div data-testid="universe-preview" className="overflow-hidden rounded-xl border">
                 <EngramindProvider dataSource={opexEngramindSource} mode="manager" universeLayout={config}>
                     <MemoryUniverse
-                        center={center === "agent" ? { kind: "agent", id: "exemplo/agente", label: "Agente de exemplo" } : { kind: "channel", id: sample.channels[0]!, label: "Canal de exemplo" }}
+                        center={center === "agent" ? { kind: "agent", id: SAMPLE_AGENT, label: "Agente de exemplo" } : { kind: "channel", id: sample.channels[0]!, label: "Canal de exemplo" }}
                         memories={memories}
                         staleAfterDays={90}
                         channelColors={center === "agent" ? colors : undefined}
                         actions={ACTIONS}
                         layoutConfig={config}
+                        related={related}
                         className="h-[28rem] max-md:h-[60dvh]"
                     />
                 </EngramindProvider>

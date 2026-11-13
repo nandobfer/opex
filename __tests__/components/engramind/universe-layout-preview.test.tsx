@@ -40,6 +40,24 @@ describe('prévia da aba Visualização', () => {
     expect(new Set(radii().map((radius) => Math.round(radius))).size).toBeGreaterThan(60)
   })
 
+  it('OPE-164: com links entre similares, mostra arestas fictícias (até relatedMax) sem consultar o Engramind', () => {
+    wrap({ ...DEFAULT_UNIVERSE_LAYOUT, links: 'related', relatedMax: 1 })
+    const related = flowItems.edges.filter((edge) => edge.type === 'related')
+    expect(related.length).toBeGreaterThan(0)
+    const outgoing = new Map<string, number>()
+    for (const edge of related) outgoing.set(edge.source, (outgoing.get(edge.source) ?? 0) + 1)
+    expect(Math.max(...outgoing.values())).toBeLessThanOrEqual(2)
+    expect(flowItems.edges.filter((edge) => edge.type === 'orbit').every((edge) => (edge.data as { authored?: boolean }).authored)).toBe(true)
+    expect(net.get).not.toHaveBeenCalled()
+  })
+
+  it('OPE-164: authorLinks desligado no modo center tira só o destaque', () => {
+    wrap({ ...DEFAULT_UNIVERSE_LAYOUT, authorLinks: false })
+    const orbits = flowItems.edges.filter((edge) => edge.type === 'orbit')
+    expect(orbits).toHaveLength(120)
+    expect(orbits.some((edge) => (edge.data as { authored?: boolean }).authored)).toBe(false)
+  })
+
   it('quantidade, canais e centro da prévia são controles locais', async () => {
     wrap()
     fireEvent.change(screen.getByLabelText('Memórias de exemplo'), { target: { value: '40' } })

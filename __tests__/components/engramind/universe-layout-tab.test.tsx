@@ -131,6 +131,43 @@ describe('aba Visualização', () => {
     expect(state.save).not.toHaveBeenCalled()
   })
 
+  it('OPE-164: as quatro predefinições aparecem, com "Relacionadas"', () => {
+    mount()
+    const group = screen.getByRole('group', { name: 'Predefinições' })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      expect.stringContaining('Anéis (padrão)'),
+      expect.stringContaining('Anéis soltos'),
+      expect.stringContaining('Espiral'),
+      expect.stringContaining('Relacionadas'),
+    ])
+  })
+
+  it('OPE-164: "Relacionadas" preenche os valores fixos e os links entre similares como pendente, sem mudar o link do autor', async () => {
+    mount()
+    fireEvent.click(document.getElementById('universe-authorLinks')!)
+    await waitFor(() => expect((document.getElementById('universe-authorLinks') as HTMLInputElement).checked).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /Relacionadas/ }))
+    await waitFor(() => expect(input('ringGap').value).toBe('200'))
+    expect(input('slot').value).toBe('120')
+    expect(input('angleJitter').value).toBe('35')
+    expect(input('radiusJitter').value).toBe('32')
+    expect(screen.getByRole('radio', { name: 'Entre similares' }).getAttribute('aria-checked')).toBe('true')
+    expect(input('relatedMax').value).toBe('3')
+    expect((document.getElementById('universe-authorLinks') as HTMLInputElement).checked).toBe(false)
+    expect(screen.getByRole('button', { name: /Relacionadas/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(state.save).not.toHaveBeenCalled()
+  })
+
+  it('OPE-164: "Arestas por memória" só aparece com links entre similares e recusa mais de 3', async () => {
+    mount()
+    expect(input('relatedMax')).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Entre similares' }))
+    await waitFor(() => expect(input('relatedMax')).toBeTruthy())
+    fireEvent.change(input('relatedMax'), { target: { value: '4' } })
+    expect(await screen.findByText('Arestas por memória: o máximo é 3')).toBeTruthy()
+    expect(screen.getByTestId('universe-field-authorLinks').textContent).toContain('Padrão: ligado')
+  })
+
   it('exportar: JSON com os valores do formulário (inclusive não salvos) e botão Copiar', async () => {
     mount()
     fireEvent.change(input('ringGap'), { target: { value: '72' } })

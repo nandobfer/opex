@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Download, Loader2, RotateCcw, Save, Undo2, Upload } from "lucide-react"
 import { useForm, useWatch, type Resolver } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { DEFAULT_UNIVERSE_LAYOUT, sameUniverseLayout, universeLayoutSchema, type UniverseLayoutConfig } from "@engramind/client"
+import { applyUniverseLayoutPreset, DEFAULT_UNIVERSE_LAYOUT, sameUniverseLayout, universeLayoutSchema, type UniverseLayoutConfig } from "@engramind/client"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { FORM_GRID } from "@/components/ui/form-grid"
@@ -14,6 +14,7 @@ import { useResetUniverseLayout, useSaveUniverseLayout } from "../../../hooks/us
 import { Section } from "../../shared/Section"
 import { ChoiceLayoutField, NumberLayoutField, SwitchLayoutField } from "./UniverseLayoutFields"
 import { UniverseLayoutExportDialog, UniverseLayoutImportDialog } from "./UniverseLayoutJsonDialogs"
+import { UniverseLayoutLinksSection } from "./UniverseLayoutLinksSection"
 import { UniverseLayoutPresets } from "./UniverseLayoutPresets"
 import { UniverseLayoutPreview } from "./UniverseLayoutPreview"
 import { useDebouncedValue } from "./useDebouncedValue"
@@ -69,6 +70,8 @@ export function UniverseLayoutForm({ saved, isDefault, onDirtyChange, onSaved }:
     const reset = useResetUniverseLayout()
 
     const apply = (config: UniverseLayoutConfig) => form.reset(config, { keepDefaultValues: true })
+    // O preset não muda o "Link do agente às memórias que ele criou" (OPE-164); o JSON importado muda tudo.
+    const applyPreset = (config: UniverseLayoutConfig) => apply(applyUniverseLayoutPreset(values, { config }))
     const resetField = (name: keyof UniverseLayoutConfig) => form.setValue(name, DEFAULT_UNIVERSE_LAYOUT[name] as never, { shouldDirty: true, shouldValidate: true })
     const submit = () => void form.handleSubmit((data) => save.mutate(data, { onSuccess: () => void onSaved() }))()
     const common = { control: form.control, errors: form.formState.errors, saved, values, onReset: resetField }
@@ -96,7 +99,7 @@ export function UniverseLayoutForm({ saved, isDefault, onDirtyChange, onSaved }:
                     </>
                 }
             >
-                <UniverseLayoutPresets values={values} onApply={apply} />
+                <UniverseLayoutPresets values={values} onApply={applyPreset} />
             </Section>
 
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
@@ -147,6 +150,7 @@ export function UniverseLayoutForm({ saved, isDefault, onDirtyChange, onSaved }:
                             <NumberLayoutField {...common} name="particleMaxPx" />
                         </div>
                     </Section>
+                    <UniverseLayoutLinksSection {...common} />
                 </div>
                 <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
                     <UniverseLayoutPreview config={previewConfig} />

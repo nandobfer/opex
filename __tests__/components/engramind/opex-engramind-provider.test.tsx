@@ -115,6 +115,50 @@ describe('layout dos universos (OPE-142)', () => {
   })
 })
 
+describe('similares dos universos (OPE-164)', () => {
+  const universe = (
+    <MemoryUniverse
+      center={{ kind: 'channel', id: 'eng/global', label: 'eng/global' }}
+      staleAfterDays={90}
+      actions={{ onActive: vi.fn(), onPin: vi.fn(), onEdit: vi.fn(), onDelete: vi.fn(), readOnly: true }}
+      memories={Array.from({ length: 6 }, (_, index) => ({
+        id: `m${index}`, channel: 'eng/global', title: `M ${index}`, text: 't', category: 'fact', status: 'active' as const, version: 1,
+        createdAt: new Date(Date.now() - index * 86_400_000).toISOString(), updatedAt: now, retrievals: 0, injections: 0, lastRetrievedAt: null, verifiedAt: null, stale: false, author: null,
+      }))}
+    />
+  )
+  const related = { related: { m0: [{ id: 'm3', score: 0.9 }] }, pending: false, ready: true }
+  const mockLayout = (links: 'center' | 'related') =>
+    net.get.mockImplementation(async (url: string) => ({
+      data: { success: true, data: url === '/engramind/universe-layout' ? { config: { ...DEFAULT_UNIVERSE_LAYOUT, links }, isDefault: false, updatedAt: now } : url === '/engramind/related-memories' ? related : respond(url) },
+    }))
+
+  it('com links entre similares, busca as similares e a lib desenha as arestas', async () => {
+    mockLayout('related')
+    wrap(<OpexEngramindProvider channelLabels={false}>{universe}</OpexEngramindProvider>)
+    await waitFor(() => expect(flowItems.edges.map((edge) => edge.id)).toContain('related:m0|m3'))
+    expect(flowItems.edges.some((edge) => edge.type === 'orbit')).toBe(false)
+  })
+
+  it('com links ao centro, não consulta as similares', async () => {
+    mockLayout('center')
+    wrap(<OpexEngramindProvider channelLabels={false}>{universe}</OpexEngramindProvider>)
+    await waitFor(() => expect(flowItems.edges.filter((edge) => edge.type === 'orbit')).toHaveLength(6))
+    expect(net.get).not.toHaveBeenCalledWith('/engramind/related-memories', expect.anything())
+  })
+
+  it('erro ao buscar as similares não quebra a rede: desenha sem arestas', async () => {
+    net.get.mockImplementation(async (url: string) => {
+      if (url === '/engramind/related-memories') throw new Error('falhou')
+      return { data: { success: true, data: url === '/engramind/universe-layout' ? { config: { ...DEFAULT_UNIVERSE_LAYOUT, links: 'related' }, isDefault: false, updatedAt: now } : respond(url) } }
+    })
+    wrap(<OpexEngramindProvider channelLabels={false}>{universe}</OpexEngramindProvider>)
+    await waitFor(() => expect(net.get).toHaveBeenCalledWith('/engramind/related-memories', expect.anything()))
+    expect(flowItems.nodes.filter((node) => node.type === 'memory')).toHaveLength(6)
+    expect(flowItems.edges.filter((edge) => edge.type === 'related')).toHaveLength(0)
+  })
+})
+
 describe('toLibError (axios → EngramindError)', () => {
   const axiosError = (status: number, data: unknown, headers: Record<string, string> = {}) =>
     new AxiosError('falhou', 'ERR_BAD_RESPONSE', undefined, undefined, { status, statusText: '', data, headers: new AxiosHeaders(headers), config: { headers: new AxiosHeaders() } } as never)

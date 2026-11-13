@@ -369,13 +369,26 @@ novas posições e o quadro se reenquadra).
     faixas dos anéis nunca se misturam), `jitterSeed` (embaralha de forma estável; sem `Math.random()`),
     `avoidOverlap` e `minDistance` (o desvio é reduzido até a partícula ficar a essa distância das outras).
   - Partículas: `particleMinPx` e `particleMaxPx` (o máximo não pode ser menor que o mínimo).
+  - Links (OPE-164): `links` ("Links": `center` = ao centro, o desenho de sempre | `related` = entre
+    similares), `relatedMax` ("Arestas por memória", 1 a 3, padrão 3; só aparece e só vale com `related`) e
+    `authorLinks` ("Link do agente às memórias que ele criou", padrão ligado). A nota mínima de similaridade
+    não é configurável: valem os limiares do Engramind (`memory.vector_similar_threshold` e, sem embeddings,
+    `memory.similar_threshold`).
   Cada campo tem rótulo, tooltip (`help/universe-layout.ts`), intervalo, padrão e "Voltar ao padrão"; o campo
   alterado fica destacado.
 - **Predefinições** (`UNIVERSE_LAYOUT_PRESETS`): "Anéis (padrão)", "Anéis soltos" (a 0.4.0: 84/68, desvio
-  35 %/32 %, mais novas por fora) e "Espiral". Aplicar preenche o formulário como alteração pendente.
+  35 %/32 %, mais novas por fora), "Espiral" e "Relacionadas" (OPE-164: valores fixos da configuração salva em
+  13/11/2026 — anéis 150/200/120, mínimo 6, giro 34,95°, mais novas por fora, desvio 35 %/32 %, distância
+  mínima 42, partículas 10–34 — com `links = related` e `relatedMax = 3`; mudar a configuração salva depois
+  não muda o preset). Os presets anteriores declaram `links = center`. Aplicar preenche o formulário como
+  alteração pendente e **não muda o `authorLinks`** (`applyUniverseLayoutPreset`; o preset aparece ativo
+  ignorando esse campo, `matchesUniverseLayoutPreset`). O JSON importado, ao contrário, muda tudo.
 - **Prévia**: o `MemoryUniverse` da lib com memórias de exemplo (`network/sample-universe.ts`, determinístico;
   quantidade 1–500, canais 1–8 e centro agente/canal, só da prévia), alimentado pelos valores **ainda não
-  salvos** (válidos, com espera de 150 ms). Não consulta o Engramind nem abre o SSE.
+  salvos** (válidos, com espera de 150 ms). Não consulta o Engramind nem abre o SSE. Desde a OPE-164 as memórias
+  de exemplo ganham **similares fictícias determinísticas** (`buildSampleRelated`: um "assunto" por hash dentro
+  do canal, até 3 similares do mesmo assunto e canal) e algumas são do agente de exemplo do centro
+  (`SAMPLE_AGENT`), então a prévia mostra a aproximação, as arestas, `relatedMax` e `authorLinks` não salvos.
 - **Exportar / Importar**: Exportar mostra o JSON dos valores do formulário (`$schema`
   `engramind-universe-layout`, `version` 1) com Copiar. Importar recebe o JSON (inteiro ou só os campos a
   mudar; os ausentes assumem o padrão), valida e preenche o formulário como **alteração pendente**; JSON
@@ -386,6 +399,33 @@ novas posições e o quadro se reenquadra).
   sem SSE). **Restaurar padrão** (`DELETE`) apaga a configuração, com confirmação. Configuração gravada que
   ficou inválida cai no padrão, com aviso no log.
 - Como as demais abas de IA, a aba não tem `<form>` próprio: Salvar é `type="button"` com `handleSubmit`.
+
+#### Links entre similares (OPE-164)
+
+- **Fonte das similares (decisão do dono na OPE-164):** o campo `similar` de `GET /v1/memories/{id}` lido com o
+  token admin, que não conta uso nem dispara consumo. O `POST /v1/hints` foi descartado: cada dica soma consulta
+  e último uso na memória e dispara `memory.consumed` (inflaria tamanho e brilho das partículas e atrapalharia o
+  esquecimento do consolidador), e sem embeddings ele devolve lista vazia. Consequência: **no máximo 3
+  similares por memória, sempre do mesmo canal** (por isso `relatedMax` vai até 3 e não há aresta entre canais
+  diferentes no universo do agente); com vetor, pelo cosseno, e sem embeddings, por termos.
+- **Cache no Opex** (`server/related-memories.ts`, coleção `engramind_related_memories`, `_id` = id da memória,
+  com `channel`, `related: { id, score }[]`, `memoryVersion`, `computedAt` e `failedAt`; nunca o texto):
+  - o primeiro cálculo só começa quando a rede pede as similares (`GET /api/engramind/related-memories`, só o
+    dono), o que só acontece com o layout vigente em `links = related` (`useRelatedMemories` no
+    `OpexEngramindProvider`, prop `relatedMemories` da lib). O pedido fica em `engramind_state.relatedMemories`
+    (`requestedAt`, `completedAt`);
+  - o preenchimento lista as memórias ativas e fixadas e calcula as que faltam em lotes de 25, com 4 chamadas
+    simultâneas, publicando `engramind-updated` `{ type: "related-memories" }` (só Pusher) a cada lote: as
+    arestas entram aos poucos e a rede nunca espera o fim. A cada 10 min o pedido completa o que faltou ou
+    falhou;
+  - depois, só o webhook recalcula (`onRelatedMemoryEvent`): `memory.created`/`memory.updated` recalculam só as
+    memórias do evento (as que apontam para uma editada ficam até o próprio recálculo; memória movida de canal
+    sai das listas do canal antigo) e `memory.deleted` tira a memória do cache e das listas das outras;
+    `memory.archived` não muda nada (a lib descarta as inativas);
+  - erro, 404 ou lentidão do Engramind nunca quebram a rede: a memória fica sem arestas, com aviso no log (Pino)
+    e `failedAt`. A leitura é um `GET` sem corpo: nenhum texto de memória vai ao debug.
+- O hook invalida a consulta com `engramind-updated` `related-memories` ou `memory.*`; com `links = center`
+  nada é consultado.
 
 ### Visões
 
@@ -518,7 +558,19 @@ novas posições e o quadro se reenquadra).
   (`isAuthoredByCenter`: `authorAgent === center.id`, OPE-113) tem o link **destacado**: mesma cor,
   traço mais grosso (`ORBIT_STROKE_WIDTH`: 2,25 contra 1) e mais opaco (`data-authored`); o card de
   estatísticas explica ("Link destacado: memória escrita por este agente"). No universo do canal (e
-  nos de `/integracoes/ia`), links fracos em roxo primário, sem destaque.
+  nos de `/integracoes/ia`), links fracos em roxo primário, sem destaque. Com `authorLinks` desligado
+  (OPE-164), o link da memória do agente fica igual aos demais (`centerLinkKind` da lib).
+- **Links entre similares** (`links = related`, OPE-164; `network/related-edges.ts` e
+  `network/related-order.ts` da lib, puros): não há link ao centro, exceto o destacado das memórias escritas
+  pelo agente do centro com `authorLinks` ligado (no universo do canal, nenhum). Cada memória ativa ou fixada
+  se liga a até `relatedMax` similares do mesmo universo e canal (`relatedPairs`: pela nota, desempate pelo id;
+  a própria memória, as inativas, as ausentes e as de outro canal são descartadas e a próxima candidata entra),
+  com **um traço por par** (aresta `related:<id menor>|<id maior>`, tipo `related`): a origem é o lado com a nota
+  maior (empate: o menor id), a cor é a do canal da origem (no universo do canal, roxo primário) e a espessura e a
+  opacidade crescem com a nota normalizada no universo (`relatedEdgeStyle`). A aresta nova se desenha ao chegar
+  (parada com movimento reduzido); nós e arestas são reaproveitados no hover e no card aberto. Sem link ao
+  centro, o consumo ao vivo pulsa a memória e o centro, mas a partícula não viaja até o centro. Vale nos três
+  lugares (`/engramind`, universos de `/integracoes/ia` e aba Memórias dos rotineiros).
 - **Navegação** (`useUniverseParam`): `?app=<slug>` (visão do app, OPE-129) e `?universo=canal:<slug>` / `agente:<app/agente>` (`router.push`:
   link compartilhável e voltar do navegador); trilha "Rede › App X › Agente Y" / "Rede › Canal X" com
   **Voltar**; no universo do canal, **Ações do canal** abre o `ChannelPanel`; Voltar e **Esc** sobem **um nível** (universo → app, se houver → Apps x canais; fora de diálogos e campos), e o
@@ -532,7 +584,7 @@ novas posições e o quadro se reenquadra).
 | Atributo | Regra |
 |---|---|
 | Cor | A do canal da memória (`universeChannelColors`): roxo primário para o canal com mais memórias do universo (e em todo universo de canal), cor estável `--chart-2..6` (matizes distintas antes de repetir; ver o universo do agente) para os demais. Apagada em direção ao cinza pelo brilho (`particleColor`); a bolinha do card usa a cor do canal sem o brilho (`baseColor`). |
-| Distância | Pelo layout configurado (aba Visualização, OPE-142). Padrão: a idade (criação), mais nova no anel interno e mais antiga no externo (data inválida conta como a mais antiga), em anéis concêntricos. Pode usar outro critério (atualização, último uso ou uso), o sentido inverso, espiral, agrupamento por canal e desvio estável pelo `id`. Anéis e `universeRingCounts` como descrito no universo do canal; vale com o agente ou o canal no centro. |
+| Distância | Pelo layout configurado (aba Visualização, OPE-142). Com `links = related` (OPE-164), as vagas (anel ou coroa da espiral, raio, passo, desvio estável e tamanho) continuam as do critério; só a ordem dentro de cada faixa (anel, arco do canal com `grouping = channel` ou coroa da espiral) aproxima as similares (`orderBySimilarity`: cadeias de similares lado a lado e, entre anéis, a âncora no ângulo da similar mais forte já posicionada; determinístico, desempate pelo critério e pelo id). Sem similares, as posições são idênticas às do modo `center`. Padrão: a idade (criação), mais nova no anel interno e mais antiga no externo (data inválida conta como a mais antiga), em anéis concêntricos. Pode usar outro critério (atualização, último uso ou uso), o sentido inverso, espiral, agrupamento por canal e desvio estável pelo `id`. Anéis e `universeRingCounts` como descrito no universo do canal; vale com o agente ou o canal no centro. |
 | Tamanho | `consultas + injeções` em escala `log1p` relativa (10–34 px por padrão; faixa configurável); tudo zero: mínimo. Consumo ao vivo soma +2 px até a releitura. |
 | Brilho | 1 no último uso, linear até 0 (cinza) em `consolidation.stale_after_days` (global; a chave não aceita sobreposição por canal; padrão 90). Último uso = `last_retrieved_at` do Engramind ou a criação (`verified_at` do consolidador não é consumo e não conta) (nunca usada conta da criação), igual para todos os apps (OPE-116). Consumida ao vivo desde a última leitura: brilho cheio na hora, inclusive a `stale_candidate` (a releitura traz o estado do Engramind). |
 | Fixada | Anel primário e alfinete no card; brilho mínimo 0,25. |
@@ -1011,6 +1063,7 @@ depois da emissão, o token recém-emitido é revogado na hora e a ferramenta pe
 | `GET\|POST\|PUT\|PATCH\|DELETE /api/engramind/<recurso>` | Proxy do catálogo (`[...path]`): `settings`, `channels/:channel/settings`, `secrets/:key`, `providers/redator/test`, `providers/embedding/{test,models}`, `embeddings/reembed`, `apps[/:app]`, `agents[/:agent]`, `tokens[/:token[/revoke]]`, `channels[/:channel[/archive\|restore\|stats]]`, `subscriptions[/:id]`, `memories[/:memory[/history\|revert\|pin\|unpin\|archive\|restore\|move]]` (`POST memories` = `create_memory` e `PATCH memories/:memory` = `update_memory` com `expected_version`, OPE-109; `status` da listagem aceita vários separados por vírgula), `memories/search`, `status`, `jobs[/:job/retry]`, `llm-calls`, `usage`, `audit`, `whoami` |
 | `POST /api/engramind/memories/import` | Importação com a chave derivada |
 | `GET/PUT/DELETE /api/engramind/universe-layout` | Layout dos universos de memórias (OPE-142): em uso / gravar (schema da lib, 400 sem gravar) / voltar ao padrão |
+| `GET /api/engramind/related-memories` | Similares de cada memória (OPE-164, ids e notas) e o estado do cálculo (`pending`, `ready`); o primeiro pedido começa o cálculo em segundo plano |
 | `GET /api/engramind/events` | SSE da rede e dos universos (lib `@engramind/client`, OPE-116) |
 | `GET/POST /api/engramind/providers/from-opex` | IA do Opex: estado das seções / aplicar (`applyAiSourceSchema`) |
 | `POST /api/engramind/providers/from-opex/test` e `/resend` | Testar a proposta com a chave do Opex / reenviar a chave |
@@ -1024,7 +1077,7 @@ segredos) e logada (Pino, `feature: "engramind"`).
 ## Dados
 
 - `engramind_webhook_events` (`_id` = id do evento, TTL 24 h), `engramind_state` (singleton
-  `pendingApply`, `sources` da IA do Opex, `agentTokens` cifrados, `memoryContext` e o `universeLayout` da aba Visualização) e
+  `pendingApply`, `sources` da IA do Opex, `agentTokens` cifrados, `memoryContext`, o `universeLayout` da aba Visualização e o `relatedMemories` do cache das similares), `engramind_related_memories` (similares por memória, OPE-164: ids, canal e notas) e
   `engramind_context_cache` (último contexto por consumidor + canais, com `format`, `memoryIds` e
   `delivered`) — `server/models.ts`.
 - `engramind_memory_usage`: sem uso desde a OPE-116 (o modelo saiu do código). A coleção fica intacta até o
@@ -1053,7 +1106,11 @@ de cor fixa do pacote). No Opex ficam os testes da integração, com a lib real 
   layout, validação, salvar, predefinições, exportar, importar, restaurar, sem `form` aninhado), a prévia com a
   lib real e o layout gravado chegando aos universos e mudando ao vivo. Servidor:
   `__tests__/features/engramind/universe-layout-service.test.ts`, `universe-layout-route.test.ts` e
-  `sample-universe.test.ts`. O padrão ser igual ao desenho original e todas as opções do layout são testadas na
+  `sample-universe.test.ts`. Links entre similares (OPE-164): `related-memories-service.test.ts`,
+  `related-memories-route.test.ts`, `use-related-memories.test.tsx`, o bloco "similares dos universos" de
+  `opex-engramind-provider.test.tsx` e os casos OPE-164 da aba, da prévia e da rota do layout; as funções puras
+  e o desenho estão na lib (`__tests__/network/related-layout.test.ts`,
+  `__tests__/react/memory-universe-related.test.tsx`). O padrão ser igual ao desenho original e todas as opções do layout são testadas na
   lib (`__tests__/network/universe-layout.test.ts`, `__tests__/core/universe-layout.test.ts`).
 - `__tests__/components/engramind/engramind-page.test.tsx`: card "O que é o Engramind" depois da rede,
   Configurar e Saiba mais.

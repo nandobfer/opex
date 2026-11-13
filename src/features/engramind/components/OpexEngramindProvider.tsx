@@ -16,6 +16,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
 import { ENGRAMIND_INTEGRATION_HREF, ENGRAMIND_PAGE_HREF, OPEX_APP_SLUG } from "../constants"
 import { useAgentActivity } from "../hooks/useAgentActivity"
+import { useRelatedMemories } from "../hooks/useRelatedMemories"
 import { useUniverseLayout } from "../hooks/useUniverseLayout"
 import { useOrcamentoClients } from "@/features/orcamentos/hooks/useOrcamentos"
 import { centralChannelLabels, clientChannelLabels } from "../network/channel-labels"
@@ -84,6 +85,8 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
     const activity = useAgentActivity()
     // Layout dos universos (aba Visualização): vale para a rede, os universos de IA e os dos rotineiros; muda ao vivo.
     const universeLayout = useUniverseLayout({ realtime: true })
+    // Similares (OPE-164): só com "Links entre similares"; falha ou demora não quebra a rede (desenha sem arestas).
+    const related = useRelatedMemories({ enabled: universeLayout.data?.config?.links === "related" })
     // Gravadas (auditoria do Opex): só os agentes do app do Opex (`opex/<identidade>`).
     const agentWrites = useCallback(
         (id: string) => {
@@ -118,6 +121,7 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
             messages={messages}
             slots={slots}
             universeLayout={universeLayout.data?.config}
+            relatedMemories={related.map}
             storagePrefix=""
         >
             {children}

@@ -24,4 +24,7 @@ export const UNIVERSE_LAYOUT_HELP: Record<keyof UniverseLayoutConfig, string> = 
     minDistance: "Distância mínima entre os centros de duas partículas, em pixels, respeitada quando evitar sobreposição está ligado. 0 desliga a checagem.",
     particleMinPx: "Tamanho (diâmetro) da partícula menos usada do universo, em pixels.",
     particleMaxPx: "Tamanho (diâmetro) da partícula mais usada do universo, em pixels.",
+    links: "Ao centro: cada memória tem um link até o agente ou canal do centro (o desenho de sempre). Entre similares: os links ao centro somem e cada memória se liga às similares dela do mesmo canal; dentro de cada anel, as similares ficam lado a lado (os anéis, raios, desvio e tamanhos não mudam).",
+    relatedMax: "Quantas arestas, no máximo, partem de cada memória no modo Entre similares. Vai até 3: o Engramind devolve até 3 similares por memória, sempre do mesmo canal.",
+    authorLinks: "Liga o agente do centro às memórias que ele mesmo criou, com o link destacado. Desligado, no modo Ao centro o link dela fica igual aos demais; no modo Entre similares não sobra link ao centro. Aplicar uma predefinição não muda este campo.",
 }
