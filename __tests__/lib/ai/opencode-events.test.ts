@@ -10,6 +10,8 @@ describe('normalizeOpencodeEvent', () => {
 
   it('converte texto, ferramentas, custo e fim da execução', () => {
     expect(normalizeOpencodeEvent(ev('session.text.delta', { delta: 'Olá' }), 's1')).toEqual({ kind: 'text', delta: 'Olá' })
+    // Com a parte de origem, o texto identifica o bloco (para não colar blocos distintos no texto do turno).
+    expect(normalizeOpencodeEvent(ev('session.text.delta', { delta: 'Olá', assistantMessageID: 'm1', ordinal: 2 }), 's1')).toEqual({ kind: 'text', delta: 'Olá', block: 'm1:2' })
     expect(normalizeOpencodeEvent(ev('session.tool.input.started', { id: 't1', name: 'bash' }), 's1')).toEqual({ kind: 'tool-start', id: 't1', name: 'bash' })
     expect(normalizeOpencodeEvent(ev('session.tool.success', { id: 't1', content: [{ type: 'text', text: 'ok' }] }), 's1')).toEqual({ kind: 'tool-done', id: 't1', output: 'ok' })
     expect(normalizeOpencodeEvent(ev('session.tool.failed', { id: 't1', error: { message: 'boom' } }), 's1')).toMatchObject({ kind: 'tool-error', message: 'boom' })

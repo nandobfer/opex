@@ -8,7 +8,11 @@ rodam na mesma máquina.
 Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
 `@opencode/client`), `src/lib/ai/opencode-events.ts` (eventos normalizados, puro) e
 `src/lib/ai/opencode-run.ts` (runner genérico de um turno — compartilhado com o refinamento de
-tarefas, ver `modules/refinement.md`). Modelos em `src/lib/db/models/Agentic.ts`; a saída gravada
+tarefas, ver `modules/refinement.md`). O texto do turno (`result.text` e os pedaços do `onText`) separa
+por linha em branco os blocos de texto distintos — outra parte/mensagem (`assistantMessageID:ordinal`
+do evento) ou texto depois de um evento que não é texto — e a releitura do histórico na reconexão junta
+as partes do mesmo jeito (`src/lib/ai/opencode-text.ts`, puro); a saída publicada na tela segue com os
+deltas originais (OPE-162). Modelos em `src/lib/db/models/Agentic.ts`; a saída gravada
 (`agentic_events`) também é usada pelo refinamento. O backup do MongoDB da prévia (OPE-54) tem
 caminhos puros em `src/features/agentic/preview-backup.ts` e reserva/conferência em
 `src/features/agentic/server/preview-backup.ts`; se ele roda ou não é uma opção da central
