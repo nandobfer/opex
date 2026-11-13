@@ -4,10 +4,12 @@ import { useState } from "react"
 import { UNIVERSE_LAYOUT_PRESETS } from "@engramind/client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FORM_GRID } from "@/components/ui/form-grid"
+import { cn } from "@/lib/utils"
 import { useUniverseLayout } from "../../../hooks/useUniverseLayout"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { StaleFormNotice } from "../../shared/StaleFormNotice"
 import { useFormSnapshot } from "../../shared/useFormSnapshot"
+import { FIELD_WIDE_CLASS } from "./UniverseLayoutFields"
 import { UniverseLayoutForm } from "./UniverseLayoutForm"
 import { UNIVERSE_PRESETS_GRID } from "./UniverseLayoutPresets"
 import { UniverseLayoutPreviewSkeleton } from "./UniverseLayoutPreview"
@@ -39,6 +41,18 @@ export function UniverseLayoutTab({ onDirtyChange, onConfigure }: { onDirtyChang
     )
 }
 
+/**
+ * Campos de cada seção do formulário (`true` = campo de linha inteira). Links (OPE-164), com o padrão
+ * `links = center`: "Links" e "Link do agente…" de linha inteira; "Arestas por memória" só com `related`.
+ */
+const SKELETON_SECTIONS: readonly (readonly boolean[])[] = [
+    [false, false, false, false, false],
+    [false, false, false, false, false],
+    [false, false, false, false, false],
+    [false, false],
+    [true, true],
+]
+
 /** Mesma estrutura do resultado: cartão das predefinições, formulário em seções e a prévia ao lado. */
 export function UniverseLayoutSkeleton() {
     return (
@@ -53,12 +67,12 @@ export function UniverseLayoutSkeleton() {
             </div>
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col gap-6">
-                    {[5, 5, 5, 2, 3].map((fields, section) => (
+                    {SKELETON_SECTIONS.map((fields, section) => (
                         <div key={section} className="space-y-4 rounded-xl border p-6">
                             <Skeleton className="h-5 w-28" />
                             <div className={FORM_GRID}>
-                                {Array.from({ length: fields }, (_, index) => (
-                                    <Skeleton key={index} className="h-24 w-full rounded-lg" />
+                                {fields.map((wide, index) => (
+                                    <Skeleton key={index} className={cn("h-24 w-full rounded-lg", wide && FIELD_WIDE_CLASS)} />
                                 ))}
                             </div>
                         </div>

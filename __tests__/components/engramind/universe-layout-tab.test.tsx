@@ -35,7 +35,7 @@ vi.mock('@/features/engramind/components/integration/universe-layout/UniverseLay
   UniverseLayoutPreviewSkeleton: () => <div />,
 }))
 
-import { UniverseLayoutTab } from '@/features/engramind/components/integration/universe-layout/UniverseLayoutTab'
+import { UniverseLayoutSkeleton, UniverseLayoutTab } from '@/features/engramind/components/integration/universe-layout/UniverseLayoutTab'
 
 const input = (name: string) => document.getElementById(`universe-${name}`) as HTMLInputElement
 const previewConfig = () => JSON.parse(screen.getByTestId('preview').getAttribute('data-config')!) as UniverseLayoutConfig
@@ -166,6 +166,19 @@ describe('aba Visualização', () => {
     fireEvent.change(input('relatedMax'), { target: { value: '4' } })
     expect(await screen.findByText('Arestas por memória: o máximo é 3')).toBeTruthy()
     expect(screen.getByTestId('universe-field-authorLinks').textContent).toContain('Padrão: ligado')
+  })
+
+  it('OPE-164: o skeleton da seção Links tem os 2 campos de linha inteira do padrão (links ao centro)', () => {
+    render(<UniverseLayoutSkeleton />)
+    const sections = screen.getByTestId('universe-layout-skeleton').querySelectorAll('.rounded-xl.border.p-6')
+    const links = [...sections].at(-1)!.querySelectorAll('.h-24')
+    expect(links).toHaveLength(2)
+    for (const field of links) expect(field.classList.contains('sm:col-span-2')).toBe(true)
+    cleanup()
+    mount()
+    expect(screen.getByTestId('universe-field-links').classList.contains('sm:col-span-2')).toBe(true)
+    expect(screen.getByTestId('universe-field-authorLinks').classList.contains('sm:col-span-2')).toBe(true)
+    expect(screen.queryByTestId('universe-field-relatedMax')).toBeNull()
   })
 
   it('exportar: JSON com os valores do formulário (inclusive não salvos) e botão Copiar', async () => {
