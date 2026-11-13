@@ -110,13 +110,26 @@ describe('critério aprovado (OPE-130, D14): chave idempotente e edição', () =
     expect(engramind.calls.filter((call) => call.method === 'PATCH')).toHaveLength(0)
   })
 
-  it('a sexta gravação no turno (remember + update_memory) é recusada', async () => {
-    engramind.handler = (call) => (call.method === 'GET' ? memory('m_1') : { memory: memory('m_1'), duplicate: false, created: true, similar: [] })
+  it('sem limite por turno (OPE-163): 10 gravações seguidas (remember + update_memory) são aceitas', async () => {
+    engramind.handler = (call) => (call.method === 'GET' ? memory('m_1', { channel: 'agentes/rotineiros/indexador' }) : { memory: memory('m_1', { channel: 'agentes/rotineiros/indexador' }), duplicate: false, created: true, similar: [] })
     const { run } = tools()
     for (let i = 0; i < 3; i++) await run('remember', { texto: `fato ${i}` })
     await run('update_memory', { id: 'm_1', texto: 'a' + 'b'.repeat(5) })
     await run('update_memory', { id: 'm_1', texto: 'c' + 'd'.repeat(5) })
-    await expect(run('remember', { texto: 'sexta' })).rejects.toThrow(/Limite de 5/)
+    for (let i = 5; i < 10; i++) await expect(run('remember', { texto: `fato ${i}` })).resolves.toMatchObject({ id: 'm_1' })
+    expect(engramind.calls.filter((call) => call.method === 'POST' && call.path === '/v1/memories')).toHaveLength(8)
+    expect(engramind.calls.filter((call) => call.method === 'PATCH')).toHaveLength(2)
+    expect(engramind.calls.filter((call) => call.method === 'POST').every((call) => call.body?.channel === 'agentes/rotineiros/indexador')).toBe(true)
+    expect(audits).toHaveLength(10)
+  })
+
+  it('depois de mais de 5 gravações, canal fora da lista continua recusado sem chamar o Engramind', async () => {
+    engramind.handler = () => ({ memory: memory('m_1'), duplicate: false, created: true, similar: [] })
+    const { run } = tools()
+    for (let i = 0; i < 6; i++) await run('remember', { texto: `fato ${i}` })
+    const before = engramind.calls.length
+    await expect(run('remember', { canal: 'agentes/desenvolvedor/global', texto: 'fora' })).rejects.toMatchObject({ code: 'ROUTINE_CHANNEL_NOT_ALLOWED' })
+    expect(engramind.calls).toHaveLength(before)
   })
 })
 
