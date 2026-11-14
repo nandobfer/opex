@@ -1,7 +1,9 @@
 # Quota do OpenCode (`src/features/opencode-quota`)
 
 Painel **Quota do OpenCode** na coluna "Tarefas" da Central de desenvolvimento (`/desenvolvimento`),
-logo abaixo da busca. Mostra os limites que o plugin
+logo abaixo da busca. No celular (`< lg`, OPE-166) o painel sai do topo da coluna e abre numa folha de
+baixo pelo botão **Quota do OpenCode** (com a bolinha da pior faixa, a mesma da barra lateral), com a mesma
+preferência salva (ver `modules/agentic-dev.md`, "Coluna Tarefas no celular"). Mostra os limites que o plugin
 [`@slkiser/opencode-quota`](https://github.com/slkiser/opencode-quota), instalado no servidor do
 OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal…) e o tempo até o reset.
 

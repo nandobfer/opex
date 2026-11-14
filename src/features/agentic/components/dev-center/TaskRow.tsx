@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { TriangleAlert } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
@@ -23,6 +24,11 @@ interface TaskRowProps {
     workbench: WorkbenchSummaryDto | undefined
     queueItem: QueueItemDto | undefined
     active: boolean
+    /**
+     * Celular (`< lg`, OPE-166): no toque não há dica, então o motivo da espera vira texto abaixo do código e
+     * o nome da coluna entra na linha do projeto.
+     */
+    compact?: boolean
 }
 
 /** Classes do card da lista (o skeleton usa as mesmas para ter a mesma altura). */
@@ -46,13 +52,14 @@ function ColumnDot({ column }: { column: BoardColumnView }) {
  * Card de uma tarefa na lista da Central de desenvolvimento: bullet da coluna (dica com o nome),
  * código e selos da mesa; abaixo, o repositório na cor da central, o título e o resumo.
  */
-export function TaskRow({ task, column, central, workbench, queueItem, active }: TaskRowProps) {
+export function TaskRow({ task, column, central, workbench, queueItem, active, compact = false }: TaskRowProps) {
     // Warning quando a mesa está parada aguardando o usuário (build_queued, espera por vaga e done não contam).
     const waitingFor = workbench
         ? workbenchUserWaitReason({ stage: workbench.stage, runState: workbench.runState, pendingPermissions: workbench.pendingPermissions, pendingForms: workbench.pendingForms, waitingSlot: Boolean(workbench.slotQueue) })
         : null
     const product = taskProductLabel(task, central)
     const productColor = productColorProps(central?.config?.color)
+    const columnLabel = compact ? (column?.label ?? null) : null
     return (
         <Link
             href={workbenchPath(task.id)}
@@ -76,10 +83,29 @@ export function TaskRow({ task, column, central, workbench, queueItem, active }:
                     queueItem && <QueueBadge position={queueItem.position} />
                 )}
             </span>
-            {product && (
-                <span data-testid="task-product" className={cn("truncate text-[11px] font-bold", productColor.className)} style={productColor.style}>
-                    {product}
+            {compact && waitingFor && (
+                <span className="flex min-w-0 items-center gap-1 text-[11px] text-warning" data-testid="task-waiting-reason">
+                    <TriangleAlert className="h-3 w-3 shrink-0" aria-hidden />
+                    <span className="truncate">{waitingFor}</span>
                 </span>
+            )}
+            {columnLabel ? (
+                <span className="flex min-w-0 items-center gap-1 text-[11px]">
+                    {product && (
+                        <span data-testid="task-product" className={cn("truncate font-bold", productColor.className)} style={productColor.style}>
+                            {product}
+                        </span>
+                    )}
+                    <span className="shrink-0 text-muted-foreground" data-testid="task-column-label">
+                        {product ? `· ${columnLabel}` : columnLabel}
+                    </span>
+                </span>
+            ) : (
+                product && (
+                    <span data-testid="task-product" className={cn("truncate text-[11px] font-bold", productColor.className)} style={productColor.style}>
+                        {product}
+                    </span>
+                )
             )}
             <span className="truncate text-sm">{task.title}</span>
             {task.summary && (
@@ -91,8 +117,8 @@ export function TaskRow({ task, column, central, workbench, queueItem, active }:
     )
 }
 
-/** Carregamento no formato do `TaskRow`: bullet + código, linha do projeto, título e resumo. */
-export function TaskRowSkeleton() {
+/** Carregamento no formato do `TaskRow`: bullet + código, (no celular, o motivo da espera), linha do projeto, título e resumo. */
+export function TaskRowSkeleton({ compact = false }: { compact?: boolean }) {
     return (
         <div className={ROW_CLASS} data-testid="task-row-skeleton">
             <span className="flex h-4 items-center gap-2">
@@ -100,6 +126,7 @@ export function TaskRowSkeleton() {
                 <Skeleton className="h-3 w-16" />
                 <Skeleton className="ml-auto h-4 w-14" />
             </span>
+            {compact && <Skeleton className="h-3 w-40" />}
             <Skeleton className="h-3 w-28" />
             <Skeleton className="h-4 w-4/5" />
             <Skeleton className="h-3 w-2/3" />

@@ -27,16 +27,17 @@ const when = (value: string | null) => (value ? format(new Date(value), "dd/MM/y
 function RunCard({ run }: { run: MentorLearningRunDto }) {
     return (
         <Card>
-            <CardHeader className="flex flex-row flex-wrap items-center gap-2 space-y-0 pb-3">
+            <CardHeader className="flex flex-row flex-wrap items-center gap-2 space-y-0 pb-3 max-lg:p-4 max-lg:pb-3">
                 <MentorRunBadge status={run.status} />
                 <span className="text-sm font-medium">{`Conclusão de ${when(run.completedAt)}`}</span>
-                <span className="ml-auto flex flex-wrap items-center gap-1.5">
+                {/* Celular (OPE-166): os chips descem para uma linha própria, abaixo da data. */}
+                <span className="ml-auto flex flex-wrap items-center gap-1.5 max-lg:ml-0 max-lg:basis-full">
                     {run.completionKind && <MentorRunChip>{run.completionKind === "manual" ? "Conclusão manual" : "Merge do PR"}</MentorRunChip>}
                     {(run.attempt ?? 1) > 1 && <MentorRunChip>{`Tentativa ${run.attempt}`}</MentorRunChip>}
                     <MentorRunChip label="Duração">{formatDuration(run.durationMs)}</MentorRunChip>
                 </span>
             </CardHeader>
-            <CardContent>
+            <CardContent className="max-lg:p-4 max-lg:pt-0">
                 <MentorLearningRunBody run={run} />
             </CardContent>
         </Card>
@@ -46,13 +47,13 @@ function RunCard({ run }: { run: MentorLearningRunDto }) {
 /** Skeleton da aba: um card de execução (cabeçalho, duas seções de chips e dois casos). */
 export function MentorLearningTabSkeleton() {
     return (
-        <div className="space-y-4 p-4" aria-label="Carregando o aprendizado">
+        <div className="space-y-4 p-4 max-lg:p-3" aria-label="Carregando o aprendizado">
             <Card>
-                <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-3">
+                <CardHeader className="flex flex-row items-center gap-2 space-y-0 pb-3 max-lg:p-4 max-lg:pb-3">
                     <Skeleton className="h-5 w-28 rounded-full" />
                     <Skeleton className="h-4 w-48" />
                 </CardHeader>
-                <CardContent className="space-y-5">
+                <CardContent className="space-y-5 max-lg:p-4 max-lg:pt-0">
                     <Skeleton className="h-10 w-full" />
                     <Skeleton className="h-10 w-full" />
                     <Skeleton className="h-28 w-full" />
@@ -70,7 +71,7 @@ export function MentorLearningTab({ workbenchId }: { workbenchId: string }) {
     if (query.isError) return <ErrorState title="Não foi possível carregar o aprendizado" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
     const runs = query.data ?? []
     return (
-        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto p-4 max-lg:p-3">
             <p className="text-xs text-muted-foreground">O Agente Mentor aprende uma vez por conclusão da mesa, lendo a transcrição inteira. Cada caso vai para uma lista (desenvolvedor global, desta central ou Adversário).</p>
             <AnimatePresence initial={false}>
                 {runs.map((run) => (
