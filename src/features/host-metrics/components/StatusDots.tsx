@@ -6,7 +6,11 @@ import { USAGE_LEVEL_CLASSES, USAGE_UNKNOWN_DOT_CLASS, type UsageLevel } from "@
 
 const LEVEL_TEXT: Readonly<Record<UsageLevel | "unknown", string>> = { ok: "normal", warning: "atenção", critical: "crítico", unknown: "sem dados" }
 
-function Dot({ name, level, side }: { name: string; level: UsageLevel | null; side: "left" | "right" }) {
+/**
+ * Bolinha de faixa de uso sobre um ícone (canto superior), com o texto para leitor de tela. Também usada
+ * no botão da quota da coluna Tarefas no celular (OPE-166), com o anel na cor do fundo de lá.
+ */
+export function StatusDot({ name, level, side, ringClassName = "ring-sidebar" }: { name: string; level: UsageLevel | null; side: "left" | "right"; ringClassName?: string }) {
     const reduceMotion = useReducedMotion()
     const key = level ?? "unknown"
     return (
@@ -18,7 +22,7 @@ function Dot({ name, level, side }: { name: string; level: UsageLevel | null; si
                     animate={{ scale: 1, opacity: 1 }}
                     exit={reduceMotion ? undefined : { scale: 0.4, opacity: 0 }}
                     transition={{ duration: 0.2, ease: "easeOut" }}
-                    className={cn("h-2 w-2 rounded-full ring-2 ring-sidebar", level ? USAGE_LEVEL_CLASSES[level].dot : USAGE_UNKNOWN_DOT_CLASS)}
+                    className={cn("h-2 w-2 rounded-full ring-2", ringClassName, level ? USAGE_LEVEL_CLASSES[level].dot : USAGE_UNKNOWN_DOT_CLASS)}
                     aria-hidden
                 />
             </AnimatePresence>
@@ -33,8 +37,8 @@ function Dot({ name, level, side }: { name: string; level: UsageLevel | null; si
 export function StatusDots({ server, quota }: { server: UsageLevel | null; quota: UsageLevel | null }) {
     return (
         <>
-            <Dot name="Servidor" level={server} side="left" />
-            <Dot name="Quota" level={quota} side="right" />
+            <StatusDot name="Servidor" level={server} side="left" />
+            <StatusDot name="Quota" level={quota} side="right" />
         </>
     )
 }

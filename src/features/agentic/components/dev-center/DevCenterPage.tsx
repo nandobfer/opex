@@ -21,6 +21,7 @@ import { useKeyboardInset } from "../../hooks/useKeyboardInset"
 import { AGENTIC_SETTINGS_HREF } from "../central/CentralPage"
 import { WorkbenchPane } from "../workbench/WorkbenchPane"
 import { TasksPane } from "./TasksPane"
+import { TasksPaneMobileSkeleton } from "./mobile/TasksPaneMobileSkeleton"
 
 /**
  * Central de desenvolvimento (`/desenvolvimento/[tarefa]`): a **central vem do navegador** e a
@@ -46,8 +47,9 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     // As colunas ocupam exatamente a área visível do <main> (descontado o padding e o aviso de conexão).
     const sectionRef = useRef<HTMLElement>(null)
     const viewportHeight = useScrollViewportHeight(sectionRef, list.length > 0)
-    // Celular: com o teclado virtual aberto, a central encolhe para o campo e o dock ficarem acima dele (OPE-166).
-    const keyboard = useKeyboardInset(Boolean(taskId))
+    // Celular: com o teclado virtual aberto, a central encolhe para o campo (da mesa ou a busca da lista) e o
+    // dock ficarem acima dele (OPE-166).
+    const keyboard = useKeyboardInset()
     const height = viewportHeight === undefined ? undefined : Math.max(0, viewportHeight - keyboard)
     const reduceMotion = useReducedMotion()
     // Escolha do seletor aguardando a tarefa sair da URL: enquanto houver, ela vence a central da tarefa.
@@ -84,8 +86,9 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     if (centrals.isLoading) {
         return (
             <div className="grid gap-4 lg:grid-cols-[340px_1fr]" aria-label="Carregando a Central de desenvolvimento">
-                <Skeleton className="h-96" />
-                <Skeleton className="h-96" />
+                <TasksPaneMobileSkeleton />
+                <Skeleton className="h-96 max-lg:hidden" />
+                <Skeleton className="h-96 max-lg:hidden" />
             </div>
         )
     }

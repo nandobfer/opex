@@ -401,9 +401,10 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   botão de ícone na linha do cabeçalho da mesa (ou numa linha própria antes de abrir a mesa e no erro).
   A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
   no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer; no celular,
-  com o teclado virtual aberto, a altura desconta o que o teclado cobre (`useKeyboardInset`). Como a
-  mesa se organiza no celular está em "Mesa no celular (OPE-166)".
-- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
+  com o teclado virtual aberto (no campo da mesa ou na busca da lista), a altura desconta o que o
+  teclado cobre (`useKeyboardInset`). Como a mesa e a coluna Tarefas se organizam no celular está em
+  "Mesa no celular (OPE-166)" e "Coluna Tarefas no celular (OPE-166)".
+- No **desktop** (`>= lg`), o topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
   **área de filtros recolhível** (`CollapsibleTaskFilters`, mesmas peças do `ListFilters` de /tarefas
   em `src/components/list/CollapsibleFilters.tsx`, sem botão de limpar). Ela **começa recolhida** a
   cada carregamento (o estado não é salvo; trocar de tarefa ou central o mantém) em no máximo duas
@@ -537,8 +538,41 @@ intermediário). Em `>= lg` a mesa continua igual. A escolha do leiaute é feita
   (**Enviar**, **Tentar novamente** ou **Integrar fork**); Abrir fork, Pausar, Parar, Retomar,
   Descartar, o **Modo** e os **Modelos** vão para a folha do fork. O seletor de forks ocupa a largura
   toda.
-- A aba **Aprendizado (N)** (Agente Mentor, OPE-165) aparece no celular e no desktop como as demais.
+- A aba **Aprendizado (N)** (Agente Mentor, OPE-165) aparece no celular e no desktop como as demais: só
+  quando a mesa tem ao menos uma execução do Mentor (depois da conclusão). No celular o painel e o card de
+  cada execução usam espaçamento menor e os chips (tipo de conclusão, tentativa, duração) descem para uma
+  linha própria abaixo da data.
 - Pendente de conferência no aparelho: teclado virtual (iOS) e a altura real da saída.
+
+## Coluna Tarefas no celular (OPE-166)
+
+Segunda rodada da OPE-166 (plano v2, aprovado pelo dono): a coluna **Tarefas** de `/desenvolvimento` segue
+o mesmo modelo da mesa — **tudo abaixo de `lg`**, escolhido em JS por `useCompactWorkbench`, com folhas que
+sobem de baixo (`ActionSheet`). Em `>= lg` a coluna continua igual (seção acima). Nenhuma consulta ou evento
+muda: só a apresentação.
+
+- **Casca**: sem borda, fundo e cantos, na largura toda, como a mesa (`DEV_CENTER_PANE_BLEED_CLASS` em
+  `components/dev-center/pane-classes.ts`, que também compõe `WORKBENCH_CARD_CLASS`; o `max-lg:w-auto` dela
+  anula o `w-full` da coluna, senão a margem negativa só deslocaria o painel). O skeleton do celular usa a
+  mesma classe e as classes do topo (`mobile/header-classes.ts`).
+- **Topo** (`mobile/TasksMobileHeader`): "Tarefas N" com três botões de 40 px — **Quota do OpenCode**
+  (bolinha da pior faixa, a mesma da barra lateral, `StatusDot`), **Filtros** (selo com o número de filtros
+  fora do padrão) e **Configurar central**; abaixo, a **busca sempre à vista**; e, só quando há filtro fora
+  do padrão, os **chips** removíveis numa linha que rola na horizontal. A busca não vira chip nem conta no
+  selo (tem campo próprio; `mobileFilterChips` em `dev-center-mobile.ts`).
+- **Folha "Filtros"**: os mesmos componentes do desktop (**Só mesas ativas**, **Central**, **Colunas**,
+  **Estado da mesa**) e, no pé, **Ver N tarefas**, que fecha a folha. Sem "Limpar filtros" (igual ao
+  desktop; o estado vazio da lista tem o seu).
+- **Folha "Quota do OpenCode"** (`mobile/QuotaSheetButton`): o mesmo `OpencodeQuotaPanel`, com a mesma
+  preferência salva; a quota sai do topo e a altura fica para a lista. O atalho de configuração do painel
+  leva para fora de `/desenvolvimento`, o que desmonta a central e a folha junto.
+- **Linha da tarefa** (`TaskRow` com `compact`): no toque não há dica, então o **motivo da espera** aparece
+  em texto abaixo do código e o **nome da coluna** entra na linha do projeto ("Opex · Em andamento").
+- **Voltar da mesa**: a coluna fica escondida enquanto a mesa está aberta e perde a rolagem; ao reaparecer,
+  a lista rola até a tarefa que estava aberta, centralizada (`activeTaskIndex` +
+  `virtualizer.scrollToIndex`).
+- **Skeletons**: o carregamento das centrais mostra no celular o formato do topo novo
+  (`mobile/TasksPaneMobileSkeleton`); a linha de carregamento ganha a linha do motivo.
 
 ## Refinamento na mesa (OPE-137)
 
@@ -1357,6 +1391,8 @@ pedidos, adversário, campos recolhidos, cabeçalho), `workbench-view-mobile.tes
 sem faixa de pedidos, folha de pedidos e "Excluir mesa" com a central), `dev-center-keyboard.test.tsx`
 (altura descontando o teclado), `stage-steps.test.tsx` (forma compacta) e os casos de celular em
 `RefinementActionBar.test.tsx` e `ForkPanel.test.tsx` (com `matchMedia` simulado; sem ele vale o desktop).
+Coluna Tarefas no celular: `dev-center-mobile.test.ts` (funções puras) e `tasks-pane-mobile.test.tsx` (busca à
+vista, folhas de filtros e quota, motivo e coluna em texto, rolagem ao voltar da mesa e o desktop intacto).
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em
