@@ -6,6 +6,7 @@ import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { useSetWorkbenchPreview } from "../../hooks/useAgentic"
 import type { WorkbenchStage } from "../../constants"
 import type { WorkbenchDto } from "../../types"
+import { ActionSheetItem, ActionSheetSwitch } from "./mobile/ActionSheet"
 
 /** A chave (e o divisor antes dela) some em Finalizando e Concluída. */
 export const previewSwitchVisible = (stage: WorkbenchStage) => stage !== "finishing" && stage !== "done"
@@ -26,6 +27,11 @@ interface PreviewSwitchProps {
     /** Outra ação da mesa em andamento. */
     actionPending: boolean
     onRebuild: () => void
+    /**
+     * `bar` (padrão): rótulo, chave e o botão de ícone na barra do desktop. `sheet`: folha "Mais ações" do
+     * celular (OPE-166), com a explicação e o motivo do bloqueio em texto (no toque não há dica).
+     */
+    layout?: "bar" | "sheet"
 }
 
 /**
@@ -35,7 +41,7 @@ interface PreviewSwitchProps {
  * à direita, o botão de ícone **Gerar nova prévia**: sempre visível, bloqueado (com o motivo na dica)
  * com a chave desligada ou salvando, fora da Prévia pronta ou com outra ação em andamento.
  */
-export function PreviewSwitch({ workbench, rebuildAvailable, actionPending, onRebuild }: PreviewSwitchProps) {
+export function PreviewSwitch({ workbench, rebuildAvailable, actionPending, onRebuild, layout = "bar" }: PreviewSwitchProps) {
     const mutation = useSetWorkbenchPreview(workbench)
     if (!previewSwitchVisible(workbench.stage)) return null
     const id = `workbench-preview-${workbench.id}`
@@ -43,6 +49,14 @@ export function PreviewSwitch({ workbench, rebuildAvailable, actionPending, onRe
     const hint = enabled
         ? "Ligada: depois da implementação a mesa sobe a prévia e espera a sua aprovação antes de publicar no PR"
         : "Desligada: ao fim da implementação a mesa publica direto no PR, sem prévia. Religar com o PR aberto gera a prévia na hora"
+    const blockedReason = rebuildBlockedReason({ saving: mutation.isPending, enabled, rebuildAvailable, actionPending })
+    if (layout === "sheet")
+        return (
+            <div className="space-y-1.5">
+                <ActionSheetSwitch id={id} label="Gerar prévia" hint={hint} checked={enabled} disabled={mutation.isPending} onCheckedChange={(checked) => mutation.mutate(checked)} />
+                <ActionSheetItem icon={Container} label="Gerar nova prévia" hint="Reconstrói a prévia com o código atual" disabledReason={blockedReason} onSelect={onRebuild} />
+            </div>
+        )
     return (
         <div className="flex shrink-0 items-center gap-2">
             <label htmlFor={id} className="cursor-pointer whitespace-nowrap text-xs text-muted-foreground" title={hint}>
@@ -55,7 +69,7 @@ export function PreviewSwitch({ workbench, rebuildAvailable, actionPending, onRe
             <TooltipIconButton
                 label="Gerar nova prévia"
                 tooltip="Reconstrói a prévia com o código atual"
-                disabledReason={rebuildBlockedReason({ saving: mutation.isPending, enabled, rebuildAvailable, actionPending })}
+                disabledReason={blockedReason}
                 onClick={onRebuild}
                 className="h-8 min-w-8 px-2"
             >

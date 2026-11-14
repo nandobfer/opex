@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
@@ -24,6 +24,7 @@ import { ForkActionBar } from '@/features/agentic/components/workbench/ForkActio
 import { ForkPanel } from '@/features/agentic/components/workbench/ForkPanel'
 import { ForkStatusBadge } from '@/features/agentic/components/workbench/ForkStatusBadge'
 import type { ForkDto, WorkbenchDto } from '@/features/agentic/types'
+import { COMPACT_WORKBENCH_QUERY } from '@/features/agentic/hooks/useCompactWorkbench'
 
 const fork = (patch: Partial<ForkDto> = {}): ForkDto => ({
   id: 'f1',
@@ -226,5 +227,32 @@ describe('ForkPanel', () => {
   it('concluído: aviso no fim da conversa', () => {
     forkPanel({ status: 'concluded', closedAt: '2026-10-16T13:00:00.000Z' })
     expect(scrollArea().contains(screen.getByText(/Fork concluído junto com a mesa/))).toBe(true)
+  })
+})
+
+describe('ForkActionBar no celular (OPE-166)', () => {
+  const compact = (matches: boolean) =>
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({ matches: matches && query === COMPACT_WORKBENCH_QUERY, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    })
+
+  it('Enviar fica no dock; Pausar conversa, Descartar e Abrir fork vão para a folha do fork', () => {
+    compact(true)
+    try {
+      render(<ForkActionBar workbenchId="w1" fork={fork({})} />)
+      fireEvent.change(screen.getByLabelText('Mensagem para o fork'), { target: { value: 'e o caso X?' } })
+      const dock = within(screen.getByTestId('mobile-action-dock'))
+      fireEvent.click(dock.getByRole('button', { name: /Enviar/ }))
+      expect(mocks.mutate).toHaveBeenCalledWith({ action: 'send', text: 'e o caso X?' }, expect.anything())
+      expect(screen.queryByRole('button', { name: /Pausar conversa/ })).toBeNull()
+      fireEvent.click(dock.getByRole('button', { name: 'Mais ações' }))
+      const more = within(screen.getByRole('dialog', { name: 'Fork 1' }))
+      expect(more.getByRole('button', { name: 'Abrir fork' })).toBeTruthy()
+      fireEvent.click(more.getByRole('button', { name: 'Pausar conversa' }))
+      expect(mocks.mutate).toHaveBeenCalledWith({ action: 'close' })
+    } finally {
+      compact(false)
+    }
   })
 })

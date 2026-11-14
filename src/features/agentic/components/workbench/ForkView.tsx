@@ -28,7 +28,7 @@ export function ForkView({ workbench, forks, selectedId, onSelect }: { workbench
                 </span>
                 {forks.length > 1 && (
                     <Select value={fork.id} onValueChange={onSelect}>
-                        <SelectTrigger className="w-64" aria-label="Fork exibido">
+                        <SelectTrigger className="w-full lg:w-64" aria-label="Fork exibido">
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>

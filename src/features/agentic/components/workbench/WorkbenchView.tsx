@@ -9,6 +9,7 @@ import { usePrWatchSchedule } from "../../hooks/useAgentic"
 import { useWorkbenchBuilds } from "../../hooks/useBuilds"
 import { useWorkbenchForks } from "../../hooks/useForks"
 import { useWorkbenchStream } from "../../hooks/useWorkbenchStream"
+import { useCompactWorkbench } from "../../hooks/useCompactWorkbench"
 import { latestPrWatch, nextPrWatchAt } from "../../timeline"
 import type { CentralDto, WorkbenchDto } from "../../types"
 import { ActionBar } from "./ActionBar"
@@ -41,6 +42,7 @@ export function WorkbenchView({ workbench, central }: { workbench: WorkbenchDto;
 
 function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; central: CentralDto }) {
     const { timeline, connected } = useWorkbenchStream(workbench.id)
+    const compact = useCompactWorkbench()
     const task = useTaskDetail(workbench.taskId)
     const [selected, setView] = useState<View>("output")
     const [forkId, setForkId] = useState<string | null>(null)
@@ -109,11 +111,13 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
                     )}
                 </motion.div>
             </AnimatePresence>
-            {view !== "forks" && <PendingRequests workbench={workbench} />}
+            {/* Celular (`< lg`, OPE-166): os pedidos ficam na folha "Pedidos do agente" do dock (ActionBar). */}
+            {view !== "forks" && !compact && <PendingRequests workbench={workbench} />}
             <ForksDonePrompt workbench={workbench} />
             {view !== "forks" && (
                 <ActionBar
                     workbench={workbench}
+                    central={central}
                     onForkOpened={(fork) => {
                         setForkId(fork.id)
                         setView("forks")

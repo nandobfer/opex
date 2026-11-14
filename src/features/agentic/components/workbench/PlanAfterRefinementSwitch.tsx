@@ -3,18 +3,21 @@
 import { Switch } from "@/components/ui/switch"
 import { useSetWorkbenchPlanAfterRefinement } from "../../hooks/useAgentic"
 import type { WorkbenchDto } from "../../types"
+import { ActionSheetSwitch } from "./mobile/ActionSheet"
 
 /**
  * Switch "Gerar plano após refinar" da barra da mesa em "Refinando" (OPE-137): ligado, a mesa passa sozinha
  * ao planejamento quando a especificação fica pronta (vale o valor daquele momento); desligado, para em
  * "Especificação pronta". Mesmo desenho da chave "Gerar prévia".
  */
-export function PlanAfterRefinementSwitch({ workbench }: { workbench: WorkbenchDto }) {
+export function PlanAfterRefinementSwitch({ workbench, layout = "bar" }: { workbench: WorkbenchDto; layout?: "bar" | "sheet" }) {
     const mutation = useSetWorkbenchPlanAfterRefinement(workbench)
     if (workbench.stage !== "refining") return null
     const id = `workbench-plan-after-refinement-${workbench.id}`
     const enabled = workbench.planAfterRefinement
     const hint = enabled ? "Ligado: com a especificação pronta, a mesa segue sozinha para o planejamento" : "Desligado: com a especificação pronta, a mesa para em Especificação pronta e espera você"
+    // Folha "Mais ações" do celular (OPE-166): a explicação aparece em texto.
+    if (layout === "sheet") return <ActionSheetSwitch id={id} label="Gerar plano após refinar" hint={hint} checked={enabled} disabled={mutation.isPending} onCheckedChange={(checked) => mutation.mutate(checked)} />
     return (
         <div className="flex shrink-0 items-center gap-2">
             <label htmlFor={id} className="cursor-pointer whitespace-nowrap text-xs text-muted-foreground" title={hint}>

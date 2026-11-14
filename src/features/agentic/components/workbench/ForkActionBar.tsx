@@ -23,14 +23,19 @@ import { ForkComposer } from "./ForkComposer"
 import { ForkModeSelect } from "./ForkModeSelect"
 import { LiveMessageComposer } from "./LiveMessageComposer"
 import { ForkModelSettings } from "./ForkModelSettings"
+import { cn } from "@/lib/utils"
+import { useCompactWorkbench } from "../../hooks/useCompactWorkbench"
+import { ForkMobileBar, type ForkButton } from "./mobile/ForkMobileBar"
 
 /**
  * Conversa e ciclo de vida do fork: enviar, pausar a conversa, parar, tentar de novo, retomar, integrar,
  * descartar, **Modo** (Plan/Build e trava de somente leitura), **Modelos** (texto do modelo em uso e o popover "Modelos por etapa", com "Este fork" e as etapas da mesa) e **Abrir fork** a partir deste fork (fork
  * de fork, com o fork em aberto). `extra` entra na linha de botões depois do Abrir fork (ex.: os botões
- * da integração).
+ * da integração). Abaixo de `lg` (OPE-166) os botões viram o dock do celular (`ForkMobileBar`): o principal
+ * (Enviar, Tentar novamente ou Integrar) e os demais, o Modo e os Modelos na folha "Mais ações".
  */
 export function ForkActionBar({ workbenchId, workbench, fork, onForkOpened, extra = null }: { workbenchId: string; workbench?: WorkbenchDto; fork: ForkDto; onForkOpened?: (fork: ForkDto) => void; extra?: ReactNode }) {
+    const compact = useCompactWorkbench()
     const mutation = useForkAction(workbenchId, fork)
     const discard = useDiscardFork(workbenchId)
     const [text, setText] = useState("")
@@ -55,6 +60,27 @@ export function ForkActionBar({ workbenchId, workbench, fork, onForkOpened, extr
             },
         )
 
+    const buttons: ForkButton[] = actions.flatMap((action): ForkButton[] => {
+        switch (action) {
+            case "send":
+                return [{ key: action, label: "Enviar", icon: Send, variant: "default", disabled: pending || !text.trim() || Boolean(blocked), title: blocked, ctrlEnter: true, spinning: mutation.isPending, onSelect: () => send() }]
+            case "close":
+                return [{ key: action, label: "Pausar conversa", icon: Pause, variant: "outline", disabled: pending, onSelect: () => mutation.mutate({ action: "close" }) }]
+            case "interrupt":
+                return [{ key: action, label: "Parar", icon: Square, variant: "outline", disabled: pending, onSelect: () => setConfirm("interrupt") }]
+            case "retry":
+                return [{ key: action, label: "Tentar novamente", icon: RefreshCw, variant: "default", disabled: pending, onSelect: () => mutation.mutate({ action: "retry" }) }]
+            case "resume":
+                return [{ key: action, label: "Retomar conversa", icon: MessageSquareReply, variant: "outline", disabled: pending, onSelect: () => mutation.mutate({ action: "resume" }) }]
+            case "discard":
+                return [{ key: action, label: "Descartar fork", icon: Trash2, variant: "outline", destructive: true, disabled: pending, onSelect: () => setConfirm("discard") }]
+            case "integrate":
+                return [{ key: action, label: "Integrar fork", icon: Combine, variant: "default", disabled: pending, onSelect: () => mutation.mutate({ action: "integrate" }) }]
+            default:
+                return []
+        }
+    })
+
     if (forking)
         return (
             <div className="border-t p-3" data-ctrl-enter-scope>
@@ -76,13 +102,13 @@ export function ForkActionBar({ workbenchId, workbench, fork, onForkOpened, extr
     return (
         <div className="space-y-2 border-t p-3" data-ctrl-enter-scope>
             <AnimatePresence initial={false}>
-                {live && <LiveMessageComposer key="fork-live-message" id={`fork-live-message-${fork.id}`} value={text} onValueChange={setText} attachments={attachments} pending={mutation.isPending} onSubmit={send} />}
+                {live && <LiveMessageComposer key="fork-live-message" id={`fork-live-message-${fork.id}`} value={text} onValueChange={setText} attachments={attachments} pending={mutation.isPending} compact={compact} onSubmit={send} />}
                 {actions.includes("send") && (
                     <motion.div key="fork-message" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="overflow-hidden">
                         <label htmlFor={`fork-message-${fork.id}`} className="sr-only">
                             Mensagem para o fork
                         </label>
-                        <AttachableTextarea id={`fork-message-${fork.id}`} rows={3} value={text} onValueChange={setText} placeholder="Continue a conversa do fork…" attachments={attachments} />
+                        <AttachableTextarea id={`fork-message-${fork.id}`} rows={compact ? 2 : 3} value={text} onValueChange={setText} placeholder="Continue a conversa do fork…" attachments={attachments} />
                     </motion.div>
                 )}
                 {fork.status === "closed" && (
@@ -91,68 +117,51 @@ export function ForkActionBar({ workbenchId, workbench, fork, onForkOpened, extr
                     </motion.p>
                 )}
             </AnimatePresence>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-                {isOpenFork(fork.status) && (
-                    <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
-                        <ForkModeSelect fork={fork} disabled={pending} onChange={(mode) => mutation.mutate({ action: "set-mode", mode })} onLock={() => mutation.mutate({ action: "lock" })} />
-                        {workbench && <ForkModelSettings workbench={workbench} fork={fork} buttonClassName="h-8 min-w-8 px-2" />}
-                    </div>
-                )}
-                {canFork && (
-                    <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setForking(true)}>
-                        <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
-                    </Button>
-                )}
-                {extra}
-                {actions.map((action) => {
-                    switch (action) {
-                        case "send":
-                            return (
-                                <Button key={action} type="button" data-ctrl-enter-submit size="sm" className="gap-1.5" disabled={pending || !text.trim() || Boolean(blocked)} title={blocked ?? undefined} onClick={() => send()}>
-                                    {mutation.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <Send className="h-3.5 w-3.5" aria-hidden />} Enviar
-                                </Button>
-                            )
-                        case "close":
-                            return (
-                                <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => mutation.mutate({ action: "close" })}>
-                                    <Pause className="h-3.5 w-3.5" aria-hidden /> Pausar conversa
-                                </Button>
-                            )
-                        case "interrupt":
-                            return (
-                                <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setConfirm("interrupt")}>
-                                    <Square className="h-3.5 w-3.5" aria-hidden /> Parar
-                                </Button>
-                            )
-                        case "retry":
-                            return (
-                                <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => mutation.mutate({ action: "retry" })}>
-                                    <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Tentar novamente
-                                </Button>
-                            )
-                        case "resume":
-                            return (
-                                <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => mutation.mutate({ action: "resume" })}>
-                                    <MessageSquareReply className="h-3.5 w-3.5" aria-hidden /> Retomar conversa
-                                </Button>
-                            )
-                        case "discard":
-                            return (
-                                <Button key={action} type="button" variant="outline" size="sm" className="gap-1.5 text-destructive hover:text-destructive" disabled={pending} onClick={() => setConfirm("discard")}>
-                                    <Trash2 className="h-3.5 w-3.5" aria-hidden /> Descartar fork
-                                </Button>
-                            )
-                        case "integrate":
-                            return (
-                                <Button key={action} type="button" size="sm" className="gap-1.5" disabled={pending} onClick={() => mutation.mutate({ action: "integrate" })}>
-                                    <Combine className="h-3.5 w-3.5" aria-hidden /> Integrar fork
-                                </Button>
-                            )
-                        default:
-                            return null
-                    }
-                })}
-            </div>
+            {compact ? (
+                <>
+                    {extra && <div className="flex flex-wrap items-center justify-end gap-2">{extra}</div>}
+                    <ForkMobileBar
+                        fork={fork}
+                        workbench={workbench}
+                        buttons={buttons}
+                        canFork={canFork}
+                        pending={pending}
+                        onFork={() => setForking(true)}
+                        onMode={(mode) => mutation.mutate({ action: "set-mode", mode })}
+                        onLock={() => mutation.mutate({ action: "lock" })}
+                    />
+                </>
+            ) : (
+                <div className="flex flex-wrap items-center justify-end gap-2">
+                    {isOpenFork(fork.status) && (
+                        <div className="mr-auto flex min-w-0 flex-wrap items-center gap-2">
+                            <ForkModeSelect fork={fork} disabled={pending} onChange={(mode) => mutation.mutate({ action: "set-mode", mode })} onLock={() => mutation.mutate({ action: "lock" })} />
+                            {workbench && <ForkModelSettings workbench={workbench} fork={fork} buttonClassName="h-8 min-w-8 px-2" />}
+                        </div>
+                    )}
+                    {canFork && (
+                        <Button type="button" variant="outline" size="sm" className="gap-1.5" disabled={pending} onClick={() => setForking(true)}>
+                            <GitFork className="h-3.5 w-3.5" aria-hidden /> Abrir fork
+                        </Button>
+                    )}
+                    {extra}
+                    {buttons.map((button) => (
+                        <Button
+                            key={button.key}
+                            type="button"
+                            variant={button.variant}
+                            size="sm"
+                            data-ctrl-enter-submit={button.ctrlEnter || undefined}
+                            className={cn("gap-1.5", button.destructive && "text-destructive hover:text-destructive")}
+                            disabled={button.disabled}
+                            title={button.title ?? undefined}
+                            onClick={button.onSelect}
+                        >
+                            {button.spinning ? <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden /> : <button.icon className="h-3.5 w-3.5" aria-hidden />} {button.label}
+                        </Button>
+                    ))}
+                </div>
+            )}
 
             <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
                 <AlertDialogContent>
