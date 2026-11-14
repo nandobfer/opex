@@ -6,7 +6,8 @@ import type { OpencodePermissionDto } from "@/lib/ai/opencode-events"
 
 /**
  * Pedido de permissão do agente (ferramenta/ação) com aprovar uma vez, aprovar sempre ou recusar.
- * Presentacional: quem usa passa `onReply`/`pending` (mesa de trabalho, refinamento de tarefas).
+ * Presentacional: quem usa passa `onReply`/`pending` (mesa de trabalho, refinamento de tarefas). Abaixo de
+ * `lg` (OPE-166) os três botões dividem a linha em partes iguais, com alvo de toque de 40 px.
  */
 export function PermissionCard({ permission, pending, onReply }: { permission: OpencodePermissionDto; pending: boolean; onReply: (decision: "once" | "always" | "reject") => void }) {
     return (
@@ -16,7 +17,7 @@ export function PermissionCard({ permission, pending, onReply }: { permission: O
             </p>
             {permission.message && <p className="mt-1 text-sm text-muted-foreground">{permission.message}</p>}
             {permission.resources.length > 0 && <pre className="mt-2 max-h-32 overflow-auto whitespace-pre-wrap break-all rounded bg-muted/40 p-2 font-mono text-[11px]">{permission.resources.join("\n")}</pre>}
-            <div className="mt-3 flex flex-wrap justify-end gap-2">
+            <div className="mt-3 flex flex-wrap justify-end gap-2 max-lg:grid max-lg:grid-cols-3 max-lg:[&>button]:h-auto max-lg:[&>button]:min-h-10 max-lg:[&>button]:whitespace-normal">
                 <Button type="button" size="sm" variant="outline" disabled={pending} onClick={() => onReply("reject")}>
                     Recusar
                 </Button>

@@ -26,7 +26,11 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
 }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskList: () => mocks.tasks, useTasksRealtime: () => {} }))
 vi.mock('@/features/agentic/components/workbench/WorkbenchPane', () => ({
-  WorkbenchPane: ({ central }: { central: CentralDto }) => <div data-testid="workbench">{central.id}</div>,
+  WorkbenchPane: ({ central, backHref }: { central: CentralDto; backHref?: string | null }) => (
+    <div data-testid="workbench" data-back-href={backHref ?? ''}>
+      {central.id}
+    </div>
+  ),
 }))
 // A coluna de tarefas é reduzida ao essencial: mostra a central ativa e dispara a troca.
 vi.mock('@/features/agentic/components/dev-center/TasksPane', () => ({
@@ -100,13 +104,15 @@ describe('troca de central na Central de desenvolvimento (OPE-42)', () => {
     expect(mocks.replace).not.toHaveBeenCalled()
   })
 
-  it('com tarefa aberta mostra o botão de voltar para a lista; sem tarefa, ele não aparece', () => {
+  it('com tarefa aberta a mesa recebe o destino do "Voltar para tarefas" (no cabeçalho da mesa, OPE-166); sem tarefa, não', () => {
     const { unmount } = render(<DevCenterPage taskId={TASK} />)
-    expect(screen.getByRole('link', { name: /Voltar para tarefas/ }).getAttribute('href')).toBe('/desenvolvimento')
+    expect(screen.getByTestId('workbench').getAttribute('data-back-href')).toBe('/desenvolvimento')
+    // A faixa própria acima da mesa saiu: o botão fica na linha do cabeçalho.
+    expect(screen.queryByRole('link', { name: /Voltar para tarefas/ })).toBeNull()
     unmount()
 
     render(<DevCenterPage taskId={null} />)
-    expect(screen.queryByRole('link', { name: /Voltar para tarefas/ })).toBeNull()
+    expect(screen.queryByTestId('workbench')?.getAttribute('data-back-href') ?? '').toBe('')
   })
 
   it('no celular só um painel aparece por vez (lista sem tarefa; mesa com tarefa)', () => {

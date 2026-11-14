@@ -1,8 +1,8 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { fireEvent, render, screen } from '@testing-library/react'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, within } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /** Barra da mesa no refinamento (OPE-137): Refinando e Especificação pronta. */
@@ -19,12 +19,15 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useWorkbenchAction: () => ({ mutate: mocks.workbenchAction, isPending: false }),
   useSetWorkbenchPlanAfterRefinement: () => ({ mutate: mocks.setPlan, isPending: false }),
   useSetWorkbenchModel: () => ({ mutate: vi.fn(), isPending: false }),
+  useSetWorkbenchStage: () => ({ mutateAsync: vi.fn(), isPending: false }),
+  useDeleteWorkbench: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))
 
 import { RefinementActionBar } from '@/features/agentic/components/workbench/RefinementActionBar'
 import type { WorkbenchDto } from '@/features/agentic/types'
 import type { TaskRefinementStateDto } from '@/features/refinement/types'
+import { COMPACT_WORKBENCH_QUERY } from '@/features/agentic/hooks/useCompactWorkbench'
 
 const workbench = (patch: Partial<WorkbenchDto>): WorkbenchDto => ({
   id: 'w1',
@@ -143,5 +146,37 @@ describe('RefinementActionBar · Especificação pronta', () => {
     fireEvent.click(screen.getByRole('button', { name: /Cancelar espera/ }))
     expect(mocks.workbenchAction).toHaveBeenCalledWith({ action: 'cancel-wait' })
     expect(screen.queryByRole('button', { name: /Gerar plano/ })).toBeNull()
+  })
+})
+
+describe('RefinementActionBar · celular (OPE-166)', () => {
+  const compact = (matches: boolean) =>
+    Object.defineProperty(window, 'matchMedia', {
+      configurable: true,
+      value: vi.fn((query: string) => ({ matches: matches && query === COMPACT_WORKBENCH_QUERY, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() })),
+    })
+  beforeEach(() => compact(true))
+  afterEach(() => compact(false))
+
+  it('Refinando: Encerrar refinamento no dock; Parar, Recomeçar e o switch na folha "Mais ações"', () => {
+    render(<RefinementActionBar workbench={workbench({})} state={state()} />)
+    const dock = within(screen.getByTestId('mobile-action-dock'))
+    expect(dock.getByRole('button', { name: /Encerrar refinamento/ })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /Parar/ })).toBeNull()
+    fireEvent.click(dock.getByRole('button', { name: 'Mais ações' }))
+    const more = within(screen.getByRole('dialog', { name: 'Mais ações' }))
+    fireEvent.click(more.getByRole('checkbox', { name: 'Gerar plano após refinar' }))
+    expect(mocks.setPlan).toHaveBeenCalledWith(true)
+    // Recomeçar com o agente rodando: bloqueado, com o motivo em texto.
+    expect(more.getByRole('button', { name: 'Recomeçar' }).textContent).toContain('Pare o refinamento antes de recomeçar')
+    fireEvent.click(more.getByRole('button', { name: 'Parar' }))
+    expect(mocks.refinementAction).toHaveBeenCalledWith('interrupt')
+  })
+
+  it('Especificação pronta: Gerar plano no dock e "Informações adicionais" recolhido', () => {
+    render(<RefinementActionBar workbench={workbench({ stage: 'spec_ready', runState: 'idle' })} state={state({ runState: 'idle', resolved: true, concluded: true })} />)
+    expect(screen.getByRole('button', { name: 'Informações adicionais (opcional)' }).getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(within(screen.getByTestId('mobile-action-dock')).getByRole('button', { name: /Gerar plano/ }))
+    expect(mocks.workbenchAction).toHaveBeenCalledWith({ action: 'generate-plan', text: undefined }, expect.anything())
   })
 })

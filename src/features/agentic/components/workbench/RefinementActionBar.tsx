@@ -1,8 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { AnimatePresence, motion } from "framer-motion"
-import { CircleStop, Hourglass, ListChecks, PlugZap, RotateCcw, Square, X } from "lucide-react"
+import { AnimatePresence } from "framer-motion"
+import { CircleStop, ListChecks, PlugZap, RotateCcw, Square, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import { useReplyFallback } from "@/components/agent-reply/ReplyTargetProvider"
@@ -15,14 +15,20 @@ import { PENDING_TURN_LABELS } from "../../constants"
 import { useWorkbenchAction } from "../../hooks/useAgentic"
 import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
 import { startFieldKey, takeStartDraft } from "../../start-draft"
-import type { WorkbenchDto } from "../../types"
+import type { CentralDto, WorkbenchDto } from "../../types"
+import { useCompactWorkbench } from "../../hooks/useCompactWorkbench"
+import { PENDING_REASON } from "../../workbench-action-items"
+import { RECONNECT_HINT, reconnectHintNotice, type StatusNotice } from "../../workbench-notices"
+import { StatusNoticeList } from "./WorkbenchStatusNotices"
+import { RefinementMobileBar, type RefinementButton } from "./mobile/RefinementMobileBar"
 import { ImplementInfoField } from "./ImplementInfoField"
 import { PlanAfterRefinementSwitch } from "./PlanAfterRefinementSwitch"
 import { ReconnectButton } from "./ReconnectButton"
+import { ACTION_BUTTON, ICON_BUTTON } from "./WorkbenchActionButton"
 import { WorkbenchModelSettings } from "./WorkbenchModelSettings"
 
-const ICON_BUTTON = "h-8 min-w-8 px-2 max-md:shrink-0"
-const ACTION_BUTTON = "gap-1.5 max-md:shrink-0 max-md:px-2.5"
+const present = (list: (RefinementButton | null)[]): RefinementButton[] => list.filter((button): button is RefinementButton => button !== null)
+
 const PLAN_HINT = "Essas informações (e os arquivos anexados) vão ao planejador junto da tarefa e da especificação técnica."
 
 /**
@@ -30,8 +36,11 @@ const PLAN_HINT = "Essas informações (e os arquivos anexados) vão ao planejad
  * Recomeçar, Encerrar refinamento, o switch "Gerar plano após refinar" e o modelo do Refinamento — as
  * ações vão ao refinamento da tarefa (o mesmo da página da tarefa). Em "Especificação pronta": Gerar plano
  * (com informações adicionais), Continuar refinamento e Recomeçar, que passam pela mesa (vaga da central).
+ * Abaixo de `lg` (OPE-166) vira o dock do celular (`RefinementMobileBar`): o botão principal (Encerrar
+ * refinamento, Gerar plano ou Cancelar espera) e os demais na folha "Mais ações".
  */
-export function RefinementActionBar({ workbench, state }: { workbench: WorkbenchDto; state: TaskRefinementStateDto | undefined }) {
+export function RefinementActionBar({ workbench, central = null, state }: { workbench: WorkbenchDto; central?: CentralDto | null; state: TaskRefinementStateDto | undefined }) {
+    const compact = useCompactWorkbench()
     const refinement = state?.refinement ?? null
     const availability = state?.availability ?? null
     const { action, running, reconnectable, autoReconnect } = useRefinementControls(workbench.taskId, refinement)
@@ -54,104 +63,101 @@ export function RefinementActionBar({ workbench, state }: { workbench: Workbench
             : null,
     )
     const restart = () => (refining ? action.mutate("restart") : mutation.mutate({ action: "restart-refinement" }))
+    const busy = pending ? PENDING_REASON : null
+    const noRefinement = refinement ? null : "O refinamento ainda não carregou"
+
+    const notices: StatusNotice[] = []
+    if (refining && (failed || (refinement?.runState === "idle" && !refinement.concluded)) && refinement?.error) notices.push({ key: "error", tone: "error", icon: "info", text: refinement.error, role: "alert" })
+    if (refining && autoReconnect.notice) notices.push({ key: "reconnect-notice", tone: "muted", icon: "plug", text: autoReconnect.notice, role: "status" })
+    if (refining && refinement?.finalizing) notices.push({ key: "finalizing", tone: "muted", icon: "info", text: "Consolidando a especificação técnica…", role: "status" })
+    if (slotQueue) notices.push({ key: "slot-queue", tone: "muted", icon: "hourglass", text: `Aguardando vaga na central${slotQueue.position ? ` — posição #${slotQueue.position}` : ""}: ${PENDING_TURN_LABELS[slotQueue.action]}.`, role: "status" })
+
+    // Botões da etapa, na ordem do desktop; `primary` é o botão principal do dock do celular.
+    const buttons: RefinementButton[] = refining
+        ? present([
+              running
+                  ? { key: "interrupt", label: "Parar", icon: Square, variant: "outline", disabledReason: busy, onSelect: () => action.mutate("interrupt") }
+                  : refinement
+                    ? { key: "continue", label: "Continuar", icon: RotateCcw, variant: "outline", disabledReason: busy ?? unavailableReason, title: unavailableReason, onSelect: () => action.mutate("continue") }
+                    : null,
+              reconnectable ? { key: "reconnect", label: "Reconectar ao agente", icon: PlugZap, variant: "outline", disabledReason: null, reconnect: true, hint: RECONNECT_HINT, onSelect: autoReconnect.retryNow } : null,
+              { key: "restart", label: "Recomeçar", icon: RotateCcw, variant: "outline", disabledReason: busy ?? (running ? "Pare o refinamento antes de recomeçar" : noRefinement), onSelect: () => setConfirm("restart") },
+              { key: "close", label: "Encerrar refinamento", icon: CircleStop, variant: "default", disabledReason: busy ?? noRefinement, primary: true, onSelect: () => setConfirm("close") },
+          ])
+        : slotQueue
+          ? [{ key: "cancel-wait", label: "Cancelar espera", icon: X, variant: "outline", disabledReason: busy, primary: true, onSelect: () => mutation.mutate({ action: "cancel-wait" }) }]
+          : [
+                { key: "continue-refinement", label: "Continuar refinamento", icon: RotateCcw, variant: "outline", disabledReason: busy ?? unavailableReason, title: unavailableReason, onSelect: () => mutation.mutate({ action: "continue-refinement" }) },
+                { key: "restart", label: "Recomeçar", icon: RotateCcw, variant: "outline", disabledReason: busy ?? unavailableReason, title: unavailableReason, onSelect: () => setConfirm("restart") },
+                {
+                    key: "generate-plan",
+                    label: "Gerar plano",
+                    icon: ListChecks,
+                    variant: "default",
+                    disabledReason: busy ?? planFiles.blockReason,
+                    title: planFiles.blockReason,
+                    ctrlEnter: true,
+                    primary: true,
+                    onSelect: () =>
+                        mutation.mutate(
+                            { action: "generate-plan", text: planText.trim() || undefined, ...(planFiles.fileIds.length ? { fileIds: planFiles.fileIds } : {}) },
+                            {
+                                onSuccess: () => {
+                                    setPlanText("")
+                                    planFiles.clearSent()
+                                },
+                            },
+                        ),
+                },
+            ]
 
     return (
         <div className="space-y-2 border-t p-3" data-ctrl-enter-scope>
+            {!compact && <StatusNoticeList notices={notices} />}
             <AnimatePresence initial={false}>
-                {refining && (failed || (refinement?.runState === "idle" && !refinement.concluded)) && refinement?.error && (
-                    <motion.p key="error" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-destructive" role="alert">
-                        {refinement.error}
-                    </motion.p>
-                )}
-                {refining && autoReconnect.notice && (
-                    <motion.p key="reconnect-notice" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} className="flex items-center gap-1.5 text-xs text-muted-foreground" role="status">
-                        <PlugZap className="h-3.5 w-3.5" aria-hidden /> {autoReconnect.notice}
-                    </motion.p>
-                )}
-                {refining && refinement?.finalizing && (
-                    <motion.p key="finalizing" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="text-xs text-muted-foreground" role="status">
-                        Consolidando a especificação técnica…
-                    </motion.p>
-                )}
-                {slotQueue && (
-                    <motion.p key="slot-queue" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
-                        <Hourglass className="h-3.5 w-3.5 shrink-0" aria-hidden /> Aguardando vaga na central{slotQueue.position ? ` — posição #${slotQueue.position}` : ""}: {PENDING_TURN_LABELS[slotQueue.action]}.
-                    </motion.p>
-                )}
-                {!refining && !slotQueue && <ImplementInfoField key="plan-info" id={`workbench-plan-info-${workbench.id}`} value={planText} onValueChange={setPlanText} attachments={planFiles} hint={PLAN_HINT} />}
+                {!refining && !slotQueue && <ImplementInfoField key="plan-info" id={`workbench-plan-info-${workbench.id}`} value={planText} onValueChange={setPlanText} attachments={planFiles} hint={PLAN_HINT} collapsible={compact} />}
             </AnimatePresence>
-            {refining && refinement && <RefinementLiveMessage taskId={workbench.taskId} refinement={refinement} />}
+            {refining && refinement && <RefinementLiveMessage taskId={workbench.taskId} refinement={refinement} compact={compact} />}
 
-            <div className="flex flex-wrap items-center gap-2">
-                <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
-                    <WorkbenchModelSettings workbench={workbench} buttonClassName={ICON_BUTTON} />
-                    {refining && <Separator orientation="vertical" className="h-5" />}
-                    <PlanAfterRefinementSwitch workbench={workbench} />
-                </div>
-                <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2 max-md:max-w-full max-md:flex-nowrap max-md:gap-1.5 max-md:overflow-x-auto max-md:pb-0.5">
-                    {refining ? (
-                        <>
-                            {running ? (
-                                <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => action.mutate("interrupt")}>
-                                    <Square className="h-3.5 w-3.5" aria-hidden /> Parar
-                                </Button>
-                            ) : (
-                                refinement && (
-                                    <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending || Boolean(unavailableReason)} title={unavailableReason ?? undefined} onClick={() => action.mutate("continue")}>
-                                        <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Continuar
+            {compact ? (
+                <RefinementMobileBar workbench={workbench} central={central} buttons={buttons} notices={refining && reconnectable ? [...notices, reconnectHintNotice] : notices} reconnecting={autoReconnect.reconnecting} />
+            ) : (
+                <>
+                    <div className="flex flex-wrap items-center gap-2">
+                        <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
+                            <WorkbenchModelSettings workbench={workbench} buttonClassName={ICON_BUTTON} />
+                            {refining && <Separator orientation="vertical" className="h-5" />}
+                            <PlanAfterRefinementSwitch workbench={workbench} />
+                        </div>
+                        <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2">
+                            {buttons.map((button) =>
+                                button.reconnect ? (
+                                    <ReconnectButton key={button.key} reconnecting={autoReconnect.reconnecting} className={ACTION_BUTTON} onClick={button.onSelect} />
+                                ) : (
+                                    <Button
+                                        key={button.key}
+                                        type="button"
+                                        variant={button.variant}
+                                        size="sm"
+                                        data-ctrl-enter-submit={button.ctrlEnter || undefined}
+                                        className={ACTION_BUTTON}
+                                        disabled={button.disabledReason !== null}
+                                        title={button.title ?? undefined}
+                                        onClick={button.onSelect}
+                                    >
+                                        <button.icon className="h-3.5 w-3.5" aria-hidden /> {button.label}
                                     </Button>
-                                )
+                                ),
                             )}
-                            {reconnectable && <ReconnectButton reconnecting={autoReconnect.reconnecting} className={ACTION_BUTTON} onClick={autoReconnect.retryNow} />}
-                            <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending || running || !refinement} onClick={() => setConfirm("restart")}>
-                                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Recomeçar
-                            </Button>
-                            <Button type="button" size="sm" className={ACTION_BUTTON} disabled={pending || !refinement} onClick={() => setConfirm("close")}>
-                                <CircleStop className="h-3.5 w-3.5" aria-hidden /> Encerrar refinamento
-                            </Button>
-                        </>
-                    ) : slotQueue ? (
-                        <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending} onClick={() => mutation.mutate({ action: "cancel-wait" })}>
-                            <X className="h-3.5 w-3.5" aria-hidden /> Cancelar espera
-                        </Button>
-                    ) : (
-                        <>
-                            <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending || Boolean(unavailableReason)} title={unavailableReason ?? undefined} onClick={() => mutation.mutate({ action: "continue-refinement" })}>
-                                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Continuar refinamento
-                            </Button>
-                            <Button type="button" variant="outline" size="sm" className={ACTION_BUTTON} disabled={pending || Boolean(unavailableReason)} title={unavailableReason ?? undefined} onClick={() => setConfirm("restart")}>
-                                <RotateCcw className="h-3.5 w-3.5" aria-hidden /> Recomeçar
-                            </Button>
-                            <Button
-                                type="button"
-                                size="sm"
-                                data-ctrl-enter-submit
-                                className={ACTION_BUTTON}
-                                disabled={pending || Boolean(planFiles.blockReason)}
-                                title={planFiles.blockReason ?? undefined}
-                                onClick={() =>
-                                    mutation.mutate(
-                                        { action: "generate-plan", text: planText.trim() || undefined, ...(planFiles.fileIds.length ? { fileIds: planFiles.fileIds } : {}) },
-                                        {
-                                            onSuccess: () => {
-                                                setPlanText("")
-                                                planFiles.clearSent()
-                                            },
-                                        },
-                                    )
-                                }
-                            >
-                                <ListChecks className="h-3.5 w-3.5" aria-hidden /> Gerar plano
-                            </Button>
-                        </>
-                    )}
-                </div>
-            </div>
+                        </div>
+                    </div>
 
-            {refining && reconnectable && (
-                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <PlugZap className="h-3.5 w-3.5" aria-hidden /> Reconectar acompanha a sessão existente sem reenviar a mensagem (use se o agente ainda estiver rodando).
-                </p>
+                    {refining && reconnectable && (
+                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                            <PlugZap className="h-3.5 w-3.5" aria-hidden /> {RECONNECT_HINT}
+                        </p>
+                    )}
+                </>
             )}
 
             <RefinementRestartDialog open={confirm === "restart"} onOpenChange={(open) => setConfirm(open ? "restart" : null)} onConfirm={restart} />

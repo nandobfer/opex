@@ -397,9 +397,12 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   escolhida fica salva e a tarefa é limpa (o guarda evita que a central da tarefa regrave por cima a
   escolha no render intermediário entre a troca e a navegação). Duas colunas:
   **Tarefas do projeto** | **Mesa de trabalho**. No **celular** (`< lg`) só um painel aparece por
-  vez: a lista quando não há tarefa aberta; a mesa quando há, com um botão **Voltar para tarefas**.
+  vez: a lista quando não há tarefa aberta; a mesa quando há, com o **Voltar para tarefas** como
+  botão de ícone na linha do cabeçalho da mesa (ou numa linha própria antes de abrir a mesa e no erro).
   A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
-  no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer.
+  no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer; no celular,
+  com o teclado virtual aberto, a altura desconta o que o teclado cobre (`useKeyboardInset`). Como a
+  mesa se organiza no celular está em "Mesa no celular (OPE-166)".
 - O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
   **área de filtros recolhível** (`CollapsibleTaskFilters`, mesmas peças do `ListFilters` de /tarefas
   em `src/components/list/CollapsibleFilters.tsx`, sem botão de limpar). Ela **começa recolhida** a
@@ -474,6 +477,68 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   indisponível. Em fila, mostra a posição e abre ao liberar a vaga.
 - Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
   etapa e a dica mostra o chip da etapa.
+
+## Mesa no celular (OPE-166)
+
+Decisão do dono na OPE-166 (plano v1, opção B): **barra de ações fixa no pé da mesa + folha "Mais ações"**,
+valendo para **tudo abaixo de `lg`** (celular e tablet, o mesmo divisor da central; sem leiaute
+intermediário). Em `>= lg` a mesa continua igual. A escolha do leiaute é feita em JS por
+`useCompactWorkbench` (`(max-width: 1023px)`; sem `matchMedia` — SSR e testes — vale o desktop).
+
+- **Descritor único dos botões** (`src/features/agentic/workbench-action-items.ts`, puro):
+  `workbenchActionItems` monta a lista (Abrir fork primeiro, depois as ações da etapa, sem
+  `open-preview`/`rebuild-preview` e sem as decisões do adversário) com rótulo completo e compacto,
+  dica, variante, **motivo do bloqueio** e `title`. A linha do desktop (`WorkbenchActionButton`) e o
+  dock do celular renderizam da mesma lista. Os avisos de estado (erro, reconexão, vaga, PR
+  acompanhado, conflitos, CI, merge, fila do build) saem de `workbenchNotices`
+  (`workbench-notices.ts`).
+- **Dock** (`mobile/MobileActionDock`): **Mais ações** (ícone, 44 px) e o **botão principal** ocupando
+  o resto da linha, sempre no mesmo lugar. A escolha (`dockLayout`): pedido do agente esperando →
+  **Responder pedido** (ou **Responder pedidos (N)**); bloqueio do adversário → **Decidir revisão**;
+  senão a primeira de `DOCK_PRIMARY_PRIORITY` (Implementar, Aprovar, Tentar novamente, Reconectar,
+  Descrever as mudanças, Reabrir, Cancelar espera, Parar, Solicitar correção, Solicitar correção do
+  plano). Sem nenhuma (ex.: PR aberto parado), o **Mais ações** ocupa a linha. Com o botão principal
+  bloqueado (ex.: anexo subindo no Implementar, outra ação em andamento), o motivo aparece em texto
+  logo acima do dock. Com o campo de
+  correção ou de fork aberto o dock some (o campo tem Cancelar/Enviar), como a linha do desktop.
+- **Folha "Mais ações"** (`mobile/ActionSheet`, `Sheet` do shadcn vindo de baixo, até 85% da altura):
+  **Ações da etapa** (as demais do descritor, com o motivo do bloqueio **em texto** — no toque não há
+  dica — e **Revisão adversária** na revisão que falhou), **Prévia e PR** (Abrir prévia, Abrir PR,
+  chave **Gerar prévia** com a explicação e **Gerar nova prévia** com o motivo do bloqueio),
+  **Modelo** (o mesmo controle "Modelos por etapa") e **Mesa** (**Concluir mesa…**, **Definir
+  etapa…** e **Excluir mesa**, com as mesmas confirmações; `WorkbenchManage`). Escolher um item
+  sempre fecha a folha, inclusive os links.
+- **Pedidos do agente** (permissões e perguntas): no celular saem de baixo da saída e vão para a folha
+  **Pedidos do agente**, que **abre sozinha** quando chega um pedido novo e fecha quando não há mais.
+  Os botões da permissão dividem a linha em três (alvo de 40 px, `PermissionCard`).
+- **Bloqueio do adversário**: os achados, a orientação e Corrigir / Revisar de novo / Seguir mesmo
+  assim (`AdversarialActions`) ficam na folha **Revisão adversária**.
+- **Avisos**: uma linha só acima do dock com o mais importante (erro em destaque) e "+N"; o toque
+  expande o texto completo e os demais (`StatusNoticeLine`). A explicação do **Reconectar** entra no fim
+  dessa lista.
+- **Campos**: **Informações adicionais** (Plano pronto e Especificação pronta) começa recolhido num
+  botão; o campo continua montado (oculto), então a **citação de linha** cai nele e ele abre sozinho
+  ao ganhar texto ou anexo. O **chat durante a execução** é uma linha com **Enviar** ao lado, que
+  cresce ao focar. O campo de correção usa 3 linhas.
+- **Cabeçalho**: duas linhas — **Voltar para tarefas** (ícone), código, etapa, "ao vivo" e o título;
+  **Abrir prévia** e **Abrir PR** viram ícones e branch, worktree, porta e custo ficam atrás de
+  **Detalhes da mesa**. O menu **Mais ações** do cabeçalho e o **Excluir mesa** saem do cabeçalho
+  (estão na folha); "Excluindo…" continua visível.
+- **Etapas**: no lugar da trilha, uma linha "Etapa N de M · Nome" com barra de progresso
+  (`compactStepPosition`; mesa concluída conta como o último passo).
+- **Card**: sem borda, fundo e cantos, ocupando a largura toda (anula o `px-4 md:px-6` do `<main>`;
+  `WORKBENCH_CARD_CLASS`). O skeleton de carregamento da mesa segue a mesma estrutura (cabeçalho,
+  etapas, abas, saída e o dock no celular / a linha de botões no desktop).
+- **Refinamento** (`RefinementActionBar` → `mobile/RefinementMobileBar`): o dock tem **Encerrar
+  refinamento**, **Gerar plano** ou **Cancelar espera**; Parar/Continuar, Reconectar, Recomeçar,
+  Continuar refinamento, **Gerar plano após refinar**, o modelo e os itens da mesa vão para a folha.
+  As perguntas do Agente Refinador continuam abaixo da saída: são a própria conversa do refinamento.
+- **Fork** (`ForkActionBar` → `mobile/ForkMobileBar`): o dock tem o primeiro botão de destaque
+  (**Enviar**, **Tentar novamente** ou **Integrar fork**); Abrir fork, Pausar, Parar, Retomar,
+  Descartar, o **Modo** e os **Modelos** vão para a folha do fork. O seletor de forks ocupa a largura
+  toda.
+- A aba **Aprendizado (N)** (Agente Mentor, OPE-165) aparece no celular e no desktop como as demais.
+- Pendente de conferência no aparelho: teclado virtual (iOS) e a altura real da saída.
 
 ## Refinamento na mesa (OPE-137)
 
@@ -708,10 +773,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   sendo excluída" durante a exclusão), **Solicitar correção** (e a variante **Voltar ao
   planejamento** da mesa com falha) e **Solicitar correção do plano** são botões de ícone com dica
   (`TooltipIconButton`, bloqueados com "Aguarde a ação em andamento" durante outra ação), com o nome
-  completo no `aria-label`. No **celular** as ações da etapa ficam na **mesma linha** (sem quebrar)
-  e os botões com texto usam rótulos compactos (**Descrever**, **Reabrir**, **Aprovar PR**,
-  **Tentar**, **Cancelar**), preservando o nome acessível completo; se não couber, a barra rola na
-  horizontal. Assim a saída do agente ganha altura de leitura.
+  completo no `aria-label`. Abaixo de `lg` a linha de botões vira o dock do celular: ver "Mesa no
+  celular (OPE-166)".
 - **PR**: a IA valida, faz commit (padrão da central) e push e abre o PR com o `gh`
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).
@@ -1142,7 +1205,9 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   carregar com "Tentar novamente"; componente `TaskTextView`), **Saída da IA** (aba aberta ao
   entrar na mesa; turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam,
   avisos), **Plano vN** (versões) e **Forks (N)** (quando houver), pedidos pendentes e barra de
-  ações com o campo de correção. A barra de abas rola na horizontal quando não cabe (celular).
+  ações com o campo de correção. A barra de abas rola na horizontal quando não cabe; a aba ativa entra
+  na área visível sozinha e, abaixo de `lg`, um esmaecido na borda (no lugar da barra de rolagem)
+  avisa que há mais abas (`WorkbenchTabs`, `scrollEdges`).
 - **Citar uma linha da saída** (`ReplyTargetProvider` no `WorkbenchView`): cada linha do texto da
   IA, do **Plano** e das abas **Descrição** e **Spec.** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
   campo focado por último (resposta de pergunta pendente, correção/feedback da etapa, **Informações
@@ -1285,6 +1350,13 @@ switch), `refinement-stage-logic.test.ts` (etapas, vagas, ações, bloqueios da 
 Refinamento, trilha), `RefinementActionBar.test.tsx`, `StartWorkbench.test.tsx` ("Refinar tarefa"),
 `refine-workbench-route.test.ts`, `environment-section.test.tsx` (padrão da central) e
 `refinement-workbench-controls.test.ts` (sem controles nativos).
+
+Mesa no celular (OPE-166): `workbench-mobile-logic.test.ts` (descritor dos botões, `dockLayout`, avisos,
+`keyboardInset`, `scrollEdges`), `workbench-mobile-bar.test.tsx` (dock, motivo do bloqueio, folhas,
+pedidos, adversário, campos recolhidos, cabeçalho), `workbench-view-mobile.test.tsx` (mesa montada inteira:
+sem faixa de pedidos, folha de pedidos e "Excluir mesa" com a central), `dev-center-keyboard.test.tsx`
+(altura descontando o teclado), `stage-steps.test.tsx` (forma compacta) e os casos de celular em
+`RefinementActionBar.test.tsx` e `ForkPanel.test.tsx` (com `matchMedia` simulado; sem ele vale o desktop).
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em

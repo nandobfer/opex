@@ -32,6 +32,7 @@ export function FeedbackComposer({
     onSubmit,
     id = "workbench-feedback",
     aside,
+    rows = 4,
 }: {
     copy: FeedbackCopy
     value: string
@@ -42,6 +43,8 @@ export function FeedbackComposer({
     onSubmit: (text: string) => void
     id?: string
     aside?: ReactNode
+    /** Altura do campo em linhas (3 no celular, OPE-166). */
+    rows?: number
 }) {
     const blocked = attachments.blockReason
     return (
@@ -49,7 +52,7 @@ export function FeedbackComposer({
             <label htmlFor={id} className="text-sm font-medium">
                 {copy.title}
             </label>
-            <AttachableTextarea id={id} autoFocus rows={4} value={value} onValueChange={onValueChange} placeholder={copy.placeholder} attachments={attachments} />
+            <AttachableTextarea id={id} autoFocus rows={rows} value={value} onValueChange={onValueChange} placeholder={copy.placeholder} attachments={attachments} />
             <div className="flex flex-wrap items-center justify-end gap-2">
                 {aside && <div className="mr-auto min-w-0 flex-1">{aside}</div>}
                 <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={onCancel} disabled={pending}>
