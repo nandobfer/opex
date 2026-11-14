@@ -151,14 +151,19 @@ as têm no histórico). Falha ao ler as memórias não derruba o
   (OPE-115). Só falha real (sem URL pública do Opex, sem `INTEGRATIONS_ENCRYPTION_KEY` ou nenhum
   diretório registrado, por erro ou por nenhum existir) gera o aviso "Aprendizado autônomo indisponível neste turno"; o turno
   segue sempre. Excluir a central arquiva o canal dela no Engramind.
-- **Duas camadas (OPE-117)**: o desenvolvedor grava o que percebe (checklist de fim de turno, sem
-  restrição) e o Mentor grava só o que passou batido, fundindo com o que já existe. O contexto da mesa
+- **Somente leitura com o Mentor (OPE-165)**: quando o Agente Mentor aprende na central (ativo, "Aprender ao
+  concluir a mesa" ligado e a central no escopo), o desenvolvedor da mesa e dos forks **não grava memória**:
+  a instrução sai sem o checklist de fim de turno (só leitura, com o motivo) e o MCP recusa as ferramentas
+  de gravação. Quem grava é o Mentor, ao concluir a mesa, a partir da transcrição inteira. Fora disso,
+  vale a **dupla camada** (OPE-117): o desenvolvedor grava o que percebe e o Mentor, na conclusão, grava
+  só o que passou batido, fundindo com o que já existe. O contexto da mesa
   leva o **foco** do turno (código, título, etapa e projeto; a descrição da tarefa no restante) e o MCP
   de memórias é registrado sempre (leitura da faixa de títulos com `get_hints`/`get_memory`/
   `search_memories`; gravação só com o aprendizado ligado), inclusive ao mover a sessão para o worktree.
-- O **Agente Mentor** também grava nestas listas (lendo os turnos configurados, inclusive as revisões do
-  adversário, e as memórias que o agente já gravou na cadeia): depois do decisor, o **Triador** escolhe UMA lista
-  entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver
+- O **Agente Mentor** grava nestas listas ao concluir a mesa (OPE-165), lendo a transcrição inteira: o
+  digestor extrai os casos e, para cada um, o **Triador** escolhe UMA lista entre o Agente Adversário, as
+  globais do desenvolvedor e as da central da mesa — a mesma execução pode criar, atualizar, fundir ou
+  arquivar em várias listas (ver
   `modules/adversarial-agent.md`, "Agente Mentor"). Os agentes de refinamento e de revisão de PR não
   recebem estas memórias.
 - O Agente Opex gerencia as duas listas pelas ferramentas de memórias (`centralId` de
@@ -607,11 +612,14 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   publica na Saída da IA e nunca muda a etapa da mesa; a exclusão da mesa aborta a geração
   (`cleanupWorkbenchDiagrams`). Aba **Arquitetura (N)** depois de "Adversário (N)" e campo
   `WorkbenchDto.architect` (`applies`, `planVersion`: o plano mais recente). Ver `modules/architect-agent.md`.
-- **Agente Mentor (OPE-92 · OPE-104)**: o fim de cada cadeia de turnos (com a ação que a originou, o
-  texto do usuário, a rodada do Adversário quando houver e o início da cadeia) e o chat ao vivo vão ao
-  Mentor (sem o antigo bloco ` ```opex-lesson `: o agente consolida as próprias memórias)
-  (`mentorAfterTurns`/`mentorRecordLiveMessage`), que avalia em segundo plano: a mesa nunca espera e uma
-  falha dele não muda a etapa. Comportamento em `modules/adversarial-agent.md`, "Agente Mentor".
+- **Agente Mentor (OPE-165)**: chamado **só na conclusão** — `completeWorkbench` grava `done` e
+  `completedAt` e, depois de concluir (sessão, forks e fila), chama `notifyMentorDone` → `mentorOnDone` em
+  segundo plano, com o `completedAt` como chave de idempotência (uma execução por conclusão; reabrir e
+  concluir de novo gera outra) e `completionKind` (`merge` ou `manual`). Turnos, chat ao vivo, revisões do
+  adversário e feedback de PR não chamam mais o Mentor; exclusão, cancelamento e "Definir etapa" para
+  outra etapa também não. A mesa nunca espera e uma falha dele não muda a etapa. Aba **Aprendizado (N)**
+  depois de "Arquitetura (N)", com as execuções da mesa. Comportamento em `modules/adversarial-agent.md`,
+  "Agente Mentor".
 - **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave
   **Gerar prévia** (`ToggleCard`, situação "Ligada"/"Desligada") — **ligada = Publicar prévia**,
   **desligada = PR automático**. A escolha salva na hora na tarefa
@@ -1151,7 +1159,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   `prefers-reduced-motion`.
 - **Avisos de memória com detalhe** (OPE-139): os avisos de gravação de memória na Saída da IA (mesa e
   forks) — "Memória gravada/editada/fixada/desafixada/reativada/inativada/excluída pelo agente…" (agente
-  desenvolvedor e Agente Adversário) e "O Agente Mentor registrou/atualizou/sugeriu uma memória…" — têm
+  desenvolvedor e Agente Adversário) e "O Agente Mentor aprendeu com esta mesa…" (OPE-165; os antigos
+  "registrou/atualizou/sugeriu uma memória…" continuam no histórico) — têm
   o texto como gatilho de um painel (`NoticeMemoryDetail` → `MemoryDetailPopover`): **passar o mouse**
   abre a prévia e o **clique fixa** o painel (fecha por Esc, clique fora, botão de fechar ou outro
   clique no texto; `useHoverPopover` com `pinOnClick`). O painel mostra **título** (com "Resumo sendo
@@ -1165,7 +1174,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
     app. A sugestão lê a execução (`GET /api/adversarial/mentor/runs/[id]`): aguardando, mostra a
     proposta como "Sugestão, ainda não gravada" (categoria "Definida ao gravar"); aprovada, mostra a
     memória gravada.
-  - Lição dividida pelo Mentor (global + central): abas **Principal** e **Parte separada**.
+  - Aviso com várias memórias (o aprendizado do Mentor, ou a lição dividida antiga): uma aba por memória
+    (**Memória 1**, **Memória 2**…).
   - Memória excluída (aviso de exclusão ou 404 depois) mostra "não está mais no Engramind"; falha de
     leitura mostra "Tentar novamente". Avisos antigos, sem a referência, continuam como texto.
 

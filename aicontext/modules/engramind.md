@@ -938,6 +938,18 @@ enquanto `title_state = pending`).
 
 Ver `aicontext/modules/ai.md`, "Aprendizado autônomo".
 
+### Canais das centrais como fonte do projeto (OPE-165)
+
+O canal de cada central (`agentes/desenvolvedor/central/<centralId>`) é a fonte de **comportamento do
+sistema e informações do projeto** para o agente desenvolvedor, além das convenções: o que mudou no
+comportamento de uma tela ou serviço, comandos, caminhos, armadilhas e preferências do dono daquele
+projeto — para não depender só do `aicontext/` do repositório. Quem grava nele é o **Agente Mentor** ao
+concluir cada mesa (lendo a transcrição inteira): caso com escopo "só este projeto" tende a cair na
+central, onde o sanitizador aceita caminhos e rotas; ele cria, atualiza, funde e arquiva (o que ficou
+obsoleto), nunca exclui, e não arquiva nem absorve memória do dono. Com o Mentor aprendendo na central, o
+desenvolvedor só lê esse canal (contexto, dicas, busca e leitura por id). Ver
+`modules/adversarial-agent.md`, "Agente Mentor".
+
 ### Migração (`?aba=migracao`, `server/migration.ts`)
 
 Etapas no servidor (estado no singleton `engramind_memory_migration`, progresso por `migration.updated`;

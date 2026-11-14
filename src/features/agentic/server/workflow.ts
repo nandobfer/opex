@@ -293,7 +293,7 @@ async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: Tu
     const id = String(doc._id)
     const stage = asStage(doc.stage)
     if (!needsSlotToRun(stage)) {
-        await launchTurn(loaded, turn, { ...options, action })
+        await launchTurn(loaded, turn, options)
         return true
     }
     if (isWorkbenchActive(id)) throw new DomainError(409, "O agente já está trabalhando nesta mesa", "WORKBENCH_BUSY")
@@ -306,7 +306,7 @@ async function launchOrQueue(loaded: Loaded, action: PendingTurnAction, turn: Tu
         }
         const [occupied, othersWaiting] = await Promise.all([occupiedSlots(doc.centralId, id), AgenticWorkbench.exists({ centralId: doc.centralId, pendingTurn: { $ne: null }, _id: { $ne: doc._id } })])
         if (!othersWaiting && occupied < config.maxConcurrent) {
-            await launchTurn(flags.reopen ? await applyReopen(loaded) : loaded, turn, { ...options, action })
+            await launchTurn(flags.reopen ? await applyReopen(loaded) : loaded, turn, options)
             return true
         }
         const pendingTurn: IPendingTurn = {
@@ -371,7 +371,6 @@ export async function startPendingTurn(id: string): Promise<"started" | "dropped
             ready,
             { stage: asStage(pending.stage), text: pending.text, ...(pending.fileIds?.length ? { fileIds: pending.fileIds } : {}) },
             {
-                action: pending.action as PendingTurnAction,
                 ...(pending.userText ? { userText: pending.userText } : {}),
                 ...(pending.feedback !== null ? { feedback: pending.feedback } : {}),
                 ...(pending.extraSet ? { extraSet: pending.extraSet } : {}),
@@ -633,40 +632,6 @@ interface LaunchOptions {
     extraSet?: Record<string, unknown>
     /** Ignora o limite de mesas abertas (a limpeza da exclusão nunca espera uma vaga). */
     bypassLimit?: boolean
-    /** Ação do usuário (ou do PR) que originou o turno (gatilho do Agente Mentor). */
-    action?: PendingTurnAction
-}
-
-/** Turno bem-sucedido da cadeia, com o bloco de lição do desenvolvedor já retirado (Agente Mentor). */
-type MentorTurns = Parameters<Awaited<ReturnType<typeof adversaryModule>>["mentorAfterTurns"]>[0]["turns"]
-
-/** Agente Mentor: fim da cadeia de turnos → avalia em segundo plano (nunca bloqueia a mesa). */
-async function notifyMentor(id: string, turn: TurnPlan, options: LaunchOptions, turns: MentorTurns, chainStartedAt: Date | null): Promise<void> {
-    if (turn.attach || turn.stage === "finishing") {
-        // Sem avaliação nesta cadeia: as mensagens ao vivo dela não podem ficar para a próxima.
-        const adversary = await adversaryModule()
-        adversary.mentorDiscardLiveMessages(id)
-        return
-    }
-    const loaded = await loadAll(id)
-    const { doc } = loaded
-    await (
-        await adversaryModule()
-    ).mentorAfterTurns({
-        workbenchId: id,
-        centralId: doc.centralId,
-        taskId: doc.taskId,
-        taskCode: doc.taskCode,
-        taskTitle: doc.taskTitle,
-        projectName: loaded.projectName,
-        repo: loaded.repo?.repo ?? null,
-        approvedPlan: doc.plans?.at(-1)?.text ?? null,
-        origin: { action: options.action ?? null, userText: options.userText ?? null, feedback: options.feedback ?? null },
-        turns,
-        // Início da cadeia, capturado no launchTurn: o `turnStartedAt` do documento pode já ser de outra cadeia
-        // (ex.: o build disparado pela fila logo depois).
-        since: chainStartedAt,
-    })
 }
 
 /** Inicia um turno em segundo plano (as rotas respondem na hora; a saída chega pelo stream). */
@@ -681,7 +646,6 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
     const shown = turn.attach ? [] : await fileDtosFor(turn.fileIds)
     if (options.userText || shown.length) publishWorkbenchEvent(id, { type: "user", text: options.userText ?? "Arquivos anexados", ...(shown.length ? { files: shown } : {}) })
     const controller = new AbortController()
-    const mentorTurns: MentorTurns = []
     const chainStartedAt = new Date()
     markWorkbenchActive(id, controller)
     try {
@@ -705,18 +669,17 @@ async function launchTurn(loaded: Loaded, turn: TurnPlan, options: LaunchOptions
         await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { refinementPending: null } })
         void releaseRefinementSession(loaded.doc)
     }
-    void executeTurns(id, turn, controller, mentorTurns)
+    void executeTurns(id, turn, controller)
         .catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).error("Falha inesperada na mesa", error))
         .finally(() => {
             clearWorkbenchActive(id, controller)
             // Terminou um build (liberou a vaga) ou uma implementação/revisão adversária (entrou na fila): avalia a fila do build.
             if (turn.stage === "building" || turn.stage === "implementing" || turn.stage === "adversarial_review") pumpBuildQueue()
-            void notifyMentor(id, turn, options, mentorTurns, chainStartedAt).catch((error) => centralLogger(loaded.doc.centralId, loaded.doc.taskCode).warn("Agente Mentor: avaliação não enfileirada", { workbenchId: id, error: errorText(error) }))
         })
 }
 
 /** Executa o turno e os encadeados (implementação → build), mantendo a mesa ativa entre eles. */
-async function executeTurns(id: string, first: TurnPlan, controller: AbortController, mentorTurns: MentorTurns = []): Promise<void> {
+async function executeTurns(id: string, first: TurnPlan, controller: AbortController): Promise<void> {
     let turn: TurnPlan | null = first
     /** Tentativa remota desta rodada de build (a falha dela não invalida uma reserva mais nova). */
     const failedAttempt: { attempt: string | null } = { attempt: null }
@@ -729,9 +692,6 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         if (turn.stage === "adversarial_review") {
             try {
                 next = await adversarialTurn(loaded, turn, controller)
-                // Agente Mentor ("Revisões do adversário"): o relatório da rodada entra na avaliação do fim da cadeia.
-                const review = await (await adversaryModule()).mentorAdversarialTurn(id)
-                if (review) mentorTurns.push(review)
             } catch (error) {
                 log.error(`${WORKBENCH_STAGE_LABELS[turn.stage]}: falhou`, error, { workbenchId: id })
                 await prepareHub(id)
@@ -771,8 +731,6 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
             const text = withAttachmentsSection(memories ? withDeveloperMemories(memories, withNotes) : withNotes, attachments.section)
             const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
-            // Agente Mentor: a resposta do turno entra na avaliação do fim da cadeia.
-            if (result.outcome === "succeeded") mentorTurns.push({ stage: turn.stage, text: result.text })
             if (result.outcome !== "succeeded") {
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
                 return
@@ -1290,11 +1248,13 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
 async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
     await releasePreviewPort(String(doc._id))
     const sessionId = doc.sessionId
+    // Chave da execução do Agente Mentor desta conclusão (reabrir e concluir de novo gera outra).
+    const completedAt = new Date()
     // A mesa concluiu: desvincula a sessão e a registra como pendente de exclusão na MESMA atualização
     // (a exclusão em si é tentada logo abaixo; se falhar, a pendência é retomada pela rotina de Crons).
     await update(
         doc,
-        { stage: "done", runState: "idle", completedAt: new Date(), error: null, previewUrl: null, previewHealthy: null, previewBackup: null, sessionId: null, sessionDirectory: null },
+        { stage: "done", runState: "idle", completedAt, error: null, previewUrl: null, previewHealthy: null, previewBackup: null, sessionId: null, sessionDirectory: null },
         sessionId ? { $addToSet: { pendingSessionDeletions: sessionId } } : {},
     )
     publishWorkbenchEvent(String(doc._id), { type: "notice", level: "success", message: "Mesa de trabalho concluída" })
@@ -1314,6 +1274,27 @@ async function completeWorkbench(doc: IAgenticWorkbench): Promise<void> {
         centralLogger(doc.centralId, doc.taskCode).warn("Falha ao tratar os forks na conclusão da mesa", { workbenchId: String(doc._id), error: errorText(error) })
     }
     pumpQueue(doc.centralId)
+    // Agente Mentor (OPE-165): aprende UMA vez por conclusão, em segundo plano e depois de a mesa ficar `done`.
+    void notifyMentorDone(doc, completedAt).catch((error) => centralLogger(doc.centralId, doc.taskCode).warn("Agente Mentor: aprendizado não enfileirado", { workbenchId: String(doc._id), error: errorText(error) }))
+}
+
+/** Dados da conclusão para o Agente Mentor (nunca lança para a mesa: o chamador só loga). */
+async function notifyMentorDone(doc: IAgenticWorkbench, completedAt: Date): Promise<void> {
+    const { doc: central } = await loadCentral(doc.centralId)
+    const repo = await repoForProject(central.projectId).catch(() => null)
+    await (
+        await adversaryModule()
+    ).mentorOnDone({
+        workbenchId: String(doc._id),
+        centralId: doc.centralId,
+        taskId: doc.taskId,
+        taskCode: doc.taskCode,
+        taskTitle: doc.taskTitle,
+        projectName: central.projectName,
+        repo: repo?.repo ?? null,
+        completedAt,
+        completionKind: doc.manualCompletion ? "manual" : "merge",
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -1709,7 +1690,7 @@ async function launchPlanFromSpec(loaded: Loaded, text: string | null, fileIds: 
     const turn: TurnPlan = { stage: "planning", text: planPrompt(loaded.config, contextOf(loaded), taskMarkdown(task, loaded.config), text), ...(fileIds.length ? { fileIds } : {}) }
     const options: LaunchOptions = text ? { userText: text } : fileIds.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}
     if (queue) return launchOrQueue(loaded, "generate-plan", turn, options)
-    await launchTurn(loaded, turn, { ...options, action: "generate-plan" })
+    await launchTurn(loaded, turn, options)
     return true
 }
 
@@ -2154,9 +2135,6 @@ export async function sendLiveMessage(id: string, text: string, fileIds?: string
     const files = await loadClaimableFiles(fileIds, id)
     const attachments = files.length ? await liveAttachments(files, agenticDownloadDir(doc.taskCode)) : undefined
     await deliverLiveMessage({ runId: id, centralId: doc.centralId, label: "a mesa", audit: { entidade: AGENTIC_AUDIT_WORKBENCH, contexto: { tarefa: doc.taskCode, etapa: asStage(doc.stage) } } }, text, attachments)
-    // Agente Mentor: avalia a mensagem ao fim do turno em andamento.
-    const adversary = await adversaryModule()
-    adversary.mentorRecordLiveMessage(id, text)
     await claimAgenticFiles(files, { workbenchId: id })
     centralLogger(doc.centralId, doc.taskCode).step("Mensagem do usuário entregue ao turno em andamento", { workbenchId: id })
     return getWorkbench(id)

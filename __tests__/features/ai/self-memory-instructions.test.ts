@@ -60,8 +60,8 @@ describe('instrução de memória própria', () => {
   })
 
   it('duas camadas: desenvolvedor e Adversário sabem que o Mentor grava o que passou batido; os demais não', () => {
-    expect(selfMemoryInstructions('desenvolvedor', TURNS.desenvolvedor)).toContain('Agente Mentor revisa a cadeia depois')
-    expect(selfMemoryInstructions('adversario', TURNS.adversario)).toContain('Agente Mentor revisa a cadeia depois')
+    expect(selfMemoryInstructions('desenvolvedor', TURNS.desenvolvedor)).toContain('o Agente Mentor relê a transcrição inteira')
+    expect(selfMemoryInstructions('adversario', TURNS.adversario)).toContain('o Agente Mentor relê a transcrição inteira')
     expect(selfMemoryInstructions('opex', TURNS.opex)).not.toContain('Agente Mentor')
   })
 

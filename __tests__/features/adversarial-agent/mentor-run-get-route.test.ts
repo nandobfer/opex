@@ -1,10 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
 
-/** OPE-139: `GET /api/adversarial/mentor/runs/[id]` repassa o id a `getMentorRun` (painel da sugestão no aviso da mesa). */
+/** OPE-139: `GET /api/adversarial/mentor/runs/[id]` repassa o id a `getMentorLearningRun` (detalhe e painel da sugestão). */
 
 const mocks = vi.hoisted(() => ({ getRun: vi.fn() }))
 
-vi.mock('@/features/adversarial-agent/server/mentor/run', () => ({ getMentorRun: mocks.getRun }))
+vi.mock('@/features/adversarial-agent/server/mentor/run', () => ({ getMentorLearningRun: mocks.getRun }))
 
 import { NextRequest } from 'next/server'
 import { DomainError } from '@/lib/api/route'

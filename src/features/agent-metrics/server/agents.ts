@@ -412,7 +412,7 @@ export async function mentorMetrics(ctx: MetricsContext): Promise<Partial_> {
     const { MentorRun, mentorDb } = await import("@/features/adversarial-agent/server/mentor/models")
     await mentorDb()
     const docs = await MentorRun.find({ finishedAt: { $gte: ctx.range.from, $lte: ctx.range.to } })
-        .select({ taskId: 1, status: 1, target: 1, finishedAt: 1 })
+        .select({ taskId: 1, status: 1, target: 1, finishedAt: 1, operationCounts: 1, targetCounts: 1 })
         .lean()
     const tasks = await loadTasks(docs.map((doc) => doc.taskId ?? ""))
     const runs = docs
@@ -421,7 +421,7 @@ export async function mentorMetrics(ctx: MetricsContext): Promise<Partial_> {
             if (task?.archived) return false
             return matchesFilters(ctx, task ?? {})
         })
-        .map((doc) => ({ at: new Date(doc.finishedAt!).getTime(), status: doc.status, target: doc.target ?? null }))
+        .map((doc) => ({ at: new Date(doc.finishedAt!).getTime(), status: doc.status, target: doc.target ?? null, operations: doc.operationCounts ?? null, targetCounts: doc.targetCounts ?? null }))
     const summary = summarizeMentor(runs)
     const finished = runs.filter((run) => !["queued", "running"].includes(run.status))
     return {
@@ -431,7 +431,8 @@ export async function mentorMetrics(ctx: MetricsContext): Promise<Partial_> {
         kpis: [
             kpi("lessons", "% de lições registradas", summary.lessonPercent, "percent", "Execuções que geraram memória, contra as descartadas"),
             kpi("created", "Memórias criadas", summary.created, "count", "No período"),
-            kpi("updated", "Memórias editadas", summary.updated, "count", "No período"),
+            kpi("updated", "Memórias editadas", summary.updated, "count", "No período (atualizadas ou fundidas)"),
+            kpi("archived", "Memórias arquivadas", summary.archived, "count", "No período (obsoletas ou absorvidas numa fusão)"),
             kpi("failures", "% de falhas", summary.failurePercent, "percent", "Execuções que terminaram com erro"),
         ],
         lines: [
@@ -447,7 +448,7 @@ export async function mentorMetrics(ctx: MetricsContext): Promise<Partial_> {
                 ],
                 points: mergeLineSeries(
                     percentSeries(
-                        finished.filter((run) => ["created", "updated", "discarded", "skipped"].includes(run.status)).map((run) => ({ at: run.at, flags: { lessons: run.status === "created" || run.status === "updated" } })),
+                        finished.filter((run) => ["created", "updated", "learned", "discarded", "skipped"].includes(run.status)).map((run) => ({ at: run.at, flags: { lessons: run.status === "created" || run.status === "updated" || run.status === "learned" } })),
                         ["lessons"] as const,
                         ctx.bucket,
                     ),
@@ -459,7 +460,7 @@ export async function mentorMetrics(ctx: MetricsContext): Promise<Partial_> {
             {
                 id: "targets",
                 title: "Destino das lições",
-                description: "Memórias criadas ou editadas, por lista.",
+                description: "Operações aplicadas (criar, editar, fundir, arquivar), por lista.",
                 format: "count",
                 items: summary.targets.map((item) => ({ key: item.key, label: MENTOR_TARGET_LABELS[item.key as keyof typeof MENTOR_TARGET_LABELS]?.label ?? item.key, value: item.count })),
             },

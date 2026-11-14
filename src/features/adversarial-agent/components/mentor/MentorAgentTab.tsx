@@ -20,21 +20,20 @@ import { MENTOR_AI_TAB } from "../../mentor/constants"
 import { DEFAULT_MENTOR_SETTINGS, mentorSettingsSchema, type MentorSettings } from "../../mentor/schemas"
 import { useMentorSettings, useSaveMentorSettings } from "../../hooks/useMentor"
 import { ScopeCard } from "@/features/ai/components/agent-settings/ScopeCard"
-import { MentorContextSection } from "./MentorContextSection"
+import { MentorDigestCard } from "./MentorDigestCard"
+import { MentorHowItWorksCard } from "./MentorHowItWorksCard"
 import { MentorDeciderCard } from "./MentorDeciderCard"
 import { MentorRouterCard } from "./MentorRouterCard"
 import { MentorReorgSection } from "./reorg/MentorReorgSection"
 import { MentorRunsSection } from "./MentorRunsSection"
-import { MentorTriggersCard } from "./MentorTriggersCard"
 import { MentorWriterCard } from "./MentorWriterCard"
 
 /** Aba "Agente Mentor" de `/integracoes/ia` (logo depois da aba Agente Adversário). */
 export const MENTOR_AI_TAB_DEF: IntegrationTabDef<AiTab> = { id: MENTOR_AI_TAB, label: "Mentor", icon: GraduationCap }
 
-type Section = "geral" | "contexto" | "execucoes" | "reorganizacao"
+type Section = "geral" | "execucoes" | "reorganizacao"
 const SECTIONS: { value: Section; label: string }[] = [
     { value: "geral", label: "Geral" },
-    { value: "contexto", label: "Contexto" },
     { value: "execucoes", label: "Execuções" },
     { value: "reorganizacao", label: "Reorganização" },
 ]
@@ -42,8 +41,8 @@ const sectionMotion = { initial: { opacity: 0, y: 6 }, animate: { opacity: 1, y:
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 
 /**
- * Configuração do Agente Mentor: observa os turnos das mesas e os pedidos do agente desenvolvedor e
- * transforma lições relevantes em memórias do Agente Adversário. O formulário fica acima das seções
+ * Configuração do Agente Mentor (OPE-165: aprende na conclusão da mesa, a partir da transcrição inteira):
+ * chave, funcionamento, digestor, decisor, Triador, redator e escopo. O formulário fica acima das seções
  * (trocar de seção não descarta o rascunho); as execuções leem na hora, fora do formulário.
  */
 export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
@@ -72,8 +71,8 @@ export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
             const saved = await save.mutateAsync(values).catch(() => null)
             if (saved) form.reset(saved.settings)
         },
-        (errors) => {
-            setSection(errors.context ? "contexto" : "geral")
+        () => {
+            setSection("geral")
             toast.error("Corrija os campos destacados antes de salvar")
         },
     )
@@ -92,10 +91,10 @@ export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
                                         name="enabled"
                                         id="mentor-enabled"
                                         label="Agente Mentor"
-                                        description="Observa os turnos das mesas e os pedidos do agente desenvolvedor e, quando há uma lição relevante, grava (ou funde) uma memória genérica do Agente Adversário. Roda em segundo plano: a mesa nunca espera."
+                                        description="Aprende com cada mesa concluída: lê a transcrição inteira e cria, atualiza, funde ou arquiva memórias do agente desenvolvedor (globais e da central) e do Agente Adversário. Roda em segundo plano: a mesa nunca espera."
                                     />
                                     <AnimatePresence initial={false}>
-                                        {!dirty && !availability.available && availability.reason && (
+                                        {!dirty && availability.reason && (!availability.available || query.data.settings.enabled) && (
                                             <motion.p key="availability" {...noticeMotion} className="flex items-start gap-2 overflow-hidden text-xs text-muted-foreground">
                                                 <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden /> {availability.reason}
                                             </motion.p>
@@ -103,14 +102,14 @@ export function MentorAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boole
                                     </AnimatePresence>
                                 </CardContent>
                             </Card>
-                            <MentorTriggersCard form={form} />
+                            <MentorHowItWorksCard form={form} />
+                            <MentorDigestCard form={form} providers={providers} />
                             <MentorDeciderCard form={form} providers={providers} />
                             <MentorRouterCard form={form} providers={providers} />
                             <MentorWriterCard form={form} providers={providers} />
-                            <ScopeCard form={form} id="mentor" description="O Mentor avalia só as mesas das centrais escolhidas." listLabel="Centrais com o Agente Mentor" />
+                            <ScopeCard form={form} id="mentor" description="O Mentor aprende só com as mesas das centrais escolhidas (e o desenvolvedor delas fica somente leitura)." listLabel="Centrais com o Agente Mentor" />
                         </>
                     )}
-                    {section === "contexto" && <MentorContextSection form={form} />}
                     {section === "execucoes" && <MentorRunsSection />}
                     {section === "reorganizacao" && <MentorReorgSection />}
                 </motion.div>
