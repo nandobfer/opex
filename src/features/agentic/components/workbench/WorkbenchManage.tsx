@@ -16,10 +16,14 @@ export const firstManualStage = (workbench: WorkbenchDto): ManualStage => (workb
 
 export type ManageDialog = { kind: "stage"; stage: ManualStage } | { kind: "delete" }
 
-/** Itens "Mesa" da folha "Mais ações" do celular: Concluir mesa…, Definir etapa… e Excluir mesa. */
-export function WorkbenchManageItems({ workbench, onPick }: { workbench: WorkbenchDto; onPick: (dialog: ManageDialog) => void }) {
+/**
+ * Itens "Mesa" da folha "Mais ações" do celular: Concluir mesa…, Definir etapa… e Excluir mesa. `canDelete`:
+ * a confirmação de excluir precisa da central (sem ela o item não aparece, em vez de fechar a folha sem abrir nada).
+ */
+export function WorkbenchManageItems({ workbench, canDelete, onPick }: { workbench: WorkbenchDto; canDelete: boolean; onPick: (dialog: ManageDialog) => void }) {
     const stageMenu = stageMenuAvailable(workbench)
-    if (!stageMenu && workbench.deletionRequestedAt) return null
+    const deletable = canDelete && !workbench.deletionRequestedAt
+    if (!stageMenu && !deletable) return null
     return (
         <ActionSheetSection title="Mesa">
             {stageMenu && (
@@ -28,7 +32,7 @@ export function WorkbenchManageItems({ workbench, onPick }: { workbench: Workben
                     <ActionSheetItem icon={ListTree} label="Definir etapa…" hint="Leva a mesa a uma etapa manualmente" onSelect={() => onPick({ kind: "stage", stage: firstManualStage(workbench) })} />
                 </>
             )}
-            {!workbench.deletionRequestedAt && <ActionSheetItem icon={Trash2} label="Excluir mesa" hint="Limpa o ambiente e apaga a mesa (pede confirmação)" destructive onSelect={() => onPick({ kind: "delete" })} />}
+            {deletable && <ActionSheetItem icon={Trash2} label="Excluir mesa" hint="Limpa o ambiente e apaga a mesa (pede confirmação)" destructive onSelect={() => onPick({ kind: "delete" })} />}
         </ActionSheetSection>
     )
 }

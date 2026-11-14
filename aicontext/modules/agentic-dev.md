@@ -497,7 +497,9 @@ intermediário). Em `>= lg` a mesa continua igual. A escolha do leiaute é feita
   **Responder pedido** (ou **Responder pedidos (N)**); bloqueio do adversário → **Decidir revisão**;
   senão a primeira de `DOCK_PRIMARY_PRIORITY` (Implementar, Aprovar, Tentar novamente, Reconectar,
   Descrever as mudanças, Reabrir, Cancelar espera, Parar, Solicitar correção, Solicitar correção do
-  plano). Sem nenhuma (ex.: PR aberto parado), o **Mais ações** ocupa a linha. Com o campo de
+  plano). Sem nenhuma (ex.: PR aberto parado), o **Mais ações** ocupa a linha. Com o botão principal
+  bloqueado (ex.: anexo subindo no Implementar, outra ação em andamento), o motivo aparece em texto
+  logo acima do dock. Com o campo de
   correção ou de fork aberto o dock some (o campo tem Cancelar/Enviar), como a linha do desktop.
 - **Folha "Mais ações"** (`mobile/ActionSheet`, `Sheet` do shadcn vindo de baixo, até 85% da altura):
   **Ações da etapa** (as demais do descritor, com o motivo do bloqueio **em texto** — no toque não há
@@ -1350,8 +1352,10 @@ Refinamento, trilha), `RefinementActionBar.test.tsx`, `StartWorkbench.test.tsx` 
 `refinement-workbench-controls.test.ts` (sem controles nativos).
 
 Mesa no celular (OPE-166): `workbench-mobile-logic.test.ts` (descritor dos botões, `dockLayout`, avisos,
-`keyboardInset`, `scrollEdges`), `workbench-mobile-bar.test.tsx` (dock, folhas, pedidos, adversário,
-campos recolhidos, cabeçalho), `stage-steps.test.tsx` (forma compacta) e os casos de celular em
+`keyboardInset`, `scrollEdges`), `workbench-mobile-bar.test.tsx` (dock, motivo do bloqueio, folhas,
+pedidos, adversário, campos recolhidos, cabeçalho), `workbench-view-mobile.test.tsx` (mesa montada inteira:
+sem faixa de pedidos, folha de pedidos e "Excluir mesa" com a central), `dev-center-keyboard.test.tsx`
+(altura descontando o teclado), `stage-steps.test.tsx` (forma compacta) e os casos de celular em
 `RefinementActionBar.test.tsx` e `ForkPanel.test.tsx` (com `matchMedia` simulado; sem ele vale o desktop).
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),

@@ -75,7 +75,7 @@ export function WorkbenchMobileBar({ workbench, central, items, notices, editing
     return (
         <>
             <StatusNoticeLine notices={notices} />
-            <AnimatePresence initial={false}>{!editing && <MobileActionDock key="dock" primary={primaryNode} onMore={() => setSheet("more")} />}</AnimatePresence>
+            <AnimatePresence initial={false}>{!editing && <MobileActionDock key="dock" primary={primaryNode} blockedReason={primary?.type === "item" ? primary.item.disabledReason : null} onMore={() => setSheet("more")} />}</AnimatePresence>
 
             <ActionSheet open={open === "more"} onOpenChange={closeIf("more")} title="Mais ações" testId="workbench-more-sheet">
                 {(layout.secondary.length > 0 || (adversarialAvailable && !adversarialBlocked)) && (
@@ -98,7 +98,7 @@ export function WorkbenchMobileBar({ workbench, central, items, notices, editing
                         <WorkbenchModelSettings workbench={workbench} buttonClassName="h-11 min-w-11" />
                     </ActionSheetSection>
                 )}
-                <WorkbenchManageItems workbench={workbench} onPick={setManage} />
+                <WorkbenchManageItems workbench={workbench} canDelete={central !== null} onPick={setManage} />
             </ActionSheet>
 
             <ActionSheet open={open === "requests"} onOpenChange={closeIf("requests")} title="Pedidos do agente" description="O agente está esperando a sua resposta para continuar." testId="workbench-requests-sheet">

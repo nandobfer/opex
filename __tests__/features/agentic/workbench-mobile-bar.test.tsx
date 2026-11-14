@@ -10,13 +10,13 @@ import { framerMotionMock } from '../../helpers/framer-motion'
  * valendo para tudo abaixo de `lg`). O desktop segue coberto por `ActionBar.test.tsx` (sem `matchMedia`).
  */
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), reconnect: vi.fn(), setPreview: vi.fn(), sendLive: vi.fn(), replyPermission: vi.fn(), remove: vi.fn() }))
+const mocks = vi.hoisted(() => ({ pending: false, mutate: vi.fn(), reconnect: vi.fn(), setPreview: vi.fn(), sendLive: vi.fn(), replyPermission: vi.fn(), remove: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
 vi.mock('@/features/agentic/hooks/useForks', () => ({ useOpenFork: () => ({ mutate: vi.fn(), isPending: false }) }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
-  useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: false }),
+  useWorkbenchAction: () => ({ mutate: mocks.mutate, isPending: mocks.pending }),
   useWorkbenchReconnect: () => ({ mutateAsync: mocks.reconnect, isPending: false }),
   useSetWorkbenchModel: () => ({ mutate: vi.fn(), isPending: false }),
   useSetWorkbenchPreview: () => ({ mutate: mocks.setPreview, isPending: false }),
@@ -89,6 +89,7 @@ const sheet = (name: string) => within(screen.getByRole('dialog', { name }))
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.pending = false
   mockCompact(true)
 })
 afterEach(() => mockCompact(false))
@@ -118,6 +119,16 @@ describe('ActionBar no celular — dock e folha "Mais ações" (OPE-166, opção
     expect(screen.getByLabelText('O que precisa mudar no plano?')).toBeTruthy()
     // Com o campo de correção aberto o dock some (o campo tem Cancelar/Enviar), como no desktop.
     expect(screen.queryByTestId('mobile-action-dock')).toBeNull()
+  })
+
+  it('botão principal bloqueado: o motivo aparece em texto acima do dock (no toque não há dica)', () => {
+    const { rerender } = render(<ActionBar workbench={workbench({})} central={central} />)
+    expect(screen.queryByTestId('dock-blocked-reason')).toBeNull()
+    mocks.pending = true
+    rerender(<ActionBar workbench={workbench({})} central={central} />)
+    const dock = within(screen.getByTestId('mobile-action-dock'))
+    expect((dock.getByRole('button', { name: 'Implementar' }) as HTMLButtonElement).disabled).toBe(true)
+    expect(screen.getByTestId('dock-blocked-reason').textContent).toBe('Aguarde a ação em andamento')
   })
 
   it('"Informações adicionais" começa recolhido e abre sozinho quando a citação de uma linha cai nele', () => {

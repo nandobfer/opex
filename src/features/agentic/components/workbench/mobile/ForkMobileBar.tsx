@@ -46,7 +46,7 @@ export function ForkMobileBar({ fork, workbench, buttons, canFork, pending, onFo
     return (
         <>
             <AnimatePresence initial={false}>
-                <MobileActionDock key="dock" primary={primaryNode} onMore={() => setOpen(true)} />
+                <MobileActionDock key="dock" primary={primaryNode} blockedReason={primary?.disabled ? (primary.title ?? busy) : null} onMore={() => setOpen(true)} />
             </AnimatePresence>
             <ActionSheet open={open} onOpenChange={setOpen} title={`Fork ${fork.number}`} testId="fork-more-sheet">
                 {(canFork || secondary.length > 0) && (

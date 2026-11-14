@@ -54,7 +54,7 @@ export function RefinementMobileBar({ workbench, central, buttons, notices, reco
         <>
             <StatusNoticeLine notices={notices} />
             <AnimatePresence initial={false}>
-                <MobileActionDock key="dock" primary={primaryNode} onMore={() => setOpen(true)} />
+                <MobileActionDock key="dock" primary={primaryNode} blockedReason={primary && !primary.reconnect ? primary.disabledReason : null} onMore={() => setOpen(true)} />
             </AnimatePresence>
             <ActionSheet open={open} onOpenChange={setOpen} title="Mais ações" testId="workbench-more-sheet">
                 {secondary.length > 0 && (
@@ -74,7 +74,7 @@ export function RefinementMobileBar({ workbench, central, buttons, notices, reco
                         <WorkbenchModelSettings workbench={workbench} buttonClassName="h-11 min-w-11" />
                     </ActionSheetSection>
                 )}
-                <WorkbenchManageItems workbench={workbench} onPick={setManage} />
+                <WorkbenchManageItems workbench={workbench} canDelete={central !== null} onPick={setManage} />
             </ActionSheet>
             <WorkbenchManageDialogs workbench={workbench} central={central} dialog={manage} onClose={() => setManage(null)} />
         </>
