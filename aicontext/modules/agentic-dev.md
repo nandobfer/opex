@@ -552,7 +552,9 @@ sobem de baixo (`ActionSheet`). Em `>= lg` a coluna continua igual (seção acim
 muda: só a apresentação.
 
 - **Casca**: sem borda, fundo e cantos, na largura toda, como a mesa (`DEV_CENTER_PANE_BLEED_CLASS` em
-  `components/dev-center/pane-classes.ts`, que também compõe `WORKBENCH_CARD_CLASS`).
+  `components/dev-center/pane-classes.ts`, que também compõe `WORKBENCH_CARD_CLASS`; o `max-lg:w-auto` dela
+  anula o `w-full` da coluna, senão a margem negativa só deslocaria o painel). O skeleton do celular usa a
+  mesma classe e as classes do topo (`mobile/header-classes.ts`).
 - **Topo** (`mobile/TasksMobileHeader`): "Tarefas N" com três botões de 40 px — **Quota do OpenCode**
   (bolinha da pior faixa, a mesma da barra lateral, `StatusDot`), **Filtros** (selo com o número de filtros
   fora do padrão) e **Configurar central**; abaixo, a **busca sempre à vista**; e, só quando há filtro fora

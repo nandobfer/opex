@@ -7,9 +7,11 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { SheetClose } from "@/components/ui/sheet"
 import { TooltipProvider } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import { ActiveFilterChips, type ActiveFilterChip } from "@/components/list/ActiveFilterChips"
 import { mobileFilterChips, seeTasksLabel } from "../../../dev-center-mobile"
 import { ActionSheet } from "../../workbench/mobile/ActionSheet"
+import { TASKS_MOBILE_HEADER_CLASS, TASKS_MOBILE_ICON_BUTTON_CLASS, TASKS_MOBILE_SEARCH_CLASS, TASKS_MOBILE_TITLE_ROW_CLASS } from "./header-classes"
 import { QuotaSheetButton } from "./QuotaSheetButton"
 
 interface TasksMobileHeaderProps {
@@ -35,13 +37,13 @@ export function TasksMobileHeader({ count, chips, search, onSearch, settings, fi
     const visibleChips = mobileFilterChips(chips)
     const active = visibleChips.length
     return (
-        <div className="space-y-2 border-b px-3 pb-2.5 pt-1" data-testid="tasks-mobile-header">
-            <div className="flex items-center gap-1">
+        <div className={TASKS_MOBILE_HEADER_CLASS} data-testid="tasks-mobile-header">
+            <div className={TASKS_MOBILE_TITLE_ROW_CLASS}>
                 <h2 className="flex-1 text-sm font-semibold">
                     Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{count}</span>
                 </h2>
                 <QuotaSheetButton />
-                <Button type="button" variant="ghost" size="icon" className="relative h-10 w-10 shrink-0" onClick={() => setFiltersOpen(true)} aria-label={active ? `Filtros (${active} ${active === 1 ? "ativo" : "ativos"})` : "Filtros"} data-testid="dev-center-filters-button">
+                <Button type="button" variant="ghost" size="icon" className={cn("relative", TASKS_MOBILE_ICON_BUTTON_CLASS)} onClick={() => setFiltersOpen(true)} aria-label={active ? `Filtros (${active} ${active === 1 ? "ativo" : "ativos"})` : "Filtros"} data-testid="dev-center-filters-button">
                     <Filter className="h-4 w-4" aria-hidden />
                     <AnimatePresence initial={false}>
                         {active > 0 && (
@@ -63,7 +65,7 @@ export function TasksMobileHeader({ count, chips, search, onSearch, settings, fi
             </div>
             <div className="relative">
                 <Search className="pointer-events-none absolute left-2.5 top-3 h-4 w-4 text-muted-foreground" aria-hidden />
-                <Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar por código ou título" className="h-10 bg-transparent pl-8" aria-label="Buscar tarefas" />
+                <Input value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Buscar por código ou título" className={cn(TASKS_MOBILE_SEARCH_CLASS, "bg-transparent pl-8")} aria-label="Buscar tarefas" />
             </div>
             <AnimatePresence initial={false}>
                 {active > 0 && (

@@ -9,7 +9,9 @@ import { OpencodeQuotaPanel } from "@/features/opencode-quota/components/Opencod
 import { useOpencodeQuota, useOpencodeQuotaRealtime } from "@/features/opencode-quota/hooks/useOpencodeQuota"
 import { useQuotaPanelPrefs } from "@/features/opencode-quota/hooks/useQuotaPanelPrefs"
 import { visibleQuotaLevel } from "@/features/opencode-quota/logic"
+import { cn } from "@/lib/utils"
 import { ActionSheet } from "../../workbench/mobile/ActionSheet"
+import { TASKS_MOBILE_ICON_BUTTON_CLASS } from "./header-classes"
 
 /**
  * Quota do OpenCode na coluna Tarefas do celular (`< lg`, OPE-166): um botão de 40 px com a bolinha da pior
@@ -24,7 +26,7 @@ export function QuotaSheetButton() {
     const now = useNow(30_000)
     return (
         <>
-            <Button type="button" variant="ghost" size="icon" className="relative h-10 w-10 shrink-0" onClick={() => setOpen(true)} aria-label="Quota do OpenCode" data-testid="dev-center-quota-button">
+            <Button type="button" variant="ghost" size="icon" className={cn("relative", TASKS_MOBILE_ICON_BUTTON_CLASS)} onClick={() => setOpen(true)} aria-label="Quota do OpenCode" data-testid="dev-center-quota-button">
                 <span className="relative flex">
                     <Gauge className="h-4 w-4" aria-hidden />
                     <StatusDot name="Quota" level={visibleQuotaLevel(quota.data, prefs, now)} side="right" ringClassName="ring-background" />

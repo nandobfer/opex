@@ -57,6 +57,16 @@ describe('DevCenterPage · teclado virtual (OPE-166)', () => {
     expect(sectionHeight()).toBe('700px')
   })
 
+  it('celular só com a lista (sem tarefa aberta): a busca abre o teclado e a central também desconta (OPE-166, plano v2)', () => {
+    mockCompact(true)
+    render(<DevCenterPage taskId={null} />)
+    const listHeight = () => (screen.getByTestId('tasks-pane').closest('section') as HTMLElement).style.getPropertyValue('--dev-center-height')
+    expect(listHeight()).toBe('700px')
+    viewport.height = 480
+    act(() => listeners.forEach((fn) => fn()))
+    expect(listHeight()).toBe('380px')
+  })
+
   it('desktop: o teclado não muda a altura', () => {
     mockCompact(false)
     viewport.height = 480

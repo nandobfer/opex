@@ -31,6 +31,7 @@ vi.mock('@tanstack/react-virtual', () => ({
 
 import { TasksPane } from '@/features/agentic/components/dev-center/TasksPane'
 import { COMPACT_WORKBENCH_QUERY } from '@/features/agentic/hooks/useCompactWorkbench'
+import { TasksPaneMobileSkeleton } from '@/features/agentic/components/dev-center/mobile/TasksPaneMobileSkeleton'
 
 const ok = (data: unknown) => ({ data: { success: true, data } })
 const central = { id: 'c1', projectId: 'p1', projectName: 'Opex', config: { enabled: true } } as unknown as CentralDto
@@ -147,6 +148,15 @@ describe('TasksPane no celular (OPE-166, plano v2)', () => {
     await renderPane()
     expect(screen.getByTestId('task-waiting-reason').textContent).toContain('Aguardando revisão do plano')
     expect(screen.getAllByTestId('task-column-label')[0]!.textContent).toBe('· Em andamento')
+  })
+
+  it('a coluna e o skeleton sangram até a borda da tela: largura automática no celular para a margem negativa alargar', async () => {
+    await renderPane()
+    const card = screen.getByTestId('tasks-pane')
+    for (const name of ['max-lg:w-auto', 'max-md:-mx-4', 'md:max-lg:-mx-6', 'lg:w-[340px]']) expect(card.classList.contains(name)).toBe(true)
+    render(<TasksPaneMobileSkeleton />)
+    const skeleton = screen.getByTestId('tasks-pane-mobile-skeleton')
+    for (const name of ['max-lg:w-auto', 'max-md:-mx-4', 'md:max-lg:-mx-6']) expect(skeleton.classList.contains(name)).toBe(true)
   })
 
   it('ao voltar da mesa, a lista rola até a tarefa que estava aberta', async () => {

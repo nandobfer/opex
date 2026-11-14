@@ -33,6 +33,7 @@ import { CollapsibleTaskFilters } from "./CollapsibleTaskFilters"
 import { TaskFilters } from "./TaskFilters"
 import { TaskRow, TaskRowSkeleton } from "./TaskRow"
 import { TasksMobileHeader } from "./mobile/TasksMobileHeader"
+import { TASKS_MOBILE_ICON_BUTTON_CLASS } from "./mobile/header-classes"
 import { DEV_CENTER_PANE_BLEED_CLASS } from "./pane-classes"
 
 /** Configurar a central selecionada (ou as centrais, em "Todos os projetos"); 40 px no celular. */
@@ -42,7 +43,7 @@ function CentralSettingsButton({ central, compact }: { central: CentralDto | nul
         <TooltipProvider>
             <Tooltip>
                 <TooltipTrigger asChild>
-                    <Button asChild variant="ghost" size="icon" className={cn("shrink-0", compact ? "h-10 w-10" : "h-8 w-8")}>
+                    <Button asChild variant="ghost" size="icon" className={cn("shrink-0", compact ? TASKS_MOBILE_ICON_BUTTON_CLASS : "h-8 w-8")}>
                         <Link href={central ? centralSettingsPath(central.id) : AGENTIC_CENTRALS_HREF} aria-label={label}>
                             <Settings className="h-4 w-4" aria-hidden />
                         </Link>
