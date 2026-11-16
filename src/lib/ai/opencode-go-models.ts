@@ -37,6 +37,22 @@ export interface OpencodeGoRawModel {
     limit?: { context?: number }
     cost?: { text?: { input?: { price?: number }; output?: { price?: number } } }
     api?: Partial<Record<string, { base_url?: string }>>
+    /** Cota mensal do modelo por plano (`go`, `go-plus`…), em US$ de custo real; `null` nos gratuitos. */
+    go?: { monthly_usage?: Partial<Record<string, number>> | null }
+}
+
+/**
+ * Cota mensal de cada modelo no plano (`go.monthly_usage[plano]`): é a tabela que o medidor da assinatura
+ * usa para normalizar o custo por modelo. Modelo sem cota no plano fica `null` (gratuito ou fora do plano).
+ */
+export function opencodeGoMonthlyAllowances(list: readonly OpencodeGoRawModel[], product: string): Map<string, number | null> {
+    const allowances = new Map<string, number | null>()
+    for (const raw of list) {
+        if (typeof raw?.id !== "string") continue
+        const value = raw.go?.monthly_usage?.[product]
+        allowances.set(raw.id, typeof value === "number" && Number.isFinite(value) && value > 0 ? value : null)
+    }
+    return allowances
 }
 
 export interface OpencodeGoRoute {

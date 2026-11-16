@@ -6,7 +6,7 @@ import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys
 import { AiProviderError } from "./errors"
 import { opencodeGoStatusMessage } from "./opencode-go-errors"
 import { OPENCODE_GO_API_URL, OPENCODE_GO_USER_AGENT } from "./endpoints"
-import { opencodeGoRoute, toOpencodeGoModels, type OpencodeGoRawModel } from "./opencode-go-models"
+import { opencodeGoMonthlyAllowances, opencodeGoRoute, toOpencodeGoModels, type OpencodeGoRawModel } from "./opencode-go-models"
 import { addStepCost, createOpencodeGoCostScanner, type AiStepCost } from "./provider-cost"
 import type { AiModelDto } from "./providers"
 
@@ -68,6 +68,11 @@ async function loadCatalog(signal?: AbortSignal, fresh = false): Promise<Opencod
 
 export async function listOpencodeGoModels(signal?: AbortSignal): Promise<AiModelDto[]> {
     return toOpencodeGoModels(await loadCatalog(signal, true))
+}
+
+/** Cota mensal de cada modelo no plano da assinatura (`go`, `go-plus`…), do catálogo em cache. */
+export async function opencodeGoAllowances(product: string, signal?: AbortSignal): Promise<Map<string, number | null>> {
+    return opencodeGoMonthlyAllowances(await loadCatalog(signal), product)
 }
 
 /**

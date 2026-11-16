@@ -134,3 +134,94 @@ OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal�
   o painel montado na barra lateral e em `/desenvolvimento`, as duas assinaturas resultam numa busca só;
   a reconexão do Pusher refaz as
   consultas ativas (`useRealtimeConnection`). Sem polling no cliente.
+
+## Assinatura OpenCode Go (API do Console, OPE-167)
+
+Segunda fonte, **independente do plugin**: o consumo da assinatura OpenCode Go lido direto da API do
+Console com uma chave do chaveiro `ai_opencode_go`. Aparece em `/integracoes/ia/opencode-go?aba=consumo`
+(card **Assinatura OpenCode Go**, acima do consumo do Opex), não no painel de `/desenvolvimento`. O
+número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, não só o Opex.
+
+### Fonte
+
+- `GET https://opencode.ai/console/api/go/status` (`server/go-api.ts`): `product` (plano), ciclo
+  (`access.startsAt`/`endsAt`) e os medidores `fiveHour`, `week` e `month` (`usedMicroCents`,
+  `limitMicroCents`, `resetsAt`). O `month` não tem `startsAt`: o início do ciclo é `access.startsAt`.
+- Toda chamada leva `Authorization: Bearer <chave>`, `Accept: application/json` e o **`User-Agent` do Opex**
+  (sem ele o Cloudflare responde `403 Error 1010`, que parece falta de permissão e não é), com prazo de 15 s.
+- **Dados de pagamento descartados**: o `go-schemas.ts` (`z.object`) só guarda os campos usados;
+  `subscriberUserId`, `paymentMethodId`, `paymentMethodKind`, `upgradePrice`, `teamsUpgradePrice`,
+  `nextPeriodPaid`, `useBalance` etc. não chegam ao DTO, ao log nem ao evento. O debug da integração
+  registra só método, URL, cabeçalhos mascarados e status (o corpo não é lido pelo `debugFetch`).
+- **Sem reserva**: falha do `go/status` (401, 403, 404, formato) vira o estado `error` com a mensagem
+  pt-BR (`goConsoleStatusMessage`) e "Tentar novamente". O `/zen/go/v1/usage` não é usado.
+- **Percentual** = `usedMicroCents / limitMicroCents × 100`, com **uma casa, truncado** (`meterPercent`;
+  o Console mostra o inteiro truncado). **Nenhum valor do medidor em US$**: `usedMicroCents` é
+  `base × Σ(uso_i / cota_i)` por modelo, não gasto real.
+- **Gasto real do ciclo** (único valor em dinheiro, discreto, "Gasto real no ciclo: US$ 42,85"):
+  `usage/cost-by-day` do início do ciclo até hoje, com o primeiro dia pró-rateado pelo horário de início;
+  `null` (some da tela) se a chamada falhar.
+
+### Série diária em % (sem snapshot)
+
+- Nada é gravado no banco. A cada leitura (`server/go-series.ts`), um `GET /usage/models?from=<dia>&to=<dia>`
+  por dia UTC (a API pagina de 10 em 10 e ignora `pageSize`: o cliente segue `pageInfo.pageCount`), com até
+  5 chamadas simultâneas. `pp(dia) = Σ custo(dia, modelo) / cota(modelo) × 100`, com a cota
+  `go.monthly_usage.<plano>` do catálogo público do gateway (`opencodeGoAllowances`).
+- Modelo com custo e sem cota no catálogo não ganha regra inventada: o custo fica fora e o dia conta como
+  **parcial** (aviso). Modelos gratuitos (custo 0) são ignorados.
+- Cache só em memória por `(chave, dia)`: 10 min para hoje e ontem, 6 h para dias fechados. O botão
+  Atualizar relê o dia de hoje.
+- **Histórico**: o Console devolve ~40 dias (observado: hoje − 42, `GO_HISTORY_DAYS`); dia mais antigo volta
+  vazio sem erro, então não é consultado. Dia fora do histórico ou com falha é **sem dados**.
+- Catálogo indisponível: os medidores aparecem e o gráfico dá lugar ao aviso "Gráfico indisponível".
+
+### Gráfico, ciclos e previsão (`go-logic.ts`, puro)
+
+- O eixo cobre o período do filtro da aba (datas de São Paulo convertidas em dias; padrão Último mês). Com o
+  filtro chegando a hoje, o eixo vai até a renovação, para caber a previsão.
+- **Ciclos**: os anteriores são deduzidos voltando mês a mês de `access.startsAt` (`goCycles`,
+  `subUtcMonths`, em UTC). O acumulado começa no início do ciclo mais antigo que toca o filtro (mesmo antes
+  do filtro) e **acumula através dos ciclos** (decisão do dono). Cada ciclo tem um **teto mensal**
+  tracejado em "acumulado no início do ciclo + 100" (o ponto em que aquele ciclo atinge o limite).
+- O dia em que um ciclo começa é **pró-rateado** pelo horário de início (ex.: 12:15 UTC → 49% do dia fica
+  no ciclo anterior); sem isso a série passava ~0,8 pp do medidor.
+- **Dias sem dados**: a linha quebra (lacuna), contam **0** no acumulado e o card avisa "Acumulado parcial: N
+  dias sem dados…". A ponta de hoje é sempre o **medidor** (acumulado no início do ciclo atual + % do mês).
+- **Previsão linear** (`goForecast`) só no ciclo atual, depois de 1 dia de ciclo e com o mês abaixo de 100%:
+  `% previsto = % usado × (fim − início) / (agora − início)`, cruzamento em
+  `início + (agora − início) × 100 / % usado` (marcador vazado com a data, só se for antes da renovação) e
+  média `% usado × 24 h / (agora − início)` ("Média de X% por dia"). O % previsto aparece no fim da linha
+  amarela, inclusive acima de 100%.
+- Eixo Y de 0% a 150%, grades a cada 50%; sobe de 50 em 50 quando um valor passa (`goYMax`).
+
+### Servidor, rotina e tempo real
+
+- `server/go-usage.ts`: `getOpencodeGoUsage(query)` e `refreshOpencodeGoUsage(query)` (query =
+  `usageQuerySchema`: `from`, `to`, `apiKey`). Chave: "Todas" (padrão) usa a **chave em uso** (sem chave →
+  `unconfigured`); uma chave do chaveiro consulta a assinatura dela (`getAiProviderKeyById`); "Sem chave
+  identificada" e "Chaves removidas" → `no-key` (não apontam para uma assinatura).
+- O status fica em memória por chave: a tela reaproveita a leitura de até 1 min; o botão força, no máximo,
+  uma leitura a cada 30 s por chave.
+- **Rotina `opencode-go-usage-refresh`** (Integrações › Crons, 5 min, ligada): relê o status da chave em uso.
+  Quando os percentuais (uma casa) ou os resets mudam — na rotina ou numa leitura da tela —, publica
+  `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app`; `useOpencodeGoUsageRealtime` invalida
+  `["opencode-go-usage"]`. Sem chave em uso, a rotina não chama a API.
+- Rotas (sessão do dono, não públicas): `GET /api/opencode/quota/go` e `POST /api/opencode/quota/go/refresh`,
+  com a mesma query.
+
+### Interface (`components/go/`)
+
+- Cabeçalho "Uso do Go · Renova em dd/MM às HH:mm" (fuso de São Paulo), % do mês em destaque
+  (`AnimatedNumber`, uma casa, cor pela faixa `usageLevel`) e a situação: "Limite mensal atingido"
+  (vermelho, sem previsão), "No ritmo atual, atinge o limite em dd/MM" (âmbar) ou "Previsão de X% até a
+  renovação".
+- As três janelas (5h, Semanal, Mensal) com a `UsageBar` compartilhada (`fractionDigits={1}`) e o tempo até
+  o reset (`formatResetIn`), com "Reinicia em dd/MM às HH:mm" na dica.
+- Gráfico (recharts, `ComposedChart`): uso acumulado verde (`--chart-positive-1`), previsão amarela
+  (`--chart-negative-3`), tetos tracejados com o rótulo "Teto mensal", marcador vazado no cruzamento,
+  legenda "Uso / Previsão / Teto mensal", rodapé "Média de X% por dia", tooltip por dia (data, uso do dia,
+  acumulado, previsão) e tabela oculta para acessibilidade.
+- Estados: skeleton com a mesma estrutura (`GoUsageSkeleton`, constantes de `layout.ts`), chave não
+  configurada (atalho para a integração), filtro sem assinatura, erro com "Tentar novamente" e selo
+  "Desatualizado" quando a última leitura passa de 15 min.
