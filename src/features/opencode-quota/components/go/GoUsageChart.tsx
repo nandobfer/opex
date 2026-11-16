@@ -72,7 +72,7 @@ export function GoUsageChart({ chart, dailyAverage }: { chart: GoChartDto; daily
                                 fill="var(--background)"
                                 stroke={GO_FORECAST_COLOR}
                                 strokeWidth={2}
-                                label={{ value: dayKeyLabel(chart.crossing.date), position: "top", fill: GO_FORECAST_COLOR, fontSize: 11 }}
+                                label={{ value: chart.crossing.label, position: "top", fill: GO_FORECAST_COLOR, fontSize: 11 }}
                             />
                         )}
                         {chart.forecastEnd && (

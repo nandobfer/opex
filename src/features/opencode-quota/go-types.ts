@@ -47,7 +47,8 @@ export interface GoCeilingDto {
 export interface GoChartDto {
     points: GoChartPointDto[]
     ceilings: GoCeilingDto[]
-    crossing: { date: string; value: number } | null
+    /** `date` = balde UTC do eixo; `label` = data do cruzamento em São Paulo (a mesma do cabeçalho). */
+    crossing: { date: string; value: number; label: string } | null
     forecastEnd: { date: string; value: number; percent: number } | null
     yMax: number
     /** Dias sem dados (fora do histórico da API ou com falha), contados como 0 no acumulado. */

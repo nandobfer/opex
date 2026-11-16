@@ -40,7 +40,7 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
       { date: '2026-12-05', dayPercent: null, usage: null, forecast: 116.2 },
     ],
     ceilings: [{ from: '2026-11-15', to: '2026-12-05', value: 100, current: true }],
-    crossing: { date: '2026-12-01', value: 100 },
+    crossing: { date: '2026-12-01', value: 100, label: '01/12' },
     forecastEnd: { date: '2026-12-05', value: 116.2, percent: 116.2 },
     yMax: 150,
     missingDays: 2,

@@ -148,6 +148,16 @@ describe('gráfico do consumo', () => {
     expect(chart.yMax % 50).toBe(0)
   })
 
+  it('o marcador do cruzamento fica no balde UTC, rotulado com a data de São Paulo (fronteira 00h–03h UTC)', () => {
+    // 43,9% em ~11,3 dias: escolhe o % que cruza às 01:30 UTC de 01/12 (22:30 de 30/11 em São Paulo).
+    const crossesAt = Date.parse('2026-12-01T01:30:00.000Z')
+    const percent = ((NOW - START) * 100) / (crossesAt - START)
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent })
+    const chart = buildGoChart({ fromKey: '2026-11-06', toKey: '2026-11-16', nowMs: NOW, cycles: current, days: days({}), monthRatio: percent, forecast, historyFrom: '2026-10-05' })
+    expect(chart.crossing).toMatchObject({ date: '2026-12-01', label: '30/11' })
+    expect(formatGoDate(new Date(forecast.crossesAtMs!).toISOString())).toBe(chart.crossing!.label)
+  })
+
   it('sem previsão quando o mês está em 100%', () => {
     const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 100 })
     const chart = buildGoChart({ fromKey: '2026-11-05', toKey: '2026-11-16', nowMs: NOW, cycles: current, days: days({}), monthRatio: 100, forecast, historyFrom: '2026-10-05' })

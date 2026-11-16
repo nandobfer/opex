@@ -247,7 +247,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
             point.forecast = round(currentBase + (monthRatio * (at - current.startMs)) / elapsed)
         }
         forecastEnd = { date: renewalKey, value: round(currentBase + forecast.projectedPercent), percent: round(forecast.projectedPercent, 1) }
-        if (forecast.crossesAtMs !== null) crossing = { date: utcDateKey(forecast.crossesAtMs), value: round(currentBase + 100) }
+        if (forecast.crossesAtMs !== null) crossing = { date: utcDateKey(forecast.crossesAtMs), value: round(currentBase + 100), label: formatGoDate(new Date(forecast.crossesAtMs).toISOString()) }
     }
 
     const values = [...points.flatMap((point) => [point.usage ?? 0, point.forecast ?? 0]), ...ceilings.map((ceiling) => ceiling.value)]

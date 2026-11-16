@@ -90,12 +90,18 @@ async function readStatus(key: ActiveAiProviderKey, { force, nowMs }: { force: b
     return { ...entry, fetched: true }
 }
 
-/** Período do filtro em dias (datas de São Paulo); padrão: o último mês. */
-function rangeKeys(query: UsageQuery, nowMs: number): { fromKey: string; toKey: string; fromMs: number; toMs: number } {
+/**
+ * Período do filtro em dias (datas de São Paulo); padrão: o último mês. Se o fim do filtro alcança o instante
+ * atual, o último dia é ao menos o dia UTC de hoje: entre 21h e 24h em São Paulo já é amanhã em UTC, e a
+ * ponta de hoje (medidor) e a previsão não podem sumir por isso.
+ */
+export function rangeKeys(query: UsageQuery, nowMs: number): { fromKey: string; toKey: string; fromMs: number; toMs: number } {
     const toMs = query.to ? Date.parse(query.to) : nowMs
     const fromMs = query.from ? Date.parse(query.from) : subUtcMonths(toMs, 1)
     const fromKey = displayDateKey(fromMs)
-    const toKey = displayDateKey(toMs)
+    const localToKey = displayDateKey(toMs)
+    const todayKey = utcDateKey(nowMs)
+    const toKey = toMs >= nowMs && localToKey < todayKey ? todayKey : localToKey
     return { fromKey, toKey, fromMs: Date.parse(`${fromKey}T00:00:00.000Z`), toMs: Date.parse(`${toKey}T23:59:59.999Z`) }
 }
 

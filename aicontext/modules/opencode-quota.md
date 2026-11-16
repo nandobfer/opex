@@ -179,7 +179,9 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
 ### Gráfico, ciclos e previsão (`go-logic.ts`, puro)
 
 - O eixo cobre o período do filtro da aba (datas de São Paulo convertidas em dias; padrão Último mês). Com o
-  filtro chegando a hoje, o eixo vai até a renovação, para caber a previsão.
+  filtro chegando a hoje, o eixo vai até a renovação, para caber a previsão. "Chegar a hoje" é decidido pelo
+  **instante** (fim do filtro ≥ agora): entre 21h e 24h em São Paulo já é o dia seguinte em UTC, e o último dia
+  passa a ser o dia UTC de hoje (`rangeKeys`), para a ponta do medidor e a previsão não sumirem.
 - **Ciclos**: os anteriores são deduzidos voltando mês a mês de `access.startsAt` (`goCycles`,
   `subUtcMonths`, em UTC). O acumulado começa no início do ciclo mais antigo que toca o filtro (mesmo antes
   do filtro) e **acumula através dos ciclos** (decisão do dono). Cada ciclo tem um **teto mensal**
@@ -190,7 +192,8 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   dias sem dados…". A ponta de hoje é sempre o **medidor** (acumulado no início do ciclo atual + % do mês).
 - **Previsão linear** (`goForecast`) só no ciclo atual, depois de 1 dia de ciclo e com o mês abaixo de 100%:
   `% previsto = % usado × (fim − início) / (agora − início)`, cruzamento em
-  `início + (agora − início) × 100 / % usado` (marcador vazado com a data, só se for antes da renovação) e
+  `início + (agora − início) × 100 / % usado` (marcador vazado no balde UTC do dia, rotulado com a data de
+  São Paulo — a mesma do cabeçalho —, só se for antes da renovação) e
   média `% usado × 24 h / (agora − início)` ("Média de X% por dia"). O % previsto aparece no fim da linha
   amarela, inclusive acima de 100%.
 - Eixo Y de 0% a 150%, grades a cada 50%; sobe de 50 em 50 quando um valor passa (`goYMax`).

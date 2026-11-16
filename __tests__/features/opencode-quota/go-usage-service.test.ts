@@ -115,6 +115,27 @@ describe('getOpencodeGoUsage', () => {
     expect(dto.realCostUsd).toBeCloseTo(Math.round((4 * (1 - fraction) + 1) * 100) / 100, 2)
   })
 
+  it('entre 21h e 24h em São Paulo (já amanhã em UTC) o filtro "até hoje" mantém a ponta do medidor e a previsão', async () => {
+    // 22:00 de 16/11 em São Paulo = 01:00 UTC de 17/11; o filtro padrão termina no fim do dia 16/11 local.
+    const late = Date.parse('2026-11-17T01:00:00.000Z')
+    vi.setSystemTime(late)
+    const dto = await getOpencodeGoUsage({ from: '2026-11-06T03:00:00.000Z', to: '2026-11-17T02:59:59.999Z' })
+    const today = dto.chart!.points.find((point) => point.date === '2026-11-17')!
+    expect(today.usage).toBe(43.9)
+    expect(today.forecast).toBe(43.9)
+    expect(dto.chart!.forecastEnd).toMatchObject({ date: '2026-12-05' })
+    expect(dto.chart!.crossing).not.toBeNull()
+    expect(dto.chart!.points.at(-1)!.date).toBe('2026-12-05')
+    expect(mocks.fetch.mock.calls.some(([url]) => String(url).includes('from=2026-11-17'))).toBe(true)
+  })
+
+  it('filtro que termina antes de agora não ganha o dia UTC seguinte', async () => {
+    vi.setSystemTime(Date.parse('2026-11-17T01:00:00.000Z'))
+    const dto = await getOpencodeGoUsage({ from: '2026-11-06T03:00:00.000Z', to: '2026-11-15T02:59:59.999Z' })
+    expect(dto.chart!.points.at(-1)!.date).toBe('2026-11-14')
+    expect(dto.chart!.forecastEnd).toBeNull()
+  })
+
   it('segue a série quando um dia falha e conta o dia como sem dados', async () => {
     failingDays.add('2026-11-10')
     const dto = await getOpencodeGoUsage(query)
