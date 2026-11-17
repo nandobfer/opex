@@ -51,6 +51,9 @@ interface SidebarHoverPanelProps {
     returnFocusRef?: RefObject<HTMLElement | null>
     /** Itens focáveis (setas e foco inicial); padrão: links. Painéis com botões passam `"button, a[href]"`. */
     focusSelector?: string
+    /** Lado e alinhamento do painel (padrão: à direita da barra recolhida, abaixo do gatilho na gaveta). */
+    side?: "right" | "bottom"
+    align?: "start" | "end"
     children: ReactNode
 }
 
@@ -59,7 +62,8 @@ interface SidebarHoverPanelProps {
  * gatilho e limitado à janela, animado com Framer Motion, com título em caixa-alta e navegação por
  * setas entre os links. Deve ficar dentro do `Popover.Root` do gatilho.
  */
-export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, openedByHover, panelHandlers, widthClassName = "w-56", testId, id, returnFocusRef, focusSelector = SIDEBAR_PANEL_FOCUS_SELECTOR, children }: SidebarHoverPanelProps) {
+export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, openedByHover, panelHandlers, widthClassName = "w-56", testId, id, returnFocusRef, focusSelector = SIDEBAR_PANEL_FOCUS_SELECTOR, side, align = "start", children }: SidebarHoverPanelProps) {
+    const toRight = (side ?? (collapsed ? "right" : "bottom")) === "right"
     return (
         <AnimatePresence>
             {open && (
@@ -67,9 +71,9 @@ export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, opened
                     <PopoverPrimitive.Content
                         forceMount
                         asChild
-                        side={collapsed ? "right" : "bottom"}
-                        align="start"
-                        sideOffset={collapsed ? NAV_GROUP_PANEL_OFFSET : NAV_GROUP_PANEL_DRAWER_OFFSET}
+                        side={toRight ? "right" : "bottom"}
+                        align={align}
+                        sideOffset={toRight ? NAV_GROUP_PANEL_OFFSET : NAV_GROUP_PANEL_DRAWER_OFFSET}
                         collisionPadding={NAV_GROUP_PANEL_COLLISION_PADDING}
                         aria-label={label}
                         onOpenAutoFocus={(event) => {
@@ -91,9 +95,9 @@ export function SidebarHoverPanel({ open, label, collapsed, reduceMotion, opened
                         onEscapeKeyDown={(event) => event.stopPropagation()}
                     >
                         <motion.div
-                            initial={collapsed ? { opacity: 0, x: -8, scale: 0.96 } : { opacity: 0, y: -6, scale: 0.97 }}
+                            initial={toRight ? { opacity: 0, x: -8, scale: 0.96 } : { opacity: 0, y: -6, scale: 0.97 }}
                             animate={{ opacity: 1, x: 0, y: 0, scale: 1 }}
-                            exit={{ opacity: 0, ...(collapsed ? { x: -6 } : { y: -4 }), scale: 0.97, transition: { duration: reduceMotion ? 0 : 0.15 } }}
+                            exit={{ opacity: 0, ...(toRight ? { x: -6 } : { y: -4 }), scale: 0.97, transition: { duration: reduceMotion ? 0 : 0.15 } }}
                             transition={{ duration: reduceMotion ? 0 : 0.18, ease: "easeOut" }}
                             style={{ transformOrigin: "var(--radix-popover-content-transform-origin)" }}
                             className={cn(

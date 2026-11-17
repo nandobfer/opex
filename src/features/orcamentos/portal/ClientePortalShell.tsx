@@ -27,6 +27,8 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
     // Sempre montado: o item acompanha em tempo real o liga/desliga dos agentes do cliente. Sem nenhum
     // agente ele não renderiza nada e o rodapé vazio (com o divisor) some (`empty:hidden` no AppSidebar).
     const footerItems = (collapsed: boolean) => <AgentChatNavItem collapsed={collapsed} client={client} initial={initial} />
+    // No celular o agente fica no cabeçalho (OPE-168), e a gaveta não o repete.
+    const headerActions = <AgentChatNavItem variant="header" client={client} initial={initial} />
     return (
         <AppShell
             brand={{ name: "Opex", subtitle: `Portal · ${session.clientName}`, homeHref: clienteDashboardPath() }}
@@ -36,6 +38,7 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
             ownerName={session.user.username || session.user.email || "Usuário"}
             version={version}
             sidebarFooterItems={footerItems}
+            mobileHeaderActions={headerActions}
         >
             <div className="space-y-5">
                 <ClienteContextBar />

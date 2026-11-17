@@ -22,12 +22,20 @@ export interface FrameRect {
     height: number
 }
 
-/** Retângulo visível da área de conteúdo, ou da janela quando fora do dashboard. */
+/**
+ * Cabeçalho do celular (OPE-168), por cima do topo da área de conteúdo: o elemento maximizado começa
+ * abaixo dele, para o cabeçalho não cobrir a barra do painel (com o botão de restaurar).
+ */
+export const APP_HEADER_SELECTOR = "[data-app-header]"
+
+/** Retângulo visível da área de conteúdo (abaixo do cabeçalho do celular), ou da janela quando fora do dashboard. */
 export function dashboardContentRect(doc: Document = document): FrameRect {
     const main = doc.querySelector<HTMLElement>(DASHBOARD_CONTENT_SELECTOR)
     if (main) {
         const r = main.getBoundingClientRect()
-        return { top: r.top, left: r.left, width: r.width, height: r.height }
+        const header = doc.querySelector<HTMLElement>(APP_HEADER_SELECTOR)?.getBoundingClientRect()
+        const top = header && header.bottom > r.top ? Math.min(header.bottom, r.top + r.height) : r.top
+        return { top, left: r.left, width: r.width, height: r.top + r.height - top }
     }
     const view = doc.defaultView
     return { top: 0, left: 0, width: view?.innerWidth ?? 0, height: view?.innerHeight ?? 0 }
