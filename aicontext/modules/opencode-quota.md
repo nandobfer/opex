@@ -176,27 +176,29 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   vazio sem erro, então não é consultado. Dia fora do histórico ou com falha é **sem dados**.
 - Catálogo indisponível: os medidores aparecem e o gráfico dá lugar ao aviso "Gráfico indisponível".
 
-### Gráfico, ciclos e previsão (`go-logic.ts`, puro)
+### Gráfico, ciclo e previsão (`go-logic.ts`, puro)
 
-- O eixo cobre o período do filtro da aba (datas de São Paulo convertidas em dias; padrão Último mês). Com o
-  filtro chegando a hoje, o eixo vai até a renovação, para caber a previsão. "Chegar a hoje" é decidido pelo
-  **instante** (fim do filtro ≥ agora): entre 21h e 24h em São Paulo já é o dia seguinte em UTC, e o último dia
-  passa a ser o dia UTC de hoje (`rangeKeys`), para a ponta do medidor e a previsão não sumirem.
-- **Ciclos**: os anteriores são deduzidos voltando mês a mês de `access.startsAt` (`goCycles`,
-  `subUtcMonths`, em UTC). O acumulado começa no início do ciclo mais antigo que toca o filtro (mesmo antes
-  do filtro) e **acumula através dos ciclos** (decisão do dono). Cada ciclo tem um **teto mensal**
-  tracejado em "acumulado no início do ciclo + 100" (o ponto em que aquele ciclo atinge o limite).
-- O dia em que um ciclo começa é **pró-rateado** pelo horário de início (ex.: 12:15 UTC → 49% do dia fica
-  no ciclo anterior); sem isso a série passava ~0,8 pp do medidor.
-- **Dias sem dados**: a linha quebra (lacuna), contam **0** no acumulado e o card avisa "Acumulado parcial: N
-  dias sem dados…". A ponta de hoje é sempre o **medidor** (acumulado no início do ciclo atual + % do mês).
+- **Um ciclo por vez** (decisão do dono, 17/11/2026, depois da prévia; substitui o "acumula através dos
+  ciclos" da primeira versão, que com o padrão "Último mês" somava o ciclo anterior e mostrava 97% e um
+  cruzamento em 155%). `goCycleFor` escolhe o ciclo pelo **fim do filtro** da aba: o atual quando o fim
+  alcança o início dele — o padrão "Último mês" termina hoje, então abre sempre no ciclo atual (05/11 → 05/12),
+  inclusive entre 21h e 24h em São Paulo —; senão o ciclo anterior que contém o fim do filtro (deduzido
+  voltando mês a mês de `access.startsAt`, `subUtcMonths`, em UTC). O início do filtro não muda o gráfico.
+- Só os dias UTC do ciclo exibido são consultados (`cycleDayKeys`, no máximo ~31 chamadas).
+- **Eixo X em tempo contínuo** (`t` em ms, domínio = início → fim do ciclo). A linha nasce em **0% no início
+  do ciclo**, ganha um ponto no fim de cada dia UTC (primeiro e último dia pró-rateados pelos horários de
+  início e fim do ciclo) e, no ciclo atual, termina em **agora** com o valor exato do **medidor** (o mesmo do
+  cabeçalho). Num ciclo passado termina na renovação, com a soma dos dias.
+- **Dias sem dados**: a linha quebra, contam **0** no acumulado e o card avisa "Acumulado parcial: N dias do
+  ciclo sem dados…".
+- **Teto mensal fixo em 100%** (nunca relativo).
 - **Previsão linear** (`goForecast`) só no ciclo atual, depois de 1 dia de ciclo e com o mês abaixo de 100%:
   `% previsto = % usado × (fim − início) / (agora − início)`, cruzamento em
-  `início + (agora − início) × 100 / % usado` (marcador vazado no balde UTC do dia, rotulado com a data de
-  São Paulo — a mesma do cabeçalho —, só se for antes da renovação) e
-  média `% usado × 24 h / (agora − início)` ("Média de X% por dia"). O % previsto aparece no fim da linha
-  amarela, inclusive acima de 100%.
-- Eixo Y de 0% a 150%, grades a cada 50%; sobe de 50 em 50 quando um valor passa (`goYMax`).
+  `início + (agora − início) × 100 / % usado` (só se for antes da renovação) e média
+  `% usado × 24 h / (agora − início)`. Desenhada como **reta de dois pontos** (agora → renovação).
+- Eixo Y de 0% a 150%, grades a cada 50%; sobe de 50 em 50 só se a previsão passar (`goYMax`).
+- Faixa de datas (`goAxisTicks`): início, ⅓ e ⅔ do ciclo, cruzamento (destacado) e fim; marca a menos de 3 dias
+  de outra mais importante sai. Rótulos em caixa alta no fuso de São Paulo ("5 NOV", `axisDateLabel`).
 
 ### Servidor, rotina e tempo real
 
@@ -215,16 +217,23 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
 
 ### Interface (`components/go/`)
 
-- Cabeçalho "Uso do Go · Renova em dd/MM às HH:mm" (fuso de São Paulo), % do mês em destaque
-  (`AnimatedNumber`, uma casa, cor pela faixa `usageLevel`) e a situação: "Limite mensal atingido"
-  (vermelho, sem previsão), "No ritmo atual, atinge o limite em dd/MM" (âmbar) ou "Previsão de X% até a
-  renovação".
+Reproduz o card de uso do Console do OpenCode Go:
+
+- Cabeçalho (`GoUsageHeader`): o % do mês grande (`AnimatedNumber`, uma casa, `text-foreground`) e abaixo
+  "Uso do Go · Renova em 5 dez · No ritmo atual, atinge o limite em 1 dez" (trecho final em âmbar; ou
+  "Previsão de X% até a renovação", ou "Limite mensal atingido" em vermelho). Datas no fuso de São Paulo
+  (`formatGoDate`); a dica da renovação traz data e hora. "Gasto real no ciclo" discreto à direita.
 - As três janelas (5h, Semanal, Mensal) com a `UsageBar` compartilhada (`fractionDigits={1}`) e o tempo até
   o reset (`formatResetIn`), com "Reinicia em dd/MM às HH:mm" na dica.
-- Gráfico (recharts, `ComposedChart`): uso acumulado verde (`--chart-positive-1`), previsão amarela
-  (`--chart-negative-3`), tetos tracejados com o rótulo "Teto mensal", marcador vazado no cruzamento,
-  legenda "Uso / Previsão / Teto mensal", rodapé "Média de X% por dia", tooltip por dia (data, uso do dia,
-  acumulado, previsão) e tabela oculta para acessibilidade.
+- Gráfico (`GoUsageChart`, recharts `ComposedChart`, 260 px): grade horizontal apagada com "0%"…"150%";
+  **teto de 100% pontilhado e destacado** (mais claro e mais grosso que a grade, sem texto); verticais
+  tracejadas apagadas em hoje e no cruzamento; uso em área verde (`--chart-positive-1`, gradiente) até o
+  círculo vazado de hoje; previsão em reta amarela (`--chart-negative-3`) com hachura diagonal por baixo;
+  círculos vazados no cruzamento (sobre os 100%) e no fim, com o % previsto inteiro ("116%") acima; faixa de
+  datas arredondada (`GoAxisStrip`, desenhada dentro do gráfico com `usePlotArea`/`useXAxisScale`) com a data
+  do cruzamento em amarelo e negrito. Rodapé: "Média de **3,9%** por dia" e a legenda Uso / Previsão / Teto
+  mensal (barrinhas verticais, a do teto pontilhada, `LegendBar`). Ciclo passado ganha o título "Ciclo de 5 out
+  a 5 nov" e não tem previsão. Tooltip por ponto (dia, uso do dia, acumulado, previsão) e tabela oculta.
 - Estados: skeleton com a mesma estrutura (`GoUsageSkeleton`, constantes de `layout.ts`), chave não
   configurada (atalho para a integração), filtro sem assinatura, erro com "Tentar novamente" e selo
   "Desatualizado" quando a última leitura passa de 15 min.

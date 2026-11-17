@@ -5,7 +5,7 @@ import { publishAppEvent } from "@/lib/pusher/channels"
 import { API_KEY_ID_PATTERN, USAGE_KEY_ALL } from "@/features/ai/usage-key-filter"
 import type { UsageQuery } from "@/features/ai/provider-usage"
 import { GO_HISTORY_DAYS, GO_METER_IDS, GO_METER_LABELS, GO_MIN_REFRESH_MS, GO_STATUS_CACHE_MS, OPENCODE_GO_USAGE_UPDATED_EVENT } from "../go-constants"
-import { addDaysKey, buildGoChart, dateKeysBetween, displayDateKey, goCycles, goForecast, meterPercent, meterRatio, seriesStartKey, subUtcMonths, utcDateKey } from "../go-logic"
+import { addDaysKey, buildGoChart, cycleDayKeys, goCycleFor, goForecast, meterPercent, meterRatio, utcDateKey } from "../go-logic"
 import type { GoStatus } from "../go-schemas"
 import type { GoMeterDto, OpencodeGoUsageDto } from "../go-types"
 import { fetchGoStatus, GoConsoleError } from "./go-api"
@@ -91,18 +91,12 @@ async function readStatus(key: ActiveAiProviderKey, { force, nowMs }: { force: b
 }
 
 /**
- * Período do filtro em dias (datas de São Paulo); padrão: o último mês. Se o fim do filtro alcança o instante
- * atual, o último dia é ao menos o dia UTC de hoje: entre 21h e 24h em São Paulo já é amanhã em UTC, e a
- * ponta de hoje (medidor) e a previsão não podem sumir por isso.
+ * Fim do período do filtro (padrão: agora). Ele escolhe o ciclo do gráfico (`goCycleFor`): o padrão "Último
+ * mês" termina no fim do dia de hoje em São Paulo e cai sempre no ciclo atual — inclusive entre 21h e 24h,
+ * quando já é o dia seguinte em UTC.
  */
-export function rangeKeys(query: UsageQuery, nowMs: number): { fromKey: string; toKey: string; fromMs: number; toMs: number } {
-    const toMs = query.to ? Date.parse(query.to) : nowMs
-    const fromMs = query.from ? Date.parse(query.from) : subUtcMonths(toMs, 1)
-    const fromKey = displayDateKey(fromMs)
-    const localToKey = displayDateKey(toMs)
-    const todayKey = utcDateKey(nowMs)
-    const toKey = toMs >= nowMs && localToKey < todayKey ? todayKey : localToKey
-    return { fromKey, toKey, fromMs: Date.parse(`${fromKey}T00:00:00.000Z`), toMs: Date.parse(`${toKey}T23:59:59.999Z`) }
+export function filterEndMs(query: UsageQuery, nowMs: number): number {
+    return query.to ? Date.parse(query.to) : nowMs
 }
 
 function metersOf(status: GoStatus): GoMeterDto[] {
@@ -140,13 +134,9 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
     const monthRatio = meterRatio(month.usedMicroCents, month.limitMicroCents)
     const forecast = goForecast({ startMs, endMs, nowMs, percent: monthRatio })
 
-    const range = rangeKeys(query, nowMs)
-    const cycles = goCycles({ startMs, endMs }, range.fromMs, range.toMs)
-    const todayKey = utcDateKey(nowMs)
-    const historyFrom = addDaysKey(todayKey, -GO_HISTORY_DAYS)
-    const lastKey = range.toKey < todayKey ? range.toKey : todayKey
-    const firstKey = seriesStartKey(cycles, range.fromKey)
-    const dates = dateKeysBetween(firstKey > historyFrom ? firstKey : historyFrom, lastKey)
+    const cycle = goCycleFor({ startMs, endMs }, filterEndMs(query, nowMs))
+    const historyFrom = addDaysKey(utcDateKey(nowMs), -GO_HISTORY_DAYS)
+    const dates = cycleDayKeys(cycle, nowMs).filter((date) => date >= historyFrom)
 
     let chart: OpencodeGoUsageDto["chart"] = null
     let chartMessage: string | null = null
@@ -162,7 +152,7 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
         })(),
         loadGoCycleCost({ apiKey: key.apiKey, keyId: key.id, startMs, nowMs, force: reread }),
     ])
-    if (series) chart = buildGoChart({ fromKey: range.fromKey, toKey: range.toKey, nowMs, cycles, days: series, monthRatio, forecast, historyFrom })
+    if (series) chart = buildGoChart({ cycle, nowMs, days: series, monthRatio, forecast, historyFrom })
     else chartMessage = "Não foi possível ler o catálogo de modelos do OpenCode Go (cota de cada modelo): o gráfico diário ficou indisponível."
 
     return {

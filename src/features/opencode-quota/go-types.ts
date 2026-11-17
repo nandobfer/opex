@@ -25,33 +25,29 @@ export interface GoForecastDto {
 }
 
 export interface GoChartPointDto {
-    /** Dia UTC `YYYY-MM-DD` (balde da API). */
+    /** Instante do ponto (ms): início do ciclo, fim de cada dia UTC, "agora" ou a renovação. */
+    t: number
+    /** Dia UTC `YYYY-MM-DD` (balde da API) a que o ponto se refere. */
     date: string
     /** Pontos percentuais do dia; `null` sem dados. */
     dayPercent: number | null
-    /** Acumulado no fim do dia (hoje: o valor do medidor); `null` quebra a linha. */
+    /** Acumulado no ciclo até `t` (agora: o valor do medidor); `null` quebra a linha. */
     usage: number | null
-    /** Previsão linear (de hoje até a renovação). */
+    /** Previsão linear (só em "agora" e na renovação). */
     forecast: number | null
 }
 
-export interface GoCeilingDto {
-    /** Trecho do eixo em que o ciclo aparece. */
-    from: string
-    to: string
-    /** Acumulado no início do ciclo + 100. */
-    value: number
-    current: boolean
-}
-
 export interface GoChartDto {
+    /** Ciclo exibido (um por vez): o atual ou o anterior que contém o fim do filtro. */
+    cycle: { startsAt: string; endsAt: string; current: boolean }
     points: GoChartPointDto[]
-    ceilings: GoCeilingDto[]
-    /** `date` = balde UTC do eixo; `label` = data do cruzamento em São Paulo (a mesma do cabeçalho). */
-    crossing: { date: string; value: number; label: string } | null
-    forecastEnd: { date: string; value: number; percent: number } | null
+    /** Ponta de hoje no ciclo atual (o valor do medidor). */
+    today: { t: number; percent: number } | null
+    /** Cruzamento da previsão com o teto de 100%; `label` = data em São Paulo (a mesma do cabeçalho). */
+    crossing: { t: number; value: number; label: string } | null
+    forecastEnd: { t: number; percent: number } | null
     yMax: number
-    /** Dias sem dados (fora do histórico da API ou com falha), contados como 0 no acumulado. */
+    /** Dias do ciclo sem dados (fora do histórico da API ou com falha), contados como 0 no acumulado. */
     missingDays: number
     /** Dias com custo de modelo sem cota conhecida no catálogo (custo fora da soma). */
     partialDays: number

@@ -18,6 +18,10 @@ const ok = (data: unknown) => ({ data: { success: true, data } })
 const query = { from: '2026-11-06T03:00:00.000Z', to: '2026-11-17T02:59:59.999Z' }
 const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000 + 30_000).toISOString()
 
+const START = '2026-11-05T12:15:35.000Z'
+const END = '2026-12-05T12:15:35.000Z'
+const NOW = Date.parse('2026-11-16T19:57:00.000Z')
+
 const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto => ({
   state: 'ok',
   message: null,
@@ -34,14 +38,16 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
   forecast: { dailyAverage: 3.9, projectedPercent: 116.2, crossesAt: '2026-12-01T07:46:58.320Z' },
   realCostUsd: 42.85,
   chart: {
+    cycle: { startsAt: START, endsAt: END, current: true },
     points: [
-      { date: '2026-11-15', dayPercent: 5.93, usage: 40.71, forecast: null },
-      { date: '2026-11-16', dayPercent: 3.19, usage: 43.9, forecast: 43.9 },
-      { date: '2026-12-05', dayPercent: null, usage: null, forecast: 116.2 },
+      { t: Date.parse(START), date: '2026-11-05', dayPercent: null, usage: 0, forecast: null },
+      { t: Date.parse('2026-11-16T00:00:00.000Z'), date: '2026-11-15', dayPercent: 5.93, usage: 40.71, forecast: null },
+      { t: NOW, date: '2026-11-16', dayPercent: 3.19, usage: 43.9, forecast: 43.9 },
+      { t: Date.parse(END), date: '2026-12-05', dayPercent: null, usage: null, forecast: 116.2 },
     ],
-    ceilings: [{ from: '2026-11-15', to: '2026-12-05', value: 100, current: true }],
-    crossing: { date: '2026-12-01', value: 100, label: '01/12' },
-    forecastEnd: { date: '2026-12-05', value: 116.2, percent: 116.2 },
+    today: { t: NOW, percent: 43.9 },
+    crossing: { t: Date.parse('2026-12-01T07:46:58.320Z'), value: 100, label: '1 dez' },
+    forecastEnd: { t: Date.parse(END), percent: 116.2 },
     yMax: 150,
     missingDays: 2,
     partialDays: 0,
@@ -72,10 +78,13 @@ describe('OpencodeGoSubscriptionCard', () => {
     renderCard(usage())
     expect(await screen.findByText(/Renova em/)).toBeTruthy()
     expect(mocks.get).toHaveBeenCalledWith('/opencode/quota/go', { params: query })
-    expect(screen.getByText('05/12 às 09:15')).toBeTruthy()
+    // Desenho do Console: "44%" grande e "Uso do Go · Renova em 5 dez · No ritmo atual, atinge o limite em 1 dez".
     expect(screen.getAllByText('43,9%').some((node) => node.className.includes('text-3xl'))).toBe(true)
+    const renewal = screen.getByText('Renova em 5 dez')
+    expect(renewal.getAttribute('title')).toBe('Renova em 05/12 às 09:15')
+    expect(renewal.parentElement!.textContent).toBe('Uso do Go·Renova em 5 dez·No ritmo atual, atinge o limite em 1 dez')
     const status = document.querySelector('[data-go-status]')!
-    expect(status.textContent).toBe('No ritmo atual, atinge o limite em 01/12')
+    expect(status.textContent).toBe('No ritmo atual, atinge o limite em 1 dez')
     expect(status.getAttribute('data-go-status')).toBe('warning')
     expect([...document.querySelectorAll('[data-go-window]')].map((node) => node.getAttribute('data-go-window'))).toEqual(['fiveHour', 'week', 'month'])
     expect(document.querySelector('[data-go-window="week"]')!.textContent).toContain('5,6%')
@@ -84,11 +93,32 @@ describe('OpencodeGoSubscriptionCard', () => {
     expect(document.body.textContent).not.toMatch(/US\$ [\d,]+ de US\$/)
     expect([...document.querySelectorAll('[data-go-legend]')].map((node) => node.textContent)).toEqual(['Uso', 'Previsão', 'Teto mensal'])
     expect(document.querySelector('[data-go-average]')!.textContent).toBe('Média de 3,9% por dia')
-    const table = screen.getByRole('group', { name: 'Uso acumulado da assinatura OpenCode Go por dia' })
-    expect(table.querySelectorAll('tbody tr')).toHaveLength(3)
+    expect(document.querySelector('[data-go-average] strong')!.textContent).toBe('3,9%')
+    expect(document.querySelector('[data-go-cycle="past"]')).toBeNull()
+    const table = screen.getByRole('group', { name: 'Uso acumulado do ciclo atual da assinatura OpenCode Go' })
+    expect(table.querySelectorAll('tbody tr')).toHaveLength(4)
     expect(table.textContent).toContain('116,2%')
-    expect(document.querySelector('[data-go-note="missing"]')!.textContent).toContain('2 dias sem dados')
+    expect(document.querySelector('[data-go-note="missing"]')!.textContent).toContain('2 dias do ciclo sem dados')
     expect(screen.getByText(/Chave: Chave principal/)).toBeTruthy()
+  })
+
+  it('filtro num ciclo passado mostra o título do ciclo e o gráfico sem previsão', async () => {
+    const data = usage()
+    const past = {
+      ...data.chart!,
+      cycle: { startsAt: '2026-10-05T12:15:35.000Z', endsAt: START, current: false },
+      points: [
+        { t: Date.parse('2026-10-05T12:15:35.000Z'), date: '2026-10-05', dayPercent: null, usage: 0, forecast: null },
+        { t: Date.parse(START), date: '2026-11-05', dayPercent: 1, usage: 52.4, forecast: null },
+      ],
+      today: null,
+      crossing: null,
+      forecastEnd: null,
+    }
+    renderCard({ ...data, chart: past })
+    expect((await screen.findByText('Ciclo de 5 out a 5 nov')).getAttribute('data-go-cycle')).toBe('past')
+    const table = screen.getByRole('group', { name: 'Uso acumulado do ciclo da assinatura OpenCode Go' })
+    expect(table.textContent).not.toContain('116,2%')
   })
 
   it('previsão abaixo do teto mostra o % previsto até a renovação', async () => {

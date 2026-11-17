@@ -1,13 +1,15 @@
 import { describe, expect, it } from 'vitest'
 import {
+  axisDateLabel,
   buildGoChart,
   dateKeysBetween,
   dayPercentFromModels,
-  displayDateKey,
   formatGoDate,
   formatGoDateTime,
+  formatGoFullDate,
+  goAxisTicks,
   goConsoleStatusMessage,
-  goCycles,
+  goCycleFor,
   goForecast,
   goYMax,
   meterPercent,
@@ -84,108 +86,115 @@ describe('ciclos da assinatura', () => {
     expect(new Date(subUtcMonths(Date.parse('2026-03-31T10:00:00Z'), 1)).toISOString()).toBe('2026-02-28T10:00:00.000Z')
   })
 
-  it('lista os ciclos que cruzam o período, do mais antigo ao atual', () => {
-    const cycles = goCycles({ startMs: START, endMs: END }, Date.parse('2026-09-20T00:00:00Z'), Date.parse('2026-11-16T23:59:59Z'))
-    expect(cycles.map((cycle) => new Date(cycle.startMs).toISOString().slice(0, 10))).toEqual(['2026-09-05', '2026-10-05', '2026-11-05'])
-    expect(cycles.map((cycle) => cycle.current)).toEqual([false, false, true])
-    expect(cycles[0]!.endMs).toBe(cycles[1]!.startMs)
+  it('um ciclo por vez: o atual quando o fim do filtro o alcança; senão o anterior que contém o fim', () => {
+    // Padrão "Último mês" visto em 16/11: 16/10 → fim do dia 16/11 em São Paulo.
+    expect(goCycleFor({ startMs: START, endMs: END }, Date.parse('2026-11-17T02:59:59.999Z'))).toEqual({ startMs: START, endMs: END, current: true })
+    const past = goCycleFor({ startMs: START, endMs: END }, Date.parse('2026-10-20T23:59:59Z'))
+    expect(new Date(past.startMs).toISOString()).toBe('2026-10-05T12:15:35.000Z')
+    expect(past).toMatchObject({ endMs: START, current: false })
+    expect(new Date(goCycleFor({ startMs: START, endMs: END }, Date.parse('2026-09-30T00:00:00Z')).startMs).toISOString()).toBe('2026-09-05T12:15:35.000Z')
   })
 })
 
-describe('gráfico do consumo', () => {
-  // Período começando depois do início do ciclo: só o ciclo atual entra.
-  const current = goCycles({ startMs: START, endMs: END }, Date.parse('2026-11-05T13:00:00Z'), Date.parse('2026-11-16T23:59:59Z'))
-
-  it('o período que começa antes da renovação inclui o ciclo anterior', () => {
-    expect(goCycles({ startMs: START, endMs: END }, Date.parse('2026-11-05T00:00:00Z'), NOW)).toHaveLength(2)
-    expect(current).toHaveLength(1)
-  })
-
-  it('pró-rateia o primeiro dia, usa o medidor na ponta de hoje e desenha a previsão até a renovação', () => {
+describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
+  const cycle = { startMs: START, endMs: END, current: true }
+  const everyDay = (value: number) => {
     const series: Record<string, number> = {}
-    for (const key of dateKeysBetween('2026-11-05', '2026-11-16')) series[key] = 4
-    const monthRatio = 43.9
-    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: monthRatio })
-    const chart = buildGoChart({ fromKey: '2026-11-05', toKey: '2026-11-16', nowMs: NOW, cycles: current, days: days(series), monthRatio, forecast, historyFrom: '2026-10-05' })
+    for (const key of dateKeysBetween('2026-11-05', '2026-11-16')) series[key] = value
+    return series
+  }
 
-    const first = chart.points[0]!
+  it('nasce em 0% no início do ciclo, pró-rateia o primeiro dia e termina em agora com o medidor (regressão: nada do ciclo anterior)', () => {
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 44.3 })
+    const chart = buildGoChart({ cycle, nowMs: NOW, days: days(everyDay(4)), monthRatio: 44.3, forecast, historyFrom: '2026-10-05' })
+
+    expect(chart.points[0]).toMatchObject({ t: START, usage: 0 })
     const before = (START - Date.parse('2026-11-05T00:00:00Z')) / DAY
-    expect(first.date).toBe('2026-11-05')
-    expect(first.usage).toBeCloseTo(4 * (1 - before), 2)
-    const today = chart.points.find((point) => point.date === '2026-11-16')!
-    expect(today.usage).toBe(43.9)
-    expect(today.forecast).toBe(43.9)
-    expect(chart.points.at(-1)!.date).toBe('2026-12-05')
-    expect(chart.forecastEnd).toMatchObject({ date: '2026-12-05', percent: Math.round(forecast.projectedPercent! * 10) / 10 })
-    expect(chart.crossing?.date).toBe(new Date(forecast.crossesAtMs!).toISOString().slice(0, 10))
-    expect(chart.crossing?.value).toBe(100)
-    expect(chart.ceilings).toEqual([{ from: '2026-11-05', to: '2026-12-05', value: 100, current: true }])
+    expect(chart.points[1]).toMatchObject({ t: Date.parse('2026-11-06T00:00:00Z'), date: '2026-11-05' })
+    expect(chart.points[1]!.usage).toBeCloseTo(4 * (1 - before), 2)
+    const today = chart.points.find((point) => point.t === NOW)!
+    expect(today.usage).toBe(44.3)
+    expect(chart.today).toEqual({ t: NOW, percent: 44.3 })
+    expect(Math.max(...chart.points.map((point) => point.usage ?? 0))).toBeLessThan(50)
+    expect(chart.cycle).toEqual({ startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z', current: true })
     expect(chart.yMax).toBe(150)
     expect(chart.missingDays).toBe(0)
   })
 
-  it('acumula através dos ciclos com o teto relativo e quebra a linha nos dias sem dados', () => {
-    const from = Date.parse('2026-10-06T00:00:00Z')
-    const cycles = goCycles({ startMs: START, endMs: END }, from, Date.parse('2026-11-16T23:59:59Z'))
-    const series: Record<string, number | null> = {}
-    for (const key of dateKeysBetween('2026-10-05', '2026-11-16')) series[key] = 2
-    series['2026-10-10'] = null
-    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 40 })
-    const chart = buildGoChart({ fromKey: '2026-10-06', toKey: '2026-11-16', nowMs: NOW, cycles, days: days(series), monthRatio: 40, forecast, historyFrom: '2026-10-05' })
-
-    expect(chart.points.find((point) => point.date === '2026-10-10')!.usage).toBeNull()
-    expect(chart.missingDays).toBe(1)
-    expect(chart.ceilings).toHaveLength(2)
-    // O acumulado começa no início do ciclo (05/10), antes do filtro; o eixo começa no filtro.
-    expect(chart.points[0]!.date).toBe('2026-10-06')
-    expect(chart.ceilings[0]).toMatchObject({ from: '2026-10-06', value: 100, current: false })
-    const fraction = (START - Date.parse('2026-11-05T00:00:00Z')) / DAY
-    // Ciclo anterior: 2 pp/dia de 05/10 (pró-rateado) a 05/11 (parte anterior), sem o dia que faltou (conta 0).
-    const previousCycle = 2 * (1 - fraction) + 2 * 29 + 2 * fraction
-    expect(chart.ceilings[1]!.value).toBeCloseTo(previousCycle + 100, 1)
-    expect(chart.points.find((point) => point.date === '2026-11-16')!.usage).toBeCloseTo(previousCycle + 40, 1)
-    expect(chart.yMax).toBeGreaterThan(150)
-    expect(chart.yMax % 50).toBe(0)
+  it('previsão é a reta de agora até a renovação, com cruzamento no teto de 100%', () => {
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 44.3 })
+    const chart = buildGoChart({ cycle, nowMs: NOW, days: days(everyDay(4)), monthRatio: 44.3, forecast, historyFrom: '2026-10-05' })
+    const forecastPoints = chart.points.filter((point) => point.forecast !== null)
+    expect(forecastPoints.map((point) => point.t)).toEqual([NOW, END])
+    expect(forecastPoints[0]!.forecast).toBe(44.3)
+    expect(forecastPoints[1]!.forecast).toBeCloseTo(forecast.projectedPercent!, 2)
+    expect(chart.forecastEnd).toEqual({ t: END, percent: Math.round(forecast.projectedPercent! * 10) / 10 })
+    expect(chart.crossing).toMatchObject({ t: forecast.crossesAtMs, value: 100 })
+    expect(chart.crossing!.label).toBe(formatGoDate(new Date(forecast.crossesAtMs!).toISOString()))
   })
 
-  it('o marcador do cruzamento fica no balde UTC, rotulado com a data de São Paulo (fronteira 00h–03h UTC)', () => {
-    // 43,9% em ~11,3 dias: escolhe o % que cruza às 01:30 UTC de 01/12 (22:30 de 30/11 em São Paulo).
+  it('o rótulo do cruzamento usa a data de São Paulo (fronteira 00h–03h UTC)', () => {
     const crossesAt = Date.parse('2026-12-01T01:30:00.000Z')
     const percent = ((NOW - START) * 100) / (crossesAt - START)
     const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent })
-    const chart = buildGoChart({ fromKey: '2026-11-06', toKey: '2026-11-16', nowMs: NOW, cycles: current, days: days({}), monthRatio: percent, forecast, historyFrom: '2026-10-05' })
-    expect(chart.crossing).toMatchObject({ date: '2026-12-01', label: '30/11' })
-    expect(formatGoDate(new Date(forecast.crossesAtMs!).toISOString())).toBe(chart.crossing!.label)
+    const chart = buildGoChart({ cycle, nowMs: NOW, days: days({}), monthRatio: percent, forecast, historyFrom: '2026-10-05' })
+    expect(chart.crossing!.label).toBe('30 nov')
+  })
+
+  it('dia sem dados quebra a linha e conta 0', () => {
+    const series: Record<string, number | null> = everyDay(2)
+    series['2026-11-10'] = null
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 30 })
+    const chart = buildGoChart({ cycle, nowMs: NOW, days: days(series), monthRatio: 30, forecast, historyFrom: '2026-10-05' })
+    expect(chart.points.find((point) => point.date === '2026-11-10')!.usage).toBeNull()
+    expect(chart.missingDays).toBe(1)
   })
 
   it('sem previsão quando o mês está em 100%', () => {
     const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 100 })
-    const chart = buildGoChart({ fromKey: '2026-11-05', toKey: '2026-11-16', nowMs: NOW, cycles: current, days: days({}), monthRatio: 100, forecast, historyFrom: '2026-10-05' })
+    const chart = buildGoChart({ cycle, nowMs: NOW, days: days({}), monthRatio: 100, forecast, historyFrom: '2026-10-05' })
     expect(chart.forecastEnd).toBeNull()
     expect(chart.crossing).toBeNull()
     expect(chart.points.every((point) => point.forecast === null)).toBe(true)
-    expect(chart.points.find((point) => point.date === '2026-11-16')!.usage).toBe(100)
+    expect(chart.today?.percent).toBe(100)
   })
 
-  it('período no passado não estende o eixo nem usa o medidor', () => {
-    const cycles = goCycles({ startMs: START, endMs: END }, Date.parse('2026-10-10T00:00:00Z'), Date.parse('2026-10-20T23:59:59Z'))
-    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 40 })
-    const chart = buildGoChart({ fromKey: '2026-10-10', toKey: '2026-10-20', nowMs: NOW, cycles, days: days({}), monthRatio: 40, forecast, historyFrom: '2026-10-05' })
-    expect(chart.points.at(-1)!.date).toBe('2026-10-20')
+  it('ciclo passado: termina na renovação com a soma dos dias, sem medidor nem previsão', () => {
+    const past = { startMs: Date.parse('2026-10-05T12:15:35.000Z'), endMs: START, current: false }
+    const series: Record<string, number> = {}
+    for (const key of dateKeysBetween('2026-10-05', '2026-11-05')) series[key] = 1
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 44.3 })
+    const chart = buildGoChart({ cycle: past, nowMs: NOW, days: days(series), monthRatio: 44.3, forecast, historyFrom: '2026-10-05' })
+    expect(chart.points.at(-1)!.t).toBe(START)
+    expect(chart.points.at(-1)!.usage).toBeCloseTo(31, 1)
+    expect(chart.today).toBeNull()
     expect(chart.forecastEnd).toBeNull()
+    expect(chart.cycle.current).toBe(false)
   })
 
   it('eixo Y: 150% ou o próximo múltiplo de 50', () => {
     expect(goYMax([10, 120])).toBe(150)
     expect(goYMax([151])).toBe(200)
   })
+
+  it('faixa de datas: início, terços, cruzamento destacado e fim, sem encavalar', () => {
+    const crossing = Date.parse('2026-12-01T09:34:56Z')
+    const ticks = goAxisTicks(START, END, crossing)
+    expect(ticks.map((tick) => axisDateLabel(tick.t))).toEqual(['5 NOV', '15 NOV', '25 NOV', '1 DEZ', '5 DEZ'])
+    expect(ticks.filter((tick) => tick.highlight).map((tick) => tick.t)).toEqual([crossing])
+    // Cruzamento perto do ⅔: o terço sai.
+    const near = goAxisTicks(START, END, Date.parse('2026-11-26T12:00:00Z'))
+    expect(near.map((tick) => [axisDateLabel(tick.t), tick.highlight])).toEqual([['5 NOV', false], ['15 NOV', false], ['26 NOV', true], ['5 DEZ', false]])
+    expect(goAxisTicks(START, END, null)).toHaveLength(4)
+  })
 })
 
 describe('exibição e mensagens', () => {
   it('datas no fuso de São Paulo', () => {
     expect(formatGoDateTime('2026-12-05T12:15:35.000Z')).toBe('05/12 às 09:15')
-    expect(formatGoDate('2026-12-01T02:00:00.000Z')).toBe('30/11')
-    expect(displayDateKey(Date.parse('2026-11-17T02:59:59.999Z'))).toBe('2026-11-16')
+    expect(formatGoDate('2026-12-01T02:00:00.000Z')).toBe('30 nov')
+    expect(formatGoDate('2026-12-05T12:15:35.000Z')).toBe('5 dez')
+    expect(formatGoFullDate(Date.parse('2026-11-17T02:59:59.999Z'))).toBe('16/11/2026')
   })
 
   it('mensagens por status do Console', () => {

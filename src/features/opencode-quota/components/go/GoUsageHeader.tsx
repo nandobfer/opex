@@ -2,13 +2,12 @@
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
-import { USAGE_LEVEL_CLASSES, usageLevel } from "@/components/metrics/usage-level"
 import { cn } from "@/lib/utils"
 import { formatGoDate, formatGoDateTime, formatGoPercent, formatGoUsd } from "../../go-logic"
 import type { OpencodeGoUsageDto } from "../../go-types"
 import { GO_HEADER_ROW } from "./layout"
 
-/** Linha de situação: limite atingido, data em que o ritmo atual atinge o teto ou o % previsto. */
+/** Trecho final da linha de status: limite atingido, data em que o ritmo atual atinge o teto ou o % previsto. */
 export function goStatusLine(data: OpencodeGoUsageDto): { text: string; tone: "warning" | "destructive" | "muted" } | null {
     if (data.limitReached) return { text: "Limite mensal atingido", tone: "destructive" }
     if (data.forecast?.crossesAt) return { text: `No ritmo atual, atinge o limite em ${formatGoDate(data.forecast.crossesAt)}`, tone: "warning" }
@@ -16,50 +15,52 @@ export function goStatusLine(data: OpencodeGoUsageDto): { text: string; tone: "w
     return null
 }
 
-const TONE_CLASSES = { warning: "text-warning", destructive: "text-destructive", muted: "text-muted-foreground" } as const
+const TONE_CLASSES = { warning: "text-warning font-medium", destructive: "text-destructive font-medium", muted: "text-muted-foreground" } as const
 
-/** Cabeçalho "Uso do Go · Renova em …": % do mês em destaque, situação e o gasto real do ciclo, discreto. */
+/**
+ * Cabeçalho no desenho do Console: o % do mês grande e, abaixo, "Uso do Go · Renova em 5 dez · No ritmo atual,
+ * atinge o limite em 1 dez" (trecho final em âmbar). O gasto real do ciclo fica discreto à direita.
+ */
 export function GoUsageHeader({ data }: { data: OpencodeGoUsageDto }) {
     const reduceMotion = useReducedMotion()
-    const percent = data.monthPercent ?? 0
     const status = goStatusLine(data)
-    const renewal = data.cycle ? formatGoDateTime(data.cycle.endsAt) : null
 
     return (
         <div className={GO_HEADER_ROW}>
             <div className="min-w-0 space-y-1">
-                <p className="text-sm text-muted-foreground">
-                    Uso do Go{renewal && <> · Renova em <span className="text-foreground">{renewal}</span></>}
-                </p>
-                <AnimatePresence mode="wait" initial={false}>
-                    {status && (
-                        <motion.p
-                            key={status.text}
-                            initial={{ opacity: 0, y: -4 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: 4 }}
-                            transition={{ duration: reduceMotion ? 0 : 0.2 }}
-                            className={cn("text-sm font-medium", TONE_CLASSES[status.tone])}
-                            data-go-status={status.tone}
-                        >
-                            {status.text}
-                        </motion.p>
+                <AnimatedNumber value={data.monthPercent ?? 0} formatter={(value) => formatGoPercent(value)} className="block font-mono text-3xl font-semibold text-foreground tabular-nums" />
+                <p className="flex flex-wrap items-center gap-x-1.5 text-sm text-muted-foreground">
+                    <span>Uso do Go</span>
+                    {data.cycle && (
+                        <>
+                            <span aria-hidden>·</span>
+                            <span title={`Renova em ${formatGoDateTime(data.cycle.endsAt)}`}>Renova em {formatGoDate(data.cycle.endsAt)}</span>
+                        </>
                     )}
-                </AnimatePresence>
+                    <AnimatePresence mode="wait" initial={false}>
+                        {status && (
+                            <motion.span
+                                key={status.text}
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: 1 }}
+                                exit={{ opacity: 0 }}
+                                transition={{ duration: reduceMotion ? 0 : 0.2 }}
+                                className="flex items-center gap-x-1.5"
+                            >
+                                <span aria-hidden>·</span>
+                                <span className={cn(TONE_CLASSES[status.tone])} data-go-status={status.tone}>
+                                    {status.text}
+                                </span>
+                            </motion.span>
+                        )}
+                    </AnimatePresence>
+                </p>
             </div>
-            <div className="text-right">
-                <AnimatedNumber
-                    value={percent}
-                    formatter={(value) => formatGoPercent(value)}
-                    className={cn("font-mono text-3xl font-semibold tabular-nums transition-colors duration-300", USAGE_LEVEL_CLASSES[usageLevel(Math.min(100, percent))].text)}
-                />
-                <p className="text-xs text-muted-foreground">do mês usado</p>
-                {data.realCostUsd !== null && (
-                    <p className="text-[11px] text-muted-foreground" title="Soma do custo real por dia (usage/cost-by-day) desde o início do ciclo. Não é o medidor da assinatura, que normaliza o custo pela cota de cada modelo.">
-                        Gasto real no ciclo: {formatGoUsd(data.realCostUsd)}
-                    </p>
-                )}
-            </div>
+            {data.realCostUsd !== null && (
+                <p className="pt-1 text-[11px] text-muted-foreground" title="Soma do custo real por dia (usage/cost-by-day) desde o início do ciclo. Não é o medidor da assinatura, que normaliza o custo pela cota de cada modelo.">
+                    Gasto real no ciclo: {formatGoUsd(data.realCostUsd)}
+                </p>
+            )}
         </div>
     )
 }

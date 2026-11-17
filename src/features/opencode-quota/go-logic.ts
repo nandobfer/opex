@@ -1,5 +1,5 @@
 import { GO_DISPLAY_TIME_ZONE } from "./go-constants"
-import type { GoCeilingDto, GoChartDto, GoChartPointDto } from "./go-types"
+import type { GoChartDto, GoChartPointDto } from "./go-types"
 
 /**
  * Regras da assinatura OpenCode Go (OPE-167), módulo PURO: percentual do medidor, previsão linear,
@@ -31,13 +31,6 @@ export function dateKeysBetween(from: string, to: string): string[] {
     const keys: string[] = []
     for (let key = from; key <= to; key = addDaysKey(key, 1)) keys.push(key)
     return keys
-}
-
-/** Data do calendário em São Paulo de um instante (o filtro de período é escolhido em datas locais). */
-export function displayDateKey(ms: number): string {
-    const parts = new Intl.DateTimeFormat("en-CA", { timeZone: GO_DISPLAY_TIME_ZONE, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(new Date(ms))
-    const part = (type: string) => parts.find((item) => item.type === type)?.value ?? "00"
-    return `${part("year")}-${part("month")}-${part("day")}`
 }
 
 /** Fração do dia UTC já decorrida no instante (0 a 1). */
@@ -118,19 +111,25 @@ export interface GoCycle {
 }
 
 /**
- * Ciclos da assinatura que cruzam o período `[fromMs, toMs]`, do mais antigo ao atual. Os anteriores são
- * deduzidos voltando mês a mês a partir do início do ciclo atual.
+ * Ciclo exibido no gráfico (decisão do dono, 17/11/2026: um ciclo por vez, sem acumular entre ciclos): o atual
+ * quando o fim do filtro alcança o início dele (o padrão "Último mês" termina hoje); senão o ciclo anterior que
+ * contém o fim do filtro, deduzido voltando mês a mês a partir do início do ciclo atual.
  */
-export function goCycles(current: { startMs: number; endMs: number }, fromMs: number, toMs: number): GoCycle[] {
-    const cycles: GoCycle[] = []
-    if (current.startMs <= toMs && current.endMs > fromMs) cycles.push({ ...current, current: true })
+export function goCycleFor(current: { startMs: number; endMs: number }, toMs: number): GoCycle {
+    if (toMs >= current.startMs) return { ...current, current: true }
     let end = current.startMs
-    for (let back = 1; back <= 36 && end > fromMs; back++) {
+    for (let back = 1; back <= 36; back++) {
         const start = subUtcMonths(current.startMs, back)
-        if (start <= toMs) cycles.unshift({ startMs: start, endMs: end, current: false })
+        if (toMs >= start) return { startMs: start, endMs: end, current: false }
         end = start
     }
-    return cycles
+    return { startMs: subUtcMonths(current.startMs, 37), endMs: end, current: false }
+}
+
+/** Dias UTC (baldes da API) que o ciclo toca até `untilMs`. */
+export function cycleDayKeys(cycle: GoCycle, untilMs: number): string[] {
+    const last = Math.min(cycle.endMs - 1, untilMs)
+    return last < cycle.startMs ? [] : dateKeysBetween(utcDateKey(cycle.startMs), utcDateKey(last))
 }
 
 export interface GoDayValue {
@@ -140,32 +139,13 @@ export interface GoDayValue {
 }
 
 export interface GoChartInput {
-    /** Período do filtro, em dias. */
-    fromKey: string
-    toKey: string
+    cycle: GoCycle
     nowMs: number
-    cycles: readonly GoCycle[]
     days: ReadonlyMap<string, GoDayValue>
-    /** % exato do medidor mensal (ponta de hoje). */
+    /** % exato do medidor mensal (ponta de hoje no ciclo atual). */
     monthRatio: number
     forecast: GoForecast
     historyFrom: string
-}
-
-/** Primeiro dia da série: o início do ciclo mais antigo (o acumulado começa nele, mesmo antes do filtro). */
-export function seriesStartKey(cycles: readonly GoCycle[], fromKey: string): string {
-    return cycles.length ? utcDateKey(cycles[0]!.startMs) : fromKey
-}
-
-/** Último dia do eixo: com o filtro chegando a hoje, vai até a renovação (para caber a previsão). */
-export function chartEndKey(toKey: string, nowMs: number, cycles: readonly GoCycle[]): string {
-    const todayKey = utcDateKey(nowMs)
-    const current = cycles.find((cycle) => cycle.current && cycle.startMs <= nowMs && nowMs < cycle.endMs)
-    if (toKey >= todayKey && current) {
-        const renewal = utcDateKey(current.endMs - 1)
-        return renewal > toKey ? renewal : toKey
-    }
-    return toKey
 }
 
 /** Teto do eixo Y: 150% ou o próximo múltiplo de 50 acima do maior valor. */
@@ -175,83 +155,64 @@ export function goYMax(values: readonly number[]): number {
 }
 
 /**
- * Gráfico do consumo: acumulado através dos ciclos (dia sem dados quebra a linha e conta 0), um teto por
- * ciclo em "acumulado no início + 100", a ponta de hoje igual ao medidor e a previsão linear até a renovação.
- * O dia em que um ciclo começa é pró-rateado pelo horário de início.
+ * Gráfico de UM ciclo, no desenho do Console: a linha nasce em 0% no início do ciclo, ganha um ponto no fim de
+ * cada dia UTC (o primeiro e o último dia pró-rateados pelos horários de início e fim) e, no ciclo atual,
+ * termina em "agora" com o valor exato do medidor. A previsão é a reta de "agora" até a renovação; o teto é
+ * fixo em 100%. Dia sem dados quebra a linha e conta 0.
  */
 export function buildGoChart(input: GoChartInput): GoChartDto {
-    const { fromKey, toKey, nowMs, cycles, days, monthRatio, forecast, historyFrom } = input
-    const todayKey = utcDateKey(nowMs)
-    const endKey = chartEndKey(toKey, nowMs, cycles)
-    const lastPastKey = endKey < todayKey ? endKey : todayKey
-    const current = cycles.find((cycle) => cycle.current && cycle.startMs <= nowMs && nowMs < cycle.endMs) ?? null
-
-    const bases = new Map<number, number>()
-    const boundaryOf = new Map<string, number>()
-    for (const cycle of cycles) boundaryOf.set(utcDateKey(cycle.startMs), cycle.startMs)
-
-    const points: GoChartPointDto[] = []
+    const { cycle, nowMs, days, monthRatio, forecast, historyFrom } = input
+    const live = cycle.current && nowMs < cycle.endMs
+    const untilMs = live ? nowMs : cycle.endMs
+    const points: GoChartPointDto[] = [{ t: cycle.startMs, date: utcDateKey(cycle.startMs), dayPercent: null, usage: 0, forecast: null }]
     let cumulative = 0
     let missingDays = 0
     let partialDays = 0
-    const firstStart = cycles[0]?.startMs ?? null
 
-    for (const key of dateKeysBetween(seriesStartKey(cycles, fromKey), lastPastKey)) {
+    for (const key of cycleDayKeys(cycle, untilMs - 1)) {
+        const dayStart = dayStartMs(key)
+        const dayEnd = dayStart + DAY_MS
+        const from = Math.max(dayStart, cycle.startMs)
+        const to = Math.min(dayEnd, cycle.endMs)
+        const isToday = live && nowMs < dayEnd
         const day = days.get(key)
         const percent = day?.percent ?? null
-        // Hoje, no ciclo atual, a ponta vem do medidor: o dia sem dados não falta na linha.
-        const meterDay = key === todayKey && current !== null
-        if (percent === null && !meterDay) missingDays++
+        if (percent === null && !isToday) missingDays++
         else if (day?.partial) partialDays++
-        const value = percent ?? 0
-        const boundary = boundaryOf.get(key)
-        if (boundary !== undefined) {
-            const before = dayFraction(boundary)
-            if (boundary === firstStart) {
-                bases.set(boundary, 0)
-                cumulative = value * (1 - before)
-            } else {
-                bases.set(boundary, cumulative + value * before)
-                cumulative += value
-            }
-        } else {
-            cumulative += value
-        }
-        let usage: number | null = percent === null ? null : cumulative
-        if (key === todayKey && current) usage = (bases.get(current.startMs) ?? cumulative) + monthRatio
-        if (key >= fromKey) points.push({ date: key, dayPercent: percent === null ? null : round(percent), usage: usage === null ? null : round(usage), forecast: null })
-    }
-    for (const key of dateKeysBetween(addDaysKey(lastPastKey, 1), endKey)) {
-        if (key >= fromKey) points.push({ date: key, dayPercent: null, usage: null, forecast: null })
+        if (isToday) break
+        cumulative += (percent ?? 0) * ((to - from) / DAY_MS)
+        points.push({ t: to, date: key, dayPercent: percent === null ? null : round(percent), usage: percent === null ? null : round(cumulative), forecast: null })
     }
 
-    const ceilings: GoCeilingDto[] = []
-    for (const cycle of cycles) {
-        const base = bases.get(cycle.startMs)
-        if (base === undefined) continue
-        const from = utcDateKey(cycle.startMs) < fromKey ? fromKey : utcDateKey(cycle.startMs)
-        const cycleEnd = utcDateKey(cycle.endMs - 1)
-        const to = cycleEnd > endKey ? endKey : cycleEnd
-        if (from <= to) ceilings.push({ from, to, value: round(base + 100), current: cycle.current })
-    }
-
+    let today: GoChartDto["today"] = null
     let crossing: GoChartDto["crossing"] = null
     let forecastEnd: GoChartDto["forecastEnd"] = null
-    const currentBase = current ? bases.get(current.startMs) : undefined
-    if (current && currentBase !== undefined && forecast.projectedPercent !== null && endKey >= todayKey) {
-        const elapsed = nowMs - current.startMs
-        const renewalKey = utcDateKey(current.endMs - 1)
-        for (const point of points) {
-            if (point.date < todayKey || point.date > renewalKey) continue
-            const at = point.date === todayKey ? nowMs : Math.min(dayStartMs(point.date) + DAY_MS, current.endMs)
-            point.forecast = round(currentBase + (monthRatio * (at - current.startMs)) / elapsed)
+    if (live) {
+        const key = utcDateKey(nowMs)
+        const todayPercent = days.get(key)?.percent ?? null
+        const value = round(monthRatio)
+        points.push({ t: nowMs, date: key, dayPercent: todayPercent === null ? null : round(todayPercent), usage: value, forecast: forecast.projectedPercent !== null ? value : null })
+        today = { t: nowMs, percent: value }
+        if (forecast.projectedPercent !== null) {
+            const projected = round(forecast.projectedPercent)
+            points.push({ t: cycle.endMs, date: utcDateKey(cycle.endMs - 1), dayPercent: null, usage: null, forecast: projected })
+            forecastEnd = { t: cycle.endMs, percent: round(forecast.projectedPercent, 1) }
+            if (forecast.crossesAtMs !== null) crossing = { t: forecast.crossesAtMs, value: 100, label: formatGoDate(new Date(forecast.crossesAtMs).toISOString()) }
         }
-        forecastEnd = { date: renewalKey, value: round(currentBase + forecast.projectedPercent), percent: round(forecast.projectedPercent, 1) }
-        if (forecast.crossesAtMs !== null) crossing = { date: utcDateKey(forecast.crossesAtMs), value: round(currentBase + 100), label: formatGoDate(new Date(forecast.crossesAtMs).toISOString()) }
     }
 
-    const values = [...points.flatMap((point) => [point.usage ?? 0, point.forecast ?? 0]), ...ceilings.map((ceiling) => ceiling.value)]
-    return { points, ceilings, crossing, forecastEnd, yMax: goYMax(values), missingDays, partialDays, historyFrom }
+    const values = points.flatMap((point) => [point.usage ?? 0, point.forecast ?? 0])
+    return {
+        cycle: { startsAt: new Date(cycle.startMs).toISOString(), endsAt: new Date(cycle.endMs).toISOString(), current: cycle.current },
+        points,
+        today,
+        crossing,
+        forecastEnd,
+        yMax: goYMax(values),
+        missingDays,
+        partialDays,
+        historyFrom,
+    }
 }
 
 /** Mensagem pt-BR para uma resposta de erro do Console. */
@@ -271,22 +232,40 @@ function zonedParts(ms: number): Record<string, string> {
     return Object.fromEntries(parts.map((part) => [part.type, part.value]))
 }
 
-/** "05/12 às 09:15" no fuso de São Paulo. */
+/** "05/12 às 09:15" no fuso de São Paulo (dica da renovação e dos resets). */
 export function formatGoDateTime(iso: string): string {
     const parts = zonedParts(Date.parse(iso))
     return `${parts.day}/${parts.month} às ${parts.hour}:${parts.minute}`
 }
 
-/** "01/12" no fuso de São Paulo. */
+const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"] as const
+
+/** "1 dez" no fuso de São Paulo (cabeçalho e rótulo do cruzamento, como "Dec 1" no Console). */
 export function formatGoDate(iso: string): string {
     const parts = zonedParts(Date.parse(iso))
-    return `${parts.day}/${parts.month}`
+    return `${Number(parts.day)} ${MONTHS[Number(parts.month) - 1]}`
 }
 
-/** Rótulo de um dia UTC do eixo (`2026-12-01` → "01/12"; com ano → "01/12/2026"). */
-export function dayKeyLabel(key: string, withYear = false): string {
-    const [year, month, day] = key.split("-")
-    return withYear ? `${day}/${month}/${year}` : `${day}/${month}`
+/** Rótulo da faixa de datas do eixo: "5 NOV" no fuso de São Paulo. */
+export function axisDateLabel(ms: number): string {
+    return formatGoDate(new Date(ms).toISOString()).toUpperCase()
+}
+
+/** Data completa do tooltip: "16/11/2026" no fuso de São Paulo. */
+export function formatGoFullDate(ms: number): string {
+    const parts = zonedParts(ms)
+    return `${parts.day}/${parts.month}/${parts.year}`
+}
+
+/**
+ * Marcas da faixa de datas (como no Console): início, ⅓ e ⅔ do ciclo, o cruzamento com o teto (destacado) e o
+ * fim. Marca a menos de 3 dias de outra mais importante (início, fim, cruzamento) sai, para não encavalar.
+ */
+export function goAxisTicks(startMs: number, endMs: number, crossingMs: number | null): { t: number; highlight: boolean }[] {
+    const span = endMs - startMs
+    const fixed = [{ t: startMs, highlight: false }, ...(crossingMs !== null ? [{ t: crossingMs, highlight: true }] : []), { t: endMs, highlight: false }]
+    const thirds = [startMs + span / 3, startMs + (2 * span) / 3].filter((t) => fixed.every((tick) => Math.abs(tick.t - t) >= 3 * DAY_MS))
+    return [...fixed, ...thirds.map((t) => ({ t, highlight: false }))].sort((a, b) => a.t - b.t)
 }
 
 /** Percentual em pt-BR com uma casa ("43,9%"). */

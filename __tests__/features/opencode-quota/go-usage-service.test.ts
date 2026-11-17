@@ -123,17 +123,31 @@ describe('getOpencodeGoUsage', () => {
     const today = dto.chart!.points.find((point) => point.date === '2026-11-17')!
     expect(today.usage).toBe(43.9)
     expect(today.forecast).toBe(43.9)
-    expect(dto.chart!.forecastEnd).toMatchObject({ date: '2026-12-05' })
-    expect(dto.chart!.crossing).not.toBeNull()
+    expect(dto.chart!.forecastEnd).toMatchObject({ t: Date.parse('2026-12-05T12:15:35.000Z') })
+    expect(dto.chart!.crossing).toMatchObject({ value: 100 })
     expect(dto.chart!.points.at(-1)!.date).toBe('2026-12-05')
     expect(mocks.fetch.mock.calls.some(([url]) => String(url).includes('from=2026-11-17'))).toBe(true)
   })
 
-  it('filtro que termina antes de agora não ganha o dia UTC seguinte', async () => {
-    vi.setSystemTime(Date.parse('2026-11-17T01:00:00.000Z'))
-    const dto = await getOpencodeGoUsage({ from: '2026-11-06T03:00:00.000Z', to: '2026-11-15T02:59:59.999Z' })
-    expect(dto.chart!.points.at(-1)!.date).toBe('2026-11-14')
+  it('padrão "Último mês" mostra só o ciclo atual: consulta só os dias dele e começa em 0% (regressão do 97%)', async () => {
+    const dto = await getOpencodeGoUsage({ from: '2026-10-16T03:00:00.000Z', to: '2026-11-17T02:59:59.999Z' })
+    const days = mocks.fetch.mock.calls.map(([url]) => String(url)).filter((url) => url.includes('/usage/models')).map((url) => new URL(url).searchParams.get('from'))
+    expect(days.every((day) => day! >= '2026-11-05')).toBe(true)
+    expect(dto.chart!.cycle).toMatchObject({ startsAt: '2026-11-05T12:15:35.000Z', current: true })
+    expect(dto.chart!.points[0]!.usage).toBe(0)
+    expect(dto.chart!.today!.percent).toBe(43.9)
+    expect(dto.chart!.crossing!.value).toBe(100)
+    expect(Math.max(...dto.chart!.points.map((point) => point.usage ?? 0))).toBe(43.9)
+  })
+
+  it('filtro que termina num ciclo passado mostra aquele ciclo, sem previsão', async () => {
+    const dto = await getOpencodeGoUsage({ from: '2026-10-10T03:00:00.000Z', to: '2026-10-21T02:59:59.999Z' })
+    expect(dto.chart!.cycle).toEqual({ startsAt: '2026-10-05T12:15:35.000Z', endsAt: '2026-11-05T12:15:35.000Z', current: false })
     expect(dto.chart!.forecastEnd).toBeNull()
+    expect(dto.chart!.today).toBeNull()
+    expect(dto.chart!.points.at(-1)!.t).toBe(Date.parse('2026-11-05T12:15:35.000Z'))
+    // O cabeçalho continua no ciclo atual.
+    expect(dto.monthPercent).toBe(43.9)
   })
 
   it('segue a série quando um dia falha e conta o dia como sem dados', async () => {
