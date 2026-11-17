@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useRef } from "react"
+import { useEffect, useMemo, useRef } from "react"
 import Link from "next/link"
 import { useVirtualizer } from "@tanstack/react-virtual"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
@@ -23,6 +23,8 @@ import { ALL_CENTRALS_ID } from "../../dev-center-central"
 import { DEFAULT_DEV_CENTER_FILTERS, DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, filterCentralTasks } from "../../dev-center-filters"
 import { activeDevCenterFilterChips } from "../../dev-center-filter-chips"
 import { useCentralsTaskState } from "../../hooks/useAgentic"
+import { useCompactWorkbench } from "../../hooks/useCompactWorkbench"
+import { activeTaskIndex } from "../../dev-center-mobile"
 import { centralsByProject } from "../../dev-center-product"
 import type { CentralDto } from "../../types"
 import { ActiveWorkbenchSwitch } from "./ActiveWorkbenchSwitch"
@@ -30,6 +32,28 @@ import { CentralPicker } from "./CentralPicker"
 import { CollapsibleTaskFilters } from "./CollapsibleTaskFilters"
 import { TaskFilters } from "./TaskFilters"
 import { TaskRow, TaskRowSkeleton } from "./TaskRow"
+import { TasksMobileHeader } from "./mobile/TasksMobileHeader"
+import { TASKS_MOBILE_ICON_BUTTON_CLASS } from "./mobile/header-classes"
+import { DEV_CENTER_PANE_BLEED_CLASS } from "./pane-classes"
+
+/** Configurar a central selecionada (ou as centrais, em "Todos os projetos"); 40 px no celular. */
+function CentralSettingsButton({ central, compact }: { central: CentralDto | null; compact: boolean }) {
+    const label = central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"
+    return (
+        <TooltipProvider>
+            <Tooltip>
+                <TooltipTrigger asChild>
+                    <Button asChild variant="ghost" size="icon" className={cn("shrink-0", compact ? TASKS_MOBILE_ICON_BUTTON_CLASS : "h-8 w-8")}>
+                        <Link href={central ? centralSettingsPath(central.id) : AGENTIC_CENTRALS_HREF} aria-label={label}>
+                            <Settings className="h-4 w-4" aria-hidden />
+                        </Link>
+                    </Button>
+                </TooltipTrigger>
+                <TooltipContent>{label}</TooltipContent>
+            </Tooltip>
+        </TooltipProvider>
+    )
+}
 
 // Estimativa inicial da altura das linhas; cada linha é medida de verdade (o resumo varia de 1 a 2 linhas).
 const ROW_HEIGHT = 86
@@ -48,6 +72,8 @@ interface TasksPaneProps {
  * recolhida: resumo em chips; expandida: "Só mesas ativas", o seletor da central, os filtros de
  * colunas e de estado da mesa e a busca por nome, todos ocupando a linha inteira); por fim a lista
  * com a etapa da mesa, abaixo da quota do OpenCode (`OpencodeQuotaPanel`). Coluna sempre expandida (largura fixa a partir de `lg`).
+ * Abaixo de `lg` (OPE-166) o topo vira o `TasksMobileHeader` (busca à vista, filtros e quota em folhas), a
+ * coluna ocupa a largura toda e, ao voltar da mesa, a lista rola até a tarefa que estava aberta.
  */
 export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, className }: TasksPaneProps) {
     const list = useTaskList(false)
@@ -76,39 +102,55 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
     // eslint-disable-next-line react-hooks/incompatible-library -- TanStack Virtual devolve funções não memorizáveis (padrão do projeto)
     const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, getItemKey: (index) => tasks[index]?.id ?? index, overscan: 8 })
     const reduceMotion = useReducedMotion()
+    const compact = useCompactWorkbench()
+    // Voltar da mesa no celular: a coluna estava escondida (`display: none`) e a rolagem se perde; a lista
+    // rola até a tarefa que estava aberta, centralizada, quando a coluna reaparece.
+    const lastActiveRef = useRef<string | null>(activeTaskId)
+    useEffect(() => {
+        if (activeTaskId) {
+            lastActiveRef.current = activeTaskId
+            return
+        }
+        const index = activeTaskIndex(tasks, lastActiveRef.current)
+        if (!compact || index < 0) return
+        const frame = requestAnimationFrame(() => {
+            lastActiveRef.current = null
+            virtualizer.scrollToIndex(index, { align: "center", behavior: reduceMotion ? "auto" : "smooth" })
+        })
+        return () => cancelAnimationFrame(frame)
+    }, [activeTaskId, compact, tasks, virtualizer, reduceMotion])
+    const filterFields = (
+        <>
+            <ActiveWorkbenchSwitch checked={filters.activeOnly} onChange={(activeOnly) => setFilters((current) => ({ ...current, activeOnly }))} />
+            <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
+            <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} />
+        </>
+    )
+    const search = (value: string) => setFilters((current) => ({ ...current, search: value }))
 
     return (
-        <Card role="region" aria-label="Lista de tarefas" data-testid="tasks-pane" className={cn("flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0", className)}>
-            <div className="space-y-2 border-b p-3">
-                <div className="flex items-center justify-between gap-2">
-                <h2 className="text-sm font-semibold">
-                    Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
-                </h2>
-                <TooltipProvider>
-                    <Tooltip>
-                        <TooltipTrigger asChild>
-                            <Button asChild variant="ghost" size="icon" className="h-8 w-8 shrink-0">
-                                <Link href={central ? centralSettingsPath(central.id) : AGENTIC_CENTRALS_HREF} aria-label={central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}>
-                                    <Settings className="h-4 w-4" aria-hidden />
-                                </Link>
-                            </Button>
-                        </TooltipTrigger>
-                        <TooltipContent>{central ? "Configurar central selecionada" : "Configurar centrais de desenvolvimento"}</TooltipContent>
-                    </Tooltip>
-                </TooltipProvider>
-                </div>
-                <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
-                <CollapsibleTaskFilters chips={chips}>
-                    <ActiveWorkbenchSwitch checked={filters.activeOnly} onChange={(activeOnly) => setFilters((current) => ({ ...current, activeOnly }))} />
-                    <CentralPicker centrals={centrals} active={central} index={repoIndex} onSelect={onSelectCentral} />
-                    <TaskFilters filters={filters} columns={board.columns} onChange={setFilters} />
-                    <div className="relative">
-                        <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
-                        <Input value={filters.search} onChange={(event) => setFilters((current) => ({ ...current, search: event.target.value }))} placeholder="Buscar por código ou título" className="pl-8" aria-label="Buscar tarefas" />
+        <Card role="region" aria-label="Lista de tarefas" data-testid="tasks-pane" className={cn("flex min-h-[420px] w-full flex-col overflow-hidden lg:min-h-0 lg:w-[340px] lg:shrink-0", DEV_CENTER_PANE_BLEED_CLASS, className)}>
+            {compact ? (
+                <TasksMobileHeader count={tasks.length} chips={chips} search={filters.search} onSearch={search} settings={<CentralSettingsButton central={central} compact />} filters={filterFields} />
+            ) : (
+                <div className="space-y-2 border-b p-3">
+                    <div className="flex items-center justify-between gap-2">
+                        <h2 className="text-sm font-semibold">
+                            Tarefas <span className="font-mono text-xs font-normal text-muted-foreground">{tasks.length}</span>
+                        </h2>
+                        <CentralSettingsButton central={central} compact={false} />
                     </div>
-                </CollapsibleTaskFilters>
-                <OpencodeQuotaPanel />
-            </div>
+                    <div role="separator" aria-hidden className="h-px w-full bg-gradient-to-r from-transparent via-border to-transparent" />
+                    <CollapsibleTaskFilters chips={chips}>
+                        {filterFields}
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" aria-hidden />
+                            <Input value={filters.search} onChange={(event) => search(event.target.value)} placeholder="Buscar por código ou título" className="pl-8" aria-label="Buscar tarefas" />
+                        </div>
+                    </CollapsibleTaskFilters>
+                    <OpencodeQuotaPanel />
+                </div>
+            )}
             {/* Trocar de central anima só a lista; trocar de tarefa não (a lista e a rolagem ficam). */}
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -122,7 +164,7 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                     {list.isLoading ? (
                         <div className="px-1.5 py-0.5" aria-label="Carregando tarefas" aria-busy="true" data-testid="tasks-pane-skeleton">
                             {Array.from({ length: 6 }, (_, index) => (
-                                <TaskRowSkeleton key={index} />
+                                <TaskRowSkeleton key={index} compact={compact} />
                             ))}
                         </div>
                     ) : list.isError ? (
@@ -143,6 +185,7 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                                                 workbench={stages.get(task.id)}
                                                 queueItem={queued.get(task.id)}
                                                 active={task.id === activeTaskId}
+                                                compact={compact}
                                             />
                                         </div>
                                     )

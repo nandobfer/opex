@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
@@ -301,14 +301,12 @@ describe('ActionBar', () => {
     expect(screen.getByLabelText('O que precisa mudar no plano?')).toBeTruthy()
   })
 
-  it('celular: Abrir fork é ícone (sem texto), rótulos compactos nos demais e linha única com rolagem lateral', () => {
+  it('desktop: Abrir fork é ícone (sem texto) e os demais com o rótulo completo (abaixo de lg a linha vira o dock, OPE-166)', () => {
     render(<ActionBar workbench={workbench({ stage: 'preview', previewUrl: 'http://localhost:4001' })} />)
     const fork = screen.getByRole('button', { name: 'Abrir fork' })
     expect(fork.textContent?.trim()).toBe('')
-    const approve = screen.getByRole('button', { name: 'Aprovar e abrir PR' })
-    expect(within(approve).getByText('Aprovar PR').className).toContain('md:hidden')
-    expect(fork.parentElement!.className).toContain('max-md:flex-nowrap')
-    expect(fork.parentElement!.className).toContain('max-md:overflow-x-auto')
+    expect(screen.getByRole('button', { name: 'Aprovar e abrir PR' }).textContent?.trim()).toBe('Aprovar e abrir PR')
+    expect(screen.queryByTestId('mobile-action-dock')).toBeNull()
   })
 
   it('Abrir fork fica bloqueado (com o motivo na dica) enquanto a mesa é excluída', () => {

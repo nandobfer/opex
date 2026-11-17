@@ -3,6 +3,7 @@ import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
+import { aiApiKeysMock, apiKeyDto } from "../../helpers/ai-api-keys"
 import { draftFrom } from "@/features/integrations/components/detail/draft"
 import { getIntegrationDef, type IntegrationId } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
@@ -14,10 +15,14 @@ vi.mock("@/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <d
 vi.mock("@/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
 vi.mock("@/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
 vi.mock("@/features/ai/components/ProviderUsageCard", () => ({
-    ProviderUsageCard: ({ provider, showCost, keyFilter }: { provider: string; showCost?: boolean; keyFilter?: string }) => (
-        <div data-testid={`provider-usage-${provider}`} data-show-cost={String(showCost)} data-key-filter={keyFilter ?? ""} />
+    ProviderUsageCard: ({ provider, showCost, keyFilter, hideFilters }: { provider: string; showCost?: boolean; keyFilter?: string; hideFilters?: boolean }) => (
+        <div data-testid={`provider-usage-${provider}`} data-show-cost={String(showCost)} data-key-filter={keyFilter ?? ""} data-hide-filters={String(Boolean(hideFilters))} />
     ),
 }))
+vi.mock("@/features/opencode-quota/components/go/OpencodeGoSubscriptionCard", () => ({
+    OpencodeGoSubscriptionCard: ({ query }: { query: { apiKey?: string } | null }) => <div data-testid="go-subscription" data-api-key={query?.apiKey ?? "all"} />,
+}))
+vi.mock("@/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Principal", true)]))
 vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
@@ -126,6 +131,12 @@ describe("AiProviderEditorForm", () => {
         expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-show-cost")).toBe("true")
         // OPE-156: o Go usa o chaveiro, então o painel ganha o filtro "Chave de API".
         expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-key-filter")).toBe("opencode-go")
+        // OPE-167: a assinatura (Console) vem antes do consumo do Opex, com uma barra de filtros só para os dois.
+        const subscription = screen.getByTestId("go-subscription")
+        expect(subscription.compareDocumentPosition(screen.getByTestId("provider-usage-opencode-go")) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+        expect(screen.getByTestId("provider-usage-opencode-go").getAttribute("data-hide-filters")).toBe("true")
+        expect(screen.getAllByText("Período")).toHaveLength(1)
+        expect(screen.getAllByLabelText("Chave de API")).toHaveLength(1)
     })
 
     it("OpenCode Go (OPE-156): Configuração mostra Chaves de API, sem a chave oc_sk_… em Campos privados", () => {

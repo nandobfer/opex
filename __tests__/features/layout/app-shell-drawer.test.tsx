@@ -40,11 +40,12 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe("AppShell — gaveta do menu e atalho (padrão Shell do DS Sipal)", () => {
-    it("sem cabeçalho: só menu e conteúdo; no celular o botão do menu flutua", () => {
-        const { container } = renderShell()
-        expect(container.querySelector("header")).toBeNull()
+    it("sem título de página na casca; no celular o botão do menu fica no cabeçalho (OPE-168)", () => {
+        renderShell()
         expect(screen.queryByRole("heading", { name: "Tarefas" })).toBeNull()
-        expect(screen.getByRole("button", { name: "Abrir menu" }).className).toContain("fixed")
+        const header = screen.getByTestId("mobile-app-header")
+        expect(screen.getAllByRole("button", { name: "Abrir menu" })).toHaveLength(1)
+        expect(header.contains(screen.getByRole("button", { name: "Abrir menu" }))).toBe(true)
     })
 
     it("o primeiro link da página pula para o conteúdo", () => {

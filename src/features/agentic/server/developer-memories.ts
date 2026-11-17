@@ -62,20 +62,37 @@ async function developerFocus(focus: DeveloperMemoriesOptions["focus"]): Promise
     return buildMemoryFocus("desenvolvedor", { kind: "task", code: focus.code, title: focus.title, stage: focus.stage, workbench: focus.workbench, description })
 }
 
+/** Motivo do "somente leitura" na instrução do desenvolvedor quando o Mentor aprende na central (OPE-165). */
+export const MENTOR_READ_ONLY_REASON = "Nesta central quem grava as memórias é o Agente Mentor, ao concluir a mesa (ele lê a transcrição inteira)"
+
+/** O Agente Mentor aprende nesta central (o desenvolvedor fica somente leitura)? Na dúvida, não. */
+export async function developerReadOnly(centralId: string): Promise<boolean> {
+    try {
+        const { mentorLearnsOnDone } = await import("@/features/adversarial-agent/server/mentor/hooks")
+        return await mentorLearnsOnDone(centralId)
+    } catch {
+        return false
+    }
+}
+
 /**
  * O MCP de memórias vale sempre (leitura da faixa de títulos, OPE-117); a gravação (checklist de fim de
- * turno) só com o aprendizado autônomo ligado. O desenvolvedor grava o que percebe; o Mentor é a 2ª camada.
+ * turno) só com o aprendizado autônomo ligado e sem o Agente Mentor aprendendo na central (OPE-165: aí quem
+ * grava é o Mentor, ao concluir a mesa, a partir da transcrição inteira).
  */
 async function selfMemorySection(client: OpencodeClient, centralId: string, options: DeveloperMemoriesOptions, counts: { titles: number; overflow: number } | null): Promise<string> {
     const { selfMemoryEnabled } = await import("@/features/ai/server/self-memory/settings")
-    const write = await selfMemoryEnabled("desenvolvedor")
+    // OPE-165: com o Agente Mentor aprendendo na conclusão da mesa, o desenvolvedor da central só lê.
+    const enabled = await selfMemoryEnabled("desenvolvedor")
+    const mentorWrites = enabled && (await developerReadOnly(centralId))
+    const write = enabled && !mentorWrites
     const { ensureAgentMemoryMcp } = await import("@/features/ai/server/self-memory/mcp")
     const registered = await ensureAgentMemoryMcp(client, options.directories ?? [])
     if (!registered.ok) {
         if (write) options.notify?.("warn", `Aprendizado autônomo indisponível neste turno: ${registered.error}`)
         return ""
     }
-    return selfMemoryInstructions("desenvolvedor", { kind: "central", centralId }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX, counts, write, read: true }).trim()
+    return selfMemoryInstructions("desenvolvedor", { kind: "central", centralId }, { toolPrefix: SELF_MEMORY_TOOL_PREFIX, counts, write, read: true, ...(mentorWrites ? { readOnlyReason: MENTOR_READ_ONLY_REASON } : {}) }).trim()
 }
 
 export async function syncDeveloperMemories(client: OpencodeClient, sessionId: string, centralId: string, options: DeveloperMemoriesOptions = {}): Promise<DeveloperMemoriesSync> {

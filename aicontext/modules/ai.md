@@ -238,6 +238,9 @@ do `opencode serve`, não uma chave de API.
   responde `400 MissingSessionID`) e o `User-Agent` próprio `OPENCODE_GO_USER_AGENT` (exigência do Go
   para clientes de terceiros). Ids de sessão: `opex-agent-<sessão>` (Agente Opex),
   `opex-routine-<execução>` (rotineiros) e `opex-<uuid>` por geração nas demais features.
+- **Cota mensal por modelo** (OPE-167): o catálogo traz `go.monthly_usage.<plano>` (US$ por mês, ex.:
+  `deepseek-v4.1-flash` = 100 no `go`); `opencodeGoMonthlyAllowances` (puro) e `opencodeGoAllowances(plano)`
+  (cache do catálogo) dão a tabela que a série diária da assinatura usa. Gratuitos vêm `null`.
 - **Modelos** (`GET /openai/v1/models`, público; `opencode-go-models.ts`, puro): entram **todos** os
   modelos de texto (`type: "chat"`) de qualquer das quatro APIs (decisão do dono: não excluir modelo
   utilizável). Cada modelo é chamado pela API que o catálogo declara, com a SDK correspondente
@@ -363,6 +366,13 @@ do `opencode serve`, não uma chave de API.
   medição do provedor. Em `/integracoes/ia/opencode-go` o card é o mesmo, mas **com a coluna Custo
   (USD)**: o Go informa o custo de cada resposta (cota + Extra Usage, ver "OpenCode Go"); a rota
   também atende `opencode-go`. Desde a OPE-156 o painel do Go também tem o filtro de chave.
+- **Aba Consumo do OpenCode Go** (OPE-167, `OpencodeGoUsageTab`): a barra de filtros (período + chave,
+  `UsageFiltersBar`, extraída do `ProviderUsageCard`) aparece **uma vez** no topo e vale para os dois cards
+  abaixo (os filtros vivem na URL): **Assinatura OpenCode Go** (`OpencodeGoSubscriptionCard`, lido do Console
+  — ver `modules/opencode-quota.md`, "Assinatura OpenCode Go") e **Consumo do OpenCode Go pelo Opex** (o
+  `ProviderUsageCard` com `hideFilters`). Os demais provedores continuam com o filtro dentro do próprio card.
+- **Chave por id** (`getAiProviderKeyById`, `src/lib/ai/api-keys.ts`): lê e decifra no servidor uma chave
+  do chaveiro em uso ou não (filtro de chave da assinatura do Go); `null` se não existe ou não decifra.
 - **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek,
   OpenCode Go (OPE-156) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
   recebe o parâmetro `apiKey`. Opções:
@@ -687,10 +697,20 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
   recebe no turno (dono e portal). O Arquiteto em provedor direto (sem MCP) não as anuncia. O catálogo do MCP é
   único por diretório (não muda por sessão): com o aprendizado desligado, a instrução diz para não chamar
   as de gravação e, no Maddox, as regras da sessão as negam (`selfMemorySessionPermissions(…, { write: false })`).
-- **Duas camadas (OPE-117, decisão do dono: não restringir)**: o desenvolvedor (e o Adversário) gravam o
-  que percebem em `developer-global`/`developer-central`; o Agente Mentor é a segunda camada, vê as
-  memórias da lista de destino (inclusive as recém-gravadas pelo agente na cadeia) e grava só o que passou
-  batido, fundindo em vez de duplicar (`MENTOR_TWO_LAYERS` no redator).
+- **Desenvolvedor somente leitura com o Mentor (OPE-165, decisão do dono)**: quando o Agente Mentor aprende
+  na central (Mentor ativo, "Aprender ao concluir a mesa" ligado, a central no escopo e ao menos um destino
+  que vale — `mentorLearnsOnDone`,
+  lido por `developerReadOnly` em `agentic/server/developer-memories.ts`), o agente desenvolvedor da mesa e
+  dos forks **não grava memória em nenhum turno**: a instrução sai só com o bloco de leitura e o motivo
+  (`readOnlyReason` de `selfMemoryInstructions`, sem o checklist de fim de turno) e o MCP recusa as
+  ferramentas de gravação (`MENTOR_WRITES_REFUSAL` em `callSelfMemoryTool`); contexto, `get_hints`,
+  `search_memories` e `get_memory` continuam. **A escrita é do Mentor**, uma vez por conclusão da mesa, a
+  partir da transcrição inteira (cria, atualiza, funde e arquiva; nunca exclui). O Adversário (revisões)
+  continua com o aprendizado autônomo dele. Na dúvida (banco fora), vale a chave de aprendizado autônomo.
+- **Duas camadas (OPE-117)**, quando o Mentor não aprende na central: o desenvolvedor (e o Adversário)
+  gravam o que percebem em `developer-global`/`developer-central`; ao concluir a mesa, o Agente Mentor vê as
+  memórias da lista de destino (inclusive as gravadas pelo agente) e grava só o que passou batido, fundindo
+  em vez de duplicar.
 - **Adoção (OPE-117)**: o card do `SelfMemorySwitch` mostra gravações em 7 dias, última gravação, último
   contexto lido e a última entrega (`AgentMemoryActivity`); ver `modules/engramind.md`, "Contratos 0.11.0 e OPE-117".
 

@@ -32,23 +32,58 @@ export function StageSteps({ stage, runState, flow = "preview", adversarial = fa
     const steps = workbenchSteps(flow, adversarial || ADVERSARIAL_STAGES.includes(stage), refinement || REFINEMENT_STAGES.includes(stage))
     const current = steps.findIndex((step) => step.stages.includes(stage))
     return (
-        <ol className="flex items-center gap-1 overflow-x-auto border-b px-4 py-2.5" aria-label="Etapas da mesa">
-            {steps.map((step, index) => {
-                const done = index < current || stage === "done"
-                const active = index === current && stage !== "done"
-                return (
-                    <li key={step.id} className="flex shrink-0 items-center gap-1" aria-current={active ? "step" : undefined}>
-                        {index > 0 && <span className={cn("h-px w-5 sm:w-8", done || active ? "bg-primary" : "bg-border")} aria-hidden />}
-                        <span className={cn("flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs", active ? "bg-primary/15 text-foreground" : done ? "text-muted-foreground" : "text-muted-foreground/60")}>
-                            <span className={cn("relative flex h-4 w-4 items-center justify-center rounded-full border text-[10px]", done ? "border-primary bg-primary text-primary-foreground" : active ? (runState === "failed" ? "border-destructive" : "border-primary") : "border-border")}>
-                                {done ? <Check className="h-2.5 w-2.5" aria-hidden /> : index + 1}
-                                {active && runState === "running" && <motion.span className="absolute inset-0 rounded-full border border-primary" animate={{ scale: [1, 1.6], opacity: [0.8, 0] }} transition={{ repeat: Infinity, duration: 1.4 }} aria-hidden />}
+        <>
+            <CompactStageSteps steps={steps} current={current} stage={stage} runState={runState} />
+            <ol className="flex items-center gap-1 overflow-x-auto border-b px-4 py-2.5 max-lg:hidden" aria-label="Etapas da mesa">
+                {steps.map((step, index) => {
+                    const done = index < current || stage === "done"
+                    const active = index === current && stage !== "done"
+                    return (
+                        <li key={step.id} className="flex shrink-0 items-center gap-1" aria-current={active ? "step" : undefined}>
+                            {index > 0 && <span className={cn("h-px w-5 sm:w-8", done || active ? "bg-primary" : "bg-border")} aria-hidden />}
+                            <span className={cn("flex items-center gap-1.5 rounded-full px-2 py-0.5 text-xs", active ? "bg-primary/15 text-foreground" : done ? "text-muted-foreground" : "text-muted-foreground/60")}>
+                                <span className={cn("relative flex h-4 w-4 items-center justify-center rounded-full border text-[10px]", done ? "border-primary bg-primary text-primary-foreground" : active ? (runState === "failed" ? "border-destructive" : "border-primary") : "border-border")}>
+                                    {done ? <Check className="h-2.5 w-2.5" aria-hidden /> : index + 1}
+                                    {active && runState === "running" && <motion.span className="absolute inset-0 rounded-full border border-primary" animate={{ scale: [1, 1.6], opacity: [0.8, 0] }} transition={{ repeat: Infinity, duration: 1.4 }} aria-hidden />}
+                                </span>
+                                {step.label}
                             </span>
-                            {step.label}
-                        </span>
-                    </li>
-                )
-            })}
-        </ol>
+                        </li>
+                    )
+                })}
+            </ol>
+        </>
+    )
+}
+
+/** Posição da etapa atual na trilha (1-based) e o total; mesa concluída conta como o último passo. */
+export function compactStepPosition(total: number, current: number, done: boolean): { position: number; progress: number } {
+    const position = done ? total : Math.max(1, current + 1)
+    return { position, progress: total ? position / total : 0 }
+}
+
+/**
+ * Celular (`< lg`, OPE-166): uma linha só com "Etapa N de M · Nome" e a barra de progresso, em vez da
+ * trilha inteira (que rolava na horizontal e escondia a etapa atual).
+ */
+function CompactStageSteps({ steps, current, stage, runState }: { steps: Step[]; current: number; stage: WorkbenchStage; runState: RunState }) {
+    const done = stage === "done"
+    const { position, progress } = compactStepPosition(steps.length, current, done)
+    const step = done ? steps.at(-1) : steps[current]
+    return (
+        <div className="flex items-center gap-3 border-b px-3 py-1.5 lg:hidden" role="group" aria-label="Etapa da mesa" data-testid="compact-stage-steps">
+            <p className="shrink-0 text-xs text-muted-foreground">
+                Etapa {position} de {steps.length}
+                {step && (
+                    <>
+                        {" · "}
+                        <span className={cn("font-medium", runState === "failed" && !done ? "text-destructive" : "text-foreground")}>{step.label}</span>
+                    </>
+                )}
+            </p>
+            <div className="h-1 min-w-0 flex-1 overflow-hidden rounded-full bg-border" aria-hidden>
+                <motion.div className="h-full rounded-full bg-primary" initial={false} animate={{ width: `${Math.round(progress * 100)}%` }} transition={{ duration: 0.25, ease: "easeOut" }} />
+            </div>
+        </div>
     )
 }

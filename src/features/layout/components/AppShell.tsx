@@ -3,10 +3,12 @@
 import { useCallback, useEffect, useId, useRef, type ReactNode } from "react"
 import { usePathname } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Menu } from "lucide-react"
 import { AppSidebar, type AppSidebarItemPanels, type SidebarBrand } from "./AppSidebar"
 import { useSidebarState } from "../hooks/useSidebarState"
 import { useDrawerFocus } from "../hooks/useDrawerFocus"
+import { useAppScrollCompact } from "../hooks/useAppScrollCompact"
+import { MOBILE_HEADER_OFFSET_CLASS } from "../mobile-header"
+import { MobileAppHeader } from "./header/MobileAppHeader"
 import { isActiveHref, pageTransitionKey } from "../navigation"
 import type { NavBadges, NavSectionDef } from "../types"
 import { RealtimeStatusBanner } from "@/lib/pusher/RealtimeStatusBanner"
@@ -41,17 +43,24 @@ interface AppShellProps {
     sidebarFooterItems?: (collapsed: boolean) => ReactNode
     /** Itens com painel de hover (ver `AppSidebar.itemPanels`). */
     sidebarItemPanels?: AppSidebarItemPanels
+    /**
+     * Atalhos à direita do cabeçalho do celular (ex.: Agente Opex e Servidor). Com eles, no celular o
+     * rodapé da gaveta não repete esses itens (`sidebarFooterItems` vale só no desktop): uma instância
+     * só, sem atalhos de teclado e escutas globais duplicados.
+     */
+    mobileHeaderActions?: ReactNode
     children: ReactNode
 }
 
 /**
- * Casca das telas: sidebar + conteúdo (sem cabeçalho; no celular, botão flutuante abre o menu) com
+ * Casca das telas: sidebar + conteúdo (no desktop sem cabeçalho; no celular, `MobileAppHeader` com
+ * logo, botão de menu e atalhos, que recolhe ao rolar) com
  * transição de página (Framer Motion, respeitando movimento reduzido). Segue o Shell do DS Sipal:
  * "Pular para o conteúdo" como primeiro foco, gaveta abaixo de 1024px que fecha com Esc/fundo/link
  * (e a cada troca de rota),
  * devolve o foco ao botão de menu e deixa o resto da tela inerte enquanto aberta.
  */
-export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [], persistentHrefs = [], evenPaddingHrefs = [], ownerName, version, sidebarFooterItems, sidebarItemPanels, children }: AppShellProps) {
+export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [], persistentHrefs = [], evenPaddingHrefs = [], ownerName, version, sidebarFooterItems, sidebarItemPanels, mobileHeaderActions, children }: AppShellProps) {
     const pathname = usePathname()
     const reduceMotion = useReducedMotion()
     const immersive = immersiveHrefs.some((href) => isActiveHref(pathname, href))
@@ -61,6 +70,9 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
     const drawerRef = useRef<HTMLDivElement>(null)
     const menuButtonRef = useRef<HTMLButtonElement>(null)
     const drawerOpen = !sidebar.isDesktop && sidebar.mobileOpen
+    const headerCompact = useAppScrollCompact(!sidebar.isDesktop)
+    // No celular, atalhos que estão no cabeçalho não se repetem na gaveta.
+    const footerItems = !sidebar.isDesktop && mobileHeaderActions ? undefined : sidebarFooterItems
 
     const { closeMobile } = sidebar
     const closeDrawer = useCallback(() => {
@@ -86,7 +98,7 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
             badges={badges}
             ownerName={ownerName}
             version={version}
-            footerItems={sidebarFooterItems}
+            footerItems={footerItems}
             itemPanels={sidebarItemPanels}
         />
     )
@@ -133,47 +145,45 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
             </AnimatePresence>
 
             <div inert={drawerOpen} className="flex min-w-0 flex-1 flex-col">
-                {!sidebar.isDesktop && (
-                    <motion.button
-                        ref={menuButtonRef}
-                        type="button"
-                        onClick={sidebar.openMobile}
-                        initial={{ opacity: 0, scale: 0.9 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        whileTap={{ scale: 0.92 }}
-                        className="fixed left-3 top-3 z-30 rounded-md border border-border bg-card/90 p-2 text-muted-foreground shadow-lg backdrop-blur transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                        aria-label="Abrir menu"
-                        aria-expanded={drawerOpen}
-                        aria-controls={drawerId}
-                    >
-                        <Menu className="h-5 w-5" />
-                    </motion.button>
-                )}
-
                 <RealtimeStatusBanner />
 
-                <AnimatePresence mode="wait" initial={false}>
-                    <motion.main
-                        key={pageTransitionKey(pathname, persistentHrefs)}
-                        id={APP_SCROLL_CONTAINER_ID}
-                        tabIndex={-1}
-                        data-dashboard-content=""
-                        initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        exit={{ opacity: 0, y: reduceMotion ? 0 : -6 }}
-                        transition={{ duration: 0.2, ease: "easeOut" }}
-                        className={cn(
-                            immersive
-                                ? "relative min-h-0 min-w-0 flex-1 overflow-hidden outline-none md:p-3"
-                                : // `relative`: elementos absolutos do conteúdo ficam presos à área que rola, nunca à página.
-                                  cn("relative min-h-0 min-w-0 flex-1 overflow-y-auto outline-none overflow-x-hidden py-6", evenPadding ? CONTENT_PADDING_X_EVEN : CONTENT_PADDING_X),
-                            // Espaço para o botão flutuante do menu no celular.
-                            !sidebar.isDesktop && "pt-16",
-                        )}
-                    >
-                        {children}
-                    </motion.main>
-                </AnimatePresence>
+                {/* `relative`: o cabeçalho do celular fica por cima da área que rola, abaixo do aviso de conexão. */}
+                <div className="relative flex min-h-0 min-w-0 flex-1 flex-col">
+                    {!sidebar.isDesktop && (
+                        <MobileAppHeader
+                            brand={brand}
+                            compact={headerCompact}
+                            menuButtonRef={menuButtonRef}
+                            menuOpen={drawerOpen}
+                            drawerId={drawerId}
+                            onOpenMenu={sidebar.openMobile}
+                            actions={mobileHeaderActions}
+                        />
+                    )}
+
+                    <AnimatePresence mode="wait" initial={false}>
+                        <motion.main
+                            key={pageTransitionKey(pathname, persistentHrefs)}
+                            id={APP_SCROLL_CONTAINER_ID}
+                            tabIndex={-1}
+                            data-dashboard-content=""
+                            initial={{ opacity: 0, y: reduceMotion ? 0 : 8 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: reduceMotion ? 0 : -6 }}
+                            transition={{ duration: 0.2, ease: "easeOut" }}
+                            className={cn(
+                                immersive
+                                    ? "relative min-h-0 min-w-0 flex-1 overflow-hidden outline-none md:p-3"
+                                    : // `relative`: elementos absolutos do conteúdo ficam presos à área que rola, nunca à página.
+                                      cn("relative min-h-0 min-w-0 flex-1 overflow-y-auto outline-none overflow-x-hidden py-6", evenPadding ? CONTENT_PADDING_X_EVEN : CONTENT_PADDING_X),
+                                // Espaço do cabeçalho do celular (altura fixa nos dois estados: sem pulo ao rolar).
+                                !sidebar.isDesktop && MOBILE_HEADER_OFFSET_CLASS,
+                            )}
+                        >
+                            {children}
+                        </motion.main>
+                    </AnimatePresence>
+                </div>
             </div>
         </div>
     )

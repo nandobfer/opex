@@ -78,7 +78,7 @@ describe('catálogo de integrações', () => {
   })
 
   it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada), anexos abandonados (30 min), resumo diário dos agentes (1 h) e quota do OpenCode (1 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup'])
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup'])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
@@ -90,6 +90,9 @@ describe('catálogo de integrações', () => {
     expect(DEFAULT_CRON_JOBS[9]).toMatchObject({ id: 'agent-usage-daily', kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 60 } })
     expect(DEFAULT_CRON_JOBS.find((job) => job.id === OPENCODE_QUOTA_JOB_ID)).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
     expect(cronJobIntegration(OPENCODE_QUOTA_JOB_ID)).toBeNull()
+    // OPE-167: assinatura OpenCode Go (Console) a cada 5 minutos, ligada e sem integração dona.
+    expect(DEFAULT_CRON_JOBS.find((job) => job.id === 'opencode-go-usage-refresh')).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 5 } })
+    expect(cronJobIntegration('opencode-go-usage-refresh')).toBeNull()
     // OPE-145: recursos do servidor a cada 10 segundos, ligada.
     expect(DEFAULT_CRON_JOBS.find((job) => job.id === HOST_METRICS_JOB_ID)).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', seconds: 10 } })
     const jobs = getIntegrationDef('crons').publicFields.find((field) => field.key === 'jobs')?.defaultValue

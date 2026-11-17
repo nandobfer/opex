@@ -6,7 +6,9 @@ const mocks = vi.hoisted(() => ({
   context: vi.fn(async (_centralId: string | null) => ({ block: '', source: 'live' as 'live' | 'cache' | 'none', cachedAt: null as string | null, counts: { full: 0, titles: 0, overflow: 0 }, reason: null })),
   selfEnabled: vi.fn(async () => false),
   ensureMcp: vi.fn(async () => ({ ok: true, error: null as string | null, skipped: [] as string[] })),
+  mentorLearns: vi.fn<(centralId: string) => Promise<boolean>>(async () => false),
 }))
+vi.mock('@/features/adversarial-agent/server/mentor/hooks', () => ({ mentorLearnsOnDone: mocks.mentorLearns }))
 vi.mock('@/features/ai/server/agent-memory-context', () => ({ developerMemoryContext: mocks.context }))
 vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled: mocks.selfEnabled }))
 vi.mock('@/features/ai/server/self-memory/mcp', () => ({ ensureAgentMemoryMcp: mocks.ensureMcp }))
@@ -26,6 +28,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.selfEnabled.mockResolvedValue(false)
   mocks.ensureMcp.mockResolvedValue({ ok: true, error: null, skipped: [] })
+  mocks.mentorLearns.mockResolvedValue(false)
 })
 
 describe('memórias do agente desenvolvedor na sessão (OPE-97)', () => {
@@ -78,6 +81,22 @@ describe('memórias do agente desenvolvedor na sessão (OPE-97)', () => {
     expect(value).toContain('## Memória própria (aprendizado autônomo)')
     expect(value).toContain('opex_memorias_remember')
     expect(value).toContain('`developer-central`')
+  })
+
+  it('OPE-165: com o Agente Mentor aprendendo na central, o desenvolvedor fica somente leitura (sem checklist de gravação)', async () => {
+    mocks.selfEnabled.mockResolvedValue(true)
+    mocks.mentorLearns.mockResolvedValue(true)
+    mocks.context.mockResolvedValueOnce({ block: '- Global.', source: 'live', cachedAt: null, counts: { full: 1, titles: 2, overflow: 3 }, reason: null })
+    const { client, put } = makeClient()
+    await syncDeveloperMemories(client, 'ses_1', 'c1', { directories: ['/repo/wt'] })
+    expect(mocks.mentorLearns).toHaveBeenCalledWith('c1')
+    expect(mocks.ensureMcp).toHaveBeenCalled()
+    const value = (put.mock.calls[0] as unknown as [{ value: string }])[0].value
+    expect(value).toContain('- Global.')
+    expect(value).toContain('get_hints')
+    expect(value).toContain('quem grava as memórias é o Agente Mentor')
+    expect(value).not.toContain('Checklist de fim de turno')
+    expect(value).not.toContain('Você aprende sozinho')
   })
 
   it('MCP indisponível: o turno segue sem a instrução de memória própria e avisa', async () => {

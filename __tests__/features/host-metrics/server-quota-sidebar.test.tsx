@@ -155,6 +155,21 @@ describe('ServerQuotaSidebarItem (OPE-145)', () => {
     expect(dot('left')).toBeTruthy()
     expect(dot('right')).toBeTruthy()
   })
+
+  it('OPE-168: no cabeçalho do celular é um botão de ícone (sem <li> nem texto) que abre o mesmo painel', async () => {
+    serve(host(), quota([20]))
+    const { container } = renderWith(<ServerQuotaSidebarItem variant="header" />)
+    expect(container.querySelector('li')).toBeNull()
+    expect(screen.queryByText('Servidor')).toBeNull()
+    const trigger = screen.getByRole('button', { name: 'Servidor e quota' })
+    expect(trigger.classList.contains('h-11')).toBe(true)
+    expect(dot('left')).toBeTruthy()
+    fireEvent.click(trigger)
+    expect(trigger.getAttribute('aria-expanded')).toBe('true')
+    const panel = await screen.findByTestId('header-server-quota-panel')
+    await waitFor(() => expect(panel.querySelector('[data-testid="host-metrics-panel"]')).toBeTruthy())
+    await waitFor(() => expect(panel.querySelector('section[aria-label="Quota do OpenCode"]')).toBeTruthy())
+  })
 })
 
 describe('HostMetricsPanel (OPE-145)', () => {

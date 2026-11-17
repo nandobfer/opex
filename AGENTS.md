@@ -200,7 +200,8 @@ sem pedido explícito.
   avançar, concluir ou falhar uma versão do diagrama; o desenho ao vivo vai por NDJSON
   (`GET /api/architect/diagrams/[id]/stream`), não pelo Pusher (ver `aicontext/modules/architect-agent.md`).
 - Agente Mentor: `adversarial-mentor-updated` (`{ runId }`) e `adversarial-mentor-reorg-updated`
-  (`{ reorgId }`) em `private-app` — execuções e reorganização do acervo (ver
+  (`{ reorgId }`) em `private-app` — execuções (o aprendizado na conclusão da mesa, OPE-165: na fila, ao
+  iniciar, avançar, concluir e falhar; alimenta a aba "Aprendizado" da mesa) e reorganização do acervo (ver
   `aicontext/modules/adversarial-agent.md`, "Agente Mentor" e "Reorganização do acervo").
 - Métricas dos agentes: `agent-metrics-updated` (`{ agents }`) em `private-app` quando a rotina
   `agent-usage-daily` grava execuções ou resumos; as páginas `/agente-<nome>` também reagem aos eventos
@@ -214,6 +215,9 @@ sem pedido explícito.
   (`{ state, message, metrics, checkedAt, attemptedAt, staleAfterMs }`, só números), publicado pela rotina
   `host-metrics-refresh` quando um percentual arredondado ou o estado muda e, sem mudança, a cada 20 s; o
   cliente grava no cache sem nova consulta (ver `aicontext/modules/host-metrics.md`).
+- Assinatura OpenCode Go (OPE-167): `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app` quando os
+  percentuais da assinatura (5h, semanal, mensal, com uma casa) ou os resets mudam, publicado pela rotina
+  `opencode-go-usage-refresh` ou por uma leitura da tela (ver `aicontext/modules/opencode-quota.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`

@@ -7,17 +7,18 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import type { ManualStage } from "../../constants"
 import type { WorkbenchDto } from "../../types"
 import { SetStageDialog } from "./SetStageDialog"
+import { firstManualStage, stageMenuAvailable } from "./WorkbenchManage"
 
 /** Menu do cabeçalho da mesa: "Concluir mesa…" (sem PR) e "Definir etapa…". Oculto em mesa concluída ou em exclusão. */
 export function WorkbenchStageMenu({ workbench }: { workbench: WorkbenchDto }) {
     const [dialog, setDialog] = useState<ManualStage | null>(null)
     const [lastStage, setLastStage] = useState<ManualStage>("done")
-    if (workbench.stage === "done" || workbench.deletionRequestedAt) return null
+    if (!stageMenuAvailable(workbench)) return null
     const openWith = (stage: ManualStage) => {
         setLastStage(stage)
         setDialog(stage)
     }
-    const firstAvailable: ManualStage = workbench.plans.length > 0 && workbench.stage !== "plan_review" ? "plan_review" : "done"
+    const firstAvailable = firstManualStage(workbench)
 
     return (
         <>

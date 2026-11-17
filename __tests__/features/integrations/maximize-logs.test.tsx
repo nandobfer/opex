@@ -68,6 +68,18 @@ describe("dashboardContentRect / applyFrame", () => {
         expect(dashboardContentRect()).toEqual({ top: 120, left: 240, width: 1000, height: 700 })
     })
 
+    it("OPE-168: no celular começa abaixo do cabeçalho, que fica por cima do topo do conteúdo", () => {
+        const header = document.createElement("header")
+        header.setAttribute("data-app-header", "")
+        header.getBoundingClientRect = () => rectOf({ top: 120, left: 240, width: 1000, height: 64 })
+        document.body.appendChild(header)
+        try {
+            expect(dashboardContentRect()).toEqual({ top: 184, left: 240, width: 1000, height: 636 })
+        } finally {
+            header.remove()
+        }
+    })
+
     it("compensa o containing block de um ancestral com transform", () => {
         const el = document.createElement("div")
         // Posicionado em 0,0, o elemento aparece em (50, 30): ancestral transformado.

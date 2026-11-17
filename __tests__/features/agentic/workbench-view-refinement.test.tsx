@@ -38,6 +38,7 @@ vi.mock('@/features/adversarial-agent/components/workbench/AdversarialRoundsView
   AdversarialRoundsView: () => null,
 }))
 vi.mock('@/features/architect-agent/components/workbench/ArchitectTab', () => ({ useArchitectTab: () => ({ visible: false, count: 0 }), ArchitectTab: () => null }))
+vi.mock('@/features/adversarial-agent/components/workbench/MentorLearningTab', () => ({ useMentorLearningTab: () => ({ visible: false, count: 0 }), MentorLearningTab: () => null }))
 vi.mock('@/features/refinement/hooks/useRefinement', () => ({
   useRefinementRealtime: vi.fn(),
   useTaskRefinement: mocks.refinement,

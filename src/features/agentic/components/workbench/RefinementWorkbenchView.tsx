@@ -69,7 +69,7 @@ export function RefinementWorkbenchView({ workbench, central }: { workbench: Wor
                         <RefinementRequests taskId={workbench.taskId} refinement={refinement} />
                     </div>
                 )}
-                <RefinementActionBar workbench={workbench} state={state.data} />
+                <RefinementActionBar workbench={workbench} central={central} state={state.data} />
             </div>
         </ReplyTargetProvider>
     )

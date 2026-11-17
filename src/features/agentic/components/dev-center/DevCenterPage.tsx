@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, type CSSProperties } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Settings2, Workflow, ArrowLeft } from "lucide-react"
+import { Settings2, Workflow } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
@@ -17,9 +17,11 @@ import { DEV_CENTER_PATH } from "../../constants"
 import { ALL_CENTRALS_ID, isAllCentrals, pickActiveCentral } from "../../dev-center-central"
 import { useAgenticRealtime, useCentrals } from "../../hooks/useAgentic"
 import { useDevCenterCentral } from "../../hooks/useDevCenterCentral"
+import { useKeyboardInset } from "../../hooks/useKeyboardInset"
 import { AGENTIC_SETTINGS_HREF } from "../central/CentralPage"
 import { WorkbenchPane } from "../workbench/WorkbenchPane"
 import { TasksPane } from "./TasksPane"
+import { TasksPaneMobileSkeleton } from "./mobile/TasksPaneMobileSkeleton"
 
 /**
  * Central de desenvolvimento (`/desenvolvimento/[tarefa]`): a **central vem do navegador** e a
@@ -44,7 +46,11 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     const central = useMemo(() => pickActiveCentral(list, storedId, taskProjectId), [list, storedId, taskProjectId])
     // As colunas ocupam exatamente a área visível do <main> (descontado o padding e o aviso de conexão).
     const sectionRef = useRef<HTMLElement>(null)
-    const height = useScrollViewportHeight(sectionRef, list.length > 0)
+    const viewportHeight = useScrollViewportHeight(sectionRef, list.length > 0)
+    // Celular: com o teclado virtual aberto, a central encolhe para o campo (da mesa ou a busca da lista) e o
+    // dock ficarem acima dele (OPE-166).
+    const keyboard = useKeyboardInset()
+    const height = viewportHeight === undefined ? undefined : Math.max(0, viewportHeight - keyboard)
     const reduceMotion = useReducedMotion()
     // Escolha do seletor aguardando a tarefa sair da URL: enquanto houver, ela vence a central da tarefa.
     const pendingSelectionRef = useRef<string | null>(null)
@@ -80,8 +86,9 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
     if (centrals.isLoading) {
         return (
             <div className="grid gap-4 lg:grid-cols-[340px_1fr]" aria-label="Carregando a Central de desenvolvimento">
-                <Skeleton className="h-96" />
-                <Skeleton className="h-96" />
+                <TasksPaneMobileSkeleton />
+                <Skeleton className="h-96 max-lg:hidden" />
+                <Skeleton className="h-96 max-lg:hidden" />
             </div>
         )
     }
@@ -121,27 +128,18 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
             )}
             <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !taskId && "max-lg:hidden")} data-testid="dev-center-workbench-pane">
                 {central ? (
-                    <>
-                        {taskId && (
-                            <Button asChild variant="ghost" size="sm" className="mb-2 w-fit shrink-0 gap-1.5 lg:hidden">
-                                <Link href={DEV_CENTER_PATH}>
-                                    <ArrowLeft className="h-4 w-4" aria-hidden /> Voltar para tarefas
-                                </Link>
-                            </Button>
-                        )}
-                        <AnimatePresence mode="wait" initial={false}>
-                            <motion.div
-                                key={`${central.id}-${taskId ?? ""}`}
-                                initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
-                                animate={{ opacity: 1, y: 0 }}
-                                exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                                transition={{ duration: 0.15, ease: "easeOut" }}
-                                className="flex min-h-0 min-w-0 flex-1 flex-col"
-                            >
-                                <WorkbenchPane central={central} taskId={taskId} scopeName={allSelected ? null : central.projectName} />
-                            </motion.div>
-                        </AnimatePresence>
-                    </>
+                    <AnimatePresence mode="wait" initial={false}>
+                        <motion.div
+                            key={`${central.id}-${taskId ?? ""}`}
+                            initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
+                            transition={{ duration: 0.15, ease: "easeOut" }}
+                            className="flex min-h-0 min-w-0 flex-1 flex-col"
+                        >
+                            <WorkbenchPane central={central} taskId={taskId} scopeName={allSelected ? null : central.projectName} backHref={taskId ? DEV_CENTER_PATH : null} />
+                        </motion.div>
+                    </AnimatePresence>
                 ) : (
                     <Skeleton className="h-96" />
                 )}

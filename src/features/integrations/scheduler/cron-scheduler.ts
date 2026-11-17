@@ -11,6 +11,7 @@ import {
     HOST_METRICS_JOB_ID,
     MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPENCODE_QUOTA_JOB_ID,
+    OPENCODE_GO_USAGE_JOB_ID,
     OPENCODE_SESSIONS_CLEANUP_JOB_ID,
     OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPEX_FILES_CLEANUP_JOB_ID,
@@ -430,6 +431,10 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(OPENCODE_QUOTA_JOB_ID, async () => {
         const { runOpencodeQuotaRefresh } = await import("@/features/opencode-quota/server/service")
         return runOpencodeQuotaRefresh()
+    })
+    registerInternalJob(OPENCODE_GO_USAGE_JOB_ID, async () => {
+        const { runOpencodeGoUsageRefresh } = await import("@/features/opencode-quota/server/go-usage")
+        return runOpencodeGoUsageRefresh()
     })
     registerInternalJob(HOST_METRICS_JOB_ID, async () => {
         const { runHostMetricsRefresh } = await import("@/features/host-metrics/server/service")

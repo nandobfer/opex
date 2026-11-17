@@ -3,6 +3,7 @@ import { listAgentMemories } from "@/features/ai/server/agent-memory-service"
 import type { AiProviderId } from "@/lib/ai/providers"
 import { loggerFor } from "@/lib/logger"
 import type { MentorTarget } from "../../mentor/constants"
+import type { WriterMemory } from "../../mentor/operations"
 
 /**
  * Etapas compartilhadas do pipeline do Mentor (execuções e reorganização do acervo): geração de texto
@@ -36,6 +37,13 @@ export async function targetTextMax(target: MentorTarget, centralId: string | nu
 /** Memórias de uma lista (Engramind), no formato que o redator lê. */
 export async function listTargetMemories(target: MentorTarget, centralId: string | null): Promise<{ id: string; summary: string; text: string }[]> {
     return (await listAgentMemories(target, centralOf(target, centralId))).map((memory) => ({ id: memory.id, summary: memory.resumo, text: memory.texto }))
+}
+
+/** Memórias ATIVAS de uma lista, com versão e marca do dono (redator do aprendizado, OPE-165). */
+export async function listWriterMemories(target: MentorTarget, centralId: string | null): Promise<WriterMemory[]> {
+    return (await listAgentMemories(target, centralOf(target, centralId)))
+        .filter((memory) => memory.ativa)
+        .map((memory) => ({ id: memory.id, summary: memory.resumo, text: memory.texto, version: memory.versao, owner: memory.doDono }))
 }
 
 /** Gera texto pelo provedor configurado e devolve o texto e o custo (lança na falha). */

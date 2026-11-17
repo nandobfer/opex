@@ -23,6 +23,7 @@ import { isUsageProviderId, usageProviderReportsCost } from "../provider-usage"
 import { ApiKeysCard } from "./api-keys/ApiKeysCard"
 import { AiModelsCard } from "./AiModelsCard"
 import { JevUsageCard } from "./JevUsageCard"
+import { OpencodeGoUsageTab } from "./OpencodeGoUsageTab"
 import { OpencodeUsageCard } from "./OpencodeUsageCard"
 import { ProviderUsageCard } from "./ProviderUsageCard"
 
@@ -55,7 +56,7 @@ const TAB_DEFS: Record<AiProviderTab, IntegrationTabDef<AiProviderTab>> = {
  * Contas (só OpenCode: contas dos providers do servidor), Controles e os recursos Skills, Agentes,
  * Comandos, Plugins e MCPs (só OpenCode) e Consumo (uso medido). O OpenCode tem o painel por origem e o
  * JEV o painel por feature; Gemini, Anthropic, OpenAI e DeepSeek mostram só tokens (o custo não é
- * informado por essas APIs) e o OpenCode Go mostra também o custo (cota + Extra Usage). Trocar de aba com alterações pede descarte.
+ * informado por essas APIs) e o OpenCode Go mostra a assinatura (Console) e o uso do Opex com o custo. Trocar de aba com alterações pede descarte.
  */
 export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: AiProviderEditorFormProps) {
     const provider = aiProviderOfIntegration(def.id)
@@ -105,15 +106,12 @@ export function AiProviderEditorForm({ def, data, draft, setDraft, dirty, pendin
                 {tab === "mcps" && provider?.id === "opencode" && <OpencodeResourceTab key="mcp" kind="mcp" dirty={dirty} />}
                 {tab === "consumo" && provider?.id === "jev" && <JevUsageCard />}
                 {tab === "consumo" && provider?.id === "opencode" && <OpencodeUsageCard />}
-                {tab === "consumo" && provider && isUsageProviderId(provider.id) && (
+                {tab === "consumo" && provider?.id === "opencode-go" && <OpencodeGoUsageTab />}
+                {tab === "consumo" && provider && isUsageProviderId(provider.id) && provider.id !== "opencode-go" && (
                     <ProviderUsageCard
                         provider={provider.id}
                         title={`Consumo do ${provider.name}`}
-                        description={
-                            usageProviderReportsCost(provider.id)
-                                ? "Uso originado pelo Opex, separado por recurso (feature ou agente de IA). O custo é o informado pelo Go em cada resposta: o que saiu da cota da assinatura mais o cobrado como Extra Usage. O histórico anterior ao início da medição não é somado."
-                                : "Uso originado pelo Opex, separado por recurso (feature ou agente de IA). Este provedor não informa custo por requisição: a tela mostra apenas tokens. O histórico anterior ao início da medição não é somado."
-                        }
+                        description="Uso originado pelo Opex, separado por recurso (feature ou agente de IA). Este provedor não informa custo por requisição: a tela mostra apenas tokens. O histórico anterior ao início da medição não é somado."
                         firstColumnLabel="Recurso"
                         emptyTitle={`Nenhum uso do ${provider.name} neste período`}
                         showCost={usageProviderReportsCost(provider.id)}

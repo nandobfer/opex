@@ -64,6 +64,7 @@ vi.mock("framer-motion", () => {
 
 import { IntegrationDetailPage } from "@/features/integrations/components/IntegrationDetailPage"
 import { generateApiToken } from "@/features/integrations/components/TokenField"
+import { DEBUG_DIALOG_MEDIA_QUERY } from "@/features/integrations/components/detail/debug-toggle-context"
 
 const detail = (overrides: Partial<IntegrationDetailDto> = {}): IntegrationDetailDto => ({
     id: "pusher",
@@ -85,9 +86,22 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.debugMode = "realtime"
     mocks.layoutTags = []
+    vi.unstubAllGlobals()
+    stubViewport(false)
     mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
     mocks.mutateAsync.mockImplementation(async () => detail())
 })
+
+/** Tela larga ou estreita: o happy-dom tem `matchMedia` de verdade (janela de 1024 px, abaixo de `xl`). */
+const stubViewport = (narrow: boolean) =>
+    vi.stubGlobal("matchMedia", (query: string) => ({
+        matches: narrow && query === DEBUG_DIALOG_MEDIA_QUERY,
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+    }))
+
+const openDebug = () => fireEvent.click(screen.getByRole("button", { name: "Abrir logs de debug" }))
 
 describe("IntegrationDetailPage", () => {
     it("sem debug ligado, não há botão de testar conexão (o teste fica na barra do debug)", () => {
@@ -151,6 +165,7 @@ describe("IntegrationDetailPage", () => {
     it("debug ligado: barra com tempo real e Atualizar, que busca os eventos novos", () => {
         mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
+        openDebug()
         expect(screen.getByText("Tempo real")).toBeTruthy()
         expect(screen.queryByRole("button", { name: /Recarregar/ })).toBeNull()
         fireEvent.click(screen.getByRole("button", { name: "Atualizar" }))
@@ -160,6 +175,7 @@ describe("IntegrationDetailPage", () => {
     it("regressão: nenhum elemento da página usa projeção de layout (tela em branco ao navegar)", () => {
         mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
+        openDebug()
         expect(mocks.layoutTags).toEqual([])
     })
 
@@ -184,6 +200,7 @@ describe("IntegrationDetailPage", () => {
         document.body.appendChild(scroller)
 
         render(<IntegrationDetailPage id="pusher" />, { container: scroller.appendChild(document.createElement("div")) })
+        openDebug()
         act(() => observers.forEach((cb) => cb()))
 
         expect(screen.getByTestId("integration-debug-panel").style.height).toBe("852px")
@@ -194,6 +211,7 @@ describe("IntegrationDetailPage", () => {
     it("maximizar redimensiona só o Card (o aside fica como placeholder, terminal não remonta); Esc restaura", () => {
         mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
+        openDebug()
         const panel = screen.getByTestId("integration-debug-panel")
         const consoleBefore = screen.getByTestId("console")
 
@@ -214,7 +232,123 @@ describe("IntegrationDetailPage", () => {
         mocks.debugMode = "manual"
         mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
+        openDebug()
         expect(screen.getByText("Sem tempo real")).toBeTruthy()
+    })
+
+    describe("botão de debug no título (OPE-169)", () => {
+        const debugOn = () => mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+
+        it("sem modo debug, o botão não aparece e a coluna não monta", () => {
+            render(<IntegrationDetailPage id="pusher" />)
+            expect(screen.queryByRole("button", { name: /logs de debug/ })).toBeNull()
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+        })
+
+        it("com modo debug, a coluna começa fechada e o botão alterna abrir/fechar com aria-expanded e aria-controls", () => {
+            debugOn()
+            const { container } = render(<IntegrationDetailPage id="pusher" />)
+            const button = screen.getByRole("button", { name: "Abrir logs de debug" })
+            expect(button.getAttribute("aria-expanded")).toBe("false")
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(container.querySelector(".xl\\:grid-cols-\\[minmax\\(0\\,1fr\\)_minmax\\(0\\,1fr\\)\\]")).toBeNull()
+
+            fireEvent.click(button)
+            const panel = screen.getByTestId("integration-debug-panel")
+            const toggle = screen.getByRole("button", { name: "Fechar logs de debug" })
+            expect(toggle.getAttribute("aria-expanded")).toBe("true")
+            expect(toggle.getAttribute("aria-controls")).toBe(panel.id)
+            expect(panel.id).not.toBe("")
+            expect((panel.parentElement as HTMLElement).className).toContain("xl:grid-cols-")
+
+            fireEvent.click(toggle)
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
+            expect(mocks.mutateAsync).not.toHaveBeenCalled()
+        })
+
+        it("o Fechar (X) da barra do console fecha a coluna", () => {
+            debugOn()
+            render(<IntegrationDetailPage id="pusher" />)
+            openDebug()
+            fireEvent.click(screen.getByRole("button", { name: "Fechar" }))
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" })).toBeTruthy()
+        })
+
+        it("regressão: fechar maximizado devolve a tela ao normal", () => {
+            debugOn()
+            render(<IntegrationDetailPage id="pusher" />)
+            openDebug()
+            fireEvent.click(screen.getByRole("button", { name: "Maximizar" }))
+            const card = screen.getByTestId("integration-debug-panel").firstElementChild as HTMLElement
+            expect(card.style.position).toBe("fixed")
+
+            fireEvent.click(screen.getByRole("button", { name: "Fechar" }))
+            openDebug()
+            expect(screen.getByRole("button", { name: "Maximizar" })).toBeTruthy()
+            const reopened = screen.getByTestId("integration-debug-panel").firstElementChild as HTMLElement
+            expect(reopened.style.position).toBe("")
+        })
+
+        it("modo debug desligado (salvo) fecha a coluna aberta e tira o botão", () => {
+            debugOn()
+            const { rerender } = render(<IntegrationDetailPage id="pusher" />)
+            openDebug()
+            expect(screen.getByTestId("integration-debug-panel")).toBeTruthy()
+
+            mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: false }), isLoading: false, isError: false })
+            rerender(<IntegrationDetailPage id="pusher" />)
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.queryByRole("button", { name: /logs de debug/ })).toBeNull()
+
+            // Religado, continua fechado: o estado não deriva do modo debug.
+            debugOn()
+            rerender(<IntegrationDetailPage id="pusher" />)
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
+        })
+
+        it("trocar de integração com os logs abertos volta para fechado", () => {
+            debugOn()
+            const { rerender } = render(<IntegrationDetailPage id="pusher" />)
+            openDebug()
+            expect(screen.getByTestId("integration-debug-panel")).toBeTruthy()
+
+            mocks.useIntegration.mockReturnValue({
+                data: detail({
+                    id: "storage_s3",
+                    name: "Storage S3",
+                    debugMode: true,
+                    publicValues: { endpoint: "http://minio:9000", publicEndpoint: null, region: "us-east-1", bucket: "default", signedUrlExpiresSeconds: 3600 },
+                    secrets: {
+                        accessKey: { configured: true, source: "db", unreadable: false },
+                        secretKey: { configured: true, source: "db", unreadable: false },
+                    },
+                }),
+                isLoading: false,
+                isError: false,
+            })
+            rerender(<IntegrationDetailPage id="storage_s3" />)
+            expect(screen.getByText("Storage S3")).toBeTruthy()
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
+        })
+
+        it("tela estreita: o botão abre a janela de logs (sem coluna) e fechar a janela volta o botão", () => {
+            stubViewport(true)
+            debugOn()
+            render(<IntegrationDetailPage id="pusher" />)
+            openDebug()
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            const dialog = screen.getByRole("dialog")
+            expect(dialog.textContent).toContain("Logs — Pusher")
+            expect(screen.queryByRole("button", { name: "Maximizar" })).toBeNull()
+
+            fireEvent.click(screen.getByRole("button", { name: "Fechar" }))
+            expect(screen.queryByRole("dialog")).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
+        })
     })
 })
 

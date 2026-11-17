@@ -6,7 +6,6 @@ import { usePathname } from "next/navigation"
 import { motion, useReducedMotion } from "framer-motion"
 import { X } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { withBasePath } from "@/lib/base-path"
 import { activeNavHref, flattenNav } from "../navigation"
 import { isNavGroup, type NavBadges, type NavPanelKey, type NavSectionDef, type SidebarPanelItemProps } from "../types"
 import { useNavSectionsState } from "../hooks/useNavSectionsState"
@@ -15,6 +14,7 @@ import { SidebarNavItem } from "./sidebar/SidebarNavItem"
 import { SidebarNavGroup } from "./sidebar/SidebarNavGroup"
 import { SidebarFooter } from "./sidebar/SidebarFooter"
 import { SIDEBAR_FOCUS_RING } from "./sidebar/sidebar-styles"
+import { BrandMark } from "./BrandMark"
 
 export interface SidebarBrand {
     name: string
@@ -83,12 +83,7 @@ export function AppSidebar({ brand, sections, navLabel, collapsed, onNavigate, o
                     aria-label={collapsed ? brand.name : undefined}
                     title={brand.name}
                 >
-                    {/* eslint-disable-next-line @next/next/no-img-element -- marca pequena e estática; o caminho passa por `withBasePath`. */}
-                    <img
-                        src={withBasePath("/opex-mark.png")}
-                        alt=""
-                        className="h-9 w-9 shrink-0 drop-shadow-[0_0_12px_hsl(var(--primary)/0.45)]"
-                    />
+                    <BrandMark />
                     {!collapsed && (
                         <span className="flex min-w-0 flex-col">
                             <span className="truncate text-sm font-semibold leading-tight">{brand.name}</span>

@@ -160,7 +160,7 @@ concluída de novo conta uma vez). Mesa aberta fica fora da base (o uso dela apa
 | ↳ % com achado de regressão | O Adversário apontou achado da categoria `regression` | `adversarial_reviews` |
 | ↳ % com correção de prévia | Ao menos um pedido de correção da prévia | evento `correction` (`preview`); antes dele, classificação retroativa (abaixo) |
 | % de bloqueio pelo Adversário | Ao menos uma rodada com achado bloqueante | `adversarial_reviews` |
-| % de lições do Mentor | Ao menos uma memória criada ou editada pelo Mentor a partir dela | `adversarial_mentor_runs` |
+| % de lições do Mentor | Ao menos uma memória criada ou editada pelo Mentor a partir dela (inclusive o aprendizado na conclusão, `learned`) | `adversarial_mentor_runs` |
 | % de one shot | Uma versão de plano só e nenhuma correção (plano, prévia ou PR) | `plans` + eventos |
 | % de conflito de merge | Ao menos uma resolução de conflito | turno `resolving_conflicts` e evento `conflict` |
 | Ciclos de correção por mesa | Média de correções de plano + prévia + pedidos do PR | idem |
@@ -204,9 +204,11 @@ ambas marcadas.
   com o pedido do PR" (evento `pr-review-replanned`, ligado à revisão) conta como aceita; PR mergeado
   sem isso, descartada; PR fechado sem merge não entra. Antes do evento, aproximação por PR (o contador
   `autoReviewReplans` da mesa), com o aviso "Aproximado antes de" —, duração média e % de falhas.
-- **Mentor**: % de lições registradas (criadas + editadas contra descartadas + não registradas),
-  memórias criadas e editadas, destino (Adversário, Desenvolvedor global ou por central; sem destino
-  = Adversário) e % de falhas.
+- **Mentor**: % de lições registradas (criadas, editadas ou aprendizado aplicado — `learned`, OPE-165 —
+  contra descartadas + não registradas), memórias criadas, editadas (atualizadas ou fundidas) e
+  arquivadas — no aprendizado na conclusão, somadas de `operationCounts` —, destino (Adversário,
+  Desenvolvedor global ou por central; no aprendizado, `targetCounts` por lista; sem destino = Adversário)
+  e % de falhas.
 - **Opex e Maddox** (cada um na sua página): conversas por data (dono × portal), mensagens por
   conversa, ferramentas mais usadas com % de falha, % de ações destrutivas confirmadas contra
   canceladas, tokens por conversa e por data e custo (só quando houver registro; o Opex não grava

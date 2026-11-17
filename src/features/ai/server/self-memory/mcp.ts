@@ -179,6 +179,9 @@ function listingTools() {
     return selfMemoryTools({ consumer: "desenvolvedor", turn: { kind: "owner" }, label: "", turnKey: "listing", actorId: "" }, [...AI_AGENT_IDS])
 }
 
+/** Recusa da gravação do desenvolvedor quando o Agente Mentor aprende na central (OPE-165). */
+export const MENTOR_WRITES_REFUSAL = "Nesta central quem grava as memórias é o Agente Mentor, ao concluir a mesa: use só as ferramentas de leitura (get_hints, get_memory, search_memories)."
+
 export async function callSelfMemoryTool(name: string, args: Record<string, unknown>, meta: Record<string, unknown>): Promise<McpCallResult> {
     const startedAt = Date.now()
     try {
@@ -189,6 +192,11 @@ export async function callSelfMemoryTool(name: string, args: Record<string, unkn
         // Leitura (faixa de títulos) vale sempre que o agente recebe contexto; gravar exige o aprendizado autônomo.
         const write = isSelfMemoryReadTool(name) ? true : await selfMemoryEnabled(context.consumer)
         if (!write) throw new SessionRefusal(`O aprendizado autônomo do ${MEMORY_CONSUMER_DEFS[context.consumer].label} está desligado: só as ferramentas de leitura (get_hints, get_memory, search_memories) atendem.`)
+        // OPE-165: com o Agente Mentor aprendendo na conclusão da mesa, o desenvolvedor da central só lê.
+        if (!isSelfMemoryReadTool(name) && context.consumer === "desenvolvedor" && context.turn.kind === "central" && context.turn.centralId) {
+            const { developerReadOnly } = await import("@/features/agentic/server/developer-memories")
+            if (await developerReadOnly(context.turn.centralId)) throw new SessionRefusal(MENTOR_WRITES_REFUSAL)
+        }
         const tool = selfMemoryTools(context).find((item) => item.name === name)
         if (!tool || !isSelfMemoryTool(name)) return mcpTextResult(`Ferramenta desconhecida: ${name}`, true)
         const policy = await selfMemoryToolPolicy()

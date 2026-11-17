@@ -151,14 +151,19 @@ as têm no histórico). Falha ao ler as memórias não derruba o
   (OPE-115). Só falha real (sem URL pública do Opex, sem `INTEGRATIONS_ENCRYPTION_KEY` ou nenhum
   diretório registrado, por erro ou por nenhum existir) gera o aviso "Aprendizado autônomo indisponível neste turno"; o turno
   segue sempre. Excluir a central arquiva o canal dela no Engramind.
-- **Duas camadas (OPE-117)**: o desenvolvedor grava o que percebe (checklist de fim de turno, sem
-  restrição) e o Mentor grava só o que passou batido, fundindo com o que já existe. O contexto da mesa
+- **Somente leitura com o Mentor (OPE-165)**: quando o Agente Mentor aprende na central (ativo, "Aprender ao
+  concluir a mesa" ligado e a central no escopo), o desenvolvedor da mesa e dos forks **não grava memória**:
+  a instrução sai sem o checklist de fim de turno (só leitura, com o motivo) e o MCP recusa as ferramentas
+  de gravação. Quem grava é o Mentor, ao concluir a mesa, a partir da transcrição inteira. Fora disso,
+  vale a **dupla camada** (OPE-117): o desenvolvedor grava o que percebe e o Mentor, na conclusão, grava
+  só o que passou batido, fundindo com o que já existe. O contexto da mesa
   leva o **foco** do turno (código, título, etapa e projeto; a descrição da tarefa no restante) e o MCP
   de memórias é registrado sempre (leitura da faixa de títulos com `get_hints`/`get_memory`/
   `search_memories`; gravação só com o aprendizado ligado), inclusive ao mover a sessão para o worktree.
-- O **Agente Mentor** também grava nestas listas (lendo os turnos configurados, inclusive as revisões do
-  adversário, e as memórias que o agente já gravou na cadeia): depois do decisor, o **Triador** escolhe UMA lista
-  entre o Agente Adversário, as globais do desenvolvedor e as da central da mesa (ver
+- O **Agente Mentor** grava nestas listas ao concluir a mesa (OPE-165), lendo a transcrição inteira: o
+  digestor extrai os casos e, para cada um, o **Triador** escolhe UMA lista entre o Agente Adversário, as
+  globais do desenvolvedor e as da central da mesa — a mesma execução pode criar, atualizar, fundir ou
+  arquivar em várias listas (ver
   `modules/adversarial-agent.md`, "Agente Mentor"). Os agentes de refinamento e de revisão de PR não
   recebem estas memórias.
 - O Agente Opex gerencia as duas listas pelas ferramentas de memórias (`centralId` de
@@ -392,10 +397,14 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   escolhida fica salva e a tarefa é limpa (o guarda evita que a central da tarefa regrave por cima a
   escolha no render intermediário entre a troca e a navegação). Duas colunas:
   **Tarefas do projeto** | **Mesa de trabalho**. No **celular** (`< lg`) só um painel aparece por
-  vez: a lista quando não há tarefa aberta; a mesa quando há, com um botão **Voltar para tarefas**.
+  vez: a lista quando não há tarefa aberta; a mesa quando há, com o **Voltar para tarefas** como
+  botão de ícone na linha do cabeçalho da mesa (ou numa linha própria antes de abrir a mesa e no erro).
   A altura da central é sempre delimitada pela área visível (`useScrollViewportHeight`), inclusive
-  no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer.
-- O topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
+  no celular, para a saída da IA rolar por dentro e o botão **Ir para o final** aparecer; no celular,
+  com o teclado virtual aberto (no campo da mesa ou na busca da lista), a altura desconta o que o
+  teclado cobre (`useKeyboardInset`). Como a mesa e a coluna Tarefas se organizam no celular está em
+  "Mesa no celular (OPE-166)" e "Coluna Tarefas no celular (OPE-166)".
+- No **desktop** (`>= lg`), o topo da coluna de tarefas traz, de cima para baixo: o **título "Tarefas"** com a contagem e a
   **área de filtros recolhível** (`CollapsibleTaskFilters`, mesmas peças do `ListFilters` de /tarefas
   em `src/components/list/CollapsibleFilters.tsx`, sem botão de limpar). Ela **começa recolhida** a
   cada carregamento (o estado não é salvo; trocar de tarefa ou central o mantém) em no máximo duas
@@ -469,6 +478,101 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   indisponível. Em fila, mostra a posição e abre ao liberar a vaga.
 - Página da tarefa: botão de ícone **Mesa de trabalho** leva à mesa; com mesa, assume a cor da
   etapa e a dica mostra o chip da etapa.
+
+## Mesa no celular (OPE-166)
+
+Decisão do dono na OPE-166 (plano v1, opção B): **barra de ações fixa no pé da mesa + folha "Mais ações"**,
+valendo para **tudo abaixo de `lg`** (celular e tablet, o mesmo divisor da central; sem leiaute
+intermediário). Em `>= lg` a mesa continua igual. A escolha do leiaute é feita em JS por
+`useCompactWorkbench` (`(max-width: 1023px)`; sem `matchMedia` — SSR e testes — vale o desktop).
+
+- **Descritor único dos botões** (`src/features/agentic/workbench-action-items.ts`, puro):
+  `workbenchActionItems` monta a lista (Abrir fork primeiro, depois as ações da etapa, sem
+  `open-preview`/`rebuild-preview` e sem as decisões do adversário) com rótulo completo e compacto,
+  dica, variante, **motivo do bloqueio** e `title`. A linha do desktop (`WorkbenchActionButton`) e o
+  dock do celular renderizam da mesma lista. Os avisos de estado (erro, reconexão, vaga, PR
+  acompanhado, conflitos, CI, merge, fila do build) saem de `workbenchNotices`
+  (`workbench-notices.ts`).
+- **Dock** (`mobile/MobileActionDock`): **Mais ações** (ícone, 44 px) e o **botão principal** ocupando
+  o resto da linha, sempre no mesmo lugar. A escolha (`dockLayout`): pedido do agente esperando →
+  **Responder pedido** (ou **Responder pedidos (N)**); bloqueio do adversário → **Decidir revisão**;
+  senão a primeira de `DOCK_PRIMARY_PRIORITY` (Implementar, Aprovar, Tentar novamente, Reconectar,
+  Descrever as mudanças, Reabrir, Cancelar espera, Parar, Solicitar correção, Solicitar correção do
+  plano). Sem nenhuma (ex.: PR aberto parado), o **Mais ações** ocupa a linha. Com o botão principal
+  bloqueado (ex.: anexo subindo no Implementar, outra ação em andamento), o motivo aparece em texto
+  logo acima do dock. Com o campo de
+  correção ou de fork aberto o dock some (o campo tem Cancelar/Enviar), como a linha do desktop.
+- **Folha "Mais ações"** (`mobile/ActionSheet`, `Sheet` do shadcn vindo de baixo, até 85% da altura):
+  **Ações da etapa** (as demais do descritor, com o motivo do bloqueio **em texto** — no toque não há
+  dica — e **Revisão adversária** na revisão que falhou), **Prévia e PR** (Abrir prévia, Abrir PR,
+  chave **Gerar prévia** com a explicação e **Gerar nova prévia** com o motivo do bloqueio),
+  **Modelo** (o mesmo controle "Modelos por etapa") e **Mesa** (**Concluir mesa…**, **Definir
+  etapa…** e **Excluir mesa**, com as mesmas confirmações; `WorkbenchManage`). Escolher um item
+  sempre fecha a folha, inclusive os links.
+- **Pedidos do agente** (permissões e perguntas): no celular saem de baixo da saída e vão para a folha
+  **Pedidos do agente**, que **abre sozinha** quando chega um pedido novo e fecha quando não há mais.
+  Os botões da permissão dividem a linha em três (alvo de 40 px, `PermissionCard`).
+- **Bloqueio do adversário**: os achados, a orientação e Corrigir / Revisar de novo / Seguir mesmo
+  assim (`AdversarialActions`) ficam na folha **Revisão adversária**.
+- **Avisos**: uma linha só acima do dock com o mais importante (erro em destaque) e "+N"; o toque
+  expande o texto completo e os demais (`StatusNoticeLine`). A explicação do **Reconectar** entra no fim
+  dessa lista.
+- **Campos**: **Informações adicionais** (Plano pronto e Especificação pronta) começa recolhido num
+  botão; o campo continua montado (oculto), então a **citação de linha** cai nele e ele abre sozinho
+  ao ganhar texto ou anexo. O **chat durante a execução** é uma linha com **Enviar** ao lado, que
+  cresce ao focar. O campo de correção usa 3 linhas.
+- **Cabeçalho**: duas linhas — **Voltar para tarefas** (ícone), código, etapa, "ao vivo" e o título;
+  **Abrir prévia** e **Abrir PR** viram ícones e branch, worktree, porta e custo ficam atrás de
+  **Detalhes da mesa**. O menu **Mais ações** do cabeçalho e o **Excluir mesa** saem do cabeçalho
+  (estão na folha); "Excluindo…" continua visível.
+- **Etapas**: no lugar da trilha, uma linha "Etapa N de M · Nome" com barra de progresso
+  (`compactStepPosition`; mesa concluída conta como o último passo).
+- **Card**: sem borda, fundo e cantos, ocupando a largura toda (anula o `px-4 md:px-6` do `<main>`;
+  `WORKBENCH_CARD_CLASS`). O skeleton de carregamento da mesa segue a mesma estrutura (cabeçalho,
+  etapas, abas, saída e o dock no celular / a linha de botões no desktop).
+- **Refinamento** (`RefinementActionBar` → `mobile/RefinementMobileBar`): o dock tem **Encerrar
+  refinamento**, **Gerar plano** ou **Cancelar espera**; Parar/Continuar, Reconectar, Recomeçar,
+  Continuar refinamento, **Gerar plano após refinar**, o modelo e os itens da mesa vão para a folha.
+  As perguntas do Agente Refinador continuam abaixo da saída: são a própria conversa do refinamento.
+- **Fork** (`ForkActionBar` → `mobile/ForkMobileBar`): o dock tem o primeiro botão de destaque
+  (**Enviar**, **Tentar novamente** ou **Integrar fork**); Abrir fork, Pausar, Parar, Retomar,
+  Descartar, o **Modo** e os **Modelos** vão para a folha do fork. O seletor de forks ocupa a largura
+  toda.
+- A aba **Aprendizado (N)** (Agente Mentor, OPE-165) aparece no celular e no desktop como as demais: só
+  quando a mesa tem ao menos uma execução do Mentor (depois da conclusão). No celular o painel e o card de
+  cada execução usam espaçamento menor e os chips (tipo de conclusão, tentativa, duração) descem para uma
+  linha própria abaixo da data.
+- Pendente de conferência no aparelho: teclado virtual (iOS) e a altura real da saída.
+
+## Coluna Tarefas no celular (OPE-166)
+
+Segunda rodada da OPE-166 (plano v2, aprovado pelo dono): a coluna **Tarefas** de `/desenvolvimento` segue
+o mesmo modelo da mesa — **tudo abaixo de `lg`**, escolhido em JS por `useCompactWorkbench`, com folhas que
+sobem de baixo (`ActionSheet`). Em `>= lg` a coluna continua igual (seção acima). Nenhuma consulta ou evento
+muda: só a apresentação.
+
+- **Casca**: sem borda, fundo e cantos, na largura toda, como a mesa (`DEV_CENTER_PANE_BLEED_CLASS` em
+  `components/dev-center/pane-classes.ts`, que também compõe `WORKBENCH_CARD_CLASS`; o `max-lg:w-auto` dela
+  anula o `w-full` da coluna, senão a margem negativa só deslocaria o painel). O skeleton do celular usa a
+  mesma classe e as classes do topo (`mobile/header-classes.ts`).
+- **Topo** (`mobile/TasksMobileHeader`): "Tarefas N" com três botões de 40 px — **Quota do OpenCode**
+  (bolinha da pior faixa, a mesma da barra lateral, `StatusDot`), **Filtros** (selo com o número de filtros
+  fora do padrão) e **Configurar central**; abaixo, a **busca sempre à vista**; e, só quando há filtro fora
+  do padrão, os **chips** removíveis numa linha que rola na horizontal. A busca não vira chip nem conta no
+  selo (tem campo próprio; `mobileFilterChips` em `dev-center-mobile.ts`).
+- **Folha "Filtros"**: os mesmos componentes do desktop (**Só mesas ativas**, **Central**, **Colunas**,
+  **Estado da mesa**) e, no pé, **Ver N tarefas**, que fecha a folha. Sem "Limpar filtros" (igual ao
+  desktop; o estado vazio da lista tem o seu).
+- **Folha "Quota do OpenCode"** (`mobile/QuotaSheetButton`): o mesmo `OpencodeQuotaPanel`, com a mesma
+  preferência salva; a quota sai do topo e a altura fica para a lista. O atalho de configuração do painel
+  leva para fora de `/desenvolvimento`, o que desmonta a central e a folha junto.
+- **Linha da tarefa** (`TaskRow` com `compact`): no toque não há dica, então o **motivo da espera** aparece
+  em texto abaixo do código e o **nome da coluna** entra na linha do projeto ("Opex · Em andamento").
+- **Voltar da mesa**: a coluna fica escondida enquanto a mesa está aberta e perde a rolagem; ao reaparecer,
+  a lista rola até a tarefa que estava aberta, centralizada (`activeTaskIndex` +
+  `virtualizer.scrollToIndex`).
+- **Skeletons**: o carregamento das centrais mostra no celular o formato do topo novo
+  (`mobile/TasksPaneMobileSkeleton`); a linha de carregamento ganha a linha do motivo.
 
 ## Refinamento na mesa (OPE-137)
 
@@ -607,11 +711,14 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   publica na Saída da IA e nunca muda a etapa da mesa; a exclusão da mesa aborta a geração
   (`cleanupWorkbenchDiagrams`). Aba **Arquitetura (N)** depois de "Adversário (N)" e campo
   `WorkbenchDto.architect` (`applies`, `planVersion`: o plano mais recente). Ver `modules/architect-agent.md`.
-- **Agente Mentor (OPE-92 · OPE-104)**: o fim de cada cadeia de turnos (com a ação que a originou, o
-  texto do usuário, a rodada do Adversário quando houver e o início da cadeia) e o chat ao vivo vão ao
-  Mentor (sem o antigo bloco ` ```opex-lesson `: o agente consolida as próprias memórias)
-  (`mentorAfterTurns`/`mentorRecordLiveMessage`), que avalia em segundo plano: a mesa nunca espera e uma
-  falha dele não muda a etapa. Comportamento em `modules/adversarial-agent.md`, "Agente Mentor".
+- **Agente Mentor (OPE-165)**: chamado **só na conclusão** — `completeWorkbench` grava `done` e
+  `completedAt` e, depois de concluir (sessão, forks e fila), chama `notifyMentorDone` → `mentorOnDone` em
+  segundo plano, com o `completedAt` como chave de idempotência (uma execução por conclusão; reabrir e
+  concluir de novo gera outra) e `completionKind` (`merge` ou `manual`). Turnos, chat ao vivo, revisões do
+  adversário e feedback de PR não chamam mais o Mentor; exclusão, cancelamento e "Definir etapa" para
+  outra etapa também não. A mesa nunca espera e uma falha dele não muda a etapa. Aba **Aprendizado (N)**
+  depois de "Arquitetura (N)", com as execuções da mesa. Comportamento em `modules/adversarial-agent.md`,
+  "Agente Mentor".
 - **Fluxo da mesa (OPE-53 · padrão da central na OPE-79)**: o estado inicial da mesa traz a chave
   **Gerar prévia** (`ToggleCard`, situação "Ligada"/"Desligada") — **ligada = Publicar prévia**,
   **desligada = PR automático**. A escolha salva na hora na tarefa
@@ -700,10 +807,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   sendo excluída" durante a exclusão), **Solicitar correção** (e a variante **Voltar ao
   planejamento** da mesa com falha) e **Solicitar correção do plano** são botões de ícone com dica
   (`TooltipIconButton`, bloqueados com "Aguarde a ação em andamento" durante outra ação), com o nome
-  completo no `aria-label`. No **celular** as ações da etapa ficam na **mesma linha** (sem quebrar)
-  e os botões com texto usam rótulos compactos (**Descrever**, **Reabrir**, **Aprovar PR**,
-  **Tentar**, **Cancelar**), preservando o nome acessível completo; se não couber, a barra rola na
-  horizontal. Assim a saída do agente ganha altura de leitura.
+  completo no `aria-label`. Abaixo de `lg` a linha de botões vira o dock do celular: ver "Mesa no
+  celular (OPE-166)".
 - **PR**: a IA valida, faz commit (padrão da central) e push e abre o PR com o `gh`
   (`--base`, título, `--draft`, revisores, labels); PR já aberto só é atualizado (push + comentário).
   Resposta `{"url", "number"}` (ou a última URL de PR do texto).
@@ -1134,7 +1239,9 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   carregar com "Tentar novamente"; componente `TaskTextView`), **Saída da IA** (aba aberta ao
   entrar na mesa; turnos, texto em Markdown, ferramentas recolhíveis — abertas enquanto executam,
   avisos), **Plano vN** (versões) e **Forks (N)** (quando houver), pedidos pendentes e barra de
-  ações com o campo de correção. A barra de abas rola na horizontal quando não cabe (celular).
+  ações com o campo de correção. A barra de abas rola na horizontal quando não cabe; a aba ativa entra
+  na área visível sozinha e, abaixo de `lg`, um esmaecido na borda (no lugar da barra de rolagem)
+  avisa que há mais abas (`WorkbenchTabs`, `scrollEdges`).
 - **Citar uma linha da saída** (`ReplyTargetProvider` no `WorkbenchView`): cada linha do texto da
   IA, do **Plano** e das abas **Descrição** e **Spec.** tem, no hover, **Citar no campo de resposta**, que insere `> linha` no cursor do
   campo focado por último (resposta de pergunta pendente, correção/feedback da etapa, **Informações
@@ -1151,7 +1258,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   `prefers-reduced-motion`.
 - **Avisos de memória com detalhe** (OPE-139): os avisos de gravação de memória na Saída da IA (mesa e
   forks) — "Memória gravada/editada/fixada/desafixada/reativada/inativada/excluída pelo agente…" (agente
-  desenvolvedor e Agente Adversário) e "O Agente Mentor registrou/atualizou/sugeriu uma memória…" — têm
+  desenvolvedor e Agente Adversário) e "O Agente Mentor aprendeu com esta mesa…" (OPE-165; os antigos
+  "registrou/atualizou/sugeriu uma memória…" continuam no histórico) — têm
   o texto como gatilho de um painel (`NoticeMemoryDetail` → `MemoryDetailPopover`): **passar o mouse**
   abre a prévia e o **clique fixa** o painel (fecha por Esc, clique fora, botão de fechar ou outro
   clique no texto; `useHoverPopover` com `pinOnClick`). O painel mostra **título** (com "Resumo sendo
@@ -1165,7 +1273,8 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
     app. A sugestão lê a execução (`GET /api/adversarial/mentor/runs/[id]`): aguardando, mostra a
     proposta como "Sugestão, ainda não gravada" (categoria "Definida ao gravar"); aprovada, mostra a
     memória gravada.
-  - Lição dividida pelo Mentor (global + central): abas **Principal** e **Parte separada**.
+  - Aviso com várias memórias (o aprendizado do Mentor, ou a lição dividida antiga): uma aba por memória
+    (**Memória 1**, **Memória 2**…).
   - Memória excluída (aviso de exclusão ou 404 depois) mostra "não está mais no Engramind"; falha de
     leitura mostra "Tentar novamente". Avisos antigos, sem a referência, continuam como texto.
 
@@ -1275,6 +1384,15 @@ switch), `refinement-stage-logic.test.ts` (etapas, vagas, ações, bloqueios da 
 Refinamento, trilha), `RefinementActionBar.test.tsx`, `StartWorkbench.test.tsx` ("Refinar tarefa"),
 `refine-workbench-route.test.ts`, `environment-section.test.tsx` (padrão da central) e
 `refinement-workbench-controls.test.ts` (sem controles nativos).
+
+Mesa no celular (OPE-166): `workbench-mobile-logic.test.ts` (descritor dos botões, `dockLayout`, avisos,
+`keyboardInset`, `scrollEdges`), `workbench-mobile-bar.test.tsx` (dock, motivo do bloqueio, folhas,
+pedidos, adversário, campos recolhidos, cabeçalho), `workbench-view-mobile.test.tsx` (mesa montada inteira:
+sem faixa de pedidos, folha de pedidos e "Excluir mesa" com a central), `dev-center-keyboard.test.tsx`
+(altura descontando o teclado), `stage-steps.test.tsx` (forma compacta) e os casos de celular em
+`RefinementActionBar.test.tsx` e `ForkPanel.test.tsx` (com `matchMedia` simulado; sem ele vale o desktop).
+Coluna Tarefas no celular: `dev-center-mobile.test.ts` (funções puras) e `tasks-pane-mobile.test.tsx` (busca à
+vista, folhas de filtros e quota, motivo e coluna em texto, rolagem ao voltar da mesa e o desktop intacto).
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em
