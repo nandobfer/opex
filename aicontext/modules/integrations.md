@@ -144,8 +144,20 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   Geral (ambiente, modo debug), Documentação da API, Campos públicos, Campos privados (só com
   segredos), na API interna **Tokens de sistema**.
 - Rodapé (`border-t`, `justify-end`): **Desfazer** e **Salvar**, desabilitados sem alterações.
-- Com modo debug ligado, o cartão de Logs ocupa a coluna da direita (`sticky`, altura da área
-  visível do `<main>` via `useScrollViewportHeight`). Abaixo de `xl` vai para baixo do formulário.
+- **Logs do modo debug sob demanda (OPE-169)**: com o modo debug salvo (`data.debugMode`), o
+  cabeçalho mostra à direita do título um botão de ícone de debug (`DebugToggleButton`, "Abrir/Fechar
+  logs de debug", `aria-expanded` + `aria-controls` apontando para a coluna). Sem o modo debug, o botão
+  não aparece e os logs não abrem. O botão é um liga/desliga só de visualização: nada é salvo.
+  - Estado no `IntegrationEditor` (`debugOpen`), entregue ao `DetailHeader` de todos os formulários
+    pelo contexto `IntegrationDebugToggleProvider` (`detail/debug-toggle-context.tsx`). Começa
+    **fechado** ao entrar ou trocar de integração e fecha sozinho quando o modo debug salvo vira `false`.
+  - A partir de `xl`, abre o cartão de Logs na coluna da direita (`sticky`, altura da área visível do
+    `<main>` via `useScrollViewportHeight`); a grade só ganha duas colunas com ela aberta. A barra do
+    console tem sempre **Fechar** (X, `DebugConsoleCloseButton`, o mesmo da janela da lista). Fechar
+    maximizado devolve a tela ao normal (`useLogsMaximized(colunaAberta)`).
+  - Abaixo de `xl` (`DEBUG_DIALOG_MEDIA_QUERY`), por decisão do dono, o botão abre os logs na mesma
+    janela da lista de integrações (`IntegrationDebugDialog`, sem Maximizar); fechar a janela volta o
+    botão para fechado.
 - **Abas** (`components/tabs/`: `IntegrationTabs` + `useIntegrationTab`, copiados do Orquestrador
   WhatsApp do CRM): aba ativa na URL (`?aba=`, padrão omitida), troca animada (`tabMotionProps`) e
   "Descartar alterações?" ao sair de uma aba com mudanças. Usadas pelo GitHub (`GithubEditorForm`:

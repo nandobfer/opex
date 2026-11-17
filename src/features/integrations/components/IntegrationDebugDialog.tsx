@@ -1,12 +1,10 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
-import { X } from "lucide-react"
-import { Button } from "@/components/ui/button"
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { getIntegrationDef, type IntegrationId } from "@/lib/integrations/catalog"
 import { dialogPanelMotion } from "@/components/motion/dialog-panel-motion"
+import { DebugConsoleCloseButton } from "./DebugConsoleCloseButton"
 import { isSearchEscape } from "./DebugSearchBar"
 import { IntegrationDebugConsole } from "./IntegrationDebugConsole"
 
@@ -45,18 +43,9 @@ export function IntegrationDebugDialog({ integrationId, onOpenChange }: Integrat
                                     </DialogDescription>
                                 }
                                 actions={
-                                    <TooltipProvider>
-                                        <Tooltip>
-                                            <TooltipTrigger asChild>
-                                                <DialogClose asChild>
-                                                    <Button type="button" variant="ghost" size="icon" className="h-8 w-8" aria-label="Fechar">
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
-                                                </DialogClose>
-                                            </TooltipTrigger>
-                                            <TooltipContent>Fechar</TooltipContent>
-                                        </Tooltip>
-                                    </TooltipProvider>
+                                    <DialogClose asChild>
+                                        <DebugConsoleCloseButton />
+                                    </DialogClose>
                                 }
                             />
                         </motion.div>

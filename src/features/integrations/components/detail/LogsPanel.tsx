@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Bug } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import type { IntegrationId } from "@/lib/integrations/catalog"
+import { DebugConsoleCloseButton } from "../DebugConsoleCloseButton"
 import { IntegrationDebugConsole } from "../IntegrationDebugConsole"
 
 interface LogsPanelProps {
@@ -14,15 +15,19 @@ interface LogsPanelProps {
     logsCardRef: RefObject<HTMLDivElement | null>
     maximized: boolean
     onMaximizedChange: (maximized: boolean) => void
+    onClose: () => void
+    /** `id` do painel, alvo do `aria-controls` do botão do título. */
+    panelId: string
 }
 
-/** Painel lateral de logs (modo debug), fixo na área visível e maximizável. */
-export function LogsPanel({ id, visible, debugHeight, logsCardRef, maximized, onMaximizedChange }: LogsPanelProps) {
+/** Painel lateral de logs (modo debug), aberto pelo botão do título, fixo na área visível e maximizável. */
+export function LogsPanel({ id, visible, debugHeight, logsCardRef, maximized, onMaximizedChange, onClose, panelId }: LogsPanelProps) {
     return (
         <AnimatePresence>
             {visible && (
                 <motion.aside
                     key="debug"
+                    id={panelId}
                     initial={{ opacity: 0, x: 32 }}
                     animate={{ opacity: 1, x: 0 }}
                     exit={{ opacity: 0, x: 32 }}
@@ -40,6 +45,7 @@ export function LogsPanel({ id, visible, debugHeight, logsCardRef, maximized, on
                                 consoleClassName="min-h-0 flex-1"
                                 maximized={maximized}
                                 onMaximizedChange={onMaximizedChange}
+                                actions={<DebugConsoleCloseButton onClick={onClose} />}
                                 title={
                                     <h2 className="flex items-center gap-2 text-base font-semibold">
                                         <Bug className="h-4 w-4 text-amber-600" /> Logs

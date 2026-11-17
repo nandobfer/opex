@@ -8,6 +8,7 @@ import { getIntegrationDef, INTEGRATIONS_BASE_PATH, integrationPath, type Integr
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
 import type { IntegrationDetailDto } from "../../types"
 import { IntegrationStatusDot } from "../IntegrationBadges"
+import { DebugToggleButton } from "./DebugToggleButton"
 
 interface DetailHeaderProps {
     def: IntegrationDef
@@ -15,7 +16,7 @@ interface DetailHeaderProps {
     hasAnySecret: boolean
 }
 
-/** Cabeçalho (voltar, nome, status, última alteração) e aviso de chave de criptografia ausente. */
+/** Cabeçalho (voltar, nome, status, última alteração, botão dos logs de debug à direita) e aviso de chave de criptografia ausente. */
 export function DetailHeader({ def, data, hasAnySecret }: DetailHeaderProps) {
     // Integração-filha (ex.: provedor de IA) volta para a página da mãe.
     const back = def.parent ? { href: integrationPath(def.parent), label: `Voltar para ${getIntegrationDef(def.parent).name}` } : { href: INTEGRATIONS_BASE_PATH, label: "Voltar para Integrações" }
@@ -27,7 +28,7 @@ export function DetailHeader({ def, data, hasAnySecret }: DetailHeaderProps) {
                         <ArrowLeft className="h-4 w-4" />
                     </Link>
                 </Button>
-                <div>
+                <div className="min-w-0 flex-1">
                     <h1 className="flex items-center gap-3 text-lg font-semibold md:text-2xl">
                         {def.name}
                         <IntegrationStatusDot health={data.health} />
@@ -39,6 +40,7 @@ export function DetailHeader({ def, data, hasAnySecret }: DetailHeaderProps) {
                         </p>
                     )}
                 </div>
+                <DebugToggleButton />
             </motion.div>
 
             <AnimatePresence>
