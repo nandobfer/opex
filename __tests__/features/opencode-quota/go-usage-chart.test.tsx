@@ -41,6 +41,7 @@ vi.mock('@/components/ui/chart', async (importOriginal) => ({
 }))
 
 import { GoUsageChart } from '@/features/opencode-quota/components/go/GoUsageChart'
+import { GoChartTooltip } from '@/features/opencode-quota/components/go/GoChartTooltip'
 import * as chartStyle from '@/features/opencode-quota/components/go/chart-style'
 
 const NOW = Date.parse('2026-11-16T19:57:00.000Z')
@@ -49,9 +50,10 @@ const CROSS = Date.parse('2026-12-01T09:34:56.000Z')
 const chart = (overrides: Partial<GoChartDto> = {}): GoChartDto => ({
   cycle: { startsAt: new Date(START).toISOString(), endsAt: new Date(END).toISOString(), current: true },
   points: [
-    { t: START, date: '2026-11-05', dayPercent: null, usage: 0, forecast: null },
-    { t: NOW, date: '2026-11-16', dayPercent: 3.2, usage: 44.3, forecast: 44.3 },
-    { t: END, date: '2026-12-05', dayPercent: null, usage: null, forecast: 115.9 },
+    { t: START, date: '2026-11-05', dayPercent: null, usage: 0, forecast: null, dayForecast: null },
+    { t: NOW, date: '2026-11-16', dayPercent: 3.2, usage: 44.3, forecast: 44.3, dayForecast: null },
+    { t: Date.parse('2026-11-25T00:00:00.000Z'), date: '2026-11-24', dayPercent: null, usage: null, forecast: 75.27, dayForecast: 3.92 },
+    { t: END, date: '2026-12-05', dayPercent: null, usage: null, forecast: 115.9, dayForecast: 2.01 },
   ],
   today: { t: NOW, percent: 44.3 },
   crossing: { t: CROSS, value: 100, label: '1 dez' },
@@ -133,6 +135,25 @@ describe('GoUsageChart (desenho do Console)', () => {
     expect(container.innerHTML).not.toMatch(base)
     const ceilingLegend = container.querySelector('[data-go-legend="ceiling"] span span') as HTMLElement
     expect(ceilingLegend.getAttribute('style')).toContain('var(--color-foreground)')
+  })
+
+  it('dica no trecho da previsão: data do dia, previsão do dia e acumulado previsto', () => {
+    const { points } = chart()
+    const { container } = render(<GoChartTooltip active label={Date.parse('2026-11-25T00:00:00.000Z')} points={points} />)
+    expect(container.textContent).toContain('24/11/2026')
+    expect(container.querySelector('[data-go-tooltip-row="dayForecast"]')!.textContent).toBe('Previsão do dia3,92%')
+    expect(container.querySelector('[data-go-tooltip-row="forecast"]')!.textContent).toBe('Acumulado previsto75,3%')
+    expect(container.querySelector('[data-go-tooltip-row="day"]')).toBeNull()
+    expect(container.querySelector('[data-go-tooltip-row="usage"]')).toBeNull()
+  })
+
+  it('dica no trecho verde continua com uso do dia e acumulado, sem previsão', () => {
+    const { points } = chart()
+    const { container } = render(<GoChartTooltip active label={NOW} points={points} />)
+    expect(container.querySelector('[data-go-tooltip-row="day"]')!.textContent).toBe('Uso do dia3,20%')
+    expect(container.querySelector('[data-go-tooltip-row="usage"]')!.textContent).toBe('Acumulado44,3%')
+    expect(container.querySelector('[data-go-tooltip-row="dayForecast"]')).toBeNull()
+    expect(container.querySelector('[data-go-tooltip-row="forecast"]')).toBeNull()
   })
 
   it('sem previsão (limite atingido ou ciclo passado) não desenha cruzamento nem fim', () => {

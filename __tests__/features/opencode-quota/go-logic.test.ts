@@ -121,16 +121,35 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     expect(chart.missingDays).toBe(0)
   })
 
-  it('previsão é a reta de agora até a renovação, com cruzamento no teto de 100%', () => {
+  it('previsão é a reta de agora até a renovação, um ponto por dia, com cruzamento no teto de 100%', () => {
     const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 44.3 })
     const chart = buildGoChart({ cycle, nowMs: NOW, days: days(everyDay(4)), monthRatio: 44.3, forecast, historyFrom: '2026-10-05' })
     const forecastPoints = chart.points.filter((point) => point.forecast !== null)
-    expect(forecastPoints.map((point) => point.t)).toEqual([NOW, END])
+    // Agora (16/11 19:57) + fim de cada dia UTC de 16/11 a 04/12 + a renovação (05/12 12:15).
+    expect(forecastPoints[0]!.t).toBe(NOW)
     expect(forecastPoints[0]!.forecast).toBe(44.3)
-    expect(forecastPoints[1]!.forecast).toBeCloseTo(forecast.projectedPercent!, 2)
+    expect(forecastPoints.at(-1)!.t).toBe(END)
+    expect(forecastPoints.at(-1)!.forecast).toBeCloseTo(forecast.projectedPercent!, 2)
+    expect(forecastPoints.slice(1).map((point) => point.date)).toEqual(dateKeysBetween('2026-11-16', '2026-12-05'))
+    // Todos sobre a mesma reta: a linha amarela continua reta.
+    const slope = (forecastPoints.at(-1)!.forecast! - 44.3) / (END - NOW)
+    for (const point of forecastPoints) expect(point.forecast!).toBeCloseTo(44.3 + slope * (point.t - NOW), 1)
     expect(chart.forecastEnd).toEqual({ t: END, percent: Math.round(forecast.projectedPercent! * 10) / 10 })
     expect(chart.crossing).toMatchObject({ t: forecast.crossesAtMs, value: 100 })
     expect(chart.crossing!.label).toBe(formatGoDate(new Date(forecast.crossesAtMs!).toISOString()))
+  })
+
+  it('previsão do dia: a média diária num dia inteiro, pró-rateada nas pontas, somando o previsto menos o medidor', () => {
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 44.3 })
+    const chart = buildGoChart({ cycle, nowMs: NOW, days: days(everyDay(4)), monthRatio: 44.3, forecast, historyFrom: '2026-10-05' })
+    const daily = chart.points.filter((point) => point.dayForecast !== null)
+    expect(daily.find((point) => point.date === '2026-11-24')!.dayForecast).toBeCloseTo(forecast.dailyAverage!, 2)
+    expect(daily[0]!.date).toBe('2026-11-16')
+    expect(daily[0]!.dayForecast!).toBeLessThan(forecast.dailyAverage!)
+    // Cada dia vem arredondado em 2 casas: a soma fica a menos de 0,1 do previsto menos o medidor.
+    expect(Math.abs(daily.reduce((sum, point) => sum + point.dayForecast!, 0) - (forecast.projectedPercent! - 44.3))).toBeLessThan(0.1)
+    // Trecho verde e ponto de agora não têm previsão do dia.
+    expect(chart.points.filter((point) => point.usage !== null).every((point) => point.dayForecast === null)).toBe(true)
   })
 
   it('o rótulo do cruzamento usa a data de São Paulo (fronteira 00h–03h UTC)', () => {
@@ -155,7 +174,7 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     const chart = buildGoChart({ cycle, nowMs: NOW, days: days({}), monthRatio: 100, forecast, historyFrom: '2026-10-05' })
     expect(chart.forecastEnd).toBeNull()
     expect(chart.crossing).toBeNull()
-    expect(chart.points.every((point) => point.forecast === null)).toBe(true)
+    expect(chart.points.every((point) => point.forecast === null && point.dayForecast === null)).toBe(true)
     expect(chart.today?.percent).toBe(100)
   })
 

@@ -157,14 +157,14 @@ export function goYMax(values: readonly number[]): number {
 /**
  * Gráfico de UM ciclo, no desenho do Console: a linha nasce em 0% no início do ciclo, ganha um ponto no fim de
  * cada dia UTC (o primeiro e o último dia pró-rateados pelos horários de início e fim) e, no ciclo atual,
- * termina em "agora" com o valor exato do medidor. A previsão é a reta de "agora" até a renovação; o teto é
- * fixo em 100%. Dia sem dados quebra a linha e conta 0.
+ * termina em "agora" com o valor exato do medidor. A previsão é a reta de "agora" até a renovação, com um
+ * ponto no fim de cada dia (`dayForecast` = a parte da previsão que cai no dia); o teto é fixo em 100%. Dia sem dados quebra a linha e conta 0.
  */
 export function buildGoChart(input: GoChartInput): GoChartDto {
     const { cycle, nowMs, days, monthRatio, forecast, historyFrom } = input
     const live = cycle.current && nowMs < cycle.endMs
     const untilMs = live ? nowMs : cycle.endMs
-    const points: GoChartPointDto[] = [{ t: cycle.startMs, date: utcDateKey(cycle.startMs), dayPercent: null, usage: 0, forecast: null }]
+    const points: GoChartPointDto[] = [{ t: cycle.startMs, date: utcDateKey(cycle.startMs), dayPercent: null, usage: 0, forecast: null, dayForecast: null }]
     let cumulative = 0
     let missingDays = 0
     let partialDays = 0
@@ -181,7 +181,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         else if (day?.partial) partialDays++
         if (isToday) break
         cumulative += (percent ?? 0) * ((to - from) / DAY_MS)
-        points.push({ t: to, date: key, dayPercent: percent === null ? null : round(percent), usage: percent === null ? null : round(cumulative), forecast: null })
+        points.push({ t: to, date: key, dayPercent: percent === null ? null : round(percent), usage: percent === null ? null : round(cumulative), forecast: null, dayForecast: null })
     }
 
     let today: GoChartDto["today"] = null
@@ -191,11 +191,20 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         const key = utcDateKey(nowMs)
         const todayPercent = days.get(key)?.percent ?? null
         const value = round(monthRatio)
-        points.push({ t: nowMs, date: key, dayPercent: todayPercent === null ? null : round(todayPercent), usage: value, forecast: forecast.projectedPercent !== null ? value : null })
+        points.push({ t: nowMs, date: key, dayPercent: todayPercent === null ? null : round(todayPercent), usage: value, forecast: forecast.projectedPercent !== null ? value : null, dayForecast: null })
         today = { t: nowMs, percent: value }
         if (forecast.projectedPercent !== null) {
-            const projected = round(forecast.projectedPercent)
-            points.push({ t: cycle.endMs, date: utcDateKey(cycle.endMs - 1), dayPercent: null, usage: null, forecast: projected })
+            // Um ponto no fim de cada dia UTC até a renovação (todos sobre a mesma reta), para a dica mostrar a
+            // previsão do dia sob o mouse, como o uso do dia no trecho verde.
+            const rate = monthRatio / (nowMs - cycle.startMs)
+            let previous = nowMs
+            for (const key of dateKeysBetween(utcDateKey(nowMs), utcDateKey(cycle.endMs - 1))) {
+                const t = Math.min(dayStartMs(key) + DAY_MS, cycle.endMs)
+                if (t <= previous) continue
+                const atEnd = t === cycle.endMs
+                points.push({ t, date: key, dayPercent: null, usage: null, forecast: atEnd ? round(forecast.projectedPercent) : round(monthRatio + rate * (t - nowMs)), dayForecast: round(rate * (t - previous)) })
+                previous = t
+            }
             forecastEnd = { t: cycle.endMs, percent: round(forecast.projectedPercent, 1) }
             if (forecast.crossesAtMs !== null) crossing = { t: forecast.crossesAtMs, value: 100, label: formatGoDate(new Date(forecast.crossesAtMs).toISOString()) }
         }

@@ -6,7 +6,7 @@ import type { GoChartPointDto } from "../../go-types"
 import { GO_FORECAST_COLOR, GO_USAGE_COLOR } from "./chart-style"
 import { LegendBar } from "./LegendBar"
 
-/** Tooltip de um ponto: data (São Paulo), uso do dia, acumulado e, em "hoje" e na renovação, a previsão. */
+/** Tooltip de um ponto: data (São Paulo) e, no trecho verde, uso do dia e acumulado; no amarelo, previsão do dia e acumulado previsto. */
 export function GoChartTooltip({ active, label, points }: { active?: boolean; label?: unknown; points: readonly GoChartPointDto[] }) {
     if (!active || typeof label !== "number") return null
     const point = points.find((item) => item.t === label)
@@ -14,7 +14,8 @@ export function GoChartTooltip({ active, label, points }: { active?: boolean; la
     const rows: { key: string; label: string; value: string; color?: string }[] = []
     if (point.dayPercent !== null) rows.push({ key: "day", label: "Uso do dia", value: formatGoPercent(point.dayPercent, 2) })
     if (point.usage !== null) rows.push({ key: "usage", label: "Acumulado", value: formatGoPercent(point.usage), color: GO_USAGE_COLOR })
-    if (point.forecast !== null && point.usage === null) rows.push({ key: "forecast", label: "Previsão", value: formatGoPercent(point.forecast), color: GO_FORECAST_COLOR })
+    if (point.dayForecast !== null) rows.push({ key: "dayForecast", label: "Previsão do dia", value: formatGoPercent(point.dayForecast, 2) })
+    if (point.forecast !== null && point.usage === null) rows.push({ key: "forecast", label: "Acumulado previsto", value: formatGoPercent(point.forecast), color: GO_FORECAST_COLOR })
 
     return (
         <ChartTooltipFrame>

@@ -200,7 +200,9 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
 - **Previsão linear** (`goForecast`) só no ciclo atual, depois de 1 dia de ciclo e com o mês abaixo de 100%:
   `% previsto = % usado × (fim − início) / (agora − início)`, cruzamento em
   `início + (agora − início) × 100 / % usado` (só se for antes da renovação) e média
-  `% usado × 24 h / (agora − início)`. Desenhada como **reta de dois pontos** (agora → renovação).
+  `% usado × 24 h / (agora − início)`. Desenhada como **reta** de agora até a renovação, com **um ponto no fim de cada
+  dia UTC** (todos sobre a mesma reta; o último é a renovação). Cada ponto traz `dayForecast`, a previsão do
+  dia: média diária × fração do dia que cai na previsão (o dia de hoje e o da renovação pró-rateados).
 - Eixo Y de 0% a 150%, grades a cada 50%; sobe de 50 em 50 só se a previsão passar (`goYMax`).
 - Faixa de datas (`goAxisTicks`): início, ⅓ e ⅔ do ciclo, cruzamento (destacado) e fim; marca a menos de 3 dias
   de outra mais importante sai. Rótulos em caixa alta no fuso de São Paulo ("5 NOV", `axisDateLabel`).
@@ -238,7 +240,9 @@ Reproduz o card de uso do Console do OpenCode Go:
   datas arredondada (`GoAxisStrip`, desenhada dentro do gráfico com `usePlotArea`/`useXAxisScale`) com a data
   do cruzamento em amarelo e negrito. Rodapé: "Média de **3,9%** por dia" e a legenda Uso / Previsão / Teto
   mensal (barrinhas verticais, a do teto pontilhada, `LegendBar`). Ciclo passado ganha o título "Ciclo de 5 out
-  a 5 nov" e não tem previsão. Tooltip por ponto (dia, uso do dia, acumulado, previsão) e tabela oculta.
+  a 5 nov" e não tem previsão. Dica por ponto, que acompanha o mouse dia a dia: no trecho verde, data, "Uso do
+  dia" e "Acumulado"; no trecho amarelo, data, "Previsão do dia" e "Acumulado previsto" (pedido do dono na
+  prévia de 17/11). Tabela oculta com as mesmas colunas.
 - Cores do SVG (`chart-style.ts`): só cores prontas — as variáveis com prefixo do tema (`--color-foreground`,
   `--color-muted-foreground`, `--color-border`, `--color-card`) ou as de gráfico (`--chart-*`). As variáveis base
   (`--foreground`, `--border`…) guardam só os números do HSL e, num `fill`/`stroke`, deixavam o texto preto e o

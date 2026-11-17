@@ -22,6 +22,7 @@ const TABLE_COLUMNS = [
     { key: "date", label: "Data" },
     { key: "day", label: "Uso do dia" },
     { key: "usage", label: "Acumulado" },
+    { key: "dayForecast", label: "Previsão do dia" },
     { key: "forecast", label: "Previsão" },
 ]
 
@@ -94,7 +95,7 @@ export function GoUsageChart({ chart, dailyAverage }: { chart: GoChartDto; daily
                 <ChartDataTable
                     label={ariaLabel}
                     columns={TABLE_COLUMNS}
-                    rows={chart.points.map((point) => ({ date: formatGoFullDate(Date.parse(`${point.date}T12:00:00.000Z`)), day: pct(point.dayPercent), usage: pct(point.usage), forecast: pct(point.forecast) }))}
+                    rows={chart.points.map((point) => ({ date: formatGoFullDate(Date.parse(`${point.date}T12:00:00.000Z`)), day: pct(point.dayPercent), usage: pct(point.usage), dayForecast: pct(point.dayForecast), forecast: pct(point.forecast) }))}
                 />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">

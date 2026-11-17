@@ -33,8 +33,10 @@ export interface GoChartPointDto {
     dayPercent: number | null
     /** Acumulado no ciclo até `t` (agora: o valor do medidor); `null` quebra a linha. */
     usage: number | null
-    /** Previsão linear (só em "agora" e na renovação). */
+    /** Previsão linear acumulada (de "agora" até a renovação, um ponto por dia). */
     forecast: number | null
+    /** Previsão daquele dia (média diária × fração do dia que cai na previsão); `null` no trecho do uso real. */
+    dayForecast: number | null
 }
 
 export interface GoChartDto {

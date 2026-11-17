@@ -40,10 +40,10 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
   chart: {
     cycle: { startsAt: START, endsAt: END, current: true },
     points: [
-      { t: Date.parse(START), date: '2026-11-05', dayPercent: null, usage: 0, forecast: null },
-      { t: Date.parse('2026-11-16T00:00:00.000Z'), date: '2026-11-15', dayPercent: 5.93, usage: 40.71, forecast: null },
-      { t: NOW, date: '2026-11-16', dayPercent: 3.19, usage: 43.9, forecast: 43.9 },
-      { t: Date.parse(END), date: '2026-12-05', dayPercent: null, usage: null, forecast: 116.2 },
+      { t: Date.parse(START), date: '2026-11-05', dayPercent: null, usage: 0, forecast: null, dayForecast: null },
+      { t: Date.parse('2026-11-16T00:00:00.000Z'), date: '2026-11-15', dayPercent: 5.93, usage: 40.71, forecast: null, dayForecast: null },
+      { t: NOW, date: '2026-11-16', dayPercent: 3.19, usage: 43.9, forecast: 43.9, dayForecast: null },
+      { t: Date.parse(END), date: '2026-12-05', dayPercent: null, usage: null, forecast: 116.2, dayForecast: null },
     ],
     today: { t: NOW, percent: 43.9 },
     crossing: { t: Date.parse('2026-12-01T07:46:58.320Z'), value: 100, label: '1 dez' },
@@ -108,8 +108,8 @@ describe('OpencodeGoSubscriptionCard', () => {
       ...data.chart!,
       cycle: { startsAt: '2026-10-05T12:15:35.000Z', endsAt: START, current: false },
       points: [
-        { t: Date.parse('2026-10-05T12:15:35.000Z'), date: '2026-10-05', dayPercent: null, usage: 0, forecast: null },
-        { t: Date.parse(START), date: '2026-11-05', dayPercent: 1, usage: 52.4, forecast: null },
+        { t: Date.parse('2026-10-05T12:15:35.000Z'), date: '2026-10-05', dayPercent: null, usage: 0, forecast: null, dayForecast: null },
+        { t: Date.parse(START), date: '2026-11-05', dayPercent: 1, usage: 52.4, forecast: null, dayForecast: null },
       ],
       today: null,
       crossing: null,
@@ -128,7 +128,7 @@ describe('OpencodeGoSubscriptionCard', () => {
 
   it('com o mês em 100% mostra "Limite mensal atingido" sem previsão', async () => {
     const data = usage({ monthPercent: 100, limitReached: true, forecast: { dailyAverage: 9, projectedPercent: null, crossesAt: null } })
-    renderCard({ ...data, chart: { ...data.chart!, crossing: null, forecastEnd: null, points: data.chart!.points.map((point) => ({ ...point, forecast: null })) } })
+    renderCard({ ...data, chart: { ...data.chart!, crossing: null, forecastEnd: null, points: data.chart!.points.map((point) => ({ ...point, forecast: null, dayForecast: null })) } })
     const status = await screen.findByText('Limite mensal atingido')
     expect(status.getAttribute('data-go-status')).toBe('destructive')
     expect(screen.queryByText(/Previsão de/)).toBeNull()
