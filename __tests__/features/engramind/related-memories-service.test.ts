@@ -61,7 +61,7 @@ import { DomainError } from '@/lib/api/route'
 import { computeRelated, fillRelatedMemories, getRelatedMemories, onRelatedMemoryEvent, RELATED_BATCH_SIZE, RELATED_CONCURRENCY, RELATED_REFILL_MS, relatedFillDone } from '@/features/engramind/server/related-memories'
 
 const ids = (total: number) => Array.from({ length: total }, (_, index) => `m_${index}`)
-let memories: { id: string; channel: string; similar: { id: string; channel: string; score: number }[] }[] = []
+let memories: { id: string; channel: string; status?: string; similar: { id: string; channel: string; score: number }[] }[] = []
 let active = 0
 let maxActive = 0
 
@@ -74,7 +74,7 @@ beforeEach(() => {
   maxActive = 0
   memories = ids(4).map((id, index) => ({ id, channel: 'eng', similar: [{ id: `m_${(index + 1) % 4}`, channel: 'eng', score: 0.9 }, { id: 'm_outro', channel: 'outro', score: 0.95 }, { id, channel: 'eng', score: 1 }] }))
   mocks.call.mockImplementation(async (_method: string, request: { path: string; query?: { cursor?: string } }) => {
-    if (request.path === '/v1/memories') return { memories: memories.map(({ id }) => ({ id, text: 'nunca guardado' })), next_cursor: null }
+    if (request.path === '/v1/memories') return { memories: memories.map(({ id, status }) => ({ id, status: status ?? 'active', text: 'nunca guardado' })), next_cursor: null }
     const id = decodeURIComponent(request.path.split('/').pop()!)
     const memory = memories.find((item) => item.id === id)
     if (!memory) throw new DomainError(404, 'Memória não encontrada', 'ENGRAMIND_MEMORY_NOT_FOUND')
@@ -222,6 +222,36 @@ describe('similares das memórias (OPE-164)', () => {
       expect(await result).toBe('ok')
       expect(mocks.call).toHaveBeenCalledTimes(2)
       expect(mocks.docs.get('m_0')).toMatchObject({ related: [{ id: 'm_1', score: 0.8 }], memoryVersion: 3 })
+    })
+  })
+
+  describe('memórias que sumiram sem o webhook', () => {
+    const doc = (id: string, related: { id: string; score: number }[]): Doc => ({ _id: id, channel: 'eng', related, memoryVersion: 1, computedAt: new Date(), failedAt: null })
+
+    it('o preenchimento tira do cache a memória que não existe mais e as referências a ela nas outras', async () => {
+      mocks.docs.set('m_apagada', doc('m_apagada', [{ id: 'm_0', score: 0.9 }]))
+      mocks.docs.set('m_0', doc('m_0', [{ id: 'm_apagada', score: 0.95 }, { id: 'm_1', score: 0.9 }]))
+      await fillRelatedMemories()
+      expect(mocks.docs.has('m_apagada')).toBe(false)
+      expect(mocks.docs.get('m_0')?.related).toEqual([{ id: 'm_1', score: 0.9 }])
+      expect(mocks.call).not.toHaveBeenCalledWith('GET', expect.objectContaining({ path: '/v1/memories/m_apagada' }))
+    })
+
+    it('a arquivada continua existindo: fica no cache e não é recalculada', async () => {
+      memories.push({ id: 'm_arquivada', channel: 'eng', status: 'archived', similar: [] })
+      mocks.docs.set('m_arquivada', doc('m_arquivada', [{ id: 'm_0', score: 0.9 }]))
+      mocks.docs.set('m_0', doc('m_0', [{ id: 'm_arquivada', score: 0.95 }]))
+      await fillRelatedMemories()
+      expect(mocks.docs.get('m_arquivada')?.related).toEqual([{ id: 'm_0', score: 0.9 }])
+      expect(mocks.docs.get('m_0')?.related).toEqual([{ id: 'm_arquivada', score: 0.95 }])
+      expect(mocks.call).not.toHaveBeenCalledWith('GET', expect.objectContaining({ path: '/v1/memories/m_arquivada' }))
+    })
+
+    it('falha ao listar as memórias não apaga nada', async () => {
+      mocks.docs.set('m_x', doc('m_x', []))
+      mocks.call.mockRejectedValueOnce(new Error('Engramind fora do ar'))
+      await expect(fillRelatedMemories()).rejects.toThrow()
+      expect(mocks.docs.has('m_x')).toBe(true)
     })
   })
 })

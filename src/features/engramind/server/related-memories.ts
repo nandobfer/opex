@@ -115,16 +115,23 @@ export async function computeRelated(id: string): Promise<"ok" | "gone" | "faile
     }
 }
 
-/** Ids das memórias ativas e fixadas (paginado; só os ids ficam). */
-async function listMemoryIds(): Promise<string[]> {
-    const ids: string[] = []
+/**
+ * Ids das memórias que existem no Engramind (paginado; só id e status ficam): `active` = ativas e fixadas (as que
+ * entram no cálculo); `all` inclui as arquivadas (que continuam existindo e não saem do cache).
+ */
+async function listMemoryIds(): Promise<{ active: string[]; all: Set<string> }> {
+    const active: string[] = []
+    const all = new Set<string>()
     let cursor: string | undefined
     do {
-        const page = await engramindCall<{ memories?: Pick<EngramindMemory, "id">[]; next_cursor?: string | null } | null>("GET", { path: "/v1/memories", query: { status: "active,permanent", limit: LIST_PAGE, cursor } })
-        for (const memory of page?.memories ?? []) ids.push(memory.id)
+        const page = await engramindCall<{ memories?: Pick<EngramindMemory, "id" | "status">[]; next_cursor?: string | null } | null>("GET", { path: "/v1/memories", query: { status: "active,permanent,archived", limit: LIST_PAGE, cursor } })
+        for (const memory of page?.memories ?? []) {
+            all.add(memory.id)
+            if (memory.status !== "archived") active.push(memory.id)
+        }
         cursor = page?.next_cursor ?? undefined
     } while (cursor)
-    return ids
+    return { active, all }
 }
 
 async function readState(): Promise<NonNullable<IEngramindState["relatedMemories"]> | null> {
@@ -135,8 +142,13 @@ async function readState(): Promise<NonNullable<IEngramindState["relatedMemories
 
 /** Preenche o que falta (memória sem cálculo ou que falhou há mais de `RELATED_REFILL_MS`), em lotes. */
 export async function fillRelatedMemories(): Promise<void> {
-    const ids = await listMemoryIds()
+    const listed = await listMemoryIds()
+    const ids = listed.active
     await engramindDb()
+    // Memória que sumiu do Engramind sem o webhook (Opex fora do ar, entrega perdida): sai do cache e das listas das outras.
+    const cached = await EngramindRelatedMemory.find({}).select({ _id: 1 }).lean<{ _id: string }[]>()
+    const orphans = cached.map((doc) => doc._id).filter((id) => !listed.all.has(id))
+    for (const id of orphans) await removeRelatedMemory(id)
     const docs = await EngramindRelatedMemory.find({ _id: { $in: ids } }).select({ computedAt: 1, failedAt: 1 }).lean<{ _id: string; computedAt: Date | null; failedAt: Date | null }[]>()
     const known = new Map(docs.map((doc) => [doc._id, doc]))
     const now = Date.now()
@@ -151,7 +163,7 @@ export async function fillRelatedMemories(): Promise<void> {
         await publishEngramind({ type: RELATED_MEMORIES_EVENT_TYPE }, { live: false })
     }
     await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { "relatedMemories.completedAt": new Date() } })
-    engramindLog.info({ memorias: ids.length, calculadas: missing.length }, "[engramind] similares das memórias atualizadas")
+    engramindLog.info({ memorias: ids.length, calculadas: missing.length, removidas: orphans.length }, "[engramind] similares das memórias atualizadas")
 }
 
 /** Dispara o preenchimento em segundo plano (um por processo). */
