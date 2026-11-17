@@ -7,7 +7,7 @@ import { useChartAnimation } from "@/components/metrics/charts/use-chart-animati
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
 import { formatGoDate, formatGoFullDate, formatGoPercent, goAxisTicks } from "../../go-logic"
 import type { GoChartDto } from "../../go-types"
-import { GO_CEILING_COLOR, GO_CEILING_DASH, GO_CEILING_OPACITY, GO_FORECAST_COLOR, GO_GRID_COLOR, GO_MUTED_COLOR, GO_USAGE_COLOR } from "./chart-style"
+import { GO_CARD_COLOR, GO_CEILING_COLOR, GO_CEILING_DASH, GO_CEILING_OPACITY, GO_FORECAST_COLOR, GO_GRID_COLOR, GO_GRID_OPACITY, GO_MUTED_COLOR, GO_USAGE_COLOR } from "./chart-style"
 import { GoAxisStrip } from "./GoAxisStrip"
 import { GoChartTooltip } from "./GoChartTooltip"
 import { GO_AXIS_STRIP_HEIGHT, GO_CHART_HEIGHT } from "./layout"
@@ -28,11 +28,11 @@ const TABLE_COLUMNS = [
 const LEGEND = [
     { key: "usage", label: "Uso", color: GO_USAGE_COLOR, dotted: false },
     { key: "forecast", label: "Previsão", color: GO_FORECAST_COLOR, dotted: false },
-    { key: "ceiling", label: "Teto mensal", color: GO_MUTED_COLOR, dotted: true },
+    { key: "ceiling", label: "Teto mensal", color: GO_CEILING_COLOR, dotted: true },
 ]
 
 const pct = (value: number | null) => (value === null ? "—" : formatGoPercent(value))
-const hollow = (color: string) => ({ r: 4.5, fill: "var(--card)", stroke: color, strokeWidth: 2 })
+const hollow = (color: string) => ({ r: 4.5, fill: GO_CARD_COLOR, stroke: color, strokeWidth: 2 })
 
 /**
  * Gráfico de um ciclo da assinatura no desenho do Console do OpenCode Go: eixo de 0% a 150% com grade apagada,
@@ -68,7 +68,7 @@ export function GoUsageChart({ chart, dailyAverage }: { chart: GoChartDto; daily
                                 <line x1={0} y1={0} x2={0} y2={6} stroke={GO_FORECAST_COLOR} strokeOpacity={0.14} strokeWidth={2} />
                             </pattern>
                         </defs>
-                        <CartesianGrid vertical={false} stroke={GO_GRID_COLOR} strokeOpacity={0.5} />
+                        <CartesianGrid vertical={false} stroke={GO_GRID_COLOR} strokeOpacity={GO_GRID_OPACITY} />
                         <XAxis dataKey="t" type="number" scale="time" domain={[startMs, endMs]} hide />
                         <YAxis domain={[0, chart.yMax]} ticks={ticks} width={44} tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: GO_MUTED_COLOR }} tickFormatter={(value: number) => `${value}%`} />
                         <ChartTooltip cursor={{ stroke: GO_GRID_COLOR }} content={<GoChartTooltip points={chart.points} />} />

@@ -41,6 +41,7 @@ vi.mock('@/components/ui/chart', async (importOriginal) => ({
 }))
 
 import { GoUsageChart } from '@/features/opencode-quota/components/go/GoUsageChart'
+import * as chartStyle from '@/features/opencode-quota/components/go/chart-style'
 
 const NOW = Date.parse('2026-11-16T19:57:00.000Z')
 const CROSS = Date.parse('2026-12-01T09:34:56.000Z')
@@ -89,7 +90,7 @@ describe('GoUsageChart (desenho do Console)', () => {
     expect(of('Line')[0]).toMatchObject({ dataKey: 'forecast', type: 'linear' })
     const dots = of('ReferenceDot')
     expect(dots.map((props) => [props.x, props.y])).toEqual([[NOW, 44.3], [CROSS, 100], [END, 115.9]])
-    expect(dots.every((props) => props.fill === 'var(--card)')).toBe(true)
+    expect(dots.every((props) => props.fill === 'var(--color-card)')).toBe(true)
     expect((dots[2]!.label as { value: string }).value).toBe('116%')
   })
 
@@ -100,6 +101,38 @@ describe('GoUsageChart (desenho do Console)', () => {
     expect(container.querySelector('[data-go-tick="crossing"]')!.getAttribute('font-weight')).toBe('700')
     expect(container.querySelector('[data-go-average] strong')!.textContent).toBe('3,9%')
     expect([...container.querySelectorAll('[data-go-legend]')].map((node) => node.textContent)).toEqual(['Uso', 'Previsão', 'Teto mensal'])
+  })
+
+  it('teto de 100% em cor pronta do tema, mais forte que a grade', () => {
+    render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
+    const ceiling = of('ReferenceLine').find((props) => props.y === 100)!
+    const grid = of('CartesianGrid')[0]!
+    expect(ceiling.stroke).toBe('var(--color-foreground)')
+    expect(Number(ceiling.strokeOpacity)).toBeGreaterThan(Number(grid.strokeOpacity))
+    expect(Number(ceiling.strokeWidth)).toBeGreaterThan(Number(grid.strokeWidth ?? 1))
+  })
+
+  it('regressão (texto preto e teto invisível): toda cor do SVG é pronta, nunca variável base do tema', () => {
+    // `--foreground`, `--muted-foreground`, `--border` e `--card` guardam só números de HSL: num fill/stroke viram cor inválida.
+    const base = /var\(--(foreground|muted-foreground|border|card)\)/
+    const ready = (value: unknown) => typeof value !== 'string' || value === 'none' || value.startsWith('url(') || /^(var\(--(color|chart)-[a-z0-9-]+\)|#[0-9a-f]{3,8})$/i.test(value)
+    for (const [name, value] of Object.entries(chartStyle)) if (name.endsWith('_COLOR')) expect(ready(value), value).toBe(true)
+
+    const { container } = render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
+    for (const { type, props } of calls) {
+      for (const key of ['stroke', 'fill']) expect(ready(props[key]), `${type}.${key} = ${String(props[key])}`).toBe(true)
+      const tick = props.tick as { fill?: unknown } | undefined
+      if (tick) expect(ready(tick.fill), `${type}.tick.fill`).toBe(true)
+    }
+    for (const node of container.querySelectorAll('[fill], [stroke]')) {
+      for (const attr of ['fill', 'stroke']) {
+        const value = node.getAttribute(attr)
+        if (value) expect(ready(value), `<${node.tagName}> ${attr}=${value}`).toBe(true)
+      }
+    }
+    expect(container.innerHTML).not.toMatch(base)
+    const ceilingLegend = container.querySelector('[data-go-legend="ceiling"] span span') as HTMLElement
+    expect(ceilingLegend.getAttribute('style')).toContain('var(--color-foreground)')
   })
 
   it('sem previsão (limite atingido ou ciclo passado) não desenha cruzamento nem fim', () => {

@@ -239,6 +239,11 @@ Reproduz o card de uso do Console do OpenCode Go:
   do cruzamento em amarelo e negrito. Rodapé: "Média de **3,9%** por dia" e a legenda Uso / Previsão / Teto
   mensal (barrinhas verticais, a do teto pontilhada, `LegendBar`). Ciclo passado ganha o título "Ciclo de 5 out
   a 5 nov" e não tem previsão. Tooltip por ponto (dia, uso do dia, acumulado, previsão) e tabela oculta.
+- Cores do SVG (`chart-style.ts`): só cores prontas — as variáveis com prefixo do tema (`--color-foreground`,
+  `--color-muted-foreground`, `--color-border`, `--color-card`) ou as de gráfico (`--chart-*`). As variáveis base
+  (`--foreground`, `--border`…) guardam só os números do HSL e, num `fill`/`stroke`, deixavam o texto preto e o
+  teto sem desenho (achado da prévia de 17/11). Teto de 100%: `--color-foreground` com opacidade 0,7 e 1,5 px,
+  contra a grade em `--color-border` a 0,5 e 1 px; a marca "Teto mensal" da legenda usa a mesma cor do teto.
 - Estados: skeleton com a mesma estrutura (`GoUsageSkeleton`, constantes de `layout.ts`), chave não
   configurada (atalho para a integração), filtro sem assinatura, erro com "Tentar novamente" e selo
   "Desatualizado" quando a última leitura passa de 15 min.
