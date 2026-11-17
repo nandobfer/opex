@@ -215,6 +215,9 @@ sem pedido explícito.
   (`{ state, message, metrics, checkedAt, attemptedAt, staleAfterMs }`, só números), publicado pela rotina
   `host-metrics-refresh` quando um percentual arredondado ou o estado muda e, sem mudança, a cada 20 s; o
   cliente grava no cache sem nova consulta (ver `aicontext/modules/host-metrics.md`).
+- Assinatura OpenCode Go (OPE-167): `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app` quando os
+  percentuais da assinatura (5h, semanal, mensal, com uma casa) ou os resets mudam, publicado pela rotina
+  `opencode-go-usage-refresh` ou por uma leitura da tela (ver `aicontext/modules/opencode-quota.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`

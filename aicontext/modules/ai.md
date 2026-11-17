@@ -238,6 +238,9 @@ do `opencode serve`, não uma chave de API.
   responde `400 MissingSessionID`) e o `User-Agent` próprio `OPENCODE_GO_USER_AGENT` (exigência do Go
   para clientes de terceiros). Ids de sessão: `opex-agent-<sessão>` (Agente Opex),
   `opex-routine-<execução>` (rotineiros) e `opex-<uuid>` por geração nas demais features.
+- **Cota mensal por modelo** (OPE-167): o catálogo traz `go.monthly_usage.<plano>` (US$ por mês, ex.:
+  `deepseek-v4.1-flash` = 100 no `go`); `opencodeGoMonthlyAllowances` (puro) e `opencodeGoAllowances(plano)`
+  (cache do catálogo) dão a tabela que a série diária da assinatura usa. Gratuitos vêm `null`.
 - **Modelos** (`GET /openai/v1/models`, público; `opencode-go-models.ts`, puro): entram **todos** os
   modelos de texto (`type: "chat"`) de qualquer das quatro APIs (decisão do dono: não excluir modelo
   utilizável). Cada modelo é chamado pela API que o catálogo declara, com a SDK correspondente
@@ -363,6 +366,13 @@ do `opencode serve`, não uma chave de API.
   medição do provedor. Em `/integracoes/ia/opencode-go` o card é o mesmo, mas **com a coluna Custo
   (USD)**: o Go informa o custo de cada resposta (cota + Extra Usage, ver "OpenCode Go"); a rota
   também atende `opencode-go`. Desde a OPE-156 o painel do Go também tem o filtro de chave.
+- **Aba Consumo do OpenCode Go** (OPE-167, `OpencodeGoUsageTab`): a barra de filtros (período + chave,
+  `UsageFiltersBar`, extraída do `ProviderUsageCard`) aparece **uma vez** no topo e vale para os dois cards
+  abaixo (os filtros vivem na URL): **Assinatura OpenCode Go** (`OpencodeGoSubscriptionCard`, lido do Console
+  — ver `modules/opencode-quota.md`, "Assinatura OpenCode Go") e **Consumo do OpenCode Go pelo Opex** (o
+  `ProviderUsageCard` com `hideFilters`). Os demais provedores continuam com o filtro dentro do próprio card.
+- **Chave por id** (`getAiProviderKeyById`, `src/lib/ai/api-keys.ts`): lê e decifra no servidor uma chave
+  do chaveiro em uso ou não (filtro de chave da assinatura do Go); `null` se não existe ou não decifra.
 - **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek,
   OpenCode Go (OPE-156) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
   recebe o parâmetro `apiKey`. Opções:
