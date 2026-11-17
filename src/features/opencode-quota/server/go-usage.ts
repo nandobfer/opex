@@ -4,7 +4,7 @@ import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { API_KEY_ID_PATTERN, USAGE_KEY_ALL } from "@/features/ai/usage-key-filter"
 import type { UsageQuery } from "@/features/ai/provider-usage"
-import { GO_HISTORY_DAYS, GO_METER_IDS, GO_METER_LABELS, GO_MIN_REFRESH_MS, GO_STATUS_CACHE_MS, OPENCODE_GO_USAGE_UPDATED_EVENT } from "../go-constants"
+import { GO_HISTORY_DAYS, GO_METER_IDS, GO_METER_LABELS, GO_MIN_REFRESH_MS, GO_STATUS_CACHE_MS, OPENCODE_GO_USAGE_UPDATED_EVENT, GO_REQUEST_TIMEOUT_MS } from "../go-constants"
 import { addDaysKey, buildGoChart, cycleDayKeys, goCycleFor, goForecast, meterPercent, meterRatio, utcDateKey } from "../go-logic"
 import type { GoStatus } from "../go-schemas"
 import type { GoMeterDto, OpencodeGoUsageDto } from "../go-types"
@@ -143,7 +143,8 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
     const [series, realCostUsd] = await Promise.all([
         (async () => {
             try {
-                const allowances = await opencodeGoAllowances(status.product)
+                // Prazo próprio: um catálogo que não responde vira "gráfico indisponível" sem prender os medidores.
+                const allowances = await opencodeGoAllowances(status.product, { apiKey: key.apiKey, signal: AbortSignal.timeout(GO_REQUEST_TIMEOUT_MS) })
                 return await loadGoDays({ apiKey: key.apiKey, keyId: key.id, dates, allowances, nowMs, forceToday: reread })
             } catch (error) {
                 log().warn({ err: error instanceof Error ? error.message : String(error) }, "[opencode-go] catálogo de cotas indisponível")

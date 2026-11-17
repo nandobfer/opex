@@ -194,6 +194,10 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   do ciclo**, ganha um ponto no fim de cada dia UTC (primeiro e último dia pró-rateados pelos horários de
   início e fim do ciclo) e, no ciclo atual, termina em **agora** com o valor exato do **medidor** (o mesmo do
   cabeçalho). Num ciclo passado termina na renovação, com a soma dos dias.
+- O "Uso do dia" da dica no primeiro e no último dia do ciclo é o mesmo pedaço pró-rateado que entra no
+  acumulado (não o balde UTC cheio).
+- O catálogo de cotas é lido com a **chave do filtro** (não exige chave em uso) e com prazo de
+  `GO_REQUEST_TIMEOUT_MS`; sem resposta, o gráfico vira "indisponível" e os medidores aparecem normalmente.
 - **Dias sem dados**: a linha quebra, contam **0** no acumulado e o card avisa "Acumulado parcial: N dias do
   ciclo sem dados…".
 - **Teto mensal fixo em 100%** (nunca relativo).

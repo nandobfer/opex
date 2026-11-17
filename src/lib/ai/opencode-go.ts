@@ -43,10 +43,13 @@ function networkError(error: unknown): AiProviderError {
     return new AiProviderError(`Não foi possível conectar ao OpenCode Go: ${error instanceof Error ? error.message : String(error)}`)
 }
 
-/** Catálogo bruto do gateway (cache curto); a lista é pública, mas só é lida com a integração configurada. */
-async function loadCatalog(signal?: AbortSignal, fresh = false): Promise<OpencodeGoRawModel[]> {
+/**
+ * Catálogo bruto do gateway (cache curto); a lista é pública, mas só é lida com a integração configurada: com a
+ * chave informada (ex.: a do filtro da assinatura) ou, sem ela, com a chave em uso.
+ */
+async function loadCatalog(signal?: AbortSignal, fresh = false, key?: string): Promise<OpencodeGoRawModel[]> {
     if (!fresh && catalogCache && Date.now() - catalogCache.at < CATALOG_CACHE_MS) return catalogCache.list
-    const { apiKey } = await activeOpencodeGoKey()
+    const apiKey = key ?? (await activeOpencodeGoKey()).apiKey
     let res: Response
     try {
         res = await debugFetch(integrationDebug("ai_opencode_go"), LABEL, `${OPENCODE_GO_API_URL}/models`, {
@@ -70,9 +73,12 @@ export async function listOpencodeGoModels(signal?: AbortSignal): Promise<AiMode
     return toOpencodeGoModels(await loadCatalog(signal, true))
 }
 
-/** Cota mensal de cada modelo no plano da assinatura (`go`, `go-plus`…), do catálogo em cache. */
-export async function opencodeGoAllowances(product: string, signal?: AbortSignal): Promise<Map<string, number | null>> {
-    return opencodeGoMonthlyAllowances(await loadCatalog(signal), product)
+/**
+ * Cota mensal de cada modelo no plano da assinatura (`go`, `go-plus`…), do catálogo em cache. `apiKey` é a chave
+ * já resolvida pelo chamador (a do filtro), para não depender de haver chave em uso.
+ */
+export async function opencodeGoAllowances(product: string, options: { apiKey?: string; signal?: AbortSignal } = {}): Promise<Map<string, number | null>> {
+    return opencodeGoMonthlyAllowances(await loadCatalog(options.signal, false, options.apiKey), product)
 }
 
 /**

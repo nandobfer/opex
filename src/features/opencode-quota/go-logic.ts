@@ -180,8 +180,10 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         if (percent === null && !isToday) missingDays++
         else if (day?.partial) partialDays++
         if (isToday) break
-        cumulative += (percent ?? 0) * ((to - from) / DAY_MS)
-        points.push({ t: to, date: key, dayPercent: percent === null ? null : round(percent), usage: percent === null ? null : round(cumulative), forecast: null, dayForecast: null })
+        // Primeiro e último dia do ciclo entram pró-rateados — no acumulado e no "uso do dia" da dica.
+        const share = percent === null ? null : percent * ((to - from) / DAY_MS)
+        cumulative += share ?? 0
+        points.push({ t: to, date: key, dayPercent: share === null ? null : round(share), usage: percent === null ? null : round(cumulative), forecast: null, dayForecast: null })
     }
 
     let today: GoChartDto["today"] = null

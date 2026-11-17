@@ -176,6 +176,35 @@ describe('getOpencodeGoUsage', () => {
     expect(recovered.chart!.points.find((point) => point.date === '2026-11-10')!.usage).not.toBeNull()
   })
 
+  it('catálogo que não responde vira "gráfico indisponível" no prazo, sem prender os medidores', async () => {
+    // O prazo é o AbortSignal.timeout(GO_REQUEST_TIMEOUT_MS): aqui ele "vence" na hora, sem esperar 15 s.
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockImplementation((ms: number) => {
+      const deadline = new AbortController()
+      if (ms === 15_000) queueMicrotask(() => deadline.abort())
+      return deadline.signal
+    })
+    let received: AbortSignal | undefined
+    mocks.allowances.mockImplementationOnce((_product: string, options: { signal?: AbortSignal }) => {
+      received = options.signal
+      return new Promise((_, reject) => {
+        if (options.signal?.aborted) reject(new Error('aborted'))
+        options.signal?.addEventListener('abort', () => reject(new Error('aborted')))
+      })
+    })
+    const dto = await getOpencodeGoUsage(query)
+    timeout.mockRestore()
+    expect(received?.aborted).toBe(true)
+    expect(dto.state).toBe('ok')
+    expect(dto.monthPercent).toBe(43.9)
+    expect(dto.chart).toBeNull()
+    expect(dto.chartMessage).toMatch(/catálogo/)
+  })
+
+  it('o catálogo é lido com a chave do filtro (não exige chave em uso)', async () => {
+    await getOpencodeGoUsage(query)
+    expect(mocks.allowances).toHaveBeenCalledWith('go', expect.objectContaining({ apiKey: 'oc_sk_secret' }))
+  })
+
   it('sem catálogo de cotas mostra os medidores e explica o gráfico indisponível', async () => {
     mocks.allowances.mockRejectedValue(new Error('offline'))
     const dto = await getOpencodeGoUsage(query)

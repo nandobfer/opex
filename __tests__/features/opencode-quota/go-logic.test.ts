@@ -112,6 +112,9 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     const before = (START - Date.parse('2026-11-05T00:00:00Z')) / DAY
     expect(chart.points[1]).toMatchObject({ t: Date.parse('2026-11-06T00:00:00Z'), date: '2026-11-05' })
     expect(chart.points[1]!.usage).toBeCloseTo(4 * (1 - before), 2)
+    // O uso do dia da dica é o mesmo pedaço pró-rateado (não o balde UTC cheio), igual ao acumulado do 1º dia.
+    expect(chart.points[1]!.dayPercent).toBe(chart.points[1]!.usage)
+    expect(chart.points[2]!.dayPercent).toBe(4)
     const today = chart.points.find((point) => point.t === NOW)!
     expect(today.usage).toBe(44.3)
     expect(chart.today).toEqual({ t: NOW, percent: 44.3 })
@@ -186,6 +189,8 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     const chart = buildGoChart({ cycle: past, nowMs: NOW, days: days(series), monthRatio: 44.3, forecast, historyFrom: '2026-10-05' })
     expect(chart.points.at(-1)!.t).toBe(START)
     expect(chart.points.at(-1)!.usage).toBeCloseTo(31, 1)
+    // Último dia (05/11 até 12:15) pró-rateado também no uso do dia.
+    expect(chart.points.at(-1)!.dayPercent).toBeCloseTo((START - Date.parse('2026-11-05T00:00:00Z')) / DAY, 2)
     expect(chart.today).toBeNull()
     expect(chart.forecastEnd).toBeNull()
     expect(chart.cycle.current).toBe(false)
