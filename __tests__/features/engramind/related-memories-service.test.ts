@@ -253,5 +253,26 @@ describe('similares das memórias (OPE-164)', () => {
       await expect(fillRelatedMemories()).rejects.toThrow()
       expect(mocks.docs.has('m_x')).toBe(true)
     })
+
+    it('regressão: página nula ou sem a lista na listagem aborta o preenchimento sem apagar nada', async () => {
+      mocks.docs.set('m_0', doc('m_0', [{ id: 'm_1', score: 0.9 }]))
+      mocks.call.mockResolvedValueOnce(null)
+      await expect(fillRelatedMemories()).rejects.toThrow()
+      mocks.call.mockResolvedValueOnce({ next_cursor: null })
+      await expect(fillRelatedMemories()).rejects.toThrow()
+      expect(mocks.docs.get('m_0')?.related).toEqual([{ id: 'm_1', score: 0.9 }])
+    })
+
+    it('regressão: memória gravada pelo webhook durante a listagem não é tratada como órfã', async () => {
+      const list = mocks.call.getMockImplementation()!
+      mocks.call.mockImplementationOnce(async (method: string, request: { path: string }) => {
+        // A listagem já passou; o webhook `memory.created` grava a memória nova no cache.
+        const page = await list(method, request)
+        mocks.docs.set('m_nova', doc('m_nova', [{ id: 'm_0', score: 0.9 }]))
+        return page
+      })
+      await fillRelatedMemories()
+      expect(mocks.docs.get('m_nova')?.related).toEqual([{ id: 'm_0', score: 0.9 }])
+    })
   })
 })

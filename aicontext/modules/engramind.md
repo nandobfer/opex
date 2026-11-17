@@ -431,7 +431,8 @@ novas posições e o quadro se reenquadra).
     `memory.archived` não muda nada (a lib descarta as inativas);
   - memória que sumiu do Engramind sem o webhook (Opex fora do ar, entrega perdida) sai no próximo preenchimento:
     a listagem traz todos os status, e o documento cujo id não existe mais sai do cache e das listas das outras
-    (a arquivada continua existindo e fica);
+    (a arquivada continua existindo e fica). O cache é lido antes da listagem (o que o webhook grava durante ela
+    não vira órfão), e uma página sem a lista de memórias aborta o preenchimento sem apagar nada;
   - a resposta é o `MemoryDetail` **plano** do Engramind (`allOf [Memory, { similar }]`): `id`, `channel`,
     `version` e `similar` no topo, sem envelope `memory`. Só o 404 `MEMORY_NOT_FOUND` tira a memória do cache;
     erro, outro 404 (rota, proxy), resposta inesperada (sem `channel` no topo ou de outro `id`) ou lentidão do

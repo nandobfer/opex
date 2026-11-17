@@ -125,11 +125,13 @@ async function listMemoryIds(): Promise<{ active: string[]; all: Set<string> }> 
     let cursor: string | undefined
     do {
         const page = await engramindCall<{ memories?: Pick<EngramindMemory, "id" | "status">[]; next_cursor?: string | null } | null>("GET", { path: "/v1/memories", query: { status: "active,permanent,archived", limit: LIST_PAGE, cursor } })
-        for (const memory of page?.memories ?? []) {
+        // Página sem a lista (2xx sem corpo, proxy): erro, para a varredura de órfãos não apagar o cache inteiro.
+        if (!page || !Array.isArray(page.memories)) throw new Error("listagem de memórias do Engramind sem a lista")
+        for (const memory of page.memories) {
             all.add(memory.id)
             if (memory.status !== "archived") active.push(memory.id)
         }
-        cursor = page?.next_cursor ?? undefined
+        cursor = page.next_cursor ?? undefined
     } while (cursor)
     return { active, all }
 }
@@ -142,11 +144,12 @@ async function readState(): Promise<NonNullable<IEngramindState["relatedMemories
 
 /** Preenche o que falta (memória sem cálculo ou que falhou há mais de `RELATED_REFILL_MS`), em lotes. */
 export async function fillRelatedMemories(): Promise<void> {
+    await engramindDb()
+    // O cache é lido ANTES da listagem: um documento gravado durante ela (webhook `memory.created`) não vira órfão.
+    const cached = await EngramindRelatedMemory.find({}).select({ _id: 1 }).lean<{ _id: string }[]>()
     const listed = await listMemoryIds()
     const ids = listed.active
-    await engramindDb()
     // Memória que sumiu do Engramind sem o webhook (Opex fora do ar, entrega perdida): sai do cache e das listas das outras.
-    const cached = await EngramindRelatedMemory.find({}).select({ _id: 1 }).lean<{ _id: string }[]>()
     const orphans = cached.map((doc) => doc._id).filter((id) => !listed.all.has(id))
     for (const id of orphans) await removeRelatedMemory(id)
     const docs = await EngramindRelatedMemory.find({ _id: { $in: ids } }).select({ computedAt: 1, failedAt: 1 }).lean<{ _id: string; computedAt: Date | null; failedAt: Date | null }[]>()
