@@ -26,7 +26,7 @@ vi.mock('@/lib/integrations/debug', () => ({
 }))
 
 import { streamText } from 'ai'
-import { clearOpencodeGoCatalogCache, createOpencodeGoModel, listOpencodeGoModels, verifyOpencodeGoKey } from '@/lib/ai/opencode-go'
+import { clearOpencodeGoCatalogCache, createOpencodeGoModel, listOpencodeGoModels, opencodeGoAllowances, verifyOpencodeGoKey } from '@/lib/ai/opencode-go'
 import { OPENCODE_GO_USER_AGENT } from '@/lib/ai/endpoints'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
@@ -91,6 +91,20 @@ describe('listOpencodeGoModels', () => {
     await expect(verifyOpencodeGoKey()).rejects.toThrow(message)
     await expect(createOpencodeGoModel('deepseek-v4.1-flash')).rejects.toThrow(message)
     expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('opencodeGoAllowances (OPE-167)', () => {
+  it('com a chave do filtro lê o catálogo mesmo sem chave em uso, e repassa o prazo', async () => {
+    mocks.key = null
+    mocks.fetch.mockResolvedValue(json({ data: [{ id: 'glm-5.3', go: { monthly_usage: { go: 15 } } }] }))
+    const signal = new AbortController().signal
+    const allowances = await opencodeGoAllowances('go', { apiKey: 'oc_sk_do_filtro', signal })
+    expect(allowances.get('glm-5.3')).toBe(15)
+    const [, init] = mocks.fetch.mock.calls[0] as [string, RequestInit]
+    expect((init.headers as Record<string, string>).Authorization).toBe('Bearer oc_sk_do_filtro')
+    expect(init.signal).toBe(signal)
+    expect(mocks.requireKey).not.toHaveBeenCalled()
   })
 })
 

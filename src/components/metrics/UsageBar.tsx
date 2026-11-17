@@ -6,7 +6,9 @@ import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { cn } from "@/lib/utils"
 import { USAGE_LEVEL_CLASSES, USAGE_PULSE_PERCENT, usageLevel } from "./usage-level"
 
-const formatPercent = (value: number) => `${Math.round(value)}%`
+/** % inteiro (padrão) ou com casas decimais em pt-BR (ex.: 43,9%). */
+const percentFormatter = (fractionDigits: number) => (value: number) =>
+    fractionDigits > 0 ? `${value.toLocaleString("pt-BR", { minimumFractionDigits: fractionDigits, maximumFractionDigits: fractionDigits })}%` : `${Math.round(value)}%`
 
 interface UsageBarProps {
     /** Rótulo à esquerda (ex.: "5h", "RAM"). */
@@ -20,6 +22,8 @@ interface UsageBarProps {
     detailTitle?: string
     /** Atributos de teste/estado no contêiner (ex.: `data-quota-window`). */
     dataAttributes?: Record<`data-${string}`, string>
+    /** Casas decimais do % exibido (padrão 0, inteiro). */
+    fractionDigits?: number
 }
 
 /**
@@ -27,7 +31,7 @@ interface UsageBarProps {
  * animado à direita, barra colorida pela faixa (`usageLevel`), largura animada com Framer Motion e
  * pulso no vermelho a partir de 95% — sem animação com movimento reduzido.
  */
-export function UsageBar({ label, percent, ariaLabel, detail, detailTitle, dataAttributes }: UsageBarProps) {
+export function UsageBar({ label, percent, ariaLabel, detail, detailTitle, dataAttributes, fractionDigits = 0 }: UsageBarProps) {
     const reduceMotion = useReducedMotion()
     const used = Math.min(100, Math.max(0, percent))
     const level = usageLevel(used)
@@ -44,7 +48,7 @@ export function UsageBar({ label, percent, ariaLabel, detail, detailTitle, dataA
                             {detail}
                         </span>
                     )}
-                    <AnimatedNumber value={used} formatter={formatPercent} className={cn("font-mono font-semibold tabular-nums transition-colors duration-300", colors.text)} />
+                    <AnimatedNumber value={used} formatter={percentFormatter(fractionDigits)} className={cn("font-mono font-semibold tabular-nums transition-colors duration-300", colors.text)} />
                 </span>
             </div>
             <div role="progressbar" aria-label={ariaLabel} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(used)} className="h-1.5 w-full overflow-hidden rounded-full bg-muted">

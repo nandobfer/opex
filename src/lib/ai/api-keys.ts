@@ -26,6 +26,20 @@ export async function getActiveAiProviderKey(integrationId: IntegrationId): Prom
     return apiKey.trim() ? { id: active.id, name: active.name, apiKey } : null
 }
 
+/** Uma chave do chaveiro pelo id (em uso ou não), decifrada só no servidor; `null` se não existe ou não decifra. */
+export async function getAiProviderKeyById(integrationId: IntegrationId, keyId: string): Promise<ActiveAiProviderKey | null> {
+    const stored = await loadStoredIntegration(integrationId)
+    const item = stored?.apiKeys?.find((key) => key.id === keyId)
+    if (!item || !isEncryptedSecret(item.secret)) return null
+    let apiKey: string
+    try {
+        apiKey = decryptSecret(item.secret)
+    } catch {
+        return null
+    }
+    return apiKey.trim() ? { id: item.id, name: item.name, apiKey } : null
+}
+
 /** Chave ativa ou erro acionável em pt-BR (provedor sem chave = não configurado). */
 export async function requireActiveAiProviderKey(integrationId: IntegrationId, providerName: string): Promise<ActiveAiProviderKey> {
     const key = await getActiveAiProviderKey(integrationId)

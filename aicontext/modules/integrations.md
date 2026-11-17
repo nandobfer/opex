@@ -266,7 +266,9 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   `modules/opex-agent.md`), `agent-usage-daily` (60 min — sincroniza as execuções e as conversas dos
   agentes e gera o resumo diário de uso; a primeira execução faz o backfill retroativo; ver
   `modules/agent-metrics.md`), `opencode-quota-refresh` (5 min — relê a quota do plugin `opencode-quota` no
-  host do OpenCode e publica `opencode-quota-updated` só quando muda; ver `modules/opencode-quota.md`) e
+  host do OpenCode e publica `opencode-quota-updated` só quando muda; ver `modules/opencode-quota.md`),
+  `opencode-go-usage-refresh` (5 min, ligada — relê o status da assinatura OpenCode Go no Console e publica
+  `opencode-go-usage-updated` só quando os percentuais ou os resets mudam; ver `modules/opencode-quota.md`) e
   `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
   ao ativar a Builder Machine — ver `modules/builder-machine.md`) e `environments-registry-cleanup`
   (diária às 04:00, **nasce desligada** — mantém as últimas tags de cada ambiente no registry; ver
