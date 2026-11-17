@@ -5,7 +5,7 @@ import { BREAKPOINTS } from "@/lib/ui/breakpoints"
 
 /**
  * Estado da sidebar: no desktop ela é **sempre recolhida** (68px, sem recolher/expandir); em tela
- * estreita o menu vira uma gaveta sobre o conteúdo, aberta pelo botão flutuante e fechada por
+ * estreita o menu vira uma gaveta sobre o conteúdo, aberta pelo botão "Abrir menu" do cabeçalho do celular e fechada por
  * Esc/fundo/link.
  */
 export function useSidebarState() {

@@ -17,6 +17,9 @@ import { OpexUploadsProvider } from "../../hooks/useOpexUploads"
 import { onOpenOpexSession } from "../../open-session"
 import { OpexScopeProvider, useOpexScope, type OpexClientUiScope } from "../OpexScopeProvider"
 import { AgentChatPanel } from "./AgentChatPanel"
+import { AgentChatIcon } from "./AgentChatIcon"
+import { HeaderIconButton } from "@/features/layout/components/header/HeaderIconButton"
+import { useMobileHeaderFloating } from "@/features/layout/components/header/mobile-header-context"
 import { AgentSwitchProvider, useAgentSwitch } from "./AgentSwitchProvider"
 
 const MOBILE_MAX = 768
@@ -34,12 +37,19 @@ function useViewport(): { width: number; height: number } {
 }
 
 export interface AgentChatNavItemProps {
-    collapsed: boolean
+    collapsed?: boolean
     /** Portal do cliente (sem = app do dono). */
     client?: OpexClientUiScope
     /** Portal: agentes ligados para o cliente no carregamento da página. */
     initial?: Partial<Record<ChatAgentId, boolean>>
+    /**
+     * `"header"` (OPE-168): botão de ícone do cabeçalho do celular, sem `<li>`; o chat abre em tela cheia
+     * (< 768px) ou abaixo do botão. Padrão: item do menu lateral.
+     */
+    variant?: AgentChatNavItemVariant
 }
+
+export type AgentChatNavItemVariant = "sidebar" | "header"
 
 /**
  * Item **único** dos agentes de chat na barra lateral (dono e portal): abre o último agente escolhido
@@ -47,11 +57,11 @@ export interface AgentChatNavItemProps {
  * Agente Maddox, e o item acompanha (nome, ícone e cor). Ponto pulsando: alguma sessão de qualquer
  * agente respondendo ou aguardando confirmação. Atalhos: Ctrl+Shift+O (Opex) e Ctrl+Shift+M (Maddox).
  */
-export function AgentChatNavItem({ collapsed, client, initial }: AgentChatNavItemProps) {
+export function AgentChatNavItem({ collapsed = false, client, initial, variant = "sidebar" }: AgentChatNavItemProps) {
     return (
         <AgentSwitchProvider client={client} initial={initial}>
             <AgentUploads>
-                <AgentChatNavItemContent collapsed={collapsed} />
+                <AgentChatNavItemContent collapsed={collapsed} variant={variant} />
             </AgentUploads>
         </AgentSwitchProvider>
     )
@@ -84,7 +94,7 @@ function AgentActivity() {
     return null
 }
 
-function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
+function AgentChatNavItemContent({ collapsed, variant }: { collapsed: boolean; variant: AgentChatNavItemVariant }) {
     const { available, active, setActive, scopes, colors, busy } = useAgentSwitch()
     const [open, setOpen] = useState(false)
     const [maximized, setMaximized] = useState(false)
@@ -94,6 +104,7 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
     const viewport = useViewport()
     const mobile = viewport.width < MOBILE_MAX
     const opexAvailable = available.includes("opex")
+    const floating = useMobileHeaderFloating()
 
     // Painéis já abertos ficam montados (rascunho e rolagem preservados ao trocar de agente): ajuste
     // de estado durante o render, a partir do agente ativo.
@@ -167,31 +178,18 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
         </>
     )
 
-    const trigger = (
+    const header = variant === "header"
+    const iconNode = <AgentChatIcon active={active} icon={Icon} open={open} anyBusy={anyBusy} colors={colors} busyAgent={busyAgent} reduceMotion={reduceMotion} dotRingClassName={header ? (floating ? "ring-card" : "ring-background") : undefined} />
+
+    const trigger = header ? (
+        <HeaderIconButton aria-label={agent.label} title={agent.label} aria-expanded={open} aria-haspopup="dialog" floating={floating} active={open} onClick={() => setOpen((value) => !value)} data-testid="agent-header-item">
+            {iconNode}
+            {anyBusy && <span className="sr-only">: respondendo</span>}
+        </HeaderIconButton>
+    ) : (
         <button type="button" aria-label={collapsed ? agent.label : undefined} aria-expanded={open} aria-haspopup="dialog" className={cn("block w-full rounded-[4px]", SIDEBAR_FOCUS_RING)} onClick={() => setOpen((value) => !value)} data-testid="agent-nav-item">
             <SidebarItemSurface active={open} activeBar={false} collapsed={collapsed} reduceMotion={reduceMotion}>
-                <span className="relative" style={agentColorStyle(colors[active])}>
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.span
-                            key={active}
-                            className="inline-flex text-primary"
-                            initial={reduceMotion ? false : { opacity: 0, scale: 0.6, rotate: -20 }}
-                            animate={open && !reduceMotion ? { opacity: 1, scale: 1, rotate: [0, -12, 10, 0] } : { opacity: 1, scale: 1, rotate: 0 }}
-                            exit={reduceMotion ? undefined : { opacity: 0, scale: 0.6, rotate: 20 }}
-                            transition={{ duration: 0.3 }}
-                        >
-                            <Icon className="h-5 w-5 shrink-0" aria-hidden />
-                        </motion.span>
-                    </AnimatePresence>
-                    <AnimatePresence>
-                        {anyBusy && (
-                            <motion.span key="busy" initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }} className="absolute -right-1 -top-1 flex h-2.5 w-2.5" style={agentColorStyle(colors[busyAgent])} aria-hidden data-testid="agent-nav-busy">
-                                {!reduceMotion && <motion.span className="absolute inset-0 rounded-full bg-primary" animate={{ opacity: [0.7, 0], scale: [1, 2.2] }} transition={{ duration: 1.4, repeat: Infinity }} />}
-                                <span className="relative h-2.5 w-2.5 rounded-full bg-primary ring-2 ring-sidebar" />
-                            </motion.span>
-                        )}
-                    </AnimatePresence>
-                </span>
+                {iconNode}
                 {!collapsed && (
                     <AnimatePresence mode="wait" initial={false}>
                         <motion.span key={active} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.15 }} className="min-w-0 flex-1 truncate text-left">
@@ -204,9 +202,11 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
         </button>
     )
 
+    const Wrapper = header ? "div" : "li"
+
     if (mobile) {
         return (
-            <li>
+            <Wrapper>
                 {activity}
                 <DialogPrimitive.Root open={open} onOpenChange={setOpen}>
                     <DialogPrimitive.Trigger asChild>{trigger}</DialogPrimitive.Trigger>
@@ -225,7 +225,7 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
                         )}
                     </AnimatePresence>
                 </DialogPrimitive.Root>
-            </li>
+            </Wrapper>
         )
     }
 
@@ -233,20 +233,20 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
     const height = maximized ? viewport.height - 24 : Math.min(680, viewport.height - 48)
 
     return (
-        <li>
+        <Wrapper>
             {activity}
             <PopoverPrimitive.Root open={open} onOpenChange={setOpen}>
-                <SidebarTooltip label={agent.label} enabled={collapsed && !open}>
+                <SidebarTooltip label={agent.label} enabled={collapsed && !open && !header}>
                     <PopoverPrimitive.Trigger asChild>{trigger}</PopoverPrimitive.Trigger>
                 </SidebarTooltip>
                 <AnimatePresence>
                     {open && (
                         <PopoverPrimitive.Portal forceMount>
-                            <PopoverPrimitive.Content forceMount asChild side="right" align="end" sideOffset={12} collisionPadding={12} onOpenAutoFocus={(event) => event.preventDefault()} aria-label={agent.label}>
+                            <PopoverPrimitive.Content forceMount asChild side={header ? "bottom" : "right"} align="end" sideOffset={header ? 8 : 12} collisionPadding={12} onOpenAutoFocus={(event) => event.preventDefault()} aria-label={agent.label}>
                                 <motion.div
-                                    initial={{ opacity: 0, scale: 0.92, x: -12 }}
-                                    animate={{ opacity: 1, scale: 1, x: 0, width, height }}
-                                    exit={{ opacity: 0, scale: 0.94, x: -8, transition: { duration: 0.15 } }}
+                                    initial={header ? { opacity: 0, scale: 0.92, y: -12 } : { opacity: 0, scale: 0.92, x: -12 }}
+                                    animate={{ opacity: 1, scale: 1, x: 0, y: 0, width, height }}
+                                    exit={{ opacity: 0, scale: 0.94, ...(header ? { y: -8 } : { x: -8 }), transition: { duration: 0.15 } }}
                                     transition={reduceMotion ? { duration: 0 } : { type: "spring", stiffness: 380, damping: 32 }}
                                     style={{ transformOrigin: "var(--radix-popover-content-transform-origin)", ...agentColorStyle(colors[active]) }}
                                     className="z-50 flex flex-col overflow-hidden rounded-xl border bg-popover text-popover-foreground shadow-2xl shadow-primary/10"
@@ -258,6 +258,6 @@ function AgentChatNavItemContent({ collapsed }: { collapsed: boolean }) {
                     )}
                 </AnimatePresence>
             </PopoverPrimitive.Root>
-        </li>
+        </Wrapper>
     )
 }

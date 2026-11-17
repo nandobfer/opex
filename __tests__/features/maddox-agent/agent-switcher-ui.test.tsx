@@ -81,6 +81,32 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('item único dos agentes de chat', () => {
+  it('OPE-168: no cabeçalho do celular é um botão de ícone com o nome do agente e o ponto de atividade', async () => {
+    mocks.sessions.opex = [{ id: 's1', status: 'running', title: 'x' }]
+    const { container } = render(<AgentChatNavItem variant="header" />, { wrapper })
+    expect(container.querySelector('li')).toBeNull()
+    const button = screen.getByTestId('agent-header-item')
+    expect(button.getAttribute('aria-label')).toBe('Agente Opex')
+    expect(button.classList.contains('h-11')).toBe(true)
+    expect(await screen.findByTestId('agent-nav-busy')).toBeTruthy()
+    fireEvent.click(button)
+    expect(button.getAttribute('aria-expanded')).toBe('true')
+    expect(await screen.findByTestId('OpexDraftChat-opex')).toBeTruthy()
+  })
+
+  it('OPE-168: no celular estreito o botão do cabeçalho abre o chat em tela cheia', async () => {
+    const width = window.innerWidth
+    window.innerWidth = 500
+    try {
+      render(<AgentChatNavItem variant="header" />, { wrapper })
+      fireEvent.click(screen.getByRole('button', { name: 'Agente Opex' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Agente Opex' })
+      expect(dialog.className).toContain('inset-0')
+    } finally {
+      window.innerWidth = width
+    }
+  })
+
   it('mostra um único item e abre o último agente escolhido', () => {
     window.localStorage.setItem('opex:chat-agent:active:v1', JSON.stringify('maddox'))
     renderItem()

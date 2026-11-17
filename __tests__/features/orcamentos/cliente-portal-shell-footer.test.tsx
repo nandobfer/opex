@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import React from 'react'
-import { cleanup, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
@@ -10,7 +10,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
  * em tempo real) e o rodapé com divisor só aparece quando o item renderiza algo (`empty:hidden`).
  */
 
-const state = vi.hoisted(() => ({ on: false, props: null as unknown }))
+const state = vi.hoisted(() => ({ on: false, props: null as unknown, headerProps: null as unknown }))
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/navigation', () => ({ usePathname: () => '/cliente/dashboard', useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('next/link', () => ({
@@ -23,7 +23,11 @@ vi.mock('next/link', () => ({
 vi.mock('@/lib/pusher/RealtimeStatusBanner', () => ({ RealtimeStatusBanner: () => null }))
 vi.mock('@/features/orcamentos/portal/components/ClienteContextBar', () => ({ ClienteContextBar: () => null }))
 vi.mock('@/features/opex-agent/components/agents/AgentChatNavItem', () => ({
-  AgentChatNavItem: (props: unknown) => {
+  AgentChatNavItem: (props: { variant?: string }) => {
+    if (props.variant === 'header') {
+      state.headerProps = props
+      return state.on ? <div data-testid="agent-header-item">agentes</div> : null
+    }
     state.props = props
     return state.on ? <li data-testid="agent-nav-item">agentes</li> : null
   },
@@ -47,6 +51,9 @@ function renderShell(session: ClientePortalSession) {
 afterEach(() => {
   cleanup()
   state.on = false
+  state.props = null
+  state.headerProps = null
+  window.innerWidth = 1024
 })
 
 describe('rodapé da barra lateral do portal', () => {
@@ -67,5 +74,30 @@ describe('rodapé da barra lateral do portal', () => {
     const footer = item.closest('[data-testid="sidebar-footer-items"]')!
     expect(footer.classList.contains('border-t')).toBe(true)
     expect(footer.matches(':empty')).toBe(false)
+  })
+})
+
+describe('cabeçalho do portal no celular (OPE-168)', () => {
+  it('logo leva ao dashboard do portal e o agente fica no cabeçalho, não na gaveta', () => {
+    window.innerWidth = 500
+    state.on = true
+    renderShell({ ...base, opexEnabled: true })
+    const header = screen.getByTestId('mobile-app-header')
+    expect(header.querySelector('a')?.getAttribute('href')).toBe('/cliente/dashboard')
+    expect(state.headerProps).toMatchObject({ variant: 'header', initial: { opex: true, maddox: false }, client: { clientId: 'c1', userId: 'u1' } })
+    expect(header.contains(screen.getByTestId('agent-header-item'))).toBe(true)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir menu' }))
+    expect(screen.getByRole('dialog', { name: 'Menu do portal' })).toBeTruthy()
+    expect(screen.queryByTestId('sidebar-footer-items')).toBeNull()
+    expect(screen.queryByTestId('agent-nav-item')).toBeNull()
+  })
+
+  it('sem agentes ligados, a área de atalhos fica vazia e oculta', () => {
+    window.innerWidth = 500
+    renderShell(base)
+    const actions = screen.getByTestId('mobile-app-header-actions')
+    expect(actions.matches(':empty')).toBe(true)
+    expect(actions.classList.contains('empty:hidden')).toBe(true)
   })
 })

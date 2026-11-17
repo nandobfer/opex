@@ -66,7 +66,10 @@ recursos do PC (Builder Machine), histórico/minigráfico, Prometheus/node_expor
 - **Item da barra lateral** `ServerQuotaSidebarItem` (rodapé do menu do dono, acima do Agente Opex; via
   `SidebarHoverButtonItem` de `src/features/layout/components/sidebar/`): ícone `Gauge`, tooltip e
   `aria-label` "Servidor e quota"; abre por hover (`useHoverPopover`), clique, toque e teclado
-  (Enter/Espaço); não navega. Na gaveta do celular, a linha **"Servidor"** com o ícone e as bolinhas.
+  (Enter/Espaço); não navega. No celular (< 1024px) o item fica no **cabeçalho do celular**
+  (`variant="header"`, OPE-168): botão de ícone `Gauge` com as bolinhas e `aria-label` "Servidor e
+  quota", com o mesmo painel abaixo do botão (alinhado à direita); a gaveta não repete o item. A linha
+  **"Servidor"** só aparece quando a casca não passa atalhos ao cabeçalho.
 - **Bolinhas** (`StatusDots`): esquerda = servidor (`hostMetricsLevel`), direita = quota
   (`visibleQuotaLevel`, ver `modules/opencode-quota.md`); cor = token da barra (`bg-success`,
   `bg-warning`, `bg-destructive`) ou `bg-muted-foreground` sem dado confiável. Ficam vivas com o painel

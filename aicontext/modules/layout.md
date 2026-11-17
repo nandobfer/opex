@@ -46,9 +46,33 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   (`PERSISTENT_PAGE_HREFS`, hoje `/desenvolvimento`) usam o prefixo, então navegar dentro delas não
   anima nem remonta a página — a própria tela anima só o trecho que mudou. A chave da casca não basta
   quando as sub-rotas são arquivos de página ou valores de segmento dinâmico diferentes (o Next remonta
-  a página): nesse caso a tela mora no layout do prefixo. Não há cabeçalho: cada página
-  tem o próprio título. No celular, o botão "Abrir menu" flutua no canto superior esquerdo
-  (`fixed`) e o conteúdo ganha `pt-16`.
+  a página): nesse caso a tela mora no layout do prefixo. No desktop não há cabeçalho: cada página
+  tem o próprio título. No celular (< 1024px) há o cabeçalho `MobileAppHeader` (abaixo).
+- `header/MobileAppHeader` (OPE-168): cabeçalho do celular, só abaixo de 1024px (a mesma condição da
+  gaveta: nunca há dois botões de menu). Da esquerda para a direita: a **logo** (`BrandMark`, a mesma
+  marca do menu lateral; link para `brand.homeHref` com o nome da marca como rótulo), o botão
+  **Abrir menu** (abre a gaveta; `aria-expanded`/`aria-controls`, foco devolvido ao fechar e inerte com
+  a gaveta aberta, como antes) e, alinhados à direita, os atalhos `mobileHeaderActions` do `AppShell`.
+  O divisor embaixo faz parte do componente. Todos os botões usam `header/HeaderIconButton` (44px,
+  `aria-label` obrigatório).
+  - Atalhos: no dono, **Agente Opex** (`AgentChatNavItem variant="header"`) e **Servidor**
+    (`ServerQuotaSidebarItem variant="header"`); no portal do cliente, só o agente de chat (some sem
+    agentes ligados; a área vazia fica oculta). Com atalhos no cabeçalho, a gaveta do celular **não**
+    repete o rodapé `sidebarFooterItems` (uma instância só, sem atalhos de teclado e escutas globais
+    duplicados); no desktop o rodapé continua igual.
+  - Rolagem: `useAppScrollCompact` escuta o `scroll` do `<main id="main-content">` (captura no
+    `document`; rolagens de painéis internos não contam) e decide por `nextHeaderCompact`
+    (`mobile-header.ts`, puro): recolhe acima de 24px e volta ao topo abaixo de 4px (folga para não
+    piscar). Recolhido, a logo, o fundo e o divisor saem com animação, o hamburger desliza
+    (`HEADER_LOGO_SLOT`) para o lugar da logo e os botões viram "chips" flutuando sobre o conteúdo
+    (`useMobileHeaderFloating`); ao voltar ao topo tudo volta animado. A cada troca de rota o estado
+    recomeça no topo. Com `prefers-reduced-motion`, a troca é instantânea.
+  - Sem pulo de layout: o cabeçalho fica por cima da área que rola (`absolute`, `z-30`, dentro de um
+    invólucro `relative` abaixo do `RealtimeStatusBanner`) com altura fixa nos dois estados, e o conteúdo
+    reserva sempre `MOBILE_HEADER_OFFSET_CLASS` (`pt-16`). A faixa não captura toques fora dos botões
+    (`pointer-events-none`). Elementos maximizados sobre o conteúdo (`useMaximizedFrame`) começam abaixo
+    do cabeçalho (`[data-app-header]`), para ele não cobrir a barra do painel.
+  - Telas imersivas (sem rolagem da casca) mostram o cabeçalho no estado do topo.
 - `AppSidebar` + `sidebar/*`: ver `use-para-atualizar-tema-e-componentes-ui.md`, "Menu lateral".
 - `sidebar/SidebarFooter`: no desktop (recolhido) mostra só o avatar do dono (`APP_OWNER_NAME`),
   que abre um **popover** com a ação **Sair** (`LogoutButton`, de `src/features/auth/`), que encerra
