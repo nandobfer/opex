@@ -33,6 +33,8 @@ const ORDER_NOUN: Record<UniverseLayoutConfig["orderBy"], string> = { created: "
 const GROUPING_OPTIONS: OptionTabsOption<UniverseLayoutConfig["grouping"]>[] = [
     { value: "none", label: "Nenhum" },
     { value: "channel", label: "Por canal" },
+    { value: "similarity", label: "Por similaridade" },
+    { value: "channel-similarity", label: "Canal e similaridade" },
 ]
 const BALANCE_OPTIONS: OptionTabsOption<UniverseLayoutConfig["balance"]>[] = [
     { value: "proportional", label: "Proporcional" },
@@ -151,6 +153,11 @@ export function UniverseLayoutForm({ saved, isDefault, onDirtyChange, onSaved }:
                         </div>
                     </Section>
                     <UniverseLayoutLinksSection {...common} />
+                    <Section title="Carregamento" info="Como a rede de memórias carrega: o universo aparece na hora e as partículas entram por página.">
+                        <div className={FORM_GRID}>
+                            <NumberLayoutField {...common} name="memoryPageSize" />
+                        </div>
+                    </Section>
                 </div>
                 <div className="min-w-0 xl:sticky xl:top-4 xl:self-start">
                     <UniverseLayoutPreview config={previewConfig} />

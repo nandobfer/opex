@@ -168,17 +168,28 @@ describe('aba Visualização', () => {
     expect(screen.getByTestId('universe-field-authorLinks').textContent).toContain('Padrão: ligado')
   })
 
-  it('OPE-164: o skeleton da seção Links tem os 2 campos de linha inteira do padrão (links ao centro)', () => {
+  it('OPE-164 (rodada 3): Links com "Links" na linha inteira e, lado a lado, o link e o destaque do agente; o skeleton acompanha', () => {
     render(<UniverseLayoutSkeleton />)
-    const sections = screen.getByTestId('universe-layout-skeleton').querySelectorAll('.rounded-xl.border.p-6')
-    const links = [...sections].at(-1)!.querySelectorAll('.h-24')
-    expect(links).toHaveLength(2)
-    for (const field of links) expect(field.classList.contains('sm:col-span-2')).toBe(true)
+    const sections = [...screen.getByTestId('universe-layout-skeleton').querySelectorAll('.rounded-xl.border.p-6')]
+    const links = [...sections.at(-2)!.querySelectorAll('.h-24')]
+    expect(links.map((field) => field.classList.contains('sm:col-span-2'))).toEqual([true, false, false])
+    expect(sections.at(-1)!.querySelectorAll('.h-24')).toHaveLength(1)
     cleanup()
     mount()
     expect(screen.getByTestId('universe-field-links').classList.contains('sm:col-span-2')).toBe(true)
-    expect(screen.getByTestId('universe-field-authorLinks').classList.contains('sm:col-span-2')).toBe(true)
+    expect(screen.getByTestId('universe-field-authorLinks').classList.contains('sm:col-span-2')).toBe(false)
+    expect(screen.getByTestId('universe-field-authorHighlight').classList.contains('sm:col-span-2')).toBe(false)
     expect(screen.queryByTestId('universe-field-relatedMax')).toBeNull()
+    expect(screen.getByTestId('universe-field-memoryPageSize')).toBeTruthy()
+  })
+
+  it('OPE-164 (rodada 3): agrupamento por similaridade e destaque das partículas entram na configuração salva', async () => {
+    mount()
+    fireEvent.click(within(screen.getByTestId('universe-field-grouping')).getByRole('radio', { name: 'Por similaridade' }))
+    fireEvent.click(within(screen.getByTestId('universe-field-authorHighlight')).getByRole('radio', { name: 'Anel pulsando' }))
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(state.save).toHaveBeenCalled())
+    expect(state.save.mock.calls.at(-1)![0]).toMatchObject({ grouping: 'similarity', authorHighlight: 'pulse', memoryPageSize: 10 })
   })
 
   it('exportar: JSON com os valores do formulário (inclusive não salvos) e botão Copiar', async () => {

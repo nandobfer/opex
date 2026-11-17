@@ -71,13 +71,15 @@ describe('EngramindPage', () => {
   })
 
   // OPE-157: a área da rede carrega com a cena do universo (lib ≥ 0.11.0), não com barras cinzas.
-  it('o carregamento da rede é a cena do universo, anunciada ao leitor de tela', () => {
+  it('OPE-164 (rodada 3): o carregamento é o universo parado com a barra de progresso, anunciado ao leitor de tela', () => {
     connection.isLoading = true
     render(<EngramindPage />)
     const skeleton = screen.getByTestId('network-skeleton')
     expect(skeleton.getAttribute('role')).toBe('status')
     expect(skeleton.textContent).toContain('Carregando a rede de memórias…')
-    expect(skeleton.querySelector('[data-testid=network-loading-scene]')).not.toBeNull()
+    expect(skeleton.querySelector('[data-testid=network-skeleton-scene]')).not.toBeNull()
+    expect(skeleton.querySelector('[data-testid=network-loading-particle]')).toBeNull()
+    expect(skeleton.querySelector('[data-testid=memory-load-progress]')?.getAttribute('role')).toBe('progressbar')
     expect(skeleton.querySelectorAll('[data-testid=network-skeleton-agent]')).toHaveLength(1)
   })
 })

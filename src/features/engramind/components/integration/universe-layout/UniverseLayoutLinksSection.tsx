@@ -12,6 +12,11 @@ const LINKS_OPTIONS: OptionTabsOption<UniverseLayoutConfig["links"]>[] = [
     { value: "center", label: "Ao centro" },
     { value: "related", label: "Entre similares" },
 ]
+const AUTHOR_HIGHLIGHT_OPTIONS: OptionTabsOption<UniverseLayoutConfig["authorHighlight"]>[] = [
+    { value: "none", label: "Nenhum" },
+    { value: "ring", label: "Anel" },
+    { value: "pulse", label: "Anel pulsando" },
+]
 
 interface LinksSectionProps {
     control: Control<UniverseLayoutConfig>
@@ -22,8 +27,8 @@ interface LinksSectionProps {
 }
 
 /**
- * Links dos universos (OPE-164): ao centro ou entre memórias similares (com as arestas por memória) e o link do
- * agente às memórias que ele criou, independente do preset.
+ * Links dos universos (OPE-164): ao centro ou entre memórias similares (com as arestas por memória) e, lado a lado,
+ * o link do agente às memórias que ele criou e o destaque das partículas delas, independentes do preset.
  */
 export function UniverseLayoutLinksSection(common: LinksSectionProps) {
     return (
@@ -37,7 +42,8 @@ export function UniverseLayoutLinksSection(common: LinksSectionProps) {
                         </motion.div>
                     )}
                 </AnimatePresence>
-                <SwitchLayoutField {...common} name="authorLinks" wide />
+                <SwitchLayoutField {...common} name="authorLinks" />
+                <ChoiceLayoutField {...common} name="authorHighlight" options={AUTHOR_HIGHLIGHT_OPTIONS} />
             </div>
         </Section>
     )

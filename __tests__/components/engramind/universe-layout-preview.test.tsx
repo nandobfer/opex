@@ -58,6 +58,31 @@ describe('prévia da aba Visualização', () => {
     expect(orbits.some((edge) => (edge.data as { authored?: boolean }).authored)).toBe(false)
   })
 
+  it('OPE-164 (rodada 3): destaque das partículas do agente de exemplo com o valor ainda não salvo; sem destaque por padrão', () => {
+    wrap({ ...DEFAULT_UNIVERSE_LAYOUT, authorHighlight: 'pulse' })
+    const highlighted = screen.getAllByTestId('author-highlight')
+    expect(highlighted.length).toBeGreaterThan(0)
+    expect(highlighted.every((element) => element.getAttribute('data-kind') === 'pulse')).toBe(true)
+    expect(screen.queryByTestId('memory-load-progress')).toBeNull()
+    cleanup()
+    wrap()
+    expect(screen.queryAllByTestId('author-highlight')).toHaveLength(0)
+  })
+
+  it('OPE-164 (rodada 3): agrupamento por similaridade aproxima as similares fictícias, sem consultar o Engramind', () => {
+    const mean = () => {
+      const byId = new Map(flowItems.nodes.map((node) => [node.id, node.position]))
+      const related = flowItems.edges.filter((edge) => edge.type === 'related')
+      return related.reduce((sum, edge) => sum + Math.hypot(byId.get(edge.source)!.x - byId.get(edge.target)!.x, byId.get(edge.source)!.y - byId.get(edge.target)!.y), 0) / related.length
+    }
+    wrap({ ...DEFAULT_UNIVERSE_LAYOUT, links: 'related' })
+    const apart = mean()
+    cleanup()
+    wrap({ ...DEFAULT_UNIVERSE_LAYOUT, links: 'related', grouping: 'similarity' })
+    expect(mean()).toBeLessThan(apart * 0.6)
+    expect(net.get).not.toHaveBeenCalled()
+  })
+
   it('quantidade, canais e centro da prévia são controles locais', async () => {
     wrap()
     fireEvent.change(screen.getByLabelText('Memórias de exemplo'), { target: { value: '40' } })

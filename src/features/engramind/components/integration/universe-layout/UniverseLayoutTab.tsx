@@ -42,15 +42,18 @@ export function UniverseLayoutTab({ onDirtyChange, onConfigure }: { onDirtyChang
 }
 
 /**
- * Campos de cada seção do formulário (`true` = campo de linha inteira). Links (OPE-164), com o padrão
- * `links = center`: "Links" e "Link do agente…" de linha inteira; "Arestas por memória" só com `related`.
+ * Campos de cada seção do formulário (`true` = campo de linha inteira; o último de uma quantidade ímpar ocupa a
+ * linha pelo `FORM_GRID`): Disposição, Anéis, Desvio, Partículas, Links e Carregamento. Links (OPE-164), com o
+ * padrão `links = center`: "Links" de linha inteira e, lado a lado, "Link do agente…" e o destaque das partículas
+ * ("Arestas por memória" só com `related`).
  */
 const SKELETON_SECTIONS: readonly (readonly boolean[])[] = [
-    [false, false, false, false, false],
-    [false, false, false, false, false],
+    [false, false, true, true, true],
+    [false, false, false, false, true],
     [false, false, false, false, false],
     [false, false],
-    [true, true],
+    [true, false, false],
+    [false],
 ]
 
 /** Mesma estrutura do resultado: cartão das predefinições, formulário em seções e a prévia ao lado. */

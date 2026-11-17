@@ -128,10 +128,18 @@ describe('similares dos universos (OPE-164)', () => {
     />
   )
   const related = { related: { m0: [{ id: 'm3', score: 0.9 }] }, pending: false, ready: true }
-  const mockLayout = (links: 'center' | 'related') =>
+  const mockLayout = (links: 'center' | 'related', grouping: 'none' | 'similarity' = 'none') =>
     net.get.mockImplementation(async (url: string) => ({
-      data: { success: true, data: url === '/engramind/universe-layout' ? { config: { ...DEFAULT_UNIVERSE_LAYOUT, links }, isDefault: false, updatedAt: now } : url === '/engramind/related-memories' ? related : respond(url) },
+      data: { success: true, data: url === '/engramind/universe-layout' ? { config: { ...DEFAULT_UNIVERSE_LAYOUT, links, grouping }, isDefault: false, updatedAt: now } : url === '/engramind/related-memories' ? related : respond(url) },
     }))
+
+  it('rodada 3: agrupamento por similaridade com links ao centro também busca as similares (para a posição)', async () => {
+    mockLayout('center', 'similarity')
+    wrap(<OpexEngramindProvider channelLabels={false}>{universe}</OpexEngramindProvider>)
+    await waitFor(() => expect(net.get).toHaveBeenCalledWith('/engramind/related-memories', expect.anything()))
+    await waitFor(() => expect(flowItems.edges.filter((edge) => edge.type === 'orbit')).toHaveLength(6))
+    expect(flowItems.edges.some((edge) => edge.type === 'related')).toBe(false)
+  })
 
   it('com links entre similares, busca as similares e a lib desenha as arestas', async () => {
     mockLayout('related')

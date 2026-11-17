@@ -8,7 +8,7 @@ import { toast } from "sonner"
 // A lib não importa CSS: as folhas do React Flow (canvas) e do react-day-picker (filtro de período) entram aqui.
 import "@xyflow/react/dist/style.css"
 import "react-day-picker/style.css"
-import { EngramindError } from "@engramind/client"
+import { EngramindError, universeUsesRelated } from "@engramind/client"
 import { EngramindProvider, type ConfigureTarget, type EngramindDataSource, type FooterContext, type NavigationAdapter, type PartialMessages, type RenderLinkProps } from "@engramind/client/react"
 import { api, apiErrorCode, apiErrorMessage, unwrapApi } from "@/lib/api"
 import { withBasePath } from "@/lib/base-path"
@@ -86,7 +86,8 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
     // Layout dos universos (aba Visualização): vale para a rede, os universos de IA e os dos rotineiros; muda ao vivo.
     const universeLayout = useUniverseLayout({ realtime: true })
     // Similares (OPE-164): só com "Links entre similares"; falha ou demora não quebra a rede (desenha sem arestas).
-    const related = useRelatedMemories({ enabled: universeLayout.data?.config?.links === "related" })
+    // Arestas entre similares ou agrupamento por similaridade: a lib precisa das similares.
+    const related = useRelatedMemories({ enabled: universeLayout.data?.config ? universeUsesRelated(universeLayout.data.config) : false })
     // Gravadas (auditoria do Opex): só os agentes do app do Opex (`opex/<identidade>`).
     const agentWrites = useCallback(
         (id: string) => {
