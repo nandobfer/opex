@@ -23,6 +23,17 @@ const ownerFooterItems = (collapsed: boolean) => (
     </>
 )
 
+/**
+ * Atalhos do cabeçalho do celular (OPE-168): os mesmos itens do rodapé do menu, como botões de ícone
+ * (Agente Opex e Servidor). No celular a gaveta não repete esses itens.
+ */
+const ownerHeaderActions = (
+    <>
+        <AgentChatNavItem variant="header" />
+        <ServerQuotaSidebarItem variant="header" />
+    </>
+)
+
 /** Submenu de Integrações no hover (OPE-120), só no menu do dono. */
 const ownerItemPanels: AppSidebarItemPanels = { integrations: IntegrationsSidebarItem }
 
@@ -41,6 +52,7 @@ export function AppLayoutShell({ ownerName, version, children }: AppLayoutShellP
             version={version}
             sidebarFooterItems={ownerFooterItems}
             sidebarItemPanels={ownerItemPanels}
+            mobileHeaderActions={ownerHeaderActions}
         >
             {children}
         </AppShell>

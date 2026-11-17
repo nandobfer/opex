@@ -19,8 +19,11 @@ export const SERVER_QUOTA_LABEL = "Servidor e quota"
  * "Servidor e quota" no rodapé do menu do dono, acima do Agente Opex: o painel mostra os recursos do
  * servidor e, abaixo, a mesma quota do OpenCode de /desenvolvimento. As bolinhas ficam vivas com o
  * painel fechado (mesmas queries, preferência e eventos — sem requisição a mais).
+ *
+ * `variant="header"` (OPE-168): o mesmo item como botão de ícone no cabeçalho do celular, com o
+ * mesmo painel abaixo do botão.
  */
-export function ServerQuotaSidebarItem({ collapsed }: { collapsed: boolean }) {
+export function ServerQuotaSidebarItem({ collapsed = false, variant = "sidebar" }: { collapsed?: boolean; variant?: "sidebar" | "header" }) {
     const reduceMotion = useReducedMotion() ?? false
     const host = useHostMetrics()
     useHostMetricsRealtime()
@@ -38,7 +41,8 @@ export function ServerQuotaSidebarItem({ collapsed }: { collapsed: boolean }) {
             reduceMotion={reduceMotion}
             indicator={<StatusDots server={hostMetricsLevel(host.data, now)} quota={visibleQuotaLevel(quota.data, prefs, now)} />}
             panelWidthClassName="w-80"
-            testId="sidebar-server-quota"
+            testId={variant === "header" ? "header-server-quota" : "sidebar-server-quota"}
+            variant={variant}
             panel={
                 <div className="space-y-2 px-1 pb-1">
                     <HostMetricsPanel />

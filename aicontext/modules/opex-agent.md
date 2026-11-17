@@ -15,7 +15,10 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
   lateral do **dono** (`AppLayoutShell` passa `sidebarFooterItems` ao `AppShell`) e do **portal do
   cliente** (`ClientePortalShell`) quando o Agente Opex ou o Agente Maddox está ligado para o cliente
   (ver "Agente no portal do cliente" e `modules/maddox-agent.md`). O item abre o **último agente
-  escolhido** (guardado no navegador) e mostra o nome, o ícone e a cor do agente ativo.
+  escolhido** (guardado no navegador) e mostra o nome, o ícone e a cor do agente ativo. No celular
+  (< 1024px) o item fica no **cabeçalho do celular** (`variant="header"`, OPE-168: botão de ícone com o
+  nome do agente como rótulo acessível e o ponto de atividade; ver `modules/layout.md`) e não se repete
+  na gaveta; abaixo de 768px o chat abre em tela cheia e, entre 768 e 1023px, abaixo do botão.
 - Clicar abre um **popover** ancorado no item, com abertura animada (spring de escala a partir da
   âncora, Framer Motion, respeitando movimento reduzido). O botão **Maximizar** amplia o painel.
 - **Cabeçalho com troca de agente** (`AgentSwitcherHeader`): à esquerda o agente ativo (avatar, nome e
