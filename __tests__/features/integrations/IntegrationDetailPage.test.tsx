@@ -309,6 +309,32 @@ describe("IntegrationDetailPage", () => {
             expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
         })
 
+        it("trocar de integração com os logs abertos volta para fechado", () => {
+            debugOn()
+            const { rerender } = render(<IntegrationDetailPage id="pusher" />)
+            openDebug()
+            expect(screen.getByTestId("integration-debug-panel")).toBeTruthy()
+
+            mocks.useIntegration.mockReturnValue({
+                data: detail({
+                    id: "storage_s3",
+                    name: "Storage S3",
+                    debugMode: true,
+                    publicValues: { endpoint: "http://minio:9000", publicEndpoint: null, region: "us-east-1", bucket: "default", signedUrlExpiresSeconds: 3600 },
+                    secrets: {
+                        accessKey: { configured: true, source: "db", unreadable: false },
+                        secretKey: { configured: true, source: "db", unreadable: false },
+                    },
+                }),
+                isLoading: false,
+                isError: false,
+            })
+            rerender(<IntegrationDetailPage id="storage_s3" />)
+            expect(screen.getByText("Storage S3")).toBeTruthy()
+            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
+        })
+
         it("tela estreita: o botão abre a janela de logs (sem coluna) e fechar a janela volta o botão", () => {
             stubViewport(true)
             debugOn()
