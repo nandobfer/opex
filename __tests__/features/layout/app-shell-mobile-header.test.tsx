@@ -86,6 +86,28 @@ describe("AppShell — cabeçalho do celular ao rolar (OPE-168)", () => {
         expect(screen.getByTestId("mobile-app-header-divider")).toBeTruthy()
     })
 
+    it("na troca de rota, o <main> antigo ainda no DOM (saída da transição) com rolagem alta não recolhe a tela nova", async () => {
+        const { rerender } = render(shell())
+        await flushFrames()
+        await scrollTo(main(), 300)
+        expect(header().getAttribute("data-compact")).toBe("true")
+        // Simula o <main> em saída: mesmo id, rolagem antiga, ainda no DOM depois da troca.
+        const exiting = document.createElement("main")
+        exiting.id = "main-content"
+        Object.defineProperty(exiting, "scrollTop", { configurable: true, value: 300 })
+        document.body.prepend(exiting)
+        try {
+            nav.pathname = "/integracoes"
+            rerender(shell())
+            await flushFrames()
+            await flushFrames()
+            expect(header().hasAttribute("data-compact")).toBe(false)
+            expect(screen.getByRole("link", { name: "Opex" })).toBeTruthy()
+        } finally {
+            exiting.remove()
+        }
+    })
+
     it("rolagem de um painel interno não recolhe o cabeçalho", async () => {
         render(shell())
         await flushFrames()
