@@ -5,16 +5,14 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { BarChart3 } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
-import { PresetDateRangeFilter } from "@/components/ui/preset-date-range-filter"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
-import { FilterGroup } from "@/components/list/FilterGroup"
 import { apiErrorMessage } from "@/lib/api"
 import { formatLogTimestamp } from "@/lib/integrations/log-format"
 import type { AiApiKeyProviderId } from "../api-keys"
 import { usageRangeQuery, withUsageKey } from "../provider-usage"
 import { useUsageKeyFilter } from "../hooks/useUsageKeyFilter"
-import { USAGE_FILTERS_GRID, UsageKeySelect } from "./UsageKeySelect"
+import { UsageFiltersBar } from "./UsageFiltersBar"
 import { useProviderUsage } from "../hooks/useProviderUsage"
 import { useUsageRange } from "../hooks/useUsageRange"
 import { UsageBreakdownTable } from "./UsageBreakdownTable"
@@ -33,6 +31,8 @@ interface ProviderUsageCardProps {
     showCoverage?: boolean
     /** Provedor com chaveiro (OPE-155): mostra o filtro "Chave de API". */
     keyFilter?: AiApiKeyProviderId
+    /** A aba já mostra a barra de filtros acima do card (compartilhada com outro card): não repete aqui. */
+    hideFilters?: boolean
 }
 
 /**
@@ -40,7 +40,7 @@ interface ProviderUsageCardProps {
  * recurso com o total e notas de cobertura. Métricas ausentes aparecem como `—`; totais parciais
  * são sinalizados, nunca apresentados como medição completa.
  */
-export function ProviderUsageCard({ provider, title, description, firstColumnLabel, emptyTitle, showCost = true, showCoverage = false, keyFilter }: ProviderUsageCardProps) {
+export function ProviderUsageCard({ provider, title, description, firstColumnLabel, emptyTitle, showCost = true, showCoverage = false, keyFilter, hideFilters = false }: ProviderUsageCardProps) {
     const reducedMotion = useReducedMotion()
     const { range, setRange, defaults } = useUsageRange()
     const usageKey = useUsageKeyFilter(keyFilter ?? null)
@@ -69,12 +69,7 @@ export function ProviderUsageCard({ provider, title, description, firstColumnLab
                 <p className="text-sm text-muted-foreground">{description}</p>
             </CardHeader>
             <CardContent className="space-y-4">
-                <div className={keyFilter ? USAGE_FILTERS_GRID : undefined}>
-                    <FilterGroup label="Período">
-                        <PresetDateRangeFilter startDate={range.usageFrom} endDate={range.usageTo} onChange={(next) => setRange({ usageFrom: next.startDate, usageTo: next.endDate })} />
-                    </FilterGroup>
-                    {keyFilter && <UsageKeySelect value={usageKey.value} options={usageKey.options} onChange={usageKey.setValue} />}
-                </div>
+                {!hideFilters && <UsageFiltersBar range={range} onRangeChange={setRange} keyFilter={keyFilter ? usageKey : null} />}
                 <AnimatePresence mode="wait" initial={false}>
                     <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reducedMotion ? 0 : 0.15 }}>
                         {view === "invalid" && <ErrorState title="Período inválido" description="Selecione datas válidas, com início anterior ao fim." onRetry={() => setRange(defaults)} />}

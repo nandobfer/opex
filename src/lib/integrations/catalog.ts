@@ -208,6 +208,8 @@ export const AGENT_USAGE_DAILY_JOB_ID = "agent-usage-daily"
 export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
 /** Pede a quota ao plugin opencode-quota (RPC, motivo poll) e avisa a tela quando muda. */
 export const OPENCODE_QUOTA_JOB_ID = "opencode-quota-refresh"
+/** Lê o status da assinatura OpenCode Go (Console) com a chave em uso e avisa a tela quando os percentuais mudam (OPE-167). */
+export const OPENCODE_GO_USAGE_JOB_ID = "opencode-go-usage-refresh"
 /** Lê CPU, RAM, swap e disco da máquina do OpenCode (RPC do opencode-htop ou shell) e avisa a tela quando muda. */
 export const HOST_METRICS_JOB_ID = "host-metrics-refresh"
 /** Ambientes: mantém as últimas tags de cada ambiente no registry e roda o garbage-collect. */
@@ -332,6 +334,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         label: "Atualizar a quota do OpenCode (opencode-quota)",
         kind: "internal",
         schedule: { type: "interval", minutes: 1 },
+        enabled: true,
+    },
+    {
+        id: OPENCODE_GO_USAGE_JOB_ID,
+        label: "Atualizar o consumo da assinatura OpenCode Go (Console)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 5 },
         enabled: true,
     },
     {
