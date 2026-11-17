@@ -153,12 +153,15 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   `subscriberUserId`, `paymentMethodId`, `paymentMethodKind`, `upgradePrice`, `teamsUpgradePrice`,
   `nextPeriodPaid`, `useBalance` etc. não chegam ao DTO, ao log nem ao evento. O debug da integração
   registra só método, URL, cabeçalhos mascarados e status (o corpo não é lido pelo `debugFetch`).
-- **Sem reserva**: falha do `go/status` (401, 403, 404, formato) vira o estado `error` com a mensagem
+- **Sem reserva** (decisão do dono no planejamento de 16/11/2026, à pergunta "cair para `/zen/go/v1/usage`
+  se o `go/status` falhar?": "Não"; substitui o trecho da especificação técnica): falha do `go/status` (401, 403, 404, formato) vira o estado `error` com a mensagem
   pt-BR (`goConsoleStatusMessage`) e "Tentar novamente". O `/zen/go/v1/usage` não é usado.
 - **Percentual** = `usedMicroCents / limitMicroCents × 100`, com **uma casa, truncado** (`meterPercent`;
   o Console mostra o inteiro truncado). **Nenhum valor do medidor em US$**: `usedMicroCents` é
   `base × Σ(uso_i / cota_i)` por modelo, não gasto real.
-- **Gasto real do ciclo** (único valor em dinheiro, discreto, "Gasto real no ciclo: US$ 42,85"):
+- **Gasto real do ciclo** (decisão do dono no planejamento de 16/11/2026: "% destacado, e $
+  discreto/secundário", com o gasto real do ciclo — não o "US$" do medidor; substitui o "nenhum valor em US$"
+  da descrição e o "US$ usado de US$ do teto" do critério de aceite) (único valor em dinheiro, discreto, "Gasto real no ciclo: US$ 42,85"):
   `usage/cost-by-day` do início do ciclo até hoje, com o primeiro dia pró-rateado pelo horário de início;
   `null` (some da tela) se a chamada falhar.
 
@@ -170,7 +173,9 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   `go.monthly_usage.<plano>` do catálogo público do gateway (`opencodeGoAllowances`).
 - Modelo com custo e sem cota no catálogo não ganha regra inventada: o custo fica fora e o dia conta como
   **parcial** (aviso). Modelos gratuitos (custo 0) são ignorados.
-- Cache só em memória por `(chave, dia)`: 10 min para hoje e ontem, 6 h para dias fechados. O botão
+- Cache só em memória por `(chave, dia)`: 10 min para hoje e ontem, 6 h para dias fechados; dia cuja
+  leitura falhou (429, Cloudflare, rede) fica 90 s como "sem dados" antes de nova tentativa
+  (`GO_FAILED_DAY_CACHE_MS`), para não repetir a rajada a cada leitura da tela. O botão
   Atualizar relê o dia de hoje.
 - **Histórico**: o Console devolve ~40 dias (observado: hoje − 42, `GO_HISTORY_DAYS`); dia mais antigo volta
   vazio sem erro, então não é consultado. Dia fora do histórico ou com falha é **sem dados**.

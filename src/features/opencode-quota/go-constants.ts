@@ -11,6 +11,8 @@ export const OPENCODE_GO_USAGE_QUERY_KEY = "opencode-go-usage"
 export const GO_STATUS_CACHE_MS = 60_000
 /** Intervalo mínimo entre duas leituras forçadas pelo botão Atualizar. */
 export const GO_MIN_REFRESH_MS = 30_000
+/** Dia cuja leitura falhou (429, Cloudflare, rede) não é reconsultado antes disto: evita repetir a rajada a cada leitura. */
+export const GO_FAILED_DAY_CACHE_MS = 90_000
 /** Dias recentes (hoje e ontem) e o gasto real do ciclo ficam 10 min em memória. */
 export const GO_RECENT_DAY_CACHE_MS = 10 * 60_000
 /** Dias fechados não mudam mais: ficam 6 h em memória. */

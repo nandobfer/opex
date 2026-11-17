@@ -158,6 +158,24 @@ describe('getOpencodeGoUsage', () => {
     expect(dto.chart!.missingDays).toBe(1)
   })
 
+  it('dia que falhou não é reconsultado antes de 90 s (sem rajada repetida a cada leitura)', async () => {
+    failingDays.add('2026-11-10')
+    const callsFor = (day: string) => mocks.fetch.mock.calls.filter(([url]) => String(url).includes(`from=${day}&`) && String(url).endsWith("page=1")).length
+    await getOpencodeGoUsage(query)
+    expect(callsFor('2026-11-10')).toBe(1)
+
+    vi.setSystemTime(NOW + 60_000)
+    const again = await getOpencodeGoUsage(query)
+    expect(callsFor('2026-11-10')).toBe(1)
+    expect(again.chart!.missingDays).toBe(1)
+
+    failingDays.clear()
+    vi.setSystemTime(NOW + 91_000)
+    const recovered = await getOpencodeGoUsage(query)
+    expect(callsFor('2026-11-10')).toBe(2)
+    expect(recovered.chart!.points.find((point) => point.date === '2026-11-10')!.usage).not.toBeNull()
+  })
+
   it('sem catálogo de cotas mostra os medidores e explica o gráfico indisponível', async () => {
     mocks.allowances.mockRejectedValue(new Error('offline'))
     const dto = await getOpencodeGoUsage(query)

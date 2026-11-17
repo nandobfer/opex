@@ -1,5 +1,5 @@
 import { loggerFor } from "@/lib/logger"
-import { GO_CLOSED_DAY_CACHE_MS, GO_RECENT_DAY_CACHE_MS, GO_SERIES_CONCURRENCY } from "../go-constants"
+import { GO_CLOSED_DAY_CACHE_MS, GO_RECENT_DAY_CACHE_MS, GO_SERIES_CONCURRENCY, GO_FAILED_DAY_CACHE_MS } from "../go-constants"
 import { addDaysKey, dateKeysBetween, dayFraction, dayPercentFromModels, utcDateKey, type GoDayValue } from "../go-logic"
 import { fetchGoCostByDay, fetchGoModelsCost } from "./go-api"
 
@@ -14,6 +14,8 @@ const log = () => loggerFor({ feature: "opencode-quota", source: "opencode-go" }
 interface Cached<T> {
     at: number
     value: T
+    /** Resultado negativo (a chamada falhou): vale só por `GO_FAILED_DAY_CACHE_MS`. */
+    failed?: boolean
 }
 
 interface SeriesStore {
@@ -64,7 +66,8 @@ export async function loadGoDays({ apiKey, keyId, dates, allowances, nowMs, forc
     const entries = await mapLimit(dates, GO_SERIES_CONCURRENCY, async (date): Promise<[string, GoDayValue]> => {
         const cacheKey = `${keyId}:${date}`
         const hit = cache.get(cacheKey)
-        const fresh = hit && nowMs - hit.at < dayTtl(date, nowMs) && !(forceToday && date === todayKey)
+        const ttl = hit?.failed ? GO_FAILED_DAY_CACHE_MS : dayTtl(date, nowMs)
+        const fresh = hit && nowMs - hit.at < ttl && !(forceToday && date === todayKey)
         if (fresh) return [date, hit.value]
         try {
             const value: GoDayValue = dayPercentFromModels(await fetchGoModelsCost(apiKey, date, signal), allowances)
@@ -73,7 +76,9 @@ export async function loadGoDays({ apiKey, keyId, dates, allowances, nowMs, forc
         } catch (error) {
             if (signal?.aborted) throw error
             log().warn({ date, err: error instanceof Error ? error.message : String(error) }, "[opencode-go] dia da série indisponível")
-            return [date, { percent: null, partial: false }]
+            const value: GoDayValue = { percent: null, partial: false }
+            cache.set(cacheKey, { at: nowMs, value, failed: true })
+            return [date, value]
         }
     })
     return new Map(entries)
