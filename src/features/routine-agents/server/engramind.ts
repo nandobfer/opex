@@ -6,9 +6,11 @@ import type { EngramindChannel, EngramindSubscription, EngramindToken, IssuedTok
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
 import type { IRoutineAgentToken } from "@/lib/db/models/RoutineAgent"
 import { ROUTINE_GLOBAL_CHANNEL, routineChannelOf } from "../constants"
+import { routineAgentTitle } from "../identity-plan"
 
 /**
- * Identidade de um agente rotineiro no Engramind (OPE-130): o agente `opex/rotineiro-<slug>`, as
+ * Identidade de um agente rotineiro no Engramind (OPE-130): o agente `opex/rotineiro-<slug>` (nome
+ * "Agente <nome>", sem duplicar o prefixo, OPE-170), as
  * assinaturas `inject` e o token `agent` próprio (escopos `read` e `write`), guardado **cifrado no
  * documento do agente** (nunca vai para o navegador, para o modelo nem para a auditoria). Tudo é
  * idempotente: repetir não duplica agente, token, canal nem assinatura.
@@ -31,7 +33,7 @@ export async function ensureRoutineEngramindAgent(slug: string, name: string, de
     try {
         const written = await engramindCall<{ created?: boolean } | null>(
             "POST",
-            { path: "/v1/agents", body: { app: OPEX_APP_SLUG, slug: routineIdentityOf(slug), name: `Rotineiro · ${name}`.slice(0, 120), description: description.slice(0, 500) } },
+            { path: "/v1/agents", body: { app: OPEX_APP_SLUG, slug: routineIdentityOf(slug), name: routineAgentTitle(name).slice(0, 120), description: description.slice(0, 500) } },
             { target },
         )
         return written?.created === false ? "exists" : "created"

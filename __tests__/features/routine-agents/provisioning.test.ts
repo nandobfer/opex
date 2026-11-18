@@ -90,6 +90,7 @@ describe('provisionamento do agente rotineiro', () => {
     const doc = agentDoc() as { provisioning: { status: string; extras: { channel: string; created: boolean; reason: string }[]; channels: string[] }; engramindToken: { prefix: string; secret: unknown } }
     expect(doc.provisioning.status).toBe('ok')
     expect(holder.fake.state.agents.has('opex/rotineiro-vagas')).toBe(true)
+    expect(calls('POST', '/v1/agents').map((call) => (call.body as { name: string }).name)).toEqual(['Agente Vagas'])
     expect(decryptRoutineToken(doc.engramindToken as never)).toMatch(/^eng\./)
     expect(JSON.stringify(doc.engramindToken.secret)).not.toContain('segredo')
     expect(holder.fake.state.channels.has('agentes/rotineiros/vagas')).toBe(true)
