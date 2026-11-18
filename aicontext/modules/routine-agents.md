@@ -128,7 +128,10 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 
 Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo sem aprovação:
 
-1. cadastra o agente `opex/rotineiro-<slug>` no Engramind (token de app; admin se não houver);
+1. cadastra o agente `opex/rotineiro-<slug>` no Engramind com o nome **"Agente <nome>"** (OPE-170: o
+   prefixo não é duplicado quando o nome já começa com "Agente ", até 120 caracteres; a rede esconde o
+   prefixo e mostra só "<nome>"), com token de app (admin se não houver). Reprovisionar não renomeia:
+   agente que já existe mantém o nome;
 2. emite o token `agent` (escopos `read`, `write`) e guarda **cifrado** em `engramindToken` do
    documento — nunca vai para DTO, navegador, modelo, log ou auditoria (só o prefixo);
 3. cria `agentes/rotineiros/global` e o canal próprio `agentes/rotineiros/<slug>` (admin) e assina
