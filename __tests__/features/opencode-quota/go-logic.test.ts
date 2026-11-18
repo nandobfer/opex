@@ -209,18 +209,27 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     expect(goYMax([487.3])).toBe(490)
   })
 
-  it('marcas do eixo Y: de 50 em 50 com o topo como última marca, sem encavalar no topo', () => {
+  it('marcas do eixo Y: passo adaptativo (50, 100, 200, 500…) com no máximo 6 marcas, o 100% e o topo', () => {
     expect(goYTicks(110)).toEqual([0, 50, 100, 110])
     expect(goYTicks(120)).toEqual([0, 50, 100, 120])
     expect(goYTicks(150)).toEqual([0, 50, 100, 150])
     expect(goYTicks(160)).toEqual([0, 50, 100, 160])
-    expect(goYTicks(490)).toEqual([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 490])
-    for (const yMax of [110, 130, 200, 210, 340, 1000]) {
+    expect(goYTicks(250)).toEqual([0, 50, 100, 150, 200, 250])
+    expect(goYTicks(310)).toEqual([0, 100, 200, 310])
+    expect(goYTicks(490)).toEqual([0, 100, 200, 300, 400, 490])
+    expect(goYTicks(730)).toEqual([0, 100, 200, 400, 600, 730])
+    expect(goYTicks(1010)).toEqual([0, 100, 500, 1010])
+    // Acima de 1250% o 100% encavalaria com o 0%: sai das marcas (a linha pontilhada do teto continua).
+    expect(goYTicks(2500)).toEqual([0, 500, 1000, 1500, 2000, 2500])
+    for (const yMax of [110, 130, 200, 210, 340, 490, 510, 730, 1010, 2500, 9990]) {
       const ticks = goYTicks(yMax)
+      expect(ticks.length).toBeGreaterThanOrEqual(3)
+      expect(ticks.length).toBeLessThanOrEqual(6)
       expect(ticks[0]).toBe(0)
       expect(ticks.at(-1)).toBe(yMax)
-      expect(ticks).toContain(100)
+      if (yMax <= 1250) expect(ticks).toContain(100)
       expect(new Set(ticks).size).toBe(ticks.length)
+      expect([...ticks].sort((a, b) => a - b)).toEqual(ticks)
     }
   })
 

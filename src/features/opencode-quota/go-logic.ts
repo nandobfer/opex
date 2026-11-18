@@ -150,8 +150,10 @@ export interface GoChartInput {
 
 /** Folga mínima do eixo Y: o teto de 100% sempre aparece com respiro. */
 const GO_Y_MIN = 110
-const GO_Y_TICK_STEP = 50
-/** Marca de 50 em 50 a menos desta fração do topo sai, para os rótulos não se encavalarem (o 100% fica sempre). */
+/** Passos possíveis das marcas do eixo Y: 50, 100, 200, 500, 1000… (o menor que deixe no máximo 6 marcas). */
+const GO_Y_TICK_MANTISSAS = [1, 2, 5]
+const GO_Y_MAX_TICKS = 6
+/** Marca a menos desta fração do topo sai, para os rótulos não se encavalarem (o 100% fica sempre). */
 const GO_Y_TICK_GAP = 0.08
 
 /**
@@ -164,15 +166,22 @@ export function goYMax(values: readonly number[]): number {
     return Math.max(GO_Y_MIN, Math.floor(top / 10) * 10 + 10)
 }
 
-/** Marcas do eixo Y: de 50 em 50 até o teto, com o próprio teto como última marca (0, 50, 100, 120). */
+/**
+ * Marcas do eixo Y: múltiplos do menor passo (50, 100, 200, 500, 1000…) que deixe no máximo 6 marcas, com o 100%
+ * (teto) e o próprio topo como última marca — 0, 50, 100, 120 até a previsão crescer; 0, 100, 200, 300, 400, 490.
+ */
 export function goYTicks(yMax: number): number[] {
-    const ticks: number[] = []
-    for (let value = 0; value < yMax; value += GO_Y_TICK_STEP) {
-        if (value !== 100 && value > 0 && yMax - value < yMax * GO_Y_TICK_GAP) continue
-        ticks.push(value)
+    for (let index = 0; ; index++) {
+        const step = GO_Y_TICK_MANTISSAS[(index + 2) % 3]! * 10 ** (Math.floor((index + 2) / 3) + 1)
+        const ticks = new Set<number>([0])
+        // O 100% (teto) é marca fixa enquanto não encavala com o 0%; acima disso a linha pontilhada já o mostra.
+        if (100 >= yMax * GO_Y_TICK_GAP) ticks.add(100)
+        for (let value = step; value < yMax; value += step) {
+            if (yMax - value >= yMax * GO_Y_TICK_GAP) ticks.add(value)
+        }
+        if (ticks.size + 1 > GO_Y_MAX_TICKS) continue
+        return [...[...ticks].sort((a, b) => a - b), yMax]
     }
-    ticks.push(yMax)
-    return ticks
 }
 
 /**

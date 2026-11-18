@@ -37,7 +37,9 @@ const hollow = (color: string) => ({ r: 4.5, fill: GO_CARD_COLOR, stroke: color,
 
 /**
  * Gráfico de um ciclo da assinatura no desenho do Console do OpenCode Go: eixo de 0% até o maior valor com
- * folga (`goYMax`) e grade apagada de 50 em 50 mais o topo (`goYTicks`), teto de 100% pontilhado e destacado, uso acumulado em verde (área com gradiente) até o círculo de hoje,
+ * folga (`goYMax`) e grade apagada em passo adaptativo (50, 100, 200, 500…, no máximo 6 marcas, com o 100% enquanto
+ * não encavala com o 0% e o topo como última marca, `goYTicks`), teto de 100% pontilhado e destacado, uso acumulado
+ * em verde (área com gradiente) até o círculo de hoje,
  * previsão em reta amarela com hachura até a renovação, círculos vazados no cruzamento e no fim (com o %
  * previsto), verticais tracejadas em hoje e no cruzamento e a faixa de datas com a data do cruzamento destacada.
  */
