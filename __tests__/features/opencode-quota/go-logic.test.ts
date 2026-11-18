@@ -12,6 +12,7 @@ import {
   goCycleFor,
   goForecast,
   goYMax,
+  goYTicks,
   meterPercent,
   subUtcMonths,
   type GoDayValue,
@@ -120,7 +121,9 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     expect(chart.today).toEqual({ t: NOW, percent: 44.3 })
     expect(Math.max(...chart.points.map((point) => point.usage ?? 0))).toBeLessThan(50)
     expect(chart.cycle).toEqual({ startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z', current: true })
-    expect(chart.yMax).toBe(150)
+    // OPE-171: previsão de ~116% → eixo até 120%, não 150%.
+    expect(chart.yMax).toBe(120)
+    expect(chart.yMax).toBeGreaterThan(chart.forecastEnd!.percent)
     expect(chart.missingDays).toBe(0)
   })
 
@@ -196,9 +199,38 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     expect(chart.cycle.current).toBe(false)
   })
 
-  it('eixo Y: 150% ou o próximo múltiplo de 50', () => {
-    expect(goYMax([10, 120])).toBe(150)
-    expect(goYMax([151])).toBe(200)
+  it('eixo Y: próximo múltiplo de 10 estritamente acima do maior valor, no mínimo 110%', () => {
+    expect(goYMax([10, 113])).toBe(120)
+    expect(goYMax([120])).toBe(130)
+    expect(goYMax([96])).toBe(110)
+    expect(goYMax([10])).toBe(110)
+    expect(goYMax([100])).toBe(110)
+    expect(goYMax([])).toBe(110)
+    expect(goYMax([487.3])).toBe(490)
+  })
+
+  it('marcas do eixo Y: passo adaptativo (50, 100, 200, 500…) com no máximo 6 marcas, o 100% e o topo', () => {
+    expect(goYTicks(110)).toEqual([0, 50, 100, 110])
+    expect(goYTicks(120)).toEqual([0, 50, 100, 120])
+    expect(goYTicks(150)).toEqual([0, 50, 100, 150])
+    expect(goYTicks(160)).toEqual([0, 50, 100, 160])
+    expect(goYTicks(250)).toEqual([0, 50, 100, 150, 200, 250])
+    expect(goYTicks(310)).toEqual([0, 100, 200, 310])
+    expect(goYTicks(490)).toEqual([0, 100, 200, 300, 400, 490])
+    expect(goYTicks(730)).toEqual([0, 100, 200, 400, 600, 730])
+    expect(goYTicks(1010)).toEqual([0, 100, 500, 1010])
+    // Acima de 1250% o 100% encavalaria com o 0%: sai das marcas (a linha pontilhada do teto continua).
+    expect(goYTicks(2500)).toEqual([0, 500, 1000, 1500, 2000, 2500])
+    for (const yMax of [110, 130, 200, 210, 340, 490, 510, 730, 1010, 2500, 9990]) {
+      const ticks = goYTicks(yMax)
+      expect(ticks.length).toBeGreaterThanOrEqual(3)
+      expect(ticks.length).toBeLessThanOrEqual(6)
+      expect(ticks[0]).toBe(0)
+      expect(ticks.at(-1)).toBe(yMax)
+      if (yMax <= 1250) expect(ticks).toContain(100)
+      expect(new Set(ticks).size).toBe(ticks.length)
+      expect([...ticks].sort((a, b) => a - b)).toEqual(ticks)
+    }
   })
 
   it('faixa de datas: início, terços, cruzamento destacado e fim, sem encavalar', () => {

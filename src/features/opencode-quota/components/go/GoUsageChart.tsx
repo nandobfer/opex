@@ -5,7 +5,7 @@ import { Area, CartesianGrid, ComposedChart, Line, ReferenceDot, ReferenceLine, 
 import { ChartDataTable } from "@/components/metrics/charts/ChartDataTable"
 import { useChartAnimation } from "@/components/metrics/charts/use-chart-animation"
 import { ChartContainer, ChartTooltip, type ChartConfig } from "@/components/ui/chart"
-import { formatGoDate, formatGoFullDate, formatGoPercent, goAxisTicks } from "../../go-logic"
+import { formatGoDate, formatGoFullDate, formatGoPercent, goAxisTicks, goYTicks } from "../../go-logic"
 import type { GoChartDto } from "../../go-types"
 import { GO_CARD_COLOR, GO_CEILING_COLOR, GO_CEILING_DASH, GO_CEILING_OPACITY, GO_FORECAST_COLOR, GO_GRID_COLOR, GO_GRID_OPACITY, GO_MUTED_COLOR, GO_USAGE_COLOR } from "./chart-style"
 import { GoAxisStrip } from "./GoAxisStrip"
@@ -36,8 +36,10 @@ const pct = (value: number | null) => (value === null ? "—" : formatGoPercent(
 const hollow = (color: string) => ({ r: 4.5, fill: GO_CARD_COLOR, stroke: color, strokeWidth: 2 })
 
 /**
- * Gráfico de um ciclo da assinatura no desenho do Console do OpenCode Go: eixo de 0% a 150% com grade apagada,
- * teto de 100% pontilhado e destacado, uso acumulado em verde (área com gradiente) até o círculo de hoje,
+ * Gráfico de um ciclo da assinatura no desenho do Console do OpenCode Go: eixo de 0% até o maior valor com
+ * folga (`goYMax`) e grade apagada em passo adaptativo (50, 100, 200, 500…, no máximo 6 marcas, com o 100% enquanto
+ * não encavala com o 0% e o topo como última marca, `goYTicks`), teto de 100% pontilhado e destacado, uso acumulado
+ * em verde (área com gradiente) até o círculo de hoje,
  * previsão em reta amarela com hachura até a renovação, círculos vazados no cruzamento e no fim (com o %
  * previsto), verticais tracejadas em hoje e no cruzamento e a faixa de datas com a data do cruzamento destacada.
  */
@@ -46,7 +48,7 @@ export function GoUsageChart({ chart, dailyAverage }: { chart: GoChartDto; daily
     const id = useId().replace(/[^a-zA-Z0-9]/g, "")
     const startMs = Date.parse(chart.cycle.startsAt)
     const endMs = Date.parse(chart.cycle.endsAt)
-    const ticks = Array.from({ length: chart.yMax / 50 + 1 }, (_, index) => index * 50)
+    const ticks = goYTicks(chart.yMax)
     const axisTicks = goAxisTicks(startMs, endMs, chart.crossing?.t ?? null)
     const ariaLabel = chart.cycle.current ? "Uso acumulado do ciclo atual da assinatura OpenCode Go" : "Uso acumulado do ciclo da assinatura OpenCode Go"
 

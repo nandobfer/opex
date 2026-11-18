@@ -58,7 +58,7 @@ const chart = (overrides: Partial<GoChartDto> = {}): GoChartDto => ({
   today: { t: NOW, percent: 44.3 },
   crossing: { t: CROSS, value: 100, label: '1 dez' },
   forecastEnd: { t: END, percent: 115.9 },
-  yMax: 150,
+  yMax: 120,
   missingDays: 0,
   partialDays: 0,
   historyFrom: '2026-10-06',
@@ -73,15 +73,21 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('GoUsageChart (desenho do Console)', () => {
-  it('eixo de tempo do ciclo, grade 0–150%, teto de 100% pontilhado e destacado, verticais em hoje e no cruzamento', () => {
+  it('eixo de tempo do ciclo, eixo Y até o maior valor com folga, teto de 100% pontilhado e destacado, verticais em hoje e no cruzamento', () => {
     render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
     expect(of('XAxis')[0]).toMatchObject({ dataKey: 't', type: 'number', domain: [START, END] })
-    expect(of('YAxis')[0]).toMatchObject({ domain: [0, 150], ticks: [0, 50, 100, 150] })
+    // OPE-171: previsão de 115,9% → eixo até 120%, marcas de 50 em 50 mais o topo (sem o vão até 150%).
+    expect(of('YAxis')[0]).toMatchObject({ domain: [0, 120], ticks: [0, 50, 100, 120] })
     const lines = of('ReferenceLine')
     const ceiling = lines.find((props) => props.y === 100)!
     expect(ceiling.strokeDasharray).toBeTruthy()
     expect(Number(ceiling.strokeWidth)).toBeGreaterThan(1)
     expect(lines.filter((props) => props.x !== undefined).map((props) => props.x)).toEqual([NOW, CROSS])
+  })
+
+  it('eixo Y que cai num múltiplo de 50 não repete o topo', () => {
+    render(<GoUsageChart chart={chart({ yMax: 150 })} dailyAverage={3.9} />)
+    expect(of('YAxis')[0]).toMatchObject({ domain: [0, 150], ticks: [0, 50, 100, 150] })
   })
 
   it('uso em área verde com gradiente, previsão em reta amarela com hachura e círculos vazados com o % previsto', () => {

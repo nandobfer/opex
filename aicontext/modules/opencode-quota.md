@@ -207,7 +207,12 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   `% usado × 24 h / (agora − início)`. Desenhada como **reta** de agora até a renovação, com **um ponto no fim de cada
   dia UTC** (todos sobre a mesma reta; o último é a renovação). Cada ponto traz `dayForecast`, a previsão do
   dia: média diária × fração do dia que cai na previsão (o dia de hoje e o da renovação pró-rateados).
-- Eixo Y de 0% a 150%, grades a cada 50%; sobe de 50 em 50 só se a previsão passar (`goYMax`).
+- Eixo Y de 0% até o maior valor do gráfico (uso ou previsão) arredondado para o próximo múltiplo de 10
+  **estritamente acima** dele, no mínimo 110% para o teto de 100% aparecer com respiro (`goYMax`: 113% → 120%,
+  120% → 130%, 96% → 110%; OPE-171). Marcas com passo adaptativo (`goYTicks`): o menor passo de 50, 100, 200,
+  500, 1000… que deixe **no máximo 6 marcas**, sempre com o 0%, o 100% (teto) e o próprio topo como última marca
+  (120 → 0, 50, 100, 120; 490 → 0, 100, 200, 300, 400, 490). A marca a menos de 8% do topo sai para os rótulos não
+  se encavalarem; o 100% só sai quando encavalaria com o 0% (topo acima de 1250%), e a linha pontilhada continua.
 - Faixa de datas (`goAxisTicks`): início, ⅓ e ⅔ do ciclo, cruzamento (destacado) e fim; marca a menos de 3 dias
   de outra mais importante sai. Rótulos em caixa alta no fuso de São Paulo ("5 NOV", `axisDateLabel`).
 
@@ -236,7 +241,8 @@ Reproduz o card de uso do Console do OpenCode Go:
   (`formatGoDate`); a dica da renovação traz data e hora. "Gasto real no ciclo" discreto à direita.
 - As três janelas (5h, Semanal, Mensal) com a `UsageBar` compartilhada (`fractionDigits={1}`) e o tempo até
   o reset (`formatResetIn`), com "Reinicia em dd/MM às HH:mm" na dica.
-- Gráfico (`GoUsageChart`, recharts `ComposedChart`, 260 px): grade horizontal apagada com "0%"…"150%";
+- Gráfico (`GoUsageChart`, recharts `ComposedChart`, 260 px): grade horizontal apagada nas marcas de `goYTicks` (passo adaptativo de no máximo 6 marcas, com o 100% e o
+  topo; ex.: "0%", "50%", "100%", "120%");
   **teto de 100% pontilhado e destacado** (mais claro e mais grosso que a grade, sem texto); verticais
   tracejadas apagadas em hoje e no cruzamento; uso em área verde (`--chart-positive-1`, gradiente) até o
   círculo vazado de hoje; previsão em reta amarela (`--chart-negative-3`) com hachura diagonal por baixo;
