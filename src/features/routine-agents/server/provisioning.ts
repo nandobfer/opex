@@ -189,7 +189,7 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
         }
         const { admin, app } = await routineEngramindTargets(actorId, state.warnings)
 
-        await ensureRoutineEngramindAgent(doc.slug, routineAgentTitle(doc.name), doc.objective, app)
+        await ensureRoutineEngramindAgent(doc.slug, doc.name, doc.objective, app)
         state.steps.agent = true
 
         const { token, issued } = await ensureRoutineToken(doc.slug, doc.engramindToken ?? null, app)
