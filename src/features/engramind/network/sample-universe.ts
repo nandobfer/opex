@@ -1,8 +1,15 @@
 import { stableHash } from "@engramind/client/react"
-import type { MemoryUniverseProps } from "@engramind/client/react"
+import type { MemoryUniverseProps, RelatedHit } from "@engramind/client/react"
 
 /** Memória do universo (o tipo da lib, derivado das props do `MemoryUniverse`). */
 export type SampleMemory = MemoryUniverseProps["memories"][number]
+
+/** Agente do centro da prévia (universo do agente). */
+export const SAMPLE_AGENT = "exemplo/agente"
+/** Similares fictícias por memória: o mesmo limite do `similar` do Engramind (OPE-164). */
+export const SAMPLE_RELATED_MAX = 3
+/** Memórias por "assunto" fictício dentro de um canal (as similares saem do mesmo assunto). */
+const SAMPLE_TOPIC_SIZE = 6
 
 export const SAMPLE_UNIVERSE_LIMITS = { count: { min: 1, max: 500, default: 120 }, channels: { min: 1, max: 8, default: 3 } } as const
 const DAY_MS = 86_400_000
@@ -40,7 +47,37 @@ export function buildSampleUniverse(count: number, channels: number): { memories
             verifiedAt: null,
             stale: false,
             author: null,
+            // Algumas escritas pelo agente de exemplo do centro: o "Link do agente às memórias que ele criou" aparece na prévia.
+            authorAgent: unit(`${id}:author`) < 0.15 ? SAMPLE_AGENT : null,
         }
     })
     return { memories, channels: slugs }
+}
+
+/**
+ * Similares fictícias da prévia (OPE-164), determinísticas: cada memória cai num "assunto" do seu canal (pelo
+ * hash do id) e ganha até 3 similares do mesmo assunto e canal, nunca ela mesma, com nota estável. A prévia
+ * mostra a aproximação e as arestas sem consultar o Engramind.
+ */
+export function buildSampleRelated(memories: readonly Pick<SampleMemory, "id" | "channel">[]): Map<string, RelatedHit[]> {
+    const counts = new Map<string, number>()
+    for (const memory of memories) counts.set(memory.channel, (counts.get(memory.channel) ?? 0) + 1)
+    const groups = new Map<string, string[]>()
+    for (const memory of memories) {
+        const topics = Math.max(1, Math.round((counts.get(memory.channel) ?? 1) / SAMPLE_TOPIC_SIZE))
+        const key = `${memory.channel}:${Math.floor(unit(`${memory.id}:topic`) * topics)}`
+        groups.set(key, [...(groups.get(key) ?? []), memory.id])
+    }
+    const related = new Map<string, RelatedHit[]>()
+    for (const members of groups.values()) {
+        for (const id of members) {
+            const hits = members
+                .filter((other) => other !== id)
+                .map((other) => ({ id: other, score: Math.round((0.7 + 0.28 * unit([id, other].sort().join("|"))) * 1000) / 1000 }))
+                .sort((a, b) => b.score - a.score || a.id.localeCompare(b.id))
+                .slice(0, SAMPLE_RELATED_MAX)
+            if (hits.length) related.set(id, hits)
+        }
+    }
+    return related
 }

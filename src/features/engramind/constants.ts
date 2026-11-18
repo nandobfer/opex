@@ -12,6 +12,8 @@ export const ENGRAMIND_UPDATED_EVENT = "engramind-updated"
 export const ENGRAMIND_CONSUMPTION_EVENT = "engramind-consumption"
 /** Tipo do `engramind-updated` quando o layout dos universos muda (OPE-142). */
 export const UNIVERSE_LAYOUT_EVENT_TYPE = "universe-layout"
+/** Tipo do `engramind-updated` quando o cache das similares das memórias muda (OPE-164). */
+export const RELATED_MEMORIES_EVENT_TYPE = "related-memories"
 /** Entidade da auditoria do Opex. */
 export const ENGRAMIND_AUDIT_ENTITY = "Engramind"
 /** App do próprio Opex na rede do Engramind (criado no bootstrap). */

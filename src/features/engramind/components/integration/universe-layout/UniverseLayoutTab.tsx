@@ -1,13 +1,17 @@
 "use client"
 
 import { useState } from "react"
+import { UNIVERSE_LAYOUT_PRESETS } from "@engramind/client"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FORM_GRID } from "@/components/ui/form-grid"
+import { cn } from "@/lib/utils"
 import { useUniverseLayout } from "../../../hooks/useUniverseLayout"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { StaleFormNotice } from "../../shared/StaleFormNotice"
 import { useFormSnapshot } from "../../shared/useFormSnapshot"
+import { FIELD_WIDE_CLASS } from "./UniverseLayoutFields"
 import { UniverseLayoutForm } from "./UniverseLayoutForm"
+import { UNIVERSE_PRESETS_GRID } from "./UniverseLayoutPresets"
 import { UniverseLayoutPreviewSkeleton } from "./UniverseLayoutPreview"
 
 /** Aba Visualização (OPE-142): o layout único dos universos de memórias, com prévia, exportar e importar. */
@@ -37,26 +41,41 @@ export function UniverseLayoutTab({ onDirtyChange, onConfigure }: { onDirtyChang
     )
 }
 
+/**
+ * Campos de cada seção do formulário (`true` = campo de linha inteira; o último de uma quantidade ímpar ocupa a
+ * linha pelo `FORM_GRID`): Disposição, Anéis, Desvio, Partículas, Links e Carregamento. Links (OPE-164), com o
+ * padrão `links = center`: "Links" de linha inteira e, lado a lado, "Link do agente…" e o destaque das partículas
+ * ("Arestas por memória" só com `related`).
+ */
+const SKELETON_SECTIONS: readonly (readonly boolean[])[] = [
+    [false, false, true, true, true],
+    [false, false, false, false, true],
+    [false, false, false, false, false],
+    [false, false],
+    [true, false, false],
+    [false],
+]
+
 /** Mesma estrutura do resultado: cartão das predefinições, formulário em seções e a prévia ao lado. */
 export function UniverseLayoutSkeleton() {
     return (
         <div className="flex flex-col gap-6" aria-busy="true" data-testid="universe-layout-skeleton">
             <div className="space-y-4 rounded-xl border p-6">
                 <Skeleton className="h-5 w-48" />
-                <div className="grid gap-2 sm:grid-cols-3">
-                    {Array.from({ length: 3 }, (_, index) => (
+                <div className={UNIVERSE_PRESETS_GRID}>
+                    {UNIVERSE_LAYOUT_PRESETS.map((_, index) => (
                         <Skeleton key={index} className="h-16 w-full rounded-md" />
                     ))}
                 </div>
             </div>
             <div className="grid gap-6 xl:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
                 <div className="flex min-w-0 flex-col gap-6">
-                    {[5, 5, 5, 2].map((fields, section) => (
+                    {SKELETON_SECTIONS.map((fields, section) => (
                         <div key={section} className="space-y-4 rounded-xl border p-6">
                             <Skeleton className="h-5 w-28" />
                             <div className={FORM_GRID}>
-                                {Array.from({ length: fields }, (_, index) => (
-                                    <Skeleton key={index} className="h-24 w-full rounded-lg" />
+                                {fields.map((wide, index) => (
+                                    <Skeleton key={index} className={cn("h-24 w-full rounded-lg", wide && FIELD_WIDE_CLASS)} />
                                 ))}
                             </div>
                         </div>

@@ -493,6 +493,15 @@ export interface MemoryMigrationDto {
 }
 
 /** Layout dos universos de memórias (`GET /api/engramind/universe-layout`, OPE-142). */
+/** `GET /api/engramind/related-memories` (OPE-164): as similares de cada memória (ids e notas) e o estado do cálculo. */
+export interface RelatedMemoriesDto {
+    related: Record<string, { id: string; score: number }[]>
+    /** O primeiro cálculo (ou um recálculo) está em andamento: as arestas entram aos poucos. */
+    pending: boolean
+    /** O primeiro preenchimento já terminou alguma vez. */
+    ready: boolean
+}
+
 export interface UniverseLayoutDto {
     /** Configuração completa em uso (o padrão da lib quando nada foi gravado). */
     config: import("@engramind/client").UniverseLayoutConfig

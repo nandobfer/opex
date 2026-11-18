@@ -60,6 +60,21 @@ export interface IEngramindState {
     appToken?: { tokenId: string; prefix: string; issuedAt: Date } | null
     /** Layout dos universos de memórias (OPE-142): a configuração gravada e quando; sem ela vale o padrão da lib. */
     universeLayout?: { config: Record<string, unknown>; updatedAt: Date } | null
+    /** Cache das similares (OPE-164): quando a rede pediu pela primeira vez e quando o último preenchimento terminou. */
+    relatedMemories?: { requestedAt: Date; completedAt: Date | null } | null
+}
+
+/**
+ * Similares de uma memória (OPE-164, `_id` = id da memória): o `similar` de `GET /v1/memories/{id}` pelo token
+ * admin (sem contar uso nem disparar consumo), só ids e notas, nunca o texto.
+ */
+export interface IEngramindRelatedMemory {
+    _id: string
+    channel: string
+    related: { id: string; score: number }[]
+    memoryVersion: number | null
+    computedAt: Date | null
+    failedAt: Date | null
 }
 
 /** Último contexto de memórias recebido por agente e combinação de canais (reserva com o Engramind fora do ar). */
@@ -118,9 +133,24 @@ const stateSchema = new Schema<IEngramindState>(
         memoryContext: { type: Schema.Types.Mixed, default: null },
         appToken: { type: Schema.Types.Mixed, default: null },
         universeLayout: { type: Schema.Types.Mixed, default: null },
+        relatedMemories: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false },
 )
+
+const relatedMemorySchema = new Schema<IEngramindRelatedMemory>(
+    {
+        _id: { type: String, required: true },
+        channel: { type: String, default: "" },
+        related: { type: [new Schema({ id: { type: String, required: true }, score: { type: Number, required: true } }, { _id: false })], default: [] },
+        memoryVersion: { type: Number, default: null },
+        computedAt: { type: Date, default: null },
+        failedAt: { type: Date, default: null },
+    },
+    { collection: "engramind_related_memories", versionKey: false },
+)
+relatedMemorySchema.index({ "related.id": 1 }, { name: "related_id" })
+relatedMemorySchema.index({ channel: 1 }, { name: "channel" })
 
 const contextCacheSchema = new Schema<IEngramindContextCache>(
     {
@@ -166,13 +196,16 @@ export const EngramindWebhookEvent: Model<IEngramindWebhookEvent> =
     (models.EngramindWebhookEvent as Model<IEngramindWebhookEvent>) ?? model<IEngramindWebhookEvent>("EngramindWebhookEvent", webhookEventSchema)
 export const EngramindState: Model<IEngramindState> = (models.EngramindState as Model<IEngramindState>) ?? model<IEngramindState>("EngramindState", stateSchema)
 
+export const EngramindRelatedMemory: Model<IEngramindRelatedMemory> =
+    (models.EngramindRelatedMemory as Model<IEngramindRelatedMemory>) ?? model<IEngramindRelatedMemory>("EngramindRelatedMemory", relatedMemorySchema)
+
 export const ENGRAMIND_STATE_ID = "engramind"
 
 let indexesReady: Promise<void> | null = null
 
 export async function engramindDb(): Promise<void> {
     await dbConnect()
-    indexesReady ??= Promise.all([EngramindWebhookEvent.createIndexes(), EngramindState.createIndexes()])
+    indexesReady ??= Promise.all([EngramindWebhookEvent.createIndexes(), EngramindState.createIndexes(), EngramindRelatedMemory.createIndexes()])
         .then(() => undefined)
         .catch((error: unknown) => {
             indexesReady = null

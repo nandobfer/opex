@@ -16,6 +16,9 @@ import { UNIVERSE_LAYOUT_HELP } from "../../../help/universe-layout"
 
 type FieldName = keyof UniverseLayoutConfig
 
+/** Campo de linha inteira na grade (`wide`); o skeleton da aba usa a mesma classe. */
+export const FIELD_WIDE_CLASS = "sm:col-span-2"
+
 interface FieldBaseProps {
     name: FieldName
     control: Control<UniverseLayoutConfig>
@@ -40,7 +43,7 @@ function FieldFrame({ name, values, saved, onReset, error, range, wide, children
     const label = universeFieldLabel(name)
     const dirty = values[name] !== saved[name]
     return (
-        <div className={cn("space-y-1.5 rounded-lg border p-3 transition-colors", dirty && "border-primary/50 bg-primary/5", wide && "sm:col-span-2")} data-testid={`universe-field-${name}`}>
+        <div className={cn("space-y-1.5 rounded-lg border p-3 transition-colors", dirty && "border-primary/50 bg-primary/5", wide && FIELD_WIDE_CLASS)} data-testid={`universe-field-${name}`}>
             <div className="flex items-center gap-1.5">
                 <Label htmlFor={htmlFor} className="text-xs font-semibold">
                     {label}

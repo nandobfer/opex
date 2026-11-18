@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildSampleUniverse, SAMPLE_UNIVERSE_LIMITS } from '@/features/engramind/network/sample-universe'
+import { buildSampleRelated, buildSampleUniverse, SAMPLE_AGENT, SAMPLE_RELATED_MAX, SAMPLE_UNIVERSE_LIMITS } from '@/features/engramind/network/sample-universe'
 
 /** OPE-142: o universo de exemplo da prévia da aba Visualização. */
 
@@ -30,5 +30,28 @@ describe('universo de exemplo da prévia', () => {
     expect(memories).toHaveLength(SAMPLE_UNIVERSE_LIMITS.count.max)
     expect(channels).toHaveLength(SAMPLE_UNIVERSE_LIMITS.channels.max)
     expect(buildSampleUniverse(0, 0).memories).toHaveLength(SAMPLE_UNIVERSE_LIMITS.count.min)
+  })
+
+  it('OPE-164: similares fictícias determinísticas, do mesmo canal, até 3 e nunca a própria memória', () => {
+    const { memories } = buildSampleUniverse(120, 3)
+    const related = buildSampleRelated(memories)
+    expect(related).toEqual(buildSampleRelated(buildSampleUniverse(120, 3).memories))
+    const channelOf = new Map(memories.map((memory) => [memory.id, memory.channel]))
+    expect(related.size).toBeGreaterThan(60)
+    for (const [id, hits] of related) {
+      expect(hits.length).toBeLessThanOrEqual(SAMPLE_RELATED_MAX)
+      for (const hit of hits) {
+        expect(hit.id).not.toBe(id)
+        expect(channelOf.get(hit.id)).toBe(channelOf.get(id))
+        expect(hit.score).toBeGreaterThan(0)
+        expect(hit.score).toBeLessThanOrEqual(1)
+      }
+    }
+  })
+
+  it('OPE-164: algumas memórias são do agente de exemplo (o link do autor aparece na prévia)', () => {
+    const { memories } = buildSampleUniverse(120, 3)
+    expect(memories.some((memory) => memory.authorAgent === SAMPLE_AGENT)).toBe(true)
+    expect(memories.some((memory) => !memory.authorAgent)).toBe(true)
   })
 })

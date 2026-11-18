@@ -35,7 +35,7 @@ vi.mock('@/features/engramind/components/integration/universe-layout/UniverseLay
   UniverseLayoutPreviewSkeleton: () => <div />,
 }))
 
-import { UniverseLayoutTab } from '@/features/engramind/components/integration/universe-layout/UniverseLayoutTab'
+import { UniverseLayoutSkeleton, UniverseLayoutTab } from '@/features/engramind/components/integration/universe-layout/UniverseLayoutTab'
 
 const input = (name: string) => document.getElementById(`universe-${name}`) as HTMLInputElement
 const previewConfig = () => JSON.parse(screen.getByTestId('preview').getAttribute('data-config')!) as UniverseLayoutConfig
@@ -129,6 +129,67 @@ describe('aba Visualização', () => {
     expect(screen.getByRole('radio', { name: 'Mais novas por fora' }).getAttribute('aria-checked')).toBe('true')
     expect(await screen.findByRole('button', { name: /Salvar/ })).toBeTruthy()
     expect(state.save).not.toHaveBeenCalled()
+  })
+
+  it('OPE-164: as quatro predefinições aparecem, com "Relacionadas"', () => {
+    mount()
+    const group = screen.getByRole('group', { name: 'Predefinições' })
+    expect(within(group).getAllByRole('button').map((button) => button.textContent)).toEqual([
+      expect.stringContaining('Anéis (padrão)'),
+      expect.stringContaining('Anéis soltos'),
+      expect.stringContaining('Espiral'),
+      expect.stringContaining('Relacionadas'),
+    ])
+  })
+
+  it('OPE-164: "Relacionadas" preenche os valores fixos e os links entre similares como pendente, sem mudar o link do autor', async () => {
+    mount()
+    fireEvent.click(document.getElementById('universe-authorLinks')!)
+    await waitFor(() => expect((document.getElementById('universe-authorLinks') as HTMLInputElement).checked).toBe(false))
+    fireEvent.click(screen.getByRole('button', { name: /Relacionadas/ }))
+    await waitFor(() => expect(input('ringGap').value).toBe('200'))
+    expect(input('slot').value).toBe('120')
+    expect(input('angleJitter').value).toBe('35')
+    expect(input('radiusJitter').value).toBe('32')
+    expect(screen.getByRole('radio', { name: 'Entre similares' }).getAttribute('aria-checked')).toBe('true')
+    expect(input('relatedMax').value).toBe('3')
+    expect((document.getElementById('universe-authorLinks') as HTMLInputElement).checked).toBe(false)
+    expect(screen.getByRole('button', { name: /Relacionadas/ }).getAttribute('aria-pressed')).toBe('true')
+    expect(state.save).not.toHaveBeenCalled()
+  })
+
+  it('OPE-164: "Arestas por memória" só aparece com links entre similares e recusa mais de 3', async () => {
+    mount()
+    expect(input('relatedMax')).toBeNull()
+    fireEvent.click(screen.getByRole('radio', { name: 'Entre similares' }))
+    await waitFor(() => expect(input('relatedMax')).toBeTruthy())
+    fireEvent.change(input('relatedMax'), { target: { value: '4' } })
+    expect(await screen.findByText('Arestas por memória: o máximo é 3')).toBeTruthy()
+    expect(screen.getByTestId('universe-field-authorLinks').textContent).toContain('Padrão: ligado')
+  })
+
+  it('OPE-164 (rodada 3): Links com "Links" na linha inteira e, lado a lado, o link e o destaque do agente; o skeleton acompanha', () => {
+    render(<UniverseLayoutSkeleton />)
+    const sections = [...screen.getByTestId('universe-layout-skeleton').querySelectorAll('.rounded-xl.border.p-6')]
+    const links = [...sections.at(-2)!.querySelectorAll('.h-24')]
+    expect(links.map((field) => field.classList.contains('sm:col-span-2'))).toEqual([true, false, false])
+    expect(sections.at(-1)!.querySelectorAll('.h-24')).toHaveLength(1)
+    cleanup()
+    mount()
+    expect(screen.getByTestId('universe-field-links').classList.contains('sm:col-span-2')).toBe(true)
+    expect(screen.getByTestId('universe-field-authorLinks').classList.contains('sm:col-span-2')).toBe(false)
+    expect(screen.getByTestId('universe-field-authorHighlight').classList.contains('sm:col-span-2')).toBe(false)
+    expect(screen.queryByTestId('universe-field-relatedMax')).toBeNull()
+    expect(screen.getByTestId('universe-field-memoryPageSize')).toBeTruthy()
+  })
+
+  it('OPE-164 (rodada 3): agrupamento por similaridade e destaque das partículas entram na configuração salva', async () => {
+    mount()
+    fireEvent.click(within(screen.getByTestId('universe-field-grouping')).getByRole('radio', { name: 'Por similaridade' }))
+    fireEvent.click(within(screen.getByTestId('universe-field-authorHighlight')).getByRole('radio', { name: 'Anel pulsando' }))
+    fireEvent.click(screen.getByRole('button', { name: /Salvar/ }))
+    await waitFor(() => expect(state.save).toHaveBeenCalled())
+    expect(state.save.mock.calls.at(-1)![0]).toMatchObject({ grouping: 'similarity', authorHighlight: 'pulse', memoryPageSize: 10 })
   })
 
   it('exportar: JSON com os valores do formulário (inclusive não salvos) e botão Copiar', async () => {

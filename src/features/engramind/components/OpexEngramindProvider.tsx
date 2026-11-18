@@ -8,7 +8,7 @@ import { toast } from "sonner"
 // A lib não importa CSS: as folhas do React Flow (canvas) e do react-day-picker (filtro de período) entram aqui.
 import "@xyflow/react/dist/style.css"
 import "react-day-picker/style.css"
-import { EngramindError } from "@engramind/client"
+import { EngramindError, universeUsesRelated } from "@engramind/client"
 import { EngramindProvider, type ConfigureTarget, type EngramindDataSource, type FooterContext, type NavigationAdapter, type PartialMessages, type RenderLinkProps } from "@engramind/client/react"
 import { api, apiErrorCode, apiErrorMessage, unwrapApi } from "@/lib/api"
 import { withBasePath } from "@/lib/base-path"
@@ -16,6 +16,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
 import { ENGRAMIND_INTEGRATION_HREF, ENGRAMIND_PAGE_HREF, OPEX_APP_SLUG } from "../constants"
 import { useAgentActivity } from "../hooks/useAgentActivity"
+import { useRelatedMemories } from "../hooks/useRelatedMemories"
 import { useUniverseLayout } from "../hooks/useUniverseLayout"
 import { useOrcamentoClients } from "@/features/orcamentos/hooks/useOrcamentos"
 import { centralChannelLabels, clientChannelLabels } from "../network/channel-labels"
@@ -84,6 +85,9 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
     const activity = useAgentActivity()
     // Layout dos universos (aba Visualização): vale para a rede, os universos de IA e os dos rotineiros; muda ao vivo.
     const universeLayout = useUniverseLayout({ realtime: true })
+    // Similares (OPE-164): só com "Links entre similares"; falha ou demora não quebra a rede (desenha sem arestas).
+    // Arestas entre similares ou agrupamento por similaridade: a lib precisa das similares.
+    const related = useRelatedMemories({ enabled: universeLayout.data?.config ? universeUsesRelated(universeLayout.data.config) : false })
     // Gravadas (auditoria do Opex): só os agentes do app do Opex (`opex/<identidade>`).
     const agentWrites = useCallback(
         (id: string) => {
@@ -118,6 +122,7 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
             messages={messages}
             slots={slots}
             universeLayout={universeLayout.data?.config}
+            relatedMemories={related.map}
             storagePrefix=""
         >
             {children}

@@ -8,7 +8,7 @@ export const UNIVERSE_LAYOUT_HELP: Record<keyof UniverseLayoutConfig, string> = 
     layout: "Anéis: círculos concêntricos em volta do centro (o desenho original). Espiral: uma espiral de girassol, sem anéis visíveis.",
     order: "De que lado do centro ficam as memórias de maior valor no critério escolhido (as mais novas, as mais atualizadas, as usadas há menos tempo ou as mais usadas).",
     orderBy: "O que define a ordem a partir do centro: a data de criação, a última atualização, o último uso (consulta ou criação) ou o uso (consultas + injeções).",
-    grouping: "Por canal junta as memórias do mesmo canal em arcos contíguos (útil no universo do agente, que mistura canais). Nenhum mantém só a ordem do critério.",
+    grouping: "Por canal junta as memórias do mesmo canal em arcos contíguos (útil no universo do agente, que mistura canais). Por similaridade põe as memórias similares em vagas vizinhas, mesmo vindas de anéis diferentes: o critério decide onde cada grupo começa, e a vizinhança vale mais que o anel. Canal e similaridade faz as duas coisas (similares vizinhas dentro do arco do canal). Nenhum mantém só a ordem do critério.",
     balance: "Proporcional divide as memórias entre os anéis conforme as vagas de cada um, sem deixar o último quase vazio. Encher cada anel completa um anel antes de abrir o próximo.",
     firstRadius: "Distância do centro ao primeiro anel (ou ao início da espiral), em pixels.",
     ringGap: "Distância entre um anel e o seguinte, em pixels.",
@@ -24,4 +24,9 @@ export const UNIVERSE_LAYOUT_HELP: Record<keyof UniverseLayoutConfig, string> = 
     minDistance: "Distância mínima entre os centros de duas partículas, em pixels, respeitada quando evitar sobreposição está ligado. 0 desliga a checagem.",
     particleMinPx: "Tamanho (diâmetro) da partícula menos usada do universo, em pixels.",
     particleMaxPx: "Tamanho (diâmetro) da partícula mais usada do universo, em pixels.",
+    links: "Ao centro: cada memória tem um link até o agente ou canal do centro (o desenho de sempre). Entre similares: os links ao centro somem e cada memória se liga às similares dela do mesmo canal. Para as similares ficarem vizinhas, use o agrupamento Por similaridade.",
+    relatedMax: "Quantas arestas, no máximo, partem de cada memória no modo Entre similares. Vai até 3: o Engramind devolve até 3 similares por memória, sempre do mesmo canal.",
+    authorLinks: "Liga o agente do centro às memórias que ele mesmo criou, com o link destacado. Desligado, no modo Ao centro o link dela fica igual aos demais; no modo Entre similares não sobra link ao centro. Aplicar uma predefinição não muda este campo.",
+    authorHighlight: "Destaca, no universo do agente, as partículas das memórias que ele mesmo criou: um anel na cor do canal, parado ou pulsando (parado com movimento reduzido). Nenhum deixa as partículas iguais às demais. Aplicar uma predefinição não muda este campo.",
+    memoryPageSize: "Quantas memórias chegam por vez ao abrir uma rede de memórias. O universo aparece na hora e as partículas entram a cada página, com a barra de progresso no topo: páginas menores mostram o universo crescendo antes; maiores carregam com menos requisições. Vale para a rede, os universos de Inteligência Artificial e a aba Memórias dos rotineiros. Aplicar uma predefinição não muda este campo.",
 }

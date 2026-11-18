@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(async () => {}),
   forward: vi.fn(async () => {}),
   channels: vi.fn(async () => {}),
+  related: vi.fn<(event: unknown) => Promise<boolean>>(async () => true),
 }))
 
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
@@ -26,6 +27,7 @@ vi.mock('@/features/engramind/server/models', () => ({
 vi.mock('@/features/engramind/server/shared', () => ({ engramindLog: { info: vi.fn(), warn: vi.fn(), debug: vi.fn() }, publishEngramind: mocks.publish }))
 vi.mock('@/features/engramind/server/live', () => ({ forwardWebhookLive: mocks.forward }))
 vi.mock('@/lib/pusher/channels', () => ({ publishToChannels: mocks.channels }))
+vi.mock('@/features/engramind/server/related-memories', () => ({ onRelatedMemoryEvent: mocks.related }))
 
 import { authenticateWebhook, processWebhookEvent, signPayload, verifySignature } from '@/features/engramind/server/webhook'
 
@@ -53,7 +55,24 @@ describe('processamento', () => {
   beforeEach(() => {
     mocks.seen.clear()
     mocks.publish.mockClear()
+    mocks.related.mockReset()
+    mocks.related.mockResolvedValue(true)
     mocks.config = { webhookSecret: SECRET }
+  })
+
+  it.each(['memory.created', 'memory.updated', 'memory.deleted'])('OPE-164: %s chega ao recálculo das similares com os ids do evento', async (type) => {
+    const event = { id: `evt_rel_${type}`, type, channel: 'eng/global', memory_ids: ['m_1', 'm_2'], at: '2026-10-31T12:00:00Z' }
+    expect(await processWebhookEvent(event)).toBe(true)
+    expect(mocks.related).toHaveBeenCalledTimes(1)
+    expect(mocks.related).toHaveBeenCalledWith(expect.objectContaining({ type, memory_ids: ['m_1', 'm_2'] }))
+  })
+
+  it('OPE-164: falha no recálculo das similares não derruba o repasse às telas', async () => {
+    mocks.related.mockRejectedValueOnce(new Error('Engramind fora do ar'))
+    const event = { id: 'evt_rel_fail', type: 'memory.updated', channel: 'eng/global', memory_ids: ['m_1'], at: '2026-10-31T12:00:00Z' }
+    expect(await processWebhookEvent(event)).toBe(true)
+    expect(mocks.publish).toHaveBeenCalledWith({ type: 'memory.updated', channel: 'eng/global', keys: undefined }, { live: false })
+    expect(mocks.related).toHaveBeenCalledTimes(1)
   })
 
   it('sem segredo configurado, recusa', async () => {

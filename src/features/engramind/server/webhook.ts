@@ -93,6 +93,9 @@ export async function processWebhookEvent(event: WebhookEvent): Promise<boolean>
     if (event.type === "memory.consumed") return true
     await publishEngramind({ type: event.type, channel: event.channel ?? null, keys: Array.isArray(event.keys) ? event.keys.slice(0, 50) : undefined }, { live: false })
     await publishMemoryList(event)
+    // Similares da visualização "Relacionadas" (OPE-164): recalcula só as memórias do evento.
+    const { onRelatedMemoryEvent } = await import("./related-memories")
+    await onRelatedMemoryEvent(event).catch((error: unknown) => engramindLog.warn({ type: event.type, err: error instanceof Error ? error.message : String(error) }, "[engramind] similares não recalculadas pelo webhook"))
     return true
 }
 

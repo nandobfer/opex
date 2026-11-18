@@ -56,6 +56,36 @@ describe('/api/engramind/universe-layout', () => {
     expect(mocks.save).not.toHaveBeenCalled()
   })
 
+  it('OPE-164: PUT aceita os campos novos e recusa relatedMax fora de 1 a 3 (D2) ou links desconhecido, sem gravar', async () => {
+    expect((await PUT(request('PUT', { links: 'related', relatedMax: 2, authorLinks: false }), ctx)).status).toBe(200)
+    expect(mocks.save).toHaveBeenCalledWith({ ...DEFAULT_UNIVERSE_LAYOUT, links: 'related', relatedMax: 2, authorLinks: false }, 'local')
+    mocks.save.mockClear()
+    expect((await PUT(request('PUT', { relatedMax: 9 }), ctx)).status).toBe(400)
+    expect((await PUT(request('PUT', { links: 'todos' }), ctx)).status).toBe(400)
+    expect(mocks.save).not.toHaveBeenCalled()
+  })
+
+  it('OPE-164: JSON antigo, sem os campos novos, é aceito com os padrões (links ao centro, 3 arestas, autor ligado)', async () => {
+    const old: Record<string, unknown> = { ...DEFAULT_UNIVERSE_LAYOUT }
+    for (const key of ['links', 'relatedMax', 'authorLinks']) delete old[key]
+    expect((await PUT(request('PUT', old), ctx)).status).toBe(200)
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ links: 'center', relatedMax: 3, authorLinks: true }), 'local')
+  })
+
+  it('OPE-164 (rodada 3): agrupamento por similaridade, destaque das partículas e memórias por página; fora da faixa é 400', async () => {
+    expect((await PUT(request('PUT', { grouping: 'channel-similarity', authorHighlight: 'ring', memoryPageSize: 50 }), ctx)).status).toBe(200)
+    expect(mocks.save).toHaveBeenCalledWith({ ...DEFAULT_UNIVERSE_LAYOUT, grouping: 'channel-similarity', authorHighlight: 'ring', memoryPageSize: 50 }, 'local')
+    mocks.save.mockClear()
+    expect((await PUT(request('PUT', { memoryPageSize: 0 }), ctx)).status).toBe(400)
+    expect((await PUT(request('PUT', { memoryPageSize: 500 }), ctx)).status).toBe(400)
+    expect((await PUT(request('PUT', { authorHighlight: 'brilho' }), ctx)).status).toBe(400)
+    expect(mocks.save).not.toHaveBeenCalled()
+    const old: Record<string, unknown> = { ...DEFAULT_UNIVERSE_LAYOUT }
+    for (const key of ['authorHighlight', 'memoryPageSize']) delete old[key]
+    expect((await PUT(request('PUT', old), ctx)).status).toBe(200)
+    expect(mocks.save).toHaveBeenCalledWith(expect.objectContaining({ authorHighlight: 'none', memoryPageSize: 10 }), 'local')
+  })
+
   it('DELETE volta ao padrão', async () => {
     const res = await DELETE(request('DELETE'), ctx)
     expect(res.status).toBe(200)
