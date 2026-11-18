@@ -12,6 +12,7 @@ import {
   goCycleFor,
   goForecast,
   goYMax,
+  goYTicks,
   meterPercent,
   subUtcMonths,
   type GoDayValue,
@@ -120,7 +121,9 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     expect(chart.today).toEqual({ t: NOW, percent: 44.3 })
     expect(Math.max(...chart.points.map((point) => point.usage ?? 0))).toBeLessThan(50)
     expect(chart.cycle).toEqual({ startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z', current: true })
-    expect(chart.yMax).toBe(150)
+    // OPE-171: previsão de ~116% → eixo até 120%, não 150%.
+    expect(chart.yMax).toBe(120)
+    expect(chart.yMax).toBeGreaterThan(chart.forecastEnd!.percent)
     expect(chart.missingDays).toBe(0)
   })
 
@@ -196,9 +199,29 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     expect(chart.cycle.current).toBe(false)
   })
 
-  it('eixo Y: 150% ou o próximo múltiplo de 50', () => {
-    expect(goYMax([10, 120])).toBe(150)
-    expect(goYMax([151])).toBe(200)
+  it('eixo Y: próximo múltiplo de 10 estritamente acima do maior valor, no mínimo 110%', () => {
+    expect(goYMax([10, 113])).toBe(120)
+    expect(goYMax([120])).toBe(130)
+    expect(goYMax([96])).toBe(110)
+    expect(goYMax([10])).toBe(110)
+    expect(goYMax([100])).toBe(110)
+    expect(goYMax([])).toBe(110)
+    expect(goYMax([487.3])).toBe(490)
+  })
+
+  it('marcas do eixo Y: de 50 em 50 com o topo como última marca, sem encavalar no topo', () => {
+    expect(goYTicks(110)).toEqual([0, 50, 100, 110])
+    expect(goYTicks(120)).toEqual([0, 50, 100, 120])
+    expect(goYTicks(150)).toEqual([0, 50, 100, 150])
+    expect(goYTicks(160)).toEqual([0, 50, 100, 160])
+    expect(goYTicks(490)).toEqual([0, 50, 100, 150, 200, 250, 300, 350, 400, 450, 490])
+    for (const yMax of [110, 130, 200, 210, 340, 1000]) {
+      const ticks = goYTicks(yMax)
+      expect(ticks[0]).toBe(0)
+      expect(ticks.at(-1)).toBe(yMax)
+      expect(ticks).toContain(100)
+      expect(new Set(ticks).size).toBe(ticks.length)
+    }
   })
 
   it('faixa de datas: início, terços, cruzamento destacado e fim, sem encavalar', () => {

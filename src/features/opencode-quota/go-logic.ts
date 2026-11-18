@@ -148,10 +148,31 @@ export interface GoChartInput {
     historyFrom: string
 }
 
-/** Teto do eixo Y: 150% ou o próximo múltiplo de 50 acima do maior valor. */
+/** Folga mínima do eixo Y: o teto de 100% sempre aparece com respiro. */
+const GO_Y_MIN = 110
+const GO_Y_TICK_STEP = 50
+/** Marca de 50 em 50 a menos desta fração do topo sai, para os rótulos não se encavalarem (o 100% fica sempre). */
+const GO_Y_TICK_GAP = 0.08
+
+/**
+ * Teto do eixo Y: o próximo múltiplo de 10 estritamente acima do maior valor do gráfico (uso e previsão), no
+ * mínimo 110% — 113% → 120%, 120% → 130%, 96% → 110%. Fica sempre acima do maior ponto, para o círculo e o
+ * rótulo do fim da previsão não saírem do domínio.
+ */
 export function goYMax(values: readonly number[]): number {
     const top = Math.max(0, ...values)
-    return Math.max(150, Math.ceil(top / 50) * 50)
+    return Math.max(GO_Y_MIN, Math.floor(top / 10) * 10 + 10)
+}
+
+/** Marcas do eixo Y: de 50 em 50 até o teto, com o próprio teto como última marca (0, 50, 100, 120). */
+export function goYTicks(yMax: number): number[] {
+    const ticks: number[] = []
+    for (let value = 0; value < yMax; value += GO_Y_TICK_STEP) {
+        if (value !== 100 && value > 0 && yMax - value < yMax * GO_Y_TICK_GAP) continue
+        ticks.push(value)
+    }
+    ticks.push(yMax)
+    return ticks
 }
 
 /**
