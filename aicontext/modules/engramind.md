@@ -340,6 +340,11 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   fim. O quadro reenquadra quando o número de memórias dobra e no fim; o estado vazio só aparece depois da carga.
   Acessibilidade: `role="status"`, `aria-busy` e "Carregando a rede de memórias…" no skeleton e
   `role="progressbar"` com `aria-valuenow` na barra. Um refetch com a rede em tela não volta ao skeleton.
+  As arestas (links ao centro, entre similares e os links da visão geral) ligam os centros pelas **posições do
+  layout** e acompanham o deslize de cada partícula quadro a quadro (`SlideRegistry` da lib, rodada 4), sem
+  depender da medida dos handles do React Flow: ficam certas enquanto as páginas chegam e no fim da carga, sem
+  precisar tirar o canvas da tela e voltar (antes, a medida tirada no meio de um deslize ficava errada até o
+  node remontar).
 - **Pendências no Engramind** (para o modo app da lib, não para o Opex): o prazo de desuso e os pesos da
   busca em `get_consumer_settings`, o estado do webhook do próprio app para o token de app e a edição dos
   canais criados pelo app. A tarefa está em `docs/engramind-consumer-settings.md` do repositório da lib.
