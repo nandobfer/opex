@@ -35,7 +35,10 @@ describe('ColumnFormDialog: cor pelo seletor central de cores', () => {
     // Esc fecha só o seletor (camada de cima), não o diálogo da coluna.
     fireEvent.keyDown(document.activeElement ?? document.body, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('radio', { name: 'Ciano 500' })).toBeNull())
-    fireEvent.click(screen.getByRole('button', { name: 'Criar coluna' }))
+    // O botão só habilita quando a validação assíncrona do formulário (modo onChange) termina.
+    const create = screen.getByRole('button', { name: 'Criar coluna' }) as HTMLButtonElement
+    await waitFor(() => expect(create.disabled).toBe(false))
+    fireEvent.click(create)
     await waitFor(() => expect(onSubmit).toHaveBeenCalled())
     expect(onSubmit.mock.calls[0]![0]).toMatchObject({ name: 'Aguardando cliente', color: '#06B6D4' })
   })
