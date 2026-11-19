@@ -1,7 +1,7 @@
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { GithubMapping } from "@/lib/db/models/Github"
 import { GITHUB_AUDIT } from "../constants"
-import { DEFAULT_PRIORITY_RULES, DEFAULT_TYPE_RULES } from "../logic"
+import { DEFAULT_PRIORITY_RULES, DEFAULT_TYPE_RULES, withPluginTypeRule } from "../logic"
 import type { MappingInput } from "../schemas"
 import type { GithubMappingDto } from "../types"
 import { publishGithubUpdated } from "./events"
@@ -13,7 +13,7 @@ export async function getMapping(): Promise<GithubMappingDto> {
     await dbConnect()
     const doc = await GithubMapping.findOne({ key: KEY }).lean()
     if (!doc) return { typeRules: DEFAULT_TYPE_RULES, priorityRules: DEFAULT_PRIORITY_RULES, isDefault: true }
-    return { typeRules: doc.typeRules as GithubMappingDto["typeRules"], priorityRules: doc.priorityRules as GithubMappingDto["priorityRules"], isDefault: false }
+    return { typeRules: withPluginTypeRule(doc.typeRules as GithubMappingDto["typeRules"]), priorityRules: doc.priorityRules as GithubMappingDto["priorityRules"], isDefault: false }
 }
 
 export async function saveMapping(input: MappingInput, actorId: string): Promise<GithubMappingDto> {

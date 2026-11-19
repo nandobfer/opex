@@ -77,7 +77,9 @@ export async function applyIssueToTask(project: ProjectDoc, issue: GithubIssueLi
     const task = await DevTask.findById(link.taskId).lean()
     if (!task) return false
 
-    const type = mapTaskType(issue, mapping.typeRules).value
+    // Sem regra que case, a tarefa mantém o tipo atual: a issue sem label de tipo não apaga o tipo (nem o
+    // alvo de uma tarefa Plugin, que só existe no tipo Plugin).
+    const type = mapTaskType(issue, mapping.typeRules, (task.taskType as TaskType | null) ?? null).value
     const priority = mapPriority(issue, mapping.priorityRules).value
     await updateTask(
         link.taskId,

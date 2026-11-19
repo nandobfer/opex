@@ -101,6 +101,8 @@ export function htmlBaseOf(apiUrl: string): string {
 // Mapeamento
 // ---------------------------------------------------------------------------
 
+const PLUGIN_TYPE_RULE: GithubTypeRule = { kind: "label", value: "plugin", taskType: "plugin" }
+
 export const DEFAULT_TYPE_RULES: GithubTypeRule[] = [
     { kind: "type", value: "Bug", taskType: "bugfix" },
     { kind: "type", value: "Feature", taskType: "feature" },
@@ -116,7 +118,17 @@ export const DEFAULT_TYPE_RULES: GithubTypeRule[] = [
     { kind: "label", value: "devops", taskType: "devops" },
     { kind: "label", value: "infra", taskType: "devops" },
     { kind: "label", value: "automation", taskType: "automation" },
+    PLUGIN_TYPE_RULE,
 ]
+
+/**
+ * Regras de tipo com ida e volta garantida para o tipo Plugin (OPE-172): o mapeamento já gravado no
+ * banco não herda as regras padrão do código, então ganha a label `plugin` quando não tem regra
+ * própria para o tipo. Sem ela, a issue da tarefa Plugin nasce sem label de tipo.
+ */
+export function withPluginTypeRule(rules: readonly GithubTypeRule[]): GithubTypeRule[] {
+    return rules.some((rule) => rule.taskType === "plugin") ? [...rules] : [...rules, PLUGIN_TYPE_RULE]
+}
 
 export const DEFAULT_PRIORITY_RULES: GithubPriorityRule[] = [
     { label: "urgent", priority: "urgent" },
