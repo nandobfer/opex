@@ -1,6 +1,6 @@
 import { createTwoFilesPatch } from "diff"
-import type { PluginChannel, PluginVersionState } from "./constants"
-import type { PluginSourceFile } from "./manifest"
+import { PLUGIN_NAV_SLOT_BY_SCOPE, PLUGIN_SLOTS, type PluginChannel, type PluginSlotName, type PluginVersionState } from "./constants"
+import type { PluginManifest, PluginSourceFile } from "./manifest"
 
 /** Regras puras dos plugins (OPE-172): ciclo das versões, escolha stable/preview e diff. */
 
@@ -124,4 +124,12 @@ export function uniquePluginId(base: string, taken: ReadonlySet<string>): string
         if (!taken.has(candidate)) return candidate
     }
     return `${base.slice(0, 30)}-${Date.now().toString(36)}`
+}
+
+/** Slots que um manifesto ocupa: os de componente e, com `nav`, o de menu do escopo. */
+export function pluginSlotsOf(manifest: Pick<PluginManifest, "scope" | "slots" | "nav"> | null | undefined): PluginSlotName[] {
+    if (!manifest) return []
+    const slots = new Set<PluginSlotName>((manifest.slots ?? []).map((slot) => slot.slot))
+    if (manifest.nav?.length) slots.add(PLUGIN_NAV_SLOT_BY_SCOPE[manifest.scope])
+    return PLUGIN_SLOTS.filter((slot) => slots.has(slot))
 }

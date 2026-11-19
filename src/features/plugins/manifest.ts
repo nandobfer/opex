@@ -13,6 +13,7 @@ import {
     PLUGIN_SERVICES,
     PLUGIN_SLOTS,
     PLUGIN_SLOTS_BY_SCOPE,
+    isPluginNavSlot,
     type PluginScope,
 } from "./constants"
 
@@ -136,15 +137,14 @@ export function pluginManifestIssues(manifest: PluginManifest, files: PluginSour
         if (manifest.crons.length) forbidden.push("crons")
         if (manifest.tools.length) forbidden.push("tools")
         if (manifest.services.length) forbidden.push("services")
-        if (manifest.nav.length) forbidden.push("nav")
         if ([...paths].some((path) => path.startsWith("server/"))) forbidden.push("pasta server/")
         if (forbidden.length) issues.push(`Plugin de cliente é só interface; remova: ${forbidden.join(", ")}`)
     }
 
     const allowedSlots = PLUGIN_SLOTS_BY_SCOPE[manifest.scope]
     for (const slot of manifest.slots) {
-        if (!allowedSlots.includes(slot.slot)) issues.push(`O slot "${slot.slot}" não existe no escopo ${manifest.scope === "owner" ? "do dono" : "do cliente"} (válidos: ${allowedSlots.filter((s) => s !== "sidebar.nav").join(", ")})`)
-        if (slot.slot === "sidebar.nav") issues.push('Use a lista "nav" do manifesto para o menu lateral, não um slot')
+        if (!allowedSlots.includes(slot.slot)) issues.push(`O slot "${slot.slot}" não existe no escopo ${manifest.scope === "owner" ? "do dono" : "do cliente"} (válidos: ${allowedSlots.filter((s) => !isPluginNavSlot(s)).join(", ")})`)
+        if (isPluginNavSlot(slot.slot)) issues.push(`Use a lista "nav" do manifesto para o menu (${slot.slot}), não um slot`)
     }
 
     const uiDeclared = manifest.slots.length > 0 || manifest.pages.length > 0

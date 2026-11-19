@@ -5,7 +5,7 @@ import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { publishAppEvent, publishClientEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
 import { PLUGIN_UPDATED_EVENT, type PluginChannel, type PluginScope } from "../constants"
-import { diffPluginFiles, versionActionBlock } from "../logic"
+import { diffPluginFiles, pluginSlotsOf, versionActionBlock } from "../logic"
 import { isPluginTestFile, manifestScopeIssue, normalizePluginFiles, parsePluginManifest, type PluginSourceFile } from "../manifest"
 import type { PluginDetailDto, PluginDiffDto, PluginDto, PluginUpdatedPayload, PluginVersionDetailDto, PluginVersionSummaryDto } from "../types"
 
@@ -39,6 +39,9 @@ function summaryOf(version: VersionDoc): PluginVersionSummaryDto {
         hasClient: Boolean(version.artifacts?.client),
         createdAt: new Date(version.createdAt).toISOString(),
         promotedAt: version.promotedAt ? new Date(version.promotedAt).toISOString() : null,
+        slots: pluginSlotsOf(version.manifest),
+        changeSummary: version.changeSummary ?? null,
+        changeSummarySource: version.changeSummarySource ?? null,
     }
 }
 
@@ -66,6 +69,7 @@ async function toDtos(plugins: PluginDoc[]): Promise<PluginDto[]> {
         active: plugin.active,
         stable: plugin.stableVersionId ? (byId.get(plugin.stableVersionId) ?? null) : null,
         preview: plugin.previewVersionId ? (byId.get(plugin.previewVersionId) ?? null) : null,
+        slots: (plugin.stableVersionId ? byId.get(plugin.stableVersionId) : undefined)?.slots ?? (plugin.previewVersionId ? byId.get(plugin.previewVersionId) : undefined)?.slots ?? [],
         previewWorkbenchId: plugin.previewWorkbenchId,
         runtimeError: plugin.runtimeError ? { ...plugin.runtimeError, at: new Date(plugin.runtimeError.at).toISOString() } : null,
         createdAt: new Date(plugin.createdAt).toISOString(),

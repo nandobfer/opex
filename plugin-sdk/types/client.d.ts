@@ -24,7 +24,12 @@ declare module "@opex/plugin-sdk/client" {
     export interface SlotProps {
         "dashboard.widgets": Record<string, never>
         "task.panel": { task: { id: string; code: string; title: string; taskType: string | null; projectId: string | null } }
+        "topbar.actions": Record<string, never>
+        "workbench.panel": { workbenchId: string; taskId: string | null }
+        "tasks.header": Record<string, never>
+        "financeiro.widgets": Record<string, never>
         "portal.dashboard.widgets": { clientId: string }
+        "portal.task.panel": { taskId: string; clientId: string }
     }
 
     export function usePluginHost(): PluginHost

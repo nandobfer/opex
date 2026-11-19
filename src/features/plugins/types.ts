@@ -1,4 +1,4 @@
-import type { PluginChannel, PluginComponentSlot, PluginScope, PluginVersionState } from "./constants"
+import type { PluginChannel, PluginComponentSlot, PluginScope, PluginSlotName, PluginVersionState } from "./constants"
 import type { PluginManifest } from "./manifest"
 import type { PluginFileDiff } from "./logic"
 
@@ -16,6 +16,10 @@ export interface PluginVersionSummaryDto {
     hasClient: boolean
     createdAt: string
     promotedAt: string | null
+    /** Slots declarados (inclui o de menu quando há `nav`). */
+    slots: PluginSlotName[]
+    changeSummary: string | null
+    changeSummarySource: "agent" | "ai" | null
 }
 
 export interface PluginDto {
@@ -29,6 +33,8 @@ export interface PluginDto {
     active: boolean
     stable: PluginVersionSummaryDto | null
     preview: PluginVersionSummaryDto | null
+    /** Slots do plugin (da estável; sem estável, da prévia) — filtro da lista. */
+    slots: PluginSlotName[]
     previewWorkbenchId: string | null
     runtimeError: { channel: PluginChannel; versionId: string; message: string; at: string } | null
     createdAt: string
@@ -85,5 +91,10 @@ export interface PluginUpdatedPayload {
 export interface PluginSlotPropsMap {
     "dashboard.widgets": Record<string, never>
     "task.panel": { task: { id: string; code: string; title: string; taskType: string | null; projectId: string | null } }
+    "topbar.actions": Record<string, never>
+    "workbench.panel": { workbenchId: string; taskId: string | null }
+    "tasks.header": Record<string, never>
+    "financeiro.widgets": Record<string, never>
     "portal.dashboard.widgets": { clientId: string }
+    "portal.task.panel": { taskId: string; clientId: string }
 }

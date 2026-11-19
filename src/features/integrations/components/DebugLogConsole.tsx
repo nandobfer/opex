@@ -70,6 +70,7 @@ export interface DebugLogConsoleProps {
 
 export function DebugLogConsole({ terminal, logs, title, description, extraActions, actions, className, consoleClassName, maximized = false, onMaximizedChange, placeholder = "Aguardando eventos de debug..." }: DebugLogConsoleProps) {
     const { mode, loading, error, refresh } = logs
+    const { consoleRef, setSearchResults, search, clearSearch, searchResults } = terminal
     return (
         <div className={cn("flex min-h-0 flex-col gap-3", className)}>
             <div className="flex items-center justify-between gap-3">
@@ -110,8 +111,8 @@ export function DebugLogConsole({ terminal, logs, title, description, extraActio
                     </motion.p>
                 )}
             </AnimatePresence>
-            <DebugSearchBar onSearch={terminal.search} onClear={terminal.clearSearch} results={terminal.searchResults} highlightLimit={SEARCH_HIGHLIGHT_LIMIT} />
-            <IntegrationConsole ref={terminal.consoleRef} className={cn("min-h-[320px] flex-1", consoleClassName)} placeholder={placeholder} onSearchResults={terminal.setSearchResults} />
+            <DebugSearchBar onSearch={search} onClear={clearSearch} results={searchResults} highlightLimit={SEARCH_HIGHLIGHT_LIMIT} />
+            <IntegrationConsole ref={consoleRef} className={cn("min-h-[320px] flex-1", consoleClassName)} placeholder={placeholder} onSearchResults={setSearchResults} />
         </div>
     )
 }

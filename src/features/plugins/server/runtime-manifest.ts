@@ -1,7 +1,7 @@
 import { dbConnect } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { Plugin, PluginVersion, type IPlugin, type IPluginVersion } from "@/lib/db/models/Plugin"
-import type { PluginComponentSlot } from "../constants"
+import { isPluginNavSlot, type PluginComponentSlot } from "../constants"
 import { resolvePluginVersion } from "../logic"
 import type { PluginRuntimeEntry, PluginRuntimeManifestDto } from "../types"
 import type { PluginAccess } from "./service"
@@ -65,10 +65,11 @@ export async function buildRuntimeManifest(access: PluginAccess, previewOn: stri
             revision: `${version.number}-${version.artifacts?.client?.hash ?? "server"}`,
             ...urls,
             slots: manifest.slots
-                .filter((slot) => slot.slot !== "sidebar.nav")
+                .filter((slot) => !isPluginNavSlot(slot.slot))
                 .map((slot) => ({ slot: slot.slot as PluginComponentSlot, export: slot.export, title: slot.title ?? null, order: slot.order })),
             pages: manifest.pages,
-            nav: access.kind === "owner" ? manifest.nav : [],
+            // Menu: no dono, a barra lateral; no portal, o menu do portal (slot portal.nav).
+            nav: manifest.nav,
         })
     }
     return { plugins: entries, previewOn: await visiblePreviewOn(access, previewOn) }

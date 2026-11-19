@@ -99,16 +99,30 @@ export function useRollbackPlugin(id: string) {
     })
 }
 
+/** Ativa/desativa com resposta otimista na lista e no detalhe (reverte se o servidor recusar). */
 export function useSetPluginActive(id: string) {
     const source = usePluginSource()
+    const queryClient = useQueryClient()
     const invalidate = useInvalidatePlugins()
+    const listPrefix = ["plugins", sourceKey(source), "list"] as const
+    const detailKey = pluginKeys.detail(sourceKey(source), id)
     return useMutation({
         mutationFn: async (active: boolean) => unwrapApi((await source.api.patch<ApiResponse<{ active: boolean }>>(`${source.base}/${id}/active`, { active })).data),
-        onSuccess: (data) => {
-            toast.success(data.active ? "Plugin ativado" : "Plugin desativado")
-            void invalidate()
+        onMutate: async (active: boolean) => {
+            await queryClient.cancelQueries({ queryKey: listPrefix })
+            const lists = queryClient.getQueriesData<PluginDto[]>({ queryKey: listPrefix })
+            const detail = queryClient.getQueryData<PluginDetailDto>(detailKey)
+            queryClient.setQueriesData<PluginDto[]>({ queryKey: listPrefix }, (current) => current?.map((plugin) => (plugin.id === id ? { ...plugin, active } : plugin)))
+            if (detail) queryClient.setQueryData<PluginDetailDto>(detailKey, { ...detail, active })
+            return { lists, detail }
         },
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível alterar o plugin")),
+        onSuccess: (data) => toast.success(data.active ? "Plugin ativado" : "Plugin desativado"),
+        onError: (error, _active, context) => {
+            for (const [key, value] of context?.lists ?? []) queryClient.setQueryData(key, value)
+            if (context?.detail) queryClient.setQueryData(detailKey, context.detail)
+            toast.error(apiErrorMessage(error, "Não foi possível alterar o plugin"))
+        },
+        onSettled: () => void invalidate(),
     })
 }
 

@@ -79,6 +79,10 @@ export interface IPluginVersion {
     /** Caminhos dos testes do plugin (`*.test.ts(x)`). */
     tests: string[]
     compileLog: string
+    /** Descritivo em linguagem natural da diferença para a versão anterior (pt-BR, sem código). */
+    changeSummary: string | null
+    /** Quem escreveu: o agente da mesa ou a IA ("Gerar descritivo"). */
+    changeSummarySource: "agent" | "ai" | null
     /** Versão de origem (base da mesa), para o diff entre versões. */
     baseVersionId: string | null
     author: string
@@ -100,6 +104,8 @@ const pluginVersionSchema = new Schema<IPluginVersion>(
         },
         tests: { type: [String], default: [] },
         compileLog: { type: String, default: "" },
+        changeSummary: { type: String, default: null },
+        changeSummarySource: { type: String, enum: ["agent", "ai", null], default: null },
         baseVersionId: { type: String, default: null },
         author: { type: String, default: "system" },
         source: {

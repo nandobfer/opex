@@ -32,15 +32,22 @@ export const PLUGIN_CHANNELS = ["stable", "preview"] as const
 export type PluginChannel = (typeof PLUGIN_CHANNELS)[number]
 
 /**
- * Slots de interface. `sidebar.nav` é declarativo (entradas `nav` do manifesto, integradas ao
- * `APP_NAV`); os demais montam componentes exportados pelo bundle do cliente.
+ * Slots de interface. Os de menu (`sidebar.nav` no dono, `portal.nav` no portal) são declarativos:
+ * vêm das entradas `nav` do manifesto, integradas ao menu; os demais montam componentes exportados
+ * pelo bundle do cliente.
  */
-export const OWNER_PLUGIN_SLOTS = ["dashboard.widgets", "sidebar.nav", "task.panel"] as const
-export const CLIENT_PLUGIN_SLOTS = ["portal.dashboard.widgets"] as const
+export const OWNER_PLUGIN_SLOTS = ["dashboard.widgets", "sidebar.nav", "task.panel", "topbar.actions", "workbench.panel", "tasks.header", "financeiro.widgets"] as const
+export const CLIENT_PLUGIN_SLOTS = ["portal.dashboard.widgets", "portal.task.panel", "portal.nav"] as const
 export const PLUGIN_SLOTS = [...OWNER_PLUGIN_SLOTS, ...CLIENT_PLUGIN_SLOTS] as const
 export type PluginSlotName = (typeof PLUGIN_SLOTS)[number]
-/** Slots que montam componentes (o `sidebar.nav` vem do manifesto). */
-export type PluginComponentSlot = Exclude<PluginSlotName, "sidebar.nav">
+/** Slots de menu: vêm da lista `nav` do manifesto, não de um componente. */
+export const PLUGIN_NAV_SLOTS = ["sidebar.nav", "portal.nav"] as const
+export type PluginNavSlot = (typeof PLUGIN_NAV_SLOTS)[number]
+export const isPluginNavSlot = (slot: string): slot is PluginNavSlot => (PLUGIN_NAV_SLOTS as readonly string[]).includes(slot)
+/** Slots que montam componentes (os de menu vêm do manifesto). */
+export type PluginComponentSlot = Exclude<PluginSlotName, PluginNavSlot>
+/** Slot de menu de cada escopo. */
+export const PLUGIN_NAV_SLOT_BY_SCOPE: Record<PluginScope, PluginNavSlot> = { owner: "sidebar.nav", client: "portal.nav" }
 
 export const PLUGIN_SLOTS_BY_SCOPE: Record<PluginScope, readonly PluginSlotName[]> = {
     owner: OWNER_PLUGIN_SLOTS,
@@ -51,7 +58,13 @@ export const PLUGIN_SLOT_LABELS: Record<PluginSlotName, string> = {
     "dashboard.widgets": "Widgets do Dashboard",
     "sidebar.nav": "Menu lateral",
     "task.panel": "Aba da tarefa",
+    "topbar.actions": "Barra superior",
+    "workbench.panel": "Aba da mesa",
+    "tasks.header": "Topo do quadro de tarefas",
+    "financeiro.widgets": "Widgets do Financeiro",
     "portal.dashboard.widgets": "Widgets do Dashboard do portal",
+    "portal.task.panel": "Aba da tarefa no portal",
+    "portal.nav": "Menu do portal",
 }
 
 /** Serviços do núcleo que um plugin do dono pode injetar (Cordis `inject`). */
