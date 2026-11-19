@@ -64,6 +64,11 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   mocks.models.central = memoryModel()
   return { AgenticCentral: mocks.models.central, AgenticWorkbench: memoryModel(), AgenticEvent: memoryModel() }
 })
+vi.mock('@/lib/db/models/Plugin', async () => {
+  const { memoryModel } = await import('../../helpers/memory-model')
+  mocks.models.plugin = memoryModel()
+  return { Plugin: mocks.models.plugin }
+})
 vi.mock('@/lib/db/models/Orcamento', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   mocks.models.orcamentoClient = memoryModel()
@@ -586,5 +591,17 @@ describe('"Gerar plano após refinar" da tarefa (OPE-137)', () => {
 
     await updateTask(a.id, { planAfterRefinement: null }, 'local')
     expect((await getTask(a.id)).planAfterRefinement).toBeNull()
+  })
+})
+
+describe('tarefa Plugin com plugin arquivado (OPE-172)', () => {
+  it('criar ou trocar o alvo para um plugin arquivado é recusado; o ativo passa', async () => {
+    const pid = await seedProject()
+    await import('@/lib/db/models/Plugin')
+    await mocks.models.plugin.create({ pluginId: 'velho', name: 'Velho', archivedAt: new Date() })
+    await mocks.models.plugin.create({ pluginId: 'relogio', name: 'Relógio', archivedAt: null })
+    await expect(create(pid, { taskType: 'plugin', pluginTarget: { scope: 'owner', clientId: null, pluginId: 'velho' } })).rejects.toMatchObject({ status: 400, code: 'TASK_PLUGIN_ARCHIVED', message: 'O plugin Velho está arquivado. Desarquive-o ou escolha outro' })
+    const task = await create(pid, { taskType: 'plugin', pluginTarget: { scope: 'owner', clientId: null, pluginId: 'relogio' } })
+    await expect(updateTask(task.id, { pluginTarget: { scope: 'owner', clientId: null, pluginId: 'velho' } } as never, 'local')).rejects.toMatchObject({ code: 'TASK_PLUGIN_ARCHIVED' })
   })
 })

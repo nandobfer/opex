@@ -1,5 +1,5 @@
 import type { AiUsage } from "@/lib/ai/stream"
-import type { BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings } from "./schemas"
+import type { BudgetPreviewSettings, EstimateHoursSettings, PluginVersionSummarySettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings } from "./schemas"
 
 export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@/lib/ai/providers"
 
@@ -147,4 +147,11 @@ export interface MemoriesMetaDto {
     outside: { consumer: string; channels: string[]; outside: number }[]
     /** Erro ao ler o Engramind (sem conexão, fora do ar). */
     error: string | null
+}
+
+export interface PluginVersionSummarySettingsDto {
+    settings: PluginVersionSummarySettings
+    isDefault: boolean
+    availability: AiFeatureAvailability
+    updatedAt: string | null
 }

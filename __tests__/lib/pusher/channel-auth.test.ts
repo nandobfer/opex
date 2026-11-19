@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { isChannelAuthorized, parseChannel } from '@/lib/pusher/channel-auth'
-import { appChannel, clientChannel, integrationChannel, opexChannel, repoRecentsChannel } from '@/lib/pusher/channel-names'
+import { appChannel, clientChannel, integrationChannel, opexChannel, pluginDebugChannel, repoRecentsChannel } from '@/lib/pusher/channel-names'
 import type { SessionPayload } from '@/features/auth/session'
 
 const ADMIN: SessionPayload = { iat: 0, exp: 9_999_999_999, kind: 'admin' }
@@ -70,5 +70,16 @@ describe('autorização dos canais privados', () => {
     expect(isChannelAuthorized('private-company-abc-all', ADMIN)).toBe(false)
     expect(isChannelAuthorized('presence-app', ADMIN)).toBe(false)
     expect(isChannelAuthorized('', ADMIN)).toBe(false)
+  })
+})
+
+describe('canal de logs de plugin (OPE-172)', () => {
+  it('private-plugin-{id} é só do dono; id fora do padrão é desconhecido', () => {
+    expect(pluginDebugChannel('relogio')).toBe('private-plugin-relogio')
+    expect(parseChannel('private-plugin-relogio')).toEqual({ kind: 'plugin', pluginId: 'relogio' })
+    expect(parseChannel('private-plugin-../x')).toEqual({ kind: 'unknown' })
+    expect(isChannelAuthorized(pluginDebugChannel('relogio'), ADMIN)).toBe(true)
+    expect(isChannelAuthorized(pluginDebugChannel('relogio'), CLIENT('c1'))).toBe(false)
+    expect(isChannelAuthorized(pluginDebugChannel('relogio'), null)).toBe(false)
   })
 })

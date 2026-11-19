@@ -22,7 +22,10 @@ aprovados e prévias corrigidas) — ver `modules/agent-metrics.md`.
   histórico interno ou horas apontadas.
 - **Não-admin do cliente**: vê apenas as horas infladas — **nenhum valor em R$**; o menu **Financeiro**
   e a aba **Usuários** ficam ocultos e as rotas correspondentes são bloqueadas no servidor.
-- **Admin do cliente**: vê o custo e a aba Usuários (CRUD dos usuários do cliente).
+- **Admin do cliente**: vê o custo e a aba Usuários (CRUD dos usuários do cliente) e o menu **Plugins**
+  (`/cliente/plugins`, OPE-172): plugins só de interface do cliente, com prévia, aprovação da prévia, ativar/desativar
+  e rollback. Widgets dos plugins aparecem no fim do Dashboard do portal (slot `portal.dashboard.widgets`) e as
+  páginas em `/cliente/x/{id}/...`. Ver `modules/plugins.md`.
 
 ## Modelos
 

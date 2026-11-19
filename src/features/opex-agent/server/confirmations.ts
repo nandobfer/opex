@@ -40,7 +40,7 @@ export function toConfirmationDto(doc: Pick<ActionDoc, "_id" | "summary" | "stat
     return { actionId: doc._id.toString(), summary: doc.summary, status, error: doc.error ?? null }
 }
 
-export async function requestConfirmation(sessionId: string, messageId: string, tool: OpexTool, input: unknown, toolCallId: string): Promise<OpexConfirmationDto> {
+export async function requestConfirmation(sessionId: string, messageId: string, tool: OpexTool, input: unknown, toolCallId: string, previewPlugins: readonly string[] = []): Promise<OpexConfirmationDto> {
     await opexDb()
     const parsed = tool.input.parse(input)
     const summary = tool.summarize?.(parsed) ?? tool.label
@@ -51,6 +51,8 @@ export async function requestConfirmation(sessionId: string, messageId: string, 
         toolName: tool.name,
         input: sealInput(parsed),
         summary,
+        // Ferramenta de plugin: a confirmação executa a MESMA versão (preview ou stable) proposta no turno.
+        previewPlugins: [...previewPlugins],
         status: "pending",
         expiresAt: new Date(Date.now() + OPEX_ACTION_TTL_MS),
     })
@@ -101,7 +103,8 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
     if (!claimed) throw new DomainError(409, "Esta ação já foi decidida", "OPEX_ACTION_DECIDED")
 
     const sessionId = claimed.sessionId.toString()
-    const tool = scope.kind === "owner" ? findOpexTool(claimed.toolName) : findOpexClientServerTool(claimed.toolName)
+    const previewPlugins = claimed.previewPlugins ?? []
+    const tool = scope.kind === "owner" ? findOpexTool(claimed.toolName, new Set(previewPlugins)) : findOpexClientServerTool(claimed.toolName)
     let followUp: string
     let output: unknown
     let final: ActionDoc = claimed
@@ -159,7 +162,7 @@ export async function decideAction(actionId: string, decision: "confirm" | "canc
     })
     const { queueFollowUp } = await import("./runner")
     const display = decision === "cancel" ? `Cancelado: ${claimed.summary}` : final.status === "failed" ? `Confirmado (falhou): ${claimed.summary}` : `Confirmado: ${claimed.summary}`
-    await queueFollowUp(sessionId, { kind: "confirmation", text: followUp, display })
+    await queueFollowUp(sessionId, { kind: "confirmation", text: followUp, display, ...(previewPlugins.length ? { previewPlugins } : {}) })
     await publishSessionUpdated(sessionId)
     return toConfirmationDto(final)
 }

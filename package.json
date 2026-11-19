@@ -1,6 +1,6 @@
 {
   "name": "opex",
-  "version": "2.120.2",
+  "version": "2.121.0",
   "private": true,
   "packageManager": "pnpm@11.8.0",
   "scripts": {
@@ -56,8 +56,10 @@
     "axios": "^1.13.2",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "cordis": "4.0.0-rc.13",
     "d3-hierarchy": "^3.1.2",
     "date-fns": "^4.3.0",
+    "diff": "^9.0.0",
     "dotenv": "^17.2.3",
     "framer-motion": "^12.34.0",
     "fuse.js": "^7.1.0",
@@ -77,9 +79,11 @@
     "react-markdown": "^10.1.0",
     "recharts": "^3.10.1",
     "remark-gfm": "^4.0.1",
+    "rolldown": "1.3.3",
     "sonner": "^2.0.7",
     "ssh2": "^1.17.0",
     "tailwind-merge": "^3.4.0",
+    "tailwindcss": "^4",
     "yaml": "^2.9.1",
     "zod": "^4.3.6"
   },
@@ -98,7 +102,6 @@
     "eslint-config-next": "16.4.5",
     "happy-dom": "^21.0.4",
     "jsdom": "^29.1.1",
-    "tailwindcss": "^4",
     "tsx": "^4.23.15",
     "typescript": "^5",
     "vite": "^7.3.7",

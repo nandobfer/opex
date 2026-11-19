@@ -100,7 +100,7 @@ async function memoriesForTurn(
 
 /** Ferramentas e política do turno, conforme o escopo. */
 async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings): Promise<{ tools: OpexTool[]; overrides: Record<string, boolean> }> {
-    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.disabledTools), overrides: settings.confirmationOverrides }
+    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.disabledTools, new Set(scope.previewPlugins ?? [])), overrides: settings.confirmationOverrides }
     await assertClientOpexEnabled(scope.actor)
     const { names } = await enabledClientToolNamesFor(scope.actor)
     // Portal: catálogo próprio (nomes podem coincidir com os do dono), confirmação pelo padrão do risco.
@@ -111,7 +111,7 @@ async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings)
 type TurnToolMap = ReadonlyMap<string, OpexTool>
 
 function findTool(scope: OpexServerScope, name: string, extra?: TurnToolMap): OpexTool | undefined {
-    return (scope.kind === "owner" ? findOpexTool(name) : findOpexClientServerTool(name)) ?? extra?.get(name)
+    return (scope.kind === "owner" ? findOpexTool(name, new Set(scope.previewPlugins ?? [])) : findOpexClientServerTool(name)) ?? extra?.get(name)
 }
 
 const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => redactToolInput(findTool(scope, toolName, extra), input)
@@ -183,7 +183,7 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
 
 export async function sendMessage(sessionId: string, input: { text: string; fileIds?: string[] }, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexMessageDto> {
     await opexDb()
-    return startTurn(sessionId, { kind: "message", text: input.text, fileIds: input.fileIds ?? [] }, actorId, scope)
+    return startTurn(sessionId, { kind: "message", text: input.text, fileIds: input.fileIds ?? [], ...(scope.kind === "owner" && scope.previewPlugins?.length ? { previewPlugins: [...scope.previewPlugins] } : {}) }, actorId, scope)
 }
 
 /** Mensagem do sistema (decisão de confirmação): roda já ou depois do turno atual. */
@@ -212,7 +212,9 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
         return null
     })
     if (!scope) return
-    await startTurn(sessionId, followUp, actorIdOf(scope), scope).catch((error: unknown) => {
+    // Ferramentas de plugin no canal do turno de origem (prévia ligada no navegador do dono).
+    const turnScope: OpexServerScope = scope.kind === "owner" && followUp.previewPlugins?.length ? { ...scope, previewPlugins: followUp.previewPlugins } : scope
+    await startTurn(sessionId, followUp, actorIdOf(turnScope), turnScope).catch((error: unknown) => {
         log.warn({ sessionId, err: error instanceof Error ? error.message : error }, "[opex] não foi possível continuar após a confirmação")
         void failJob(error instanceof Error ? error.message : String(error))
     })
@@ -422,7 +424,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
         }
         for (const notice of current.notices) publishLine(sessionId, { type: "text-delta", text: `> ${notice}\n\n` })
         const runtime = buildToolRuntime(current.tools, current.toolContext, current.overrides, {
-            requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId),
+            requestConfirmation: (tool, input, toolCallId) => requestConfirmation(sessionId, assistantId.toString(), tool, input, toolCallId, scope.kind === "owner" ? (scope.previewPlugins ?? []) : []),
             ...(current.hooks ?? {}),
         })
         prepared = await prepareModel({ provider: model.provider, model: model.model, variant: model.variant, session: current.providerSession, ...(current.title ? { title: current.title } : {}), signal: controller.signal })

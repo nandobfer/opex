@@ -141,6 +141,6 @@ describe('menu do portal', () => {
     const { clienteNav } = await import('@/features/orcamentos/portal/navigation')
     const labels = (isAdmin: boolean) => clienteNav(isAdmin)[0]!.items.map((item) => item.label)
     expect(labels(false)).toEqual(['Dashboard', 'Tarefas', 'Ambientes'])
-    expect(labels(true)).toEqual(['Dashboard', 'Tarefas', 'Ambientes', 'Financeiro', 'Usuários'])
+    expect(labels(true)).toEqual(['Dashboard', 'Tarefas', 'Ambientes', 'Financeiro', 'Usuários', 'Plugins'])
   })
 })

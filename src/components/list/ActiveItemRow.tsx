@@ -18,9 +18,15 @@ interface ActiveItemRowProps {
     /** Rótulo acessível do card clicável, com o nome do item (ex.: "Usar a conta Pessoal"). */
     activateLabel: string
     activateDisabled?: boolean
+    /** `false`: o item não pode ser posto em uso (card sem o botão que cobre a linha). */
+    activatable?: boolean
     onActivate: () => void
-    onRename: () => void
-    onRemove: () => void
+    /** Sem ele, não há o botão de renomear. */
+    onRename?: () => void
+    /** Sem ele, não há o botão de remover. */
+    onRemove?: () => void
+    /** Selos ao lado do nome (ex.: o estado de uma versão). */
+    badges?: ReactNode
     /** Ações extras antes de renomear (ex.: substituir o segredo). */
     actions?: ReactNode
     /** Conteúdo no lugar da linha (ex.: o `InlineRenameField` durante a edição). */
@@ -38,8 +44,8 @@ const stop = (event: MouseEvent) => event.stopPropagation()
  * as ações ficam numa camada acima dele, sem botão dentro de botão. As ações aparecem no hover ou no
  * foco do card (sempre visíveis em telas de toque) e continuam no DOM para o teclado.
  */
-export function ActiveItemRow({ label, sublabel, active, activateLabel, activateDisabled, onActivate, onRename, onRemove, actions, editing, children }: ActiveItemRowProps) {
-    const clickable = !active && !editing
+export function ActiveItemRow({ label, sublabel, active, activateLabel, activateDisabled, activatable = true, onActivate, onRename, onRemove, badges, actions, editing, children }: ActiveItemRowProps) {
+    const clickable = !active && !editing && activatable
     return (
         <motion.li
             layout="position"
@@ -79,6 +85,7 @@ export function ActiveItemRow({ label, sublabel, active, activateLabel, activate
                                     </Badge>
                                 </motion.span>
                             ) : null}
+                            {badges}
                         </span>
                         {sublabel ? <span className="block text-[11px] text-muted-foreground">{sublabel}</span> : null}
                     </span>
@@ -88,12 +95,16 @@ export function ActiveItemRow({ label, sublabel, active, activateLabel, activate
                         className="pointer-events-auto relative z-10 flex items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100 [@media(hover:none)]:opacity-100"
                     >
                         {actions}
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={`Renomear ${label}`} title="Renomear" onClick={onRename}>
-                            <Pencil className="h-4 w-4" aria-hidden />
-                        </Button>
-                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Remover ${label}`} title="Remover" onClick={onRemove}>
-                            <Trash2 className="h-4 w-4" aria-hidden />
-                        </Button>
+                        {onRename ? (
+                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={`Renomear ${label}`} title="Renomear" onClick={onRename}>
+                                <Pencil className="h-4 w-4" aria-hidden />
+                            </Button>
+                        ) : null}
+                        {onRemove ? (
+                            <Button type="button" size="icon" variant="ghost" className="h-8 w-8 text-destructive hover:text-destructive" aria-label={`Remover ${label}`} title="Remover" onClick={onRemove}>
+                                <Trash2 className="h-4 w-4" aria-hidden />
+                            </Button>
+                        ) : null}
                     </div>
                 </div>
             )}

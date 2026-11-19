@@ -3,9 +3,13 @@
 import { useState } from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import type { TaskDetailDto } from '@/features/tasks/types'
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+// Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock('@/components/ui/markdown', () => ({ Markdown: ({ children }: { children: string }) => <div data-testid="markdown">{children}</div> }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useAddComment: () => ({ mutateAsync: vi.fn(), isPending: false }) }))
 vi.mock('@/features/tasks/attachments/hooks', () => ({
@@ -91,5 +95,16 @@ describe('TaskDetailTabs', () => {
   it('não renderiza o slot do refinamento fora da aba de especificação', () => {
     render(<TaskDetailTabs task={task({ description: 'Corpo' })} value="description" onValueChange={vi.fn()} specSlot={<div data-testid="spec-slot" />} />)
     expect(screen.queryByTestId('spec-slot')).toBeNull()
+  })
+})
+
+describe('TaskDetailTabs: aba de plugin (task.panel, OPE-172)', () => {
+  afterEach(resetPluginTestRuntime)
+  it('a aba do plugin aparece com o title do slot e monta o componente com a tarefa', () => {
+    pluginTestRuntime.plugins = [pluginTestEntry('task.panel')]
+    render(<Harness task={task({ description: 'Corpo' })} />)
+    fireEvent.click(screen.getByRole('tab', { name: 'Aba do relógio' }))
+    const panel = document.querySelector('[data-plugin-contribution="relogio:Widget"]')
+    expect(JSON.parse(panel?.getAttribute('data-props') ?? 'null')).toMatchObject({ task: { id: expect.any(String) } })
   })
 })

@@ -123,6 +123,9 @@ export interface WorkbenchDto {
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa: `preview` (padrão) sobe a prévia; `auto_pr` vai direto ao PR. */
     agenticFlow: TaskAgenticFlow
+    /** Mesa de tarefa do tipo Plugin (OPE-172): versões de plugin em vez de PR e deploy. */
+    kind: WorkbenchKind
+    plugin: WorkbenchPluginDto | null
     /** A mesa passou pelo refinamento (OPE-137): passo "Refinamento" na trilha. */
     refinementPhase: boolean
     /** "Gerar plano após refinar" desta mesa (vale o valor no momento em que a especificação fica pronta). */
@@ -326,3 +329,17 @@ export type WorkbenchEventPayload =
 export type WorkbenchEvent = WorkbenchEventPayload & { seq?: number; ts: string }
 
 export type WorkbenchStreamLine = WorkbenchEvent | { type: "reset" } | { type: "ping"; ts: string }
+
+/** Tipo da mesa (OPE-172). */
+export type WorkbenchKind = "repo" | "plugin"
+
+export interface WorkbenchPluginDto {
+    pluginId: string | null
+    scope: "owner" | "client"
+    clientId: string | null
+    baseVersionId: string | null
+    draftVersionId: string | null
+    workDir: string | null
+    approved: boolean
+    testAttempts: number
+}

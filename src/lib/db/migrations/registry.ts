@@ -19,6 +19,7 @@ import { removeUnderstandTaskFeature } from "./remove-understand-task-feature"
 import { startAgentMetricsTracking } from "./agent-metrics-tracking-start"
 import { ensureRoutineAgentIndexes } from "./ensure-routine-agent-indexes"
 import { migrateAiProviderApiKeys } from "./migrate-ai-provider-api-keys"
+import { ensurePluginIndexes } from "./ensure-plugin-indexes"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -39,4 +40,6 @@ registerMigrations(
     { name: "migrate-ai-provider-api-keys", run: () => migrateAiProviderApiKeys() },
     // OPE-160: índice das conversas com os agentes rotineiros (`ensureOpexIndexes` é idempotente).
     { name: "ensure-routine-chat-session-indexes", run: () => ensureOpexIndexes() },
+    // OPE-172: plugins, versões e chave-valor.
+    { name: "ensure-plugin-indexes", run: () => ensurePluginIndexes() },
 )

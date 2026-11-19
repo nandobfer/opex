@@ -32,6 +32,8 @@ export const clienteRevisaoPath = (draftId: string) => `${ORCAMENTOS_BASE_PATH}/
 export const clienteTarefaPath = (task: { code: string }) => `${ORCAMENTOS_BASE_PATH}/tarefa/${task.code.trim().toLowerCase()}`
 export const clienteFinanceiroPath = () => `${ORCAMENTOS_BASE_PATH}/financeiro`
 export const clienteUsuariosPath = () => `${ORCAMENTOS_BASE_PATH}/usuarios`
+/** Plugins do portal (OPE-172), só admin. */
+export const clientePluginsPath = () => `${ORCAMENTOS_BASE_PATH}/plugins`
 export const clienteAmbientesPath = () => `${ORCAMENTOS_BASE_PATH}/ambientes`
 
 /** Evento em `private-app` quando clientes de orçamento mudam. Payload: `{ scope }`. */

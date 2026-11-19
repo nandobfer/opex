@@ -26,3 +26,7 @@ export const REPO_RECENTS_CHANNEL_PREFIX = "private-repo-recents-"
 export const opexChannel = (clientId: string, userId: string) => `private-opex-${clientId}-${userId}`
 
 export const OPEX_CHANNEL_PREFIX = "private-opex-"
+
+/** Logs de debug de um plugin (OPE-172): só o dono. */
+export const pluginDebugChannel = (pluginId: string) => `private-plugin-${pluginId}`
+export const PLUGIN_DEBUG_CHANNEL_PREFIX = "private-plugin-"

@@ -2,7 +2,8 @@ import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { runAfterResponse } from "@/lib/after-response"
 import { Project } from "@/lib/db/models/Project"
-import { assertColumn, createTask, type CreateTaskOptions } from "@/features/tasks/server/service"
+import { assertColumn, assertPluginTargetNotArchived, createTask, type CreateTaskOptions } from "@/features/tasks/server/service"
+import { resolvePluginTarget } from "@/features/tasks/plugin-target"
 import type { CreateTaskInput } from "@/features/tasks/schemas"
 import type { TaskDto } from "@/features/tasks/types"
 import { assertAttachmentsLinkable, linkAttachmentsToTask } from "@/features/tasks/attachments/server/service"
@@ -56,6 +57,8 @@ export async function createTaskWithIssue(
 
     const attachments = options.attachments
     if (attachments) await assertAttachmentsLinkable(attachments.actor, attachments.ids)
+    // Alvo do plugin (OPE-172) conferido antes da issue: um 400 depois dela deixaria uma issue órfã no GitHub.
+    await assertPluginTargetNotArchived(resolvePluginTarget(input.taskType ?? null, input.pluginTarget ?? null, options.clientId ?? null))
 
     const mapping = await getMapping()
     const labels = reverseLabels(input.taskType ?? null, input.priority ?? null, mapping)

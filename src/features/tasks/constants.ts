@@ -3,7 +3,7 @@
  * Opex é a fonte de verdade, então não há espelho de plataforma externa nem regras de transição.
  */
 
-export const TASK_TYPES = ["analysis", "feature", "bugfix", "automation", "testing", "devops"] as const
+export const TASK_TYPES = ["analysis", "feature", "bugfix", "automation", "testing", "devops", "plugin"] as const
 export type TaskType = (typeof TASK_TYPES)[number]
 
 export const TASK_TYPE_LABELS: Record<TaskType, string> = {
@@ -13,6 +13,8 @@ export const TASK_TYPE_LABELS: Record<TaskType, string> = {
     automation: "Automação",
     testing: "Testes",
     devops: "DevOps",
+    /** OPE-172: a mesa gera e publica versões de plugin (sem PR, build nem deploy). */
+    plugin: "Plugin",
 }
 
 export const TASK_TYPE_SHORT_LABELS: Record<TaskType, string> = {
@@ -22,6 +24,7 @@ export const TASK_TYPE_SHORT_LABELS: Record<TaskType, string> = {
     automation: "Automação",
     testing: "Testes",
     devops: "DevOps",
+    plugin: "Plugin",
 }
 
 export const TASK_TYPE_STYLES: Record<TaskType, string> = {
@@ -31,7 +34,12 @@ export const TASK_TYPE_STYLES: Record<TaskType, string> = {
     automation: "border-violet-400/30 bg-violet-500/15 text-violet-300",
     testing: "border-teal-400/30 bg-teal-500/15 text-teal-300",
     devops: "border-amber-400/30 bg-amber-500/15 text-amber-300",
+    plugin: "border-primary/40 bg-primary/15 text-primary",
 }
+
+/** Tipo de tarefa que muda o fluxo da mesa para versões de plugin (OPE-172). */
+export const PLUGIN_TASK_TYPE = "plugin" as const satisfies TaskType
+export const isPluginTaskType = (type: string | null | undefined): boolean => type === PLUGIN_TASK_TYPE
 
 export const TASK_PRIORITIES = ["urgent", "high", "medium", "low"] as const
 export type TaskPriority = (typeof TASK_PRIORITIES)[number]

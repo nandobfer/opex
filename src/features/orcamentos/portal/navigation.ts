@@ -1,6 +1,6 @@
-import { Banknote, LayoutDashboard, ListTodo, Server, Users } from "lucide-react"
+import { Banknote, Blocks, LayoutDashboard, ListTodo, Server, Users } from "lucide-react"
 import type { NavSectionDef } from "@/features/layout/types"
-import { clienteAmbientesPath, clienteDashboardPath, clienteFinanceiroPath, clienteTarefasPath, clienteUsuariosPath } from "../constants"
+import { clienteAmbientesPath, clienteDashboardPath, clienteFinanceiroPath, clientePluginsPath, clienteTarefasPath, clienteUsuariosPath } from "../constants"
 
 /**
  * Navegação do **portal do cliente**: Dashboard, Tarefas, Ambientes (estado para todos; ações do
@@ -16,6 +16,8 @@ export function clienteNav(isAdmin: boolean): readonly NavSectionDef[] {
     if (isAdmin) {
         items.push({ href: clienteFinanceiroPath(), label: "Financeiro", title: "Financeiro", icon: Banknote })
         items.push({ href: clienteUsuariosPath(), label: "Usuários", title: "Usuários", icon: Users })
+        // Plugins do portal (OPE-172): prévia, aprovação e rollback dos plugins do cliente.
+        items.push({ href: clientePluginsPath(), label: "Plugins", title: "Plugins", icon: Blocks })
     }
     return [{ id: "portal", items }]
 }

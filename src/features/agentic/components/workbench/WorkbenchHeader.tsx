@@ -89,7 +89,7 @@ export function WorkbenchHeader({ workbench, central, connected }: { workbench: 
                         ) : workbench.stage === "build_queued" && workbench.buildQueuePosition ? (
                             <QueueBadge position={workbench.buildQueuePosition} label="Na fila do build" title="Aguardando a vez do build" />
                         ) : (
-                            <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} />
+                            <WorkbenchStageBadge stage={workbench.stage} runState={workbench.runState} kind={workbench.kind} />
                         )}
                         <span className={cn("flex items-center gap-1 text-[11px]", connected ? "text-emerald-400" : "text-muted-foreground")} title={connected ? "Recebendo a saída ao vivo" : "Reconectando à saída ao vivo"}>
                             <Plug className="h-3 w-3" aria-hidden /> {connected ? "ao vivo" : "reconectando"}

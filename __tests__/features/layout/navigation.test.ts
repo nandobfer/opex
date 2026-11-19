@@ -45,7 +45,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
                 ],
             ],
             ["Integrações", "/integracoes"],
-            ["Configurações", [["Ambientes", "/ambientes"], ["Aparência", "/configuracoes/aparencia"]]],
+            ["Configurações", [["Ambientes", "/ambientes"], ["Aparência", "/configuracoes/aparencia"], ["Plugins", "/plugins"]]],
         ])
     })
 
@@ -53,7 +53,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
         const integracoes = APP_NAV[0]!.items.find((entry) => !isNavGroup(entry) && entry.href === "/integracoes")
         expect(integracoes && !isNavGroup(integracoes) ? [integracoes.label, integracoes.icon, integracoes.panel] : null).toEqual(["Integrações", Plug, "integrations"])
         const configuracoes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "configuracoes")
-        expect(configuracoes?.items.map((item) => item.href)).toEqual(["/ambientes", "/configuracoes/aparencia"])
+        expect(configuracoes?.items.map((item) => item.href)).toEqual(["/ambientes", "/configuracoes/aparencia", "/plugins"])
         expect(activeNavHref("/integracoes/github", APP_NAV_ITEMS)).toBe("/integracoes")
     })
 
@@ -78,6 +78,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             "/integracoes",
             "/ambientes",
             "/configuracoes/aparencia",
+            "/plugins",
         ])
         expect(flattenNav(APP_NAV)).toEqual(APP_NAV_ITEMS)
     })

@@ -4,7 +4,7 @@ import { REFINEMENT_IN_PROGRESS_REASON } from "@/features/refinement/constants"
 import { normalizeColor } from "@/lib/colors"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
 
-import type { ModelChoiceDto, ModelSourceDto } from "./types"
+import type { ModelChoiceDto, ModelSourceDto, WorkbenchKind } from "./types"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
 
@@ -312,7 +312,7 @@ export const isRefinementStage = (stage: WorkbenchStage): boolean => REFINEMENT_
  * `hasSession` controla a oferta de **Reconectar** (só faz sentido com uma sessão do OpenCode já criada).
  * `waitingSlot`: a mesa aguarda vaga no limite da central — só é possível cancelar a espera.
  */
-export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean, hasSession = true, waitingSlot = false): WorkbenchAction[] {
+export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasPreview: boolean, hasSession = true, waitingSlot = false, kind: WorkbenchKind = "repo"): WorkbenchAction[] {
     if (waitingSlot) return ["cancel-wait"]
     // Refinando: Parar/Continuar/Reconectar/Recomeçar/Encerrar são as ações do refinamento (rotas próprias).
     if (stage === "refining") return []
@@ -334,6 +334,8 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
         case "adversarial_blocked":
             return ["adversarial-fix", "adversarial-rerun", "adversarial-skip"]
         case "preview":
+            // Mesa Plugin (OPE-172): a prévia é a versão `preview` carregada ao vivo (sem container para reconstruir).
+            if (kind === "plugin") return hasPreview ? ["open-preview", "request-correction", "approve"] : ["request-correction", "approve"]
             return hasPreview ? ["open-preview", "rebuild-preview", "request-correction", "approve"] : ["rebuild-preview", "request-correction", "approve"]
         case "changes_requested":
             return ["submit-pr-feedback"]
@@ -344,7 +346,7 @@ export function workbenchActions(stage: WorkbenchStage, runState: RunState, hasP
     }
 }
 
-export const canRun = (stage: WorkbenchStage, runState: RunState, action: WorkbenchAction, waitingSlot = false) => workbenchActions(stage, runState, true, true, waitingSlot).includes(action)
+export const canRun = (stage: WorkbenchStage, runState: RunState, action: WorkbenchAction, waitingSlot = false, kind: WorkbenchKind = "repo") => workbenchActions(stage, runState, true, true, waitingSlot, kind).includes(action)
 
 /** Estado da mesa consultado pelas regras de "Definir etapa". */
 export interface ManualStageState {
@@ -353,6 +355,8 @@ export interface ManualStageState {
     hasPreview: boolean
     prOpen: boolean
     deleting: boolean
+    /** Mesa Plugin (OPE-172): não tem Pull Request. */
+    kind?: WorkbenchKind
 }
 
 /**
@@ -371,6 +375,7 @@ export function manualStageBlock(target: ManualStage, state: ManualStageState): 
             return state.hasPreview ? null : "A mesa não tem uma prévia publicada"
         case "pr_open":
         case "changes_requested":
+            if (state.kind === "plugin") return "Mesa de plugin não tem Pull Request"
             return state.prOpen ? null : "A mesa não tem um Pull Request aberto"
         case "done":
             return null
@@ -386,8 +391,9 @@ export interface ManualStageOption {
 }
 
 /** Etapas que podem ser definidas na mesa, com a disponibilidade de cada uma (tela e `get_workbench` do Opex). */
-export function manualStageOptions(workbench: { stage: WorkbenchStage; plans: unknown[]; previewUrl: string | null; pr: { state: string } | null; deletionRequestedAt: unknown }): ManualStageOption[] {
+export function manualStageOptions(workbench: { stage: WorkbenchStage; plans: unknown[]; previewUrl: string | null; pr: { state: string } | null; deletionRequestedAt: unknown; kind?: WorkbenchKind }): ManualStageOption[] {
     const state: ManualStageState = {
+        kind: workbench.kind ?? "repo",
         stage: workbench.stage,
         hasPlan: workbench.plans.length > 0,
         hasPreview: Boolean(workbench.previewUrl),

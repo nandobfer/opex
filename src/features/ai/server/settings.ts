@@ -14,6 +14,9 @@ import { resolveRefinementSkill } from "../refinement-skill"
 import {
     DEFAULT_BUDGET_PREVIEW_SETTINGS,
     DEFAULT_ESTIMATE_HOURS_SETTINGS,
+    DEFAULT_PLUGIN_VERSION_SUMMARY_SETTINGS,
+    pluginVersionSummarySettingsSchema,
+    type PluginVersionSummarySettings,
     DEFAULT_TASK_REFINEMENT_SETTINGS,
     DEFAULT_TASK_SUMMARY_SETTINGS,
     DEFAULT_TASK_TAGS_SETTINGS,
@@ -28,7 +31,7 @@ import {
     type TaskSummarySettings,
     type TaskTagsSettings,
 } from "../schemas"
-import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, RefinementSkillStateDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto } from "../types"
+import type { AiFeatureAvailability, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, PluginVersionSummarySettingsDto, RefinementSkillStateDto, TaskRefinementSettingsDto, TaskSummarySettingsDto, TaskTagsSettingsDto } from "../types"
 import { PR_REVIEW_FEATURE } from "@/features/pr-review/constants"
 import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema, type PrReviewSettings } from "@/features/pr-review/schemas"
 import type { PrReviewSettingsDto } from "@/features/pr-review/types"
@@ -38,6 +41,7 @@ const TASK_TAGS_FEATURE = "task-tags"
 const BUDGET_PREVIEW_FEATURE = "budget-preview"
 const ESTIMATE_HOURS_FEATURE = "estimate-hours"
 const TASK_REFINEMENT_FEATURE = "task-refinement"
+const PLUGIN_VERSION_SUMMARY_FEATURE = "plugin-version-summary"
 
 /** Campos de provedor comuns a toda feature de IA. */
 export type ProviderSettings = {
@@ -336,4 +340,27 @@ export async function savePrReviewSettings(input: PrReviewSettings, actorId: str
     const before = await loadPrReviewSettings()
     await persistFeature(PR_REVIEW_FEATURE, next, actorId, before)
     return getPrReviewSettings()
+}
+
+// ── Descritivo de versão de plugin (OPE-172) ─────────────────────────────────
+
+export async function loadPluginVersionSummarySettings(): Promise<{ settings: PluginVersionSummarySettings; isDefault: boolean; updatedAt: Date | null }> {
+    return loadFeature(PLUGIN_VERSION_SUMMARY_FEATURE, pluginVersionSummarySettingsSchema, DEFAULT_PLUGIN_VERSION_SUMMARY_SETTINGS)
+}
+
+export async function availabilityOfPluginVersionSummary(settings: PluginVersionSummarySettings): Promise<AiFeatureAvailability> {
+    return availability(settings, '"Descritivo de versão de plugin"')
+}
+
+export async function getPluginVersionSummarySettings(): Promise<PluginVersionSummarySettingsDto> {
+    const { settings, isDefault, updatedAt } = await loadPluginVersionSummarySettings()
+    return { settings, isDefault, availability: await availabilityOfPluginVersionSummary(settings), updatedAt: updatedAt ? updatedAt.toISOString() : null }
+}
+
+export async function savePluginVersionSummarySettings(input: PluginVersionSummarySettings, actorId: string): Promise<PluginVersionSummarySettingsDto> {
+    const next = normalizeProvider(input)
+    await assertCatalog(next)
+    const before = await loadPluginVersionSummarySettings()
+    await persistFeature(PLUGIN_VERSION_SUMMARY_FEATURE, next, actorId, before)
+    return getPluginVersionSummarySettings()
 }

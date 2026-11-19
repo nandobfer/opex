@@ -1,3 +1,4 @@
+import { isPluginToolName } from "@/features/plugins/constants"
 import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
@@ -82,7 +83,8 @@ function normalizeTitle(title: OpexTitleModel): OpexTitleModel {
 export function normalizeOpexSettings(input: OpexAgentSettings, metas: readonly OpexToolMetaDto[] = []): OpexAgentSettings {
     const known = new Map(metas.map((tool) => [tool.name, tool]))
     if (metas.length) {
-        const unknown = [...input.disabledTools, ...Object.keys(input.confirmationOverrides)].find((name) => !known.has(name))
+        // Ferramentas de plugin (OPE-172) podem estar descarregadas (plugin desligado): o ajuste fica guardado.
+        const unknown = [...input.disabledTools, ...Object.keys(input.confirmationOverrides)].find((name) => !known.has(name) && !isPluginToolName(name))
         if (unknown) throw new DomainError(400, `Ferramenta desconhecida: ${unknown}`, "OPEX_TOOL_NOT_FOUND")
     }
     return {

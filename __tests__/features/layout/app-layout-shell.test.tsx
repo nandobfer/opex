@@ -3,12 +3,16 @@
 import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { framerMotionMock } from "../../helpers/framer-motion"
 
 const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn() }))
 
 vi.mock("framer-motion", () => framerMotionMock())
+// Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
+vi.mock("@/features/plugins/hooks/usePlugins", async () => (await import("../../helpers/plugins")).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock("next/navigation", () => ({ usePathname: () => "/tarefas", useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("next/link", () => ({
     default: React.forwardRef<HTMLAnchorElement, { children: React.ReactNode; href: string } & Record<string, unknown>>(function MockLink({ children, href, ...props }, ref) {
@@ -77,7 +81,37 @@ describe("AppLayoutShell — menu do dono liga o submenu de Integrações (OPE-1
             </AppLayoutShell>,
         )
         const footer = screen.getByTestId("sidebar-footer-items")
-        const items = Array.from(footer.querySelectorAll("li")).map((item) => item.getAttribute("data-testid"))
+        // O item vazio do slot `topbar.actions` (sem plugins) fica oculto (`empty:hidden`) e não conta.
+        const items = Array.from(footer.querySelectorAll("li")).filter((item) => item.childNodes.length > 0 || item.hasAttribute("data-testid")).map((item) => item.getAttribute("data-testid"))
         expect(items).toEqual(["server-quota-item-mock", "agent-nav-item-mock"])
+    })
+})
+
+describe("AppLayoutShell: plugins (OPE-172)", () => {
+    afterEach(resetPluginTestRuntime)
+    it("topbar.actions monta no rodapé do menu e o nav do plugin entra na seção Plugins (sidebar.nav)", () => {
+        pluginTestRuntime.plugins = [pluginTestEntry("topbar.actions", { pages: [{ path: "hora", title: "Hora", export: "Page" }], nav: [{ label: "Hora certa", page: "hora", icon: "Puzzle" }] })]
+        render(
+            <AppLayoutShell ownerName="Ana">
+                <p>conteúdo</p>
+            </AppLayoutShell>,
+        )
+        expect(document.querySelector('[data-plugin-slot="topbar.actions"] [data-plugin-contribution="relogio:Widget"]')).toBeTruthy()
+        expect(screen.getByRole("link", { name: "Hora certa" }).getAttribute("href")).toBe("/x/relogio/hora")
+    })
+})
+
+describe("AppLayoutShell: item de plugin dentro de um menu (OPE-172, rodada 4)", () => {
+    afterEach(resetPluginTestRuntime)
+    it("o item com slot sidebar.nav.agentes aparece no painel do grupo Agentes, não na seção Plugins", () => {
+        pluginTestRuntime.plugins = [pluginTestEntry(null, { pages: [{ path: "hora", title: "Hora", export: "Page" }], nav: [{ label: "Hora certa", page: "hora", icon: "Puzzle", slot: "sidebar.nav.agentes" }] })]
+        render(
+            <AppLayoutShell ownerName="Ana">
+                <p>conteúdo</p>
+            </AppLayoutShell>,
+        )
+        expect(screen.queryByRole("link", { name: "Hora certa" })).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "Agentes" }))
+        expect(screen.getByRole("link", { name: "Hora certa" }).getAttribute("href")).toBe("/x/relogio/hora")
     })
 })

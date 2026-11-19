@@ -10,6 +10,7 @@ import { TrendLineChart } from "@/components/metrics/charts/TrendLineChart"
 import { colorAt } from "@/components/metrics/charts/palette"
 import { formatBucketLabel, formatTokens, formatUsd } from "../format"
 import type { DashboardDto } from "../types"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 
 type Data = Pick<DashboardDto, "timeByDay" | "costByProject" | "timeByStage" | "tokensByModel">
 
@@ -152,6 +153,8 @@ export function AgenticHoursSection({ data }: { data: Data }) {
                     )}
                 </ChartCard>
             </div>
+            {/* Slot `dashboard.section.horas` (OPE-172): cards de plugins no fim da seção. */}
+            <PluginSlot name="dashboard.section.horas" props={{}} />
         </section>
     )
 }

@@ -16,6 +16,7 @@ vi.mock('@/lib/integrations/config', () => ({
   getIntegration: async () => ({ debugMode: false, values: {} }),
 }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
+vi.mock('@/features/plugins/server/service', () => ({ reconcilePluginServers: async () => [] }))
 vi.mock('@/lib/db/models/CronJobState', () => ({
   CronJobState: { updateOne: mocks.updateOne, findOneAndUpdate: mocks.findOneAndUpdate },
 }))

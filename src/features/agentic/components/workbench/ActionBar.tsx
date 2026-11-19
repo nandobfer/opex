@@ -47,7 +47,7 @@ export function ActionBar({ workbench, central = null, onForkOpened }: { workben
     const mutation = useWorkbenchAction(workbench)
     const reconnect = useWorkbenchReconnect(workbench.id)
     const slotQueue = workbench.slotQueue
-    const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId), Boolean(slotQueue))
+    const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId), Boolean(slotQueue), workbench.kind)
     const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
     // Ciclo automático de reconexão: dispara quando a tela passa a oferecer Reconectar (e ao abrir
     // já nesse estado). Nunca depois de um Parar do usuário; um ciclo por episódio de queda.
@@ -102,7 +102,7 @@ export function ActionBar({ workbench, central = null, onForkOpened }: { workben
               : null,
     )
 
-    const items = workbenchActionItems({ actions, failed, pending, prOpen: workbench.pr?.state === "open", deleting: Boolean(workbench.deletionRequestedAt), implementBlockReason: implementFiles.blockReason })
+    const items = workbenchActionItems({ actions, failed, pending, prOpen: workbench.pr?.state === "open", deleting: Boolean(workbench.deletionRequestedAt), implementBlockReason: implementFiles.blockReason, plugin: workbench.kind === "plugin" })
     const notices = workbenchNotices(workbench, { failed, reconnectNotice: autoReconnect.notice })
     const adversarialAvailable = actions.some((action) => action.startsWith("adversarial-"))
     const editing = Boolean(composer) || forking
@@ -180,7 +180,7 @@ export function ActionBar({ workbench, central = null, onForkOpened }: { workben
                             {/* Modelo da etapa atual e "Gerar prévia" (à esquerda); os botões ficam à direita. */}
                             <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
                                 <WorkbenchModelSettings workbench={workbench} buttonClassName={ICON_BUTTON} />
-                                {previewSwitchVisible(workbench.stage) && <Separator orientation="vertical" className="h-5" data-testid="workbench-actions-divider" />}
+                                {previewSwitchVisible(workbench.stage, workbench) && <Separator orientation="vertical" className="h-5" data-testid="workbench-actions-divider" />}
                                 <PreviewSwitch workbench={workbench} rebuildAvailable={actions.includes("rebuild-preview")} actionPending={pending} onRebuild={() => run("rebuild-preview")} />
                             </div>
                             <div className="ml-auto flex min-w-0 flex-wrap justify-end gap-2">
@@ -202,13 +202,15 @@ export function ActionBar({ workbench, central = null, onForkOpened }: { workben
             <AlertDialog open={confirm !== null} onOpenChange={(open) => !open && setConfirm(null)}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>{confirm === "interrupt" ? "Parar o agente?" : confirm === "cancel-wait" ? "Cancelar a espera por vaga?" : "Aprovar e abrir o PR?"}</AlertDialogTitle>
+                        <AlertDialogTitle>{confirm === "interrupt" ? "Parar o agente?" : confirm === "cancel-wait" ? "Cancelar a espera por vaga?" : workbench.kind === "plugin" ? "Aprovar a prévia do plugin?" : "Aprovar e abrir o PR?"}</AlertDialogTitle>
                         <AlertDialogDescription>
                             {confirm === "interrupt"
                                 ? "A etapa atual é interrompida no OpenCode. Depois você pode tentar de novo ou voltar ao planejamento."
                                 : confirm === "cancel-wait"
                                   ? `"${slotQueue ? PENDING_TURN_LABELS[slotQueue.action] : ""}" não será executado e a mesa volta a aguardar sua ação nesta etapa.`
-                                  : `O agente de PR vai validar, fazer commit e push da branch ${workbench.branch ?? ""} e ${workbench.pr?.state === "open" ? `atualizar o PR #${workbench.pr.number}` : "abrir o Pull Request"}.`}
+                                  : workbench.kind === "plugin"
+                                    ? "O Opex roda os testes do plugin e, se passarem, consolida a versão como estável: as telas abertas trocam ao vivo. Sem PR, build nem deploy."
+                                    : `O agente de PR vai validar, fazer commit e push da branch ${workbench.branch ?? ""} e ${workbench.pr?.state === "open" ? `atualizar o PR #${workbench.pr.number}` : "abrir o Pull Request"}.`}
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>

@@ -55,6 +55,19 @@ export function toWorkbenchDto(doc: IAgenticWorkbench, buildQueuePosition: numbe
         previewUrl: doc.previewUrl ?? null,
         previewHealthy: doc.previewHealthy ?? null,
         agenticFlow: asAgenticFlow(doc.agenticFlow),
+        kind: doc.kind === "plugin" ? "plugin" : "repo",
+        plugin: doc.plugin
+            ? {
+                  pluginId: doc.plugin.pluginId ?? null,
+                  scope: doc.plugin.scope,
+                  clientId: doc.plugin.clientId ?? null,
+                  baseVersionId: doc.plugin.baseVersionId ?? null,
+                  draftVersionId: doc.plugin.draftVersionId ?? null,
+                  workDir: doc.plugin.workDir ?? null,
+                  approved: doc.plugin.approved === true,
+                  testAttempts: doc.plugin.testAttempts ?? 0,
+              }
+            : null,
         refinementPhase: doc.refinementPhase === true,
         planAfterRefinement: doc.planAfterRefinement === true,
         deletionRequestedAt: iso(doc.deletionRequestedAt),

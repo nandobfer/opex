@@ -3,6 +3,7 @@ import { attachmentIdsSchema } from "./attachments/schemas"
 import { colorValueSchema } from "@/lib/colors"
 import { COLUMN_ICON_KEYS, COLUMN_KEY_PATTERN } from "./board"
 import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "./constants"
+import { PLUGIN_ID_PATTERN, PLUGIN_SCOPES } from "@/features/plugins/constants"
 
 const columnKey = z.string().regex(COLUMN_KEY_PATTERN, "Coluna inválida")
 const objectId = z.string().regex(/^[a-f0-9]{24}$/i, "Identificador inválido")
@@ -33,6 +34,30 @@ export const commentSchema = z.object({
 export type CommentInput = z.infer<typeof commentSchema>
 const markdown = z.string().optional()
 
+/**
+ * Alvo de uma tarefa do tipo Plugin (OPE-172): o escopo (plugin do dono ou de um cliente) e,
+ * opcionalmente, o plugin existente a alterar (sem ele, a mesa cria um plugin novo).
+ */
+export const taskPluginTargetSchema = z.object({
+    scope: z.enum(PLUGIN_SCOPES),
+    clientId: objectId.nullable().optional(),
+    pluginId: z.string().regex(PLUGIN_ID_PATTERN, "Plugin inválido").nullable().optional(),
+})
+export type TaskPluginTarget = z.infer<typeof taskPluginTargetSchema>
+
+/** Regra do alvo do plugin (pt-BR), ou `null` quando vale. */
+export function pluginTargetIssue(taskType: string | null | undefined, target: TaskPluginTarget | null | undefined): { path: string; message: string } | null {
+    if (taskType !== "plugin") return null
+    if (!target) return { path: "pluginTarget", message: "Informe o escopo do plugin" }
+    if (target.scope === "client" && !target.clientId) return { path: "pluginTarget.clientId", message: "Escolha o cliente do plugin" }
+    return null
+}
+
+const refinePluginTarget = (value: { taskType?: string | null; pluginTarget?: TaskPluginTarget | null }, ctx: z.RefinementCtx) => {
+    const issue = pluginTargetIssue(value.taskType, value.pluginTarget)
+    if (issue) ctx.addIssue({ code: "custom", message: issue.message, path: issue.path.split(".") })
+}
+
 /** Tarefa (criar/editar). Mesmo schema no formulário e na API. */
 export const taskInputSchema = z.object({
     title: z.string().trim().min(1, "Informe o título").max(200, "Máximo de 200 caracteres"),
@@ -42,6 +67,8 @@ export const taskInputSchema = z.object({
     technicalSpec: markdown,
     taskType: z.enum(TASK_TYPES).nullable().optional(),
     priority: z.enum(TASK_PRIORITIES).optional(),
+    /** Só no tipo Plugin (OPE-172). */
+    pluginTarget: taskPluginTargetSchema.nullable().optional(),
 })
 export type TaskInput = z.infer<typeof taskInputSchema>
 
@@ -49,13 +76,15 @@ export type TaskInput = z.infer<typeof taskInputSchema>
  * Formulário da tarefa: o mesmo contrato da API **sem a especificação técnica** (ela sai do
  * formulário e será gerada de forma agêntica).
  */
-export const taskFormSchema = taskInputSchema.omit({ technicalSpec: true })
+export const taskFormSchema = taskInputSchema.omit({ technicalSpec: true }).superRefine(refinePluginTarget)
 export type TaskFormValues = z.infer<typeof taskFormSchema>
 
-export const createTaskSchema = taskInputSchema.extend({
-    /** Anexos enviados no formulário, antes de a tarefa existir (vinculados na criação). */
-    attachmentIds: attachmentIdsSchema,
-})
+export const createTaskSchema = taskInputSchema
+    .extend({
+        /** Anexos enviados no formulário, antes de a tarefa existir (vinculados na criação). */
+        attachmentIds: attachmentIdsSchema,
+    })
+    .superRefine(refinePluginTarget)
 export type CreateTaskInput = z.infer<typeof createTaskSchema>
 
 /**

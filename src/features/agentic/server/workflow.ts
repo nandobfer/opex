@@ -26,6 +26,11 @@ import {
     implementPrompt,
     mergePrPrompt,
     planPrompt,
+    pluginCompileFixPrompt,
+    pluginImplementPrompt,
+    pluginPlanningNotes,
+    pluginTestsFixPrompt,
+    pluginChangeSummaryFrom,
     prChangesPrompt,
     previewCorrectionPrompt,
     prPrompt,
@@ -41,6 +46,7 @@ import {
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
+import { PLUGIN_BASE_BRANCH, PLUGIN_COMPILE_ATTEMPTS_MAX, PLUGIN_WORK_BRANCH, pluginTestsDecision } from "../plugin-flow"
 import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type StartWorkbenchModelsInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { RefineWorkbenchResultDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
@@ -218,7 +224,7 @@ function assertAction(doc: IAgenticWorkbench, action: WorkbenchAction): void {
     const stage = asStage(doc.stage)
     const runState = isWorkbenchActive(String(doc._id)) ? "running" : asRunState(doc.runState) === "running" ? "interrupted" : asRunState(doc.runState)
     const waitingSlot = Boolean(doc.pendingTurn)
-    if (!canRun(stage, runState, action, waitingSlot)) {
+    if (!canRun(stage, runState, action, waitingSlot, doc.kind === "plugin" ? "plugin" : "repo")) {
         const detail = waitingSlot ? " (a mesa está aguardando vaga na central)" : runState === "running" ? " (o agente está trabalhando)" : ""
         throw new DomainError(409, `Ação indisponível na etapa "${WORKBENCH_STAGE_LABELS[stage]}"${detail}`, "WORKBENCH_INVALID_STATE")
     }
@@ -245,6 +251,25 @@ function pumpQueue(centralId: string): void {
     void import("./queue")
         .then((queue) => queue.pumpCentralQueue(centralId))
         .catch(() => undefined)
+}
+
+/** Fluxo Plugin da mesa (OPE-172; import dinâmico: host do OpenCode e serviço de plugins só quando a mesa é de plugin). */
+const pluginFlow = () => import("./plugin-workflow")
+const isPluginDoc = (doc: Pick<IAgenticWorkbench, "kind">) => doc.kind === "plugin"
+
+/** Prompt do planejamento: numa mesa Plugin, com o bloco do fluxo de plugin e o plugin a alterar. */
+async function planningText(loaded: Loaded, task: Awaited<ReturnType<typeof getTask>>, additionalInfo: string | null): Promise<string> {
+    const base = planPrompt(loaded.config, contextOf(loaded), taskMarkdown(task, loaded.config), additionalInfo)
+    const state = loaded.doc.plugin
+    if (!isPluginDoc(loaded.doc) || !state) return base
+    const flow = await pluginFlow()
+    let baseFiles: string[] | undefined
+    if (state.pluginId) {
+        const { findPlugin, pluginVersionFiles } = await import("@/features/plugins/server/service")
+        const plugin = await findPlugin(state.pluginId)
+        if (plugin?.stableVersionId) baseFiles = (await pluginVersionFiles(state.pluginId, plugin.stableVersionId)).map((file) => file.path)
+    }
+    return base + pluginPlanningNotes({ pluginId: state.pluginId, scope: state.scope, clientName: await flow.pluginClientName(state.clientId), baseFiles })
 }
 
 /** Refinamento de tarefa (import dinâmico: o serviço do refinamento chama este fluxo pela mesa — OPE-137). */
@@ -464,6 +489,7 @@ async function afterImplementation(loaded: Loaded): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
     const notice = (message: string) => publishWorkbenchEvent(id, { type: "notice", level: "info", message })
+    if (isPluginDoc(doc)) return afterPluginImplementation(loaded)
     if (await skipsPreview(id)) {
         notice("Geração de prévia desligada: pulando a prévia e publicando no Pull Request.")
         return autoPrTurn(loaded)
@@ -475,6 +501,109 @@ async function afterImplementation(loaded: Loaded): Promise<TurnPlan | null> {
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { previewBuild: { method: "local" } } })
     await update(doc, { stage: "build_queued", runState: "idle", buildQueuedAt: new Date() })
     notice("Implementação concluída. Aguardando a vez do build — um build por vez.")
+    return null
+}
+
+/**
+ * Mesa Plugin (OPE-172): a versão compilada vira a `preview` do plugin, carregada AO VIVO só para quem
+ * estiver com a prévia ligada (sem container, imagem nem porta). Com a prévia já aprovada (correção
+ * depois de testes que falharam), segue direto para os testes do plugin.
+ */
+async function afterPluginImplementation(loaded: Loaded): Promise<TurnPlan | null> {
+    const { doc } = loaded
+    const id = String(doc._id)
+    const fresh = (await AgenticWorkbench.findById(id).lean()) ?? doc
+    const published = await (await pluginFlow()).publishPluginPreview(fresh)
+    if (published.runtimeError) publishWorkbenchEvent(id, { type: "notice", level: "warn", message: `Prévia publicada, mas o código de servidor não ativou: ${published.runtimeError}` })
+    await update(doc, { previewUrl: published.previewUrl, previewHealthy: !published.runtimeError })
+    if (fresh.plugin?.approved) {
+        publishWorkbenchEvent(id, { type: "notice", level: "info", message: `Versão ${published.number} publicada na prévia; a aprovação continua valendo: rodando os testes do plugin.` })
+        return { stage: "fixing_ci", text: "" }
+    }
+    await update(doc, { stage: "preview", runState: "idle", error: null })
+    publishWorkbenchEvent(id, { type: "notice", level: "success", message: `Versão ${published.number} publicada na prévia ao vivo. Ligue a prévia para ver em ${published.previewUrl} e aprove.` })
+    pumpQueue(doc.centralId)
+    return null
+}
+
+/**
+ * Implementação concluída: o Agente Adversário revisa com contexto limpo antes da prévia/PR (a
+ * resposta do implementador segue no turno: traz as contestações de uma correção); sem ele, segue.
+ */
+async function implementationDone(loaded: Loaded, implementerText: string): Promise<TurnPlan | null> {
+    if (await (await adversaryModule()).adversaryApplies(loaded.doc.centralId)) {
+        publishWorkbenchEvent(String(loaded.doc._id), { type: "notice", level: "info", message: "Implementação concluída. O agente adversário vai revisar o código antes de seguir." })
+        return { stage: "adversarial_review", text: implementerText }
+    }
+    return afterImplementation(loaded)
+}
+
+/**
+ * Mesa Plugin (OPE-172), depois do turno de implementação: o Opex lê as fontes da pasta, valida o
+ * manifesto e compila a versão (Rolldown). Problema do plugin volta ao agente (até o limite);
+ * compilador indisponível no servidor (`PLUGIN_COMPILER_UNAVAILABLE`) falha a etapa e deixa
+ * `plugin.compilePending`, para o Tentar novamente refazer só a compilação, sem o agente.
+ */
+async function pluginCompileTurn(loaded: Loaded, implementerText: string): Promise<TurnPlan | null> {
+    const { doc } = loaded
+    const id = String(doc._id)
+    const notice = (level: "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    // O descritivo do agente vale para a próxima versão (também no Tentar novamente que só recompila).
+    const changeSummary = pluginChangeSummaryFrom(implementerText)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": true, ...(changeSummary ? { "plugin.changeSummary": changeSummary } : {}) } })
+    const fresh = (await AgenticWorkbench.findById(id).lean()) ?? doc
+    const draft = await (await pluginFlow()).buildPluginDraft(fresh)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": false } })
+    if (!draft.ok) {
+        const attempts = (fresh.plugin?.compileAttempts ?? 0) + 1
+        if (attempts > PLUGIN_COMPILE_ATTEMPTS_MAX) throw new Error(`A versão do plugin não compilou depois de ${PLUGIN_COMPILE_ATTEMPTS_MAX} correções: ${draft.issues.join("; ")}`)
+        notice("warn", `A versão do plugin não foi gerada (${draft.issues.length} problema(s)); pedindo a correção ao agente (${attempts}/${PLUGIN_COMPILE_ATTEMPTS_MAX}).`)
+        return { stage: "implementing", text: pluginCompileFixPrompt(draft.issues, contextOf(loaded).worktreePath) }
+    }
+    notice("success", `Versão ${draft.number} do plugin compilada.`)
+    return implementationDone(await loadAll(id), implementerText)
+}
+
+/**
+ * Testes do plugin (etapa "Testes do plugin", OPE-172): o Opex roda `npx vitest run` na pasta de
+ * trabalho pelo shell do OpenCode (sem agente). Passou → consolida a versão como `stable` e conclui a
+ * mesa; falhou → turno de correção do agente desenvolvedor, até o limite de tentativas do CI.
+ */
+async function pluginTestsTurn(loaded: Loaded, controller: AbortController): Promise<TurnPlan | null> {
+    const { doc } = loaded
+    const id = String(doc._id)
+    const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    const flow = await pluginFlow()
+    const fresh = (await AgenticWorkbench.findById(id).lean()) ?? doc
+    const workDir = fresh.plugin?.workDir
+    if (!workDir) throw new Error("A mesa de plugin ficou sem a pasta de trabalho")
+    notice("info", "Rodando os testes do plugin (Vitest) na pasta de trabalho.")
+    const result = await flow.runPluginTests(workDir, controller.signal)
+    // "Parar" durante os testes: nada de correção nem de consolidação; a mesa fica parada em "Testes do plugin".
+    if (controller.signal.aborted) {
+        await update(doc, { runState: "interrupted", error: errorText(controller.signal.reason ?? "Interrompido") })
+        return null
+    }
+    const exitCode = result.exitCode
+    const attempts = fresh.plugin?.testAttempts ?? 0
+    // Mesmo limite de correções do CI do PR (sem limite configurado, corrige até passar ou o usuário parar).
+    const limit = loaded.ci.fixCi ? (loaded.ci.ciFixLimit ?? Number.POSITIVE_INFINITY) : 0
+    const decision = pluginTestsDecision(exitCode, attempts, limit)
+    if (decision === "fix") {
+        await AgenticWorkbench.updateOne({ _id: doc._id }, { $inc: { "plugin.testAttempts": 1 } })
+        notice("warn", `Os testes do plugin falharam (tentativa ${attempts + 1}${Number.isFinite(limit) ? ` de ${limit}` : ""}); pedindo a correção ao agente.`)
+        return { stage: "implementing", text: pluginTestsFixPrompt(result.output, workDir) }
+    }
+    if (decision === "fail") throw new Error(`Os testes do plugin continuaram falhando depois de ${attempts} correções. Fim da saída: ${result.output.slice(-500)}`)
+    notice("success", "Testes do plugin passaram. Consolidando a versão.")
+    // Consolida ANTES de ir a "Finalizando": se a ativação falhar, a mesa fica em "Testes do plugin" e o
+    // Tentar novamente refaz testes e consolidação (em "Finalizando" ele só refaria a limpeza).
+    const consolidated = await flow.consolidatePluginWorkbench(fresh)
+    await update(doc, { stage: "finishing" })
+    notice("success", `Versão ${consolidated.number} consolidada como estável: as telas abertas trocam ao vivo.`)
+    await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { tarefa: doc.taskCode, plugin: fresh.plugin?.pluginId ?? null, versao: consolidated.number } })
+    await applyDoneEffects(loaded)
+    await completeWorkbench({ ...fresh, worktreePath: null })
     return null
 }
 
@@ -613,6 +742,8 @@ interface TurnPlan {
     build?: { method: "local" | "github"; port: number; local: boolean; docker: PreviewDocker | null }
     /** Anexos da mensagem do usuário (`agentic_files`): vão no prompt deste turno (os encadeados não reenviam). */
     fileIds?: string[]
+    /** Mesa Plugin: refaz só a compilação da versão (sem turno do agente; o texto é a resposta anterior). */
+    compileOnly?: boolean
 }
 
 /** Log do build (aba Build): melhor esforço — uma falha no registro nunca derruba o build. */
@@ -718,6 +849,18 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                       notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
                       focus: { taskId: loaded.doc.taskId, code: loaded.doc.taskCode, title: loaded.doc.taskTitle, stage: WORKBENCH_STAGE_LABELS[stage] ?? stage, workbench: loaded.projectName },
                   })
+            if (turn.stage === "implementing" && turn.compileOnly && isPluginDoc(loaded.doc)) {
+                // Mesa Plugin (OPE-172): o compilador estava indisponível; refaz só a compilação (sem agente).
+                next = await pluginCompileTurn(await loadAll(id), turn.text)
+                turn = controller.signal.aborted ? null : next
+                continue
+            }
+            if (turn.stage === "fixing_ci" && isPluginDoc(loaded.doc)) {
+                // Mesa Plugin (OPE-172): testes do plugin no host e consolidação (sem turno do agente).
+                next = await pluginTestsTurn(await loadAll(id), controller)
+                turn = controller.signal.aborted ? null : next
+                continue
+            }
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
                 next = await buildTurn(client, loaded, turn, sessionId, controller, memories, failedAttempt)
@@ -1063,8 +1206,9 @@ async function adversarialTurn(loaded: Loaded, turn: TurnPlan, controller: Abort
         taskCode: doc.taskCode,
         taskTitle: doc.taskTitle,
         worktreePath: ctx.worktreePath,
-        branch: ctx.branch,
-        baseBranch: config.git.baseBranch,
+        // Mesa Plugin (OPE-172): a diferença entre versões é o diff da pasta contra o commit base (`origin/opex-base`).
+        branch: isPluginDoc(doc) ? PLUGIN_WORK_BRANCH : ctx.branch,
+        baseBranch: isPluginDoc(doc) ? PLUGIN_BASE_BRANCH : config.git.baseBranch,
         plans: (doc.plans ?? []).map((plan) => ({ version: plan.version, text: plan.text, feedback: plan.feedback ?? null })),
         centralInstructions: config.instructions.implementation,
         implementationText: turn.text,
@@ -1126,13 +1270,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            // Agente Adversário: revisão com contexto limpo antes da prévia/PR (a resposta do
-            // implementador segue no turno: traz as contestações de uma correção).
-            if (await (await adversaryModule()).adversaryApplies(doc.centralId)) {
-                notice("info", "Implementação concluída. O agente adversário vai revisar o código antes de seguir.")
-                return { stage: "adversarial_review", text: result.text }
-            }
-            return afterImplementation(loaded)
+            if (isPluginDoc(doc)) return pluginCompileTurn(loaded, result.text)
+            return implementationDone(loaded, result.text)
         }
         case "building":
             // O build roda em `buildTurn` (não é um turno comum do agente).
@@ -1467,6 +1606,8 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
                 composeProject: composeProjectFor(central.projectName, task.code),
                 agenticFlow,
                 planAfterRefinement,
+                // Tarefa do tipo Plugin (OPE-172): a mesa segue o fluxo de versões de plugin.
+                ...(await pluginFlow()).workbenchKindFor(task),
                 ...(hasModels ? { modelOverrides: overrides } : {}),
             })
         ).toObject()
@@ -1490,7 +1631,7 @@ export async function startWorkbenchInCentral(centralId: string, taskId: string,
     const additionalInfo = text?.trim() || null
     await launchTurn(
         loaded,
-        { stage: "planning", text: planPrompt(config, contextOf(loaded), taskMarkdown(task, config), additionalInfo), ...fileIdsOf(files) },
+        { stage: "planning", text: await planningText(loaded, task, additionalInfo), ...fileIdsOf(files) },
         { ...(additionalInfo ? { userText: additionalInfo } : files.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}) },
     )
     await claimAgenticFiles(files, { workbenchId: id })
@@ -1582,6 +1723,7 @@ async function openRefinementInCentral(centralId: string, taskId: string, input:
                 agenticFlow,
                 refinementPhase: true,
                 planAfterRefinement,
+                ...(await pluginFlow()).workbenchKindFor(task),
                 refinementId: snapshot?.id ?? null,
                 ...(hasModels ? { modelOverrides: overrides } : {}),
             })
@@ -1687,7 +1829,7 @@ export async function applyRefinementState(id: string): Promise<void> {
 /** Turno de planejamento a partir da especificação (a tarefa inteira já leva a especificação técnica). */
 async function launchPlanFromSpec(loaded: Loaded, text: string | null, fileIds: string[], queue = false): Promise<boolean> {
     const task = await getTask(loaded.doc.taskId)
-    const turn: TurnPlan = { stage: "planning", text: planPrompt(loaded.config, contextOf(loaded), taskMarkdown(task, loaded.config), text), ...(fileIds.length ? { fileIds } : {}) }
+    const turn: TurnPlan = { stage: "planning", text: await planningText(loaded, task, text), ...(fileIds.length ? { fileIds } : {}) }
     const options: LaunchOptions = text ? { userText: text } : fileIds.length ? { userText: "Informações adicionais (arquivos anexados)" } : {}
     if (queue) return launchOrQueue(loaded, "generate-plan", turn, options)
     await launchTurn(loaded, turn, options)
@@ -1787,12 +1929,23 @@ export async function implement(id: string, additionalInfo?: string, fileIds?: s
     const info = additionalInfo?.trim() || null
     const userText = info ? `Plano aprovado: implementar\n\n${info}` : "Plano aprovado: implementar"
     const approvedPlanVersion = loaded.doc.plans?.length ?? 1
-    await launchOrQueue(
-        loaded,
-        "implement",
-        { stage: "implementing", text: implementPrompt(loaded.config, ctx, approvedPlanVersion, info), ...fileIdsOf(files) },
-        { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
-    )
+    if (isPluginDoc(loaded.doc)) {
+        // Mesa Plugin (OPE-172): o Opex exporta as fontes (ou o esqueleto) e o SDK para a pasta de trabalho; sem worktree nem branch.
+        const flow = await pluginFlow()
+        const prepared = await flow.preparePluginImplementation(loaded.doc, loaded.config)
+        const text = pluginImplementPrompt(loaded.config, ctx, approvedPlanVersion, { pluginId: prepared.pluginId, scope: prepared.scope, workDir: prepared.workDir }, info)
+        // Novo turno do agente: a marca de compilação pendente e o descritivo de uma rodada anterior não
+        // valem mais (o Tentar novamente de uma falha deste turno precisa rodar o agente de novo).
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "plugin.compilePending": false, "plugin.changeSummary": null } })
+        await launchOrQueue(loaded, "implement", { stage: "implementing", text, ...fileIdsOf(files) }, { userText, extraSet: { worktreePath: prepared.workDir, branch: null } })
+    } else {
+        await launchOrQueue(
+            loaded,
+            "implement",
+            { stage: "implementing", text: implementPrompt(loaded.config, ctx, approvedPlanVersion, info), ...fileIdsOf(files) },
+            { userText, extraSet: { branch: ctx.branch, worktreePath: ctx.worktreePath, composeProject: ctx.composeProject } },
+        )
+    }
     // A versão aprovada vale na hora, mesmo com a mesa aguardando vaga (o Agente Arquiteto lê dela).
     await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { approvedPlanVersion } })
     await claimAgenticFiles(files, { workbenchId: id })
@@ -1806,6 +1959,7 @@ export async function requestCorrection(id: string, feedback: string, fileIds?: 
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "request-correction")
     const files = await loadClaimableFiles(fileIds, id)
+    if (isPluginDoc(loaded.doc)) await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "plugin.approved": false } })
     await invalidateRemotePreview(await getOpencodeClient(), loaded.doc, loaded.config.sessionDirectory)
     await launchOrQueue(loaded, "request-correction", { stage: "planning", text: previewCorrectionPrompt(loaded.config, feedback), ...fileIdsOf(files) }, { userText: feedback, feedback })
     metricEvent(loaded.doc, METRIC_EVENT.correction, { kind: "preview" })
@@ -1813,9 +1967,16 @@ export async function requestCorrection(id: string, feedback: string, fileIds?: 
     return getWorkbench(id)
 }
 
-export async function approve(id: string): Promise<WorkbenchDto> {
+export async function approve(id: string, options: { approvedBy?: string } = {}): Promise<WorkbenchDto> {
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "approve")
+    if (isPluginDoc(loaded.doc)) {
+        // Mesa Plugin (OPE-172): aprovar a prévia roda os testes do plugin e consolida (sem PR).
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "plugin.approved": true, "plugin.testAttempts": 0 } })
+        await recordAudit({ userId: options.approvedBy ?? actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { tarefa: loaded.doc.taskCode, previaDoPlugin: loaded.doc.plugin?.pluginId ?? null } })
+        await launchOrQueue(loaded, "approve", { stage: "fixing_ci", text: "" }, { userText: "Prévia do plugin aprovada: testes e consolidação" })
+        return getWorkbench(id)
+    }
     const task = await getTask(loaded.doc.taskId)
     const pr = loaded.doc.pr && loaded.doc.pr.state === "open" ? { number: loaded.doc.pr.number, url: loaded.doc.pr.url } : null
     await launchOrQueue(loaded, "approve", { stage: "opening_pr", text: prPrompt(loaded.config, contextOf(loaded), { code: task.code, title: task.title }, pr) }, { userText: "Prévia aprovada: abrir o Pull Request" })
@@ -1895,6 +2056,11 @@ export async function reopen(id: string, feedback: string, fileIds?: string[]): 
     const loaded = await loadAll(id)
     assertAction(loaded.doc, "reopen")
     const files = await loadClaimableFiles(fileIds, id)
+    if (isPluginDoc(loaded.doc) && loaded.doc.plugin) {
+        // Mesa Plugin reaberta (OPE-172): a nova rodada parte da stable atual, numa pasta de trabalho nova.
+        await (await pluginFlow()).removePluginWorkDir(loaded.doc.plugin.workDir)
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { plugin: { ...loaded.doc.plugin, baseVersionId: null, draftVersionId: null, workDir: null, approved: false, compileAttempts: 0, testAttempts: 0, compilePending: false, changeSummary: null }, worktreePath: null } })
+    }
     // Com o limite cheio, a reabertura aguarda vaga; os efeitos (PR para o histórico, card) só rodam ao ganhar a vaga.
     await launchOrQueue(
         loaded,
@@ -1934,7 +2100,7 @@ export async function setWorkbenchStage(id: string, input: SetWorkbenchStageInpu
     const from = asStage(doc.stage)
     const target = input.stage
     const reason = input.reason.trim()
-    const block = manualStageBlock(target, { stage: from, hasPlan: (doc.plans ?? []).length > 0, hasPreview: Boolean(doc.previewUrl), prOpen: doc.pr?.state === "open", deleting: Boolean(doc.deletionRequestedAt) })
+    const block = manualStageBlock(target, { stage: from, hasPlan: (doc.plans ?? []).length > 0, hasPreview: Boolean(doc.previewUrl), prOpen: doc.pr?.state === "open", deleting: Boolean(doc.deletionRequestedAt), kind: doc.kind === "plugin" ? "plugin" : "repo" })
     if (block) throw new DomainError(409, block, doc.deletionRequestedAt ? "WORKBENCH_DELETING" : "WORKBENCH_INVALID_STAGE")
     await prepareHub(id)
     const notice = (level: "info" | "warn", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
@@ -1988,7 +2154,7 @@ async function manualCleanupTargets(loaded: Loaded): Promise<CleanupTargets> {
 }
 
 function manualCleanupTurn(loaded: Loaded, targets: CleanupTargets): TurnPlan {
-    return { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "manual" }) }
+    return { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "manual", plugin: isPluginDoc(loaded.doc) }) }
 }
 
 /**
@@ -2004,6 +2170,8 @@ async function completeManually(loaded: Loaded, reason: string, fromStage: Workb
     await update(loaded.doc, { manualCompletion, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null })
     const ready: Loaded = { ...loaded, doc: { ...loaded.doc, manualCompletion, runState: "idle", error: null, pendingTurn: null, buildQueuedAt: null } }
     const pr = ready.doc.pr
+    // Mesa Plugin (OPE-172): concluir sem consolidar descarta a prévia que era desta mesa.
+    if (isPluginDoc(ready.doc)) await (await pluginFlow()).releasePluginPreview(ready.doc).catch((error: unknown) => notice("warn", `Prévia do plugin não descartada: ${errorText(error)}`))
     await applyDoneEffects(ready)
     if (pr?.state === "open") notice("warn", `O PR #${pr.number} continua aberto no GitHub: o acompanhamento automático dele foi encerrado.`)
     const targets = await manualCleanupTargets(ready)
@@ -2069,6 +2237,16 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
     metricEvent(doc, METRIC_EVENT.retried, { stage })
+    if (stage === "implementing" && isPluginDoc(doc) && doc.plugin?.compilePending) {
+        // Mesa Plugin (OPE-172): o turno do agente terminou e só a compilação falhou (compilador indisponível).
+        await launchTurn({ ...loaded, doc }, { stage, text: "Implementação concluída; a versão do plugin foi recompilada pelo Opex.", compileOnly: true }, { userText: "Tentar a compilação do plugin novamente" })
+        return getWorkbench(id)
+    }
+    if (stage === "fixing_ci" && isPluginDoc(doc)) {
+        // Mesa Plugin (OPE-172): refaz os testes do plugin e a consolidação (sem turno do agente).
+        await launchTurn({ ...loaded, doc }, { stage, text: "" }, { userText: "Tentar os testes e a consolidação do plugin novamente" })
+        return getWorkbench(id)
+    }
     if (stage === "finishing" && doc.manualCompletion) {
         // Conclusão manual: refaz só a limpeza do que a mesa registrou (nunca caminhos inferidos).
         const ready = { ...loaded, doc }
@@ -2078,7 +2256,7 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     if (stage === "finishing") {
         // Limpeza falhou: refaz só a limpeza (o PR já foi mergeado e a tarefa movida).
         const preview = Boolean(doc.previewUrl) && !(await localPreviewTornDown(loaded))
-        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), doc.previewBackup ?? null, { preview }) }, { userText: "Tentar a limpeza novamente" })
+        await launchTurn({ ...loaded, doc }, { stage, text: cleanupPrompt(loaded.config, contextOf(loaded), doc.previewBackup ?? null, { preview, plugin: isPluginDoc(doc) }) }, { userText: "Tentar a limpeza novamente" })
         return getWorkbench(id)
     }
     if (stage === "building") {
@@ -2266,6 +2444,8 @@ async function runDeletion(loaded: Loaded, loadedDoc: IAgenticWorkbench): Promis
         abortWorkbenchRun(id, "Mesa excluída")
         await waitWorkbenchIdle(id)
     }
+    // Mesa Plugin (OPE-172): a prévia que era desta mesa sai junto com ela.
+    if (isPluginDoc(doc)) await (await pluginFlow()).releasePluginPreview(doc).catch(() => undefined)
     let targets = cleanupTargets(loaded.config, doc)
     if (targets.teardownEnvironment && (await localPreviewTornDown({ ...loaded, doc }))) targets = { ...targets, teardownEnvironment: false }
     if (!hasCleanupWork(targets)) {
@@ -2275,7 +2455,7 @@ async function runDeletion(loaded: Loaded, loadedDoc: IAgenticWorkbench): Promis
     }
     await launchTurn(
         { ...loaded, doc },
-        { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "deletion" }) },
+        { stage: "finishing", text: cleanupPrompt(loaded.config, deletionContext(contextOf(loaded), targets), targets.backup, { preview: targets.teardownEnvironment, reason: "deletion", plugin: isPluginDoc(doc) }) },
         { userText: "Exclusão da mesa: limpando o ambiente antes de remover", bypassLimit: true },
     )
     return false
@@ -2439,7 +2619,7 @@ async function afterMerge(loaded: Loaded, pr: IWorkbenchPr): Promise<TurnPlan | 
     if (cleanup.teardownEnvironment || cleanup.removeWorktree || cleanup.deleteBranch || doc.previewBackup) {
         // Sem prévia (fluxo PR automático) não há ambiente a derrubar.
         const preview = Boolean(doc.previewUrl) && !(await localPreviewTornDown(loaded))
-        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview }) }
+        return { stage: "finishing", text: cleanupPrompt(config, contextOf(loaded), doc.previewBackup ?? null, { preview, plugin: isPluginDoc(doc) }) }
     }
     return null
 }

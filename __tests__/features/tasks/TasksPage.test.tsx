@@ -5,6 +5,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AxiosError } from 'axios'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import type { TaskDto } from '@/features/tasks/types'
 
 const mocks = vi.hoisted(() => ({
@@ -14,6 +15,9 @@ const mocks = vi.hoisted(() => ({
   timerFullWidth: false,
 }))
 
+// Slots de plugin (OPE-172).
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock('@/features/tasks/hooks/useTasks', async (original) => ({
@@ -204,5 +208,14 @@ describe('TasksPage', () => {
     expect(screen.getByText('Nenhuma tarefa com estes filtros')).toBeTruthy()
     await act(async () => fireEvent.click(screen.getAllByRole('button', { name: 'Limpar filtros' }).at(-1)!))
     expect(screen.getByRole('region', { name: 'A Fazer' })).toBeTruthy()
+  })
+})
+
+describe('TasksPage: slot de plugin (tasks.header, OPE-172)', () => {
+  afterEach(resetPluginTestRuntime)
+  it('monta o bloco do plugin acima do quadro', () => {
+    pluginTestRuntime.plugins = [pluginTestEntry('tasks.header')]
+    renderPage()
+    expect(document.querySelector('[data-plugin-slot="tasks.header"] [data-plugin-contribution="relogio:Widget"]')?.getAttribute('data-props')).toBe('{}')
   })
 })

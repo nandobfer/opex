@@ -57,6 +57,43 @@ semeado na primeira leitura (`ensureBoard`).
   em "Tags de tarefas" (Integrações › Inteligência Artificial); a tarefa guarda só os ids. `slugifyTag`,
   `normalizeTaxonomy`, `filterKnownTags`, `tagLabel`. Ver `modules/ai.md`.
 
+
+### Tipo Plugin (OPE-172)
+
+- `TASK_TYPES` tem `plugin` ("Plugin"), e `isPluginTaskType` identifica o tipo.
+- O alvo fica em `DevTask.pluginTarget` `{ scope: "owner" | "client", clientId, pluginId }`. Sem
+  `pluginId`, a mesa cria um plugin novo.
+- O mesmo schema (`taskPluginTargetSchema` + `pluginTargetIssue`) vale no formulário e na API:
+  - tipo Plugin sem alvo: "Informe o escopo do plugin";
+  - escopo cliente sem cliente: "Escolha o cliente do plugin".
+- No formulário, escolher o tipo Plugin mostra o bloco `TaskPluginTargetFields`, com:
+  - escopo em `OptionTabs`;
+  - cliente, no escopo cliente;
+  - plugin existente ou "Plugin novo".
+
+  Trocar para outro tipo zera o alvo.
+- O alvo é conferido (`resolvePluginTarget`, `src/features/tasks/plugin-target.ts`) também em
+  `createTaskWithIssue` **antes** de criar a issue no GitHub: um alvo inválido não deixa issue órfã.
+- Rascunho de prévia do dono classificado como Plugin (`approveOwnerDraft`): com cliente, o alvo é o
+  portal dele (`{ scope: "client", clientId }`, mesmo sem horas estimadas); sem cliente, plugin do dono.
+- Tarefa vinculada a um cliente (`clientId`, vinda do portal) é do escopo Cliente **desse** cliente:
+  sem alvo, ele é deduzido; um alvo com escopo do dono ou outro cliente é recusado com 400
+  `TASK_PLUGIN_SCOPE_CONFLICT` ("Esta tarefa é de um cliente: o plugin dela é do escopo Cliente, do
+  mesmo cliente da tarefa. Escolha o escopo Cliente."), nunca trocado em silêncio.
+- Sincronização com a issue do GitHub (`applyIssueToTask`): sem regra de tipo que case, a tarefa
+  mantém o tipo atual (não apaga o tipo Plugin nem o alvo). O tipo Plugin tem a label `plugin` nas
+  regras padrão, e `getMapping` a acrescenta a um mapeamento já gravado sem regra para o tipo
+  (`withPluginTypeRule`), para a label ir e voltar. A issue **nunca promove** uma tarefa a Plugin
+  (`issueTaskType`): o tipo exige um alvo que só existe no Opex. Issue nova com a label `plugin` vira
+  tarefa sem tipo, e a label numa tarefa de outro tipo mantém o tipo dela; o tipo só vai no
+  `updateTask` quando muda, então a sincronização nunca falha por falta de alvo.
+- O `pluginTarget` não vai para o portal (`ClienteTaskDto`).
+- Alvo num plugin **arquivado** é recusado com 400 `TASK_PLUGIN_ARCHIVED` ("O plugin X está arquivado.
+  Desarquive-o ou escolha outro"), ao criar (inclusive antes da issue no GitHub) e ao trocar o alvo
+  (`assertPluginTargetNotArchived`); o seletor do formulário não oferece os arquivados.
+- As ferramentas `create_task`/`update_task` dos agentes aceitam `pluginTarget`.
+- O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin".
+
 ## Servidor (`src/features/tasks/server/`)
 
 - `service.ts` (`TASK_AUDIT_ENTITY = "Tarefa"`): `listTasks(includeArchived)` (junta projeto e issue),

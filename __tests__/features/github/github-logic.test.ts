@@ -112,3 +112,13 @@ describe('menção da issue numa tarefa', () => {
     expect(mentionsIssue('Fecha #9, #10', 'sipal/app', 9)).toBe(true)
   })
 })
+
+describe('issueTaskType (OPE-172)', () => {
+  it('a issue nunca promove a tarefa a Plugin; mantém a que já é Plugin', async () => {
+    const { issueTaskType } = await import('@/features/github/logic')
+    expect(issueTaskType('plugin', null)).toBeNull()
+    expect(issueTaskType('plugin', 'bugfix')).toBe('bugfix')
+    expect(issueTaskType('plugin', 'plugin')).toBe('plugin')
+    expect(issueTaskType('feature', 'plugin')).toBe('feature')
+  })
+})

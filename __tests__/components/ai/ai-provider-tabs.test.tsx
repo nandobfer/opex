@@ -69,18 +69,23 @@ describe('TemperatureInput', () => {
   })
 
   it('as telas de IA, dos agentes e do Engramind usam o campo compartilhado (sem Input de temperatura próprio)', () => {
+    const read = (file: string) => readFileSync(join(process.cwd(), file), 'utf8')
     const files = [
       'src/features/opex-agent/components/settings/OpexModelCard.tsx',
       'src/features/ai/components/task-tags/TaskTagsSection.tsx',
-      'src/features/ai/components/task-summary/SummaryPromptCard.tsx',
       'src/features/ai/components/estimate-hours/EstimateHoursSection.tsx',
       'src/features/ai/components/budget-preview/BudgetPreviewSection.tsx',
       'src/features/engramind/components/integration/providers/opex-ai/RedatorSourceSection.tsx',
     ]
     for (const file of files) {
-      const source = readFileSync(join(process.cwd(), file), 'utf8')
+      const source = read(file)
       expect(source, file).toMatch(/<TemperatureInput/)
       expect(source, file).not.toMatch(/step="0\.1"/)
     }
+    // O Resumo de tarefas usa o bloco compartilhado (instruções + amostragem), que é quem monta o campo.
+    expect(read('src/features/ai/components/task-summary/SummaryPromptCard.tsx')).toMatch(/<PromptSamplingFieldsBlock/)
+    const shared = read('src/features/ai/components/shared/PromptSamplingFields.tsx')
+    expect(shared).toMatch(/<TemperatureInput/)
+    expect(shared).not.toMatch(/step="0\.1"/)
   })
 })

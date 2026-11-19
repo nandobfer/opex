@@ -4,11 +4,15 @@ import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import type { TimeLogDto } from '@/features/time/types'
 import type { ProjectRef } from '@/features/tasks/types'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), patch: vi.fn(), delete: vi.fn(), timerFullWidth: false }))
 
+// Slots de plugin (OPE-172).
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/lib/api', async (original) => ({
   ...(await original<typeof import('@/lib/api')>()),
@@ -240,5 +244,14 @@ describe('TimeLogsPage — filtros de repositório e tipo', () => {
     const before = mocks.get.mock.calls.filter(([url]) => url === '/tasks/options').length
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
     await waitFor(() => expect(mocks.get.mock.calls.filter(([url]) => url === '/tasks/options').length).toBeGreaterThan(before))
+  })
+})
+
+describe('TimeLogsPage: slot de plugin (horas.widgets, OPE-172)', () => {
+  afterEach(resetPluginTestRuntime)
+  it('monta o card do plugin no topo de Horas agênticas', () => {
+    pluginTestRuntime.plugins = [pluginTestEntry('horas.widgets')]
+    renderPage()
+    expect(document.querySelector('[data-plugin-slot="horas.widgets"] [data-plugin-contribution="relogio:Widget"]')?.getAttribute('data-props')).toBe('{}')
   })
 })

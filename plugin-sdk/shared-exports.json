@@ -1,0 +1,573 @@
+{
+ "@opex/ui/accordion": [
+  "Accordion",
+  "AccordionContent",
+  "AccordionItem",
+  "AccordionTrigger"
+ ],
+ "@opex/ui/alert": [
+  "Alert",
+  "AlertDescription",
+  "AlertTitle"
+ ],
+ "@opex/ui/alert-dialog": [
+  "AlertDialog",
+  "AlertDialogAction",
+  "AlertDialogCancel",
+  "AlertDialogContent",
+  "AlertDialogDescription",
+  "AlertDialogFooter",
+  "AlertDialogHeader",
+  "AlertDialogOverlay",
+  "AlertDialogPortal",
+  "AlertDialogTitle",
+  "AlertDialogTrigger"
+ ],
+ "@opex/ui/autocomplete-list": [
+  "AutocompleteList",
+  "optionId",
+  "useListNavigation"
+ ],
+ "@opex/ui/avatar": [
+  "Avatar",
+  "AvatarFallback",
+  "AvatarImage"
+ ],
+ "@opex/ui/badge": [
+  "Badge",
+  "badgeVariants"
+ ],
+ "@opex/ui/button": [
+  "Button",
+  "buttonVariants"
+ ],
+ "@opex/ui/calendar": [
+  "Calendar"
+ ],
+ "@opex/ui/card": [
+  "Card",
+  "CardContent",
+  "CardDescription",
+  "CardFooter",
+  "CardHeader",
+  "CardTitle"
+ ],
+ "@opex/ui/chart": [
+  "ChartContainer",
+  "ChartLegend",
+  "ChartLegendContent",
+  "ChartStyle",
+  "ChartTooltip",
+  "ChartTooltipContent",
+  "ChartTooltipFooter",
+  "ChartTooltipFrame"
+ ],
+ "@opex/ui/checkbox": [
+  "Checkbox"
+ ],
+ "@opex/ui/chip-input": [
+  "ChipInput",
+  "splitValues"
+ ],
+ "@opex/ui/combobox": [
+  "Combobox"
+ ],
+ "@opex/ui/confirm-dialog": [
+  "ConfirmDialog"
+ ],
+ "@opex/ui/context-menu": [
+  "ContextMenu",
+  "ContextMenuCheckboxItem",
+  "ContextMenuContent",
+  "ContextMenuGroup",
+  "ContextMenuItem",
+  "ContextMenuLabel",
+  "ContextMenuPortal",
+  "ContextMenuRadioGroup",
+  "ContextMenuRadioItem",
+  "ContextMenuSeparator",
+  "ContextMenuShortcut",
+  "ContextMenuSub",
+  "ContextMenuSubContent",
+  "ContextMenuSubTrigger",
+  "ContextMenuTrigger"
+ ],
+ "@opex/ui/data-table": [
+  "DataTable"
+ ],
+ "@opex/ui/date-picker": [
+  "DatePicker"
+ ],
+ "@opex/ui/date-range-calendar": [
+  "DateRangeCalendar",
+  "formatRangeLabel",
+  "parseIsoDate",
+  "toIsoDate"
+ ],
+ "@opex/ui/dialog": [
+  "Dialog",
+  "DialogClose",
+  "DialogContent",
+  "DialogDescription",
+  "DialogFooter",
+  "DialogHeader",
+  "DialogOverlay",
+  "DialogPortal",
+  "DialogTitle",
+  "DialogTrigger"
+ ],
+ "@opex/ui/dropdown-menu": [
+  "DropdownMenu",
+  "DropdownMenuCheckboxItem",
+  "DropdownMenuContent",
+  "DropdownMenuGroup",
+  "DropdownMenuItem",
+  "DropdownMenuLabel",
+  "DropdownMenuPortal",
+  "DropdownMenuRadioGroup",
+  "DropdownMenuRadioItem",
+  "DropdownMenuSeparator",
+  "DropdownMenuShortcut",
+  "DropdownMenuSub",
+  "DropdownMenuSubContent",
+  "DropdownMenuSubTrigger",
+  "DropdownMenuTrigger"
+ ],
+ "@opex/ui/field": [
+  "Field"
+ ],
+ "@opex/ui/field-trigger": [
+  "FieldTrigger"
+ ],
+ "@opex/ui/form": [
+  "Form",
+  "FormControl",
+  "FormDescription",
+  "FormField",
+  "FormItem",
+  "FormLabel",
+  "FormMessage",
+  "useFormField"
+ ],
+ "@opex/ui/form-footer": [
+  "FormFooter"
+ ],
+ "@opex/ui/form-grid": [
+  "FORM_GRID",
+  "FORM_GRID_3",
+  "FORM_GRID_COMPACT",
+  "FORM_GRID_WIDE"
+ ],
+ "@opex/ui/icon-action": [
+  "IconAction"
+ ],
+ "@opex/ui/info-tooltip": [
+  "InfoTooltip",
+  "LabelWithInfo"
+ ],
+ "@opex/ui/input": [
+  "Input"
+ ],
+ "@opex/ui/label": [
+  "Label"
+ ],
+ "@opex/ui/leveled-slider": [
+  "LeveledSlider"
+ ],
+ "@opex/ui/markdown": [
+  "Markdown"
+ ],
+ "@opex/ui/markdown-field": [
+  "MarkdownField"
+ ],
+ "@opex/ui/markdown-line": [
+  "LineRenderContext",
+  "MarkdownLine"
+ ],
+ "@opex/ui/markdown-line-action": [
+  "MarkdownLineActionContext",
+  "MarkdownLineActionProvider",
+  "useInheritedLineAction"
+ ],
+ "@opex/ui/markdown-media": [
+  "MarkdownMedia"
+ ],
+ "@opex/ui/markdown-selection": [
+  "MarkdownSelectionLayer"
+ ],
+ "@opex/ui/money-input": [
+  "MoneyInput"
+ ],
+ "@opex/ui/multi-autocomplete": [
+  "MultiAutocomplete"
+ ],
+ "@opex/ui/option-tabs": [
+  "OptionTabs"
+ ],
+ "@opex/ui/popover": [
+  "Popover",
+  "PopoverAnchor",
+  "PopoverContent",
+  "PopoverTrigger"
+ ],
+ "@opex/ui/portal-container": [
+  "PortalContainerProvider",
+  "usePortalContainer"
+ ],
+ "@opex/ui/preset-date-range-filter": [
+  "DATE_PRESET",
+  "DEFAULT_DATE_PRESETS",
+  "PresetDateRangeFilter",
+  "lastDaysPreset"
+ ],
+ "@opex/ui/progress": [
+  "Progress"
+ ],
+ "@opex/ui/radio-group": [
+  "RadioGroup",
+  "RadioGroupItem"
+ ],
+ "@opex/ui/reason-button": [
+  "ReasonButton"
+ ],
+ "@opex/ui/refresh-button": [
+  "RefreshButton"
+ ],
+ "@opex/ui/removable-chip": [
+  "ChipList"
+ ],
+ "@opex/ui/run-now-button": [
+  "RunNowButton",
+  "RunNowDialog"
+ ],
+ "@opex/ui/search-picker": [
+  "SearchPicker",
+  "pinItemsFirst"
+ ],
+ "@opex/ui/secret-reveal": [
+  "SecretReveal"
+ ],
+ "@opex/ui/secret-value-input": [
+  "SecretValueInput"
+ ],
+ "@opex/ui/select": [
+  "Select",
+  "SelectContent",
+  "SelectGroup",
+  "SelectItem",
+  "SelectLabel",
+  "SelectScrollDownButton",
+  "SelectScrollUpButton",
+  "SelectSeparator",
+  "SelectTrigger",
+  "SelectValue"
+ ],
+ "@opex/ui/selection-checkbox": [
+  "SelectionCheckbox"
+ ],
+ "@opex/ui/separator": [
+  "Separator"
+ ],
+ "@opex/ui/sheet": [
+  "Sheet",
+  "SheetClose",
+  "SheetContent",
+  "SheetDescription",
+  "SheetFooter",
+  "SheetHeader",
+  "SheetOverlay",
+  "SheetPortal",
+  "SheetTitle",
+  "SheetTrigger"
+ ],
+ "@opex/ui/skeleton": [
+  "Skeleton"
+ ],
+ "@opex/ui/slider": [
+  "Slider"
+ ],
+ "@opex/ui/switch": [
+  "Switch"
+ ],
+ "@opex/ui/table": [
+  "Table",
+  "TableBody",
+  "TableCaption",
+  "TableCell",
+  "TableFooter",
+  "TableHead",
+  "TableHeader",
+  "TableRow"
+ ],
+ "@opex/ui/tabs": [
+  "Tabs",
+  "TabsContent",
+  "TabsList",
+  "TabsTrigger"
+ ],
+ "@opex/ui/textarea": [
+  "Textarea"
+ ],
+ "@opex/ui/time-picker": [
+  "TimePicker"
+ ],
+ "@opex/ui/time-slot-list": [
+  "TimeSlotList",
+  "buildTimeSlots",
+  "minutesToTime",
+  "timeToMinutes"
+ ],
+ "@opex/ui/toast": [
+  "Toaster"
+ ],
+ "@opex/ui/toggle-card": [
+  "FormToggleCard",
+  "ToggleCard",
+  "ToggleRow"
+ ],
+ "@opex/ui/tooltip": [
+  "Tooltip",
+  "TooltipContent",
+  "TooltipProvider",
+  "TooltipTrigger"
+ ],
+ "@opex/ui/tooltip-icon-button": [
+  "TooltipIconButton"
+ ],
+ "@opex/ui/visually-hidden": [
+  "VisuallyHidden"
+ ],
+ "@opex/ui/color-picker": [
+  "ColorPicker",
+  "ColorPickerPanel",
+  "ColorSwatch",
+  "LowContrastWarning",
+  "favoriteLabel"
+ ],
+ "@opex/ui/check-list/SearchableCheckList": [
+  "SearchableCheckList"
+ ],
+ "@opex/ui/check-tree/CheckTree": [
+  "CheckTree"
+ ],
+ "@opex/list/ActiveFilterChips": [
+  "ActiveFilterChips"
+ ],
+ "@opex/list/ActiveItemRow": [
+  "ACTIVE_ITEM_ROW_SKELETON_CLASS",
+  "ActiveItemRow"
+ ],
+ "@opex/list/AgentPageFrame": [
+  "AgentPageFrame"
+ ],
+ "@opex/list/AgentPageHeader": [
+  "AgentPageHeader"
+ ],
+ "@opex/list/CadastroFilterCard": [
+  "CadastroFilterCard"
+ ],
+ "@opex/list/CadastroHeader": [
+  "CadastroHeader"
+ ],
+ "@opex/list/CadastroMultiSelect": [
+  "CadastroMultiSelect"
+ ],
+ "@opex/list/CadastroTableCard": [
+  "CadastroTableCard"
+ ],
+ "@opex/list/CadastroTableSkeleton": [
+  "CadastroTableSkeleton"
+ ],
+ "@opex/list/ChipOverflowList": [
+  "ChipOverflowList"
+ ],
+ "@opex/list/CollapsibleFilters": [
+  "CollapseToggle",
+  "CollapsedChips",
+  "CollapsibleBody",
+  "useFiltersCollapse"
+ ],
+ "@opex/list/FilterGroup": [
+  "FilterGroup"
+ ],
+ "@opex/list/FilterSwitch": [
+  "FilterSwitch"
+ ],
+ "@opex/list/InfiniteListView": [
+  "InfiniteListView"
+ ],
+ "@opex/list/InlineRenameField": [
+  "InlineRenameField"
+ ],
+ "@opex/list/ListFilters": [
+  "ListFilters",
+  "SEARCH_DEBOUNCE_MS"
+ ],
+ "@opex/list/SearchInput": [
+  "SearchInput"
+ ],
+ "@opex/list/StatusFilterMultiSelect": [
+  "StatusFilterMultiSelect"
+ ],
+ "@opex/list/StatusPill": [
+  "StatusPill"
+ ],
+ "@opex/list/TabFooter": [
+  "TabFooter",
+  "TabWrapper"
+ ],
+ "@opex/list/TableAction": [
+  "TableAction"
+ ],
+ "@opex/list/VirtualStack": [
+  "VIRTUALIZE_AFTER",
+  "VirtualStack"
+ ],
+ "@opex/list/VirtualizedRows": [
+  "VIRTUALIZE_ABOVE",
+  "VirtualizedRows"
+ ],
+ "@opex/metrics/DataSinceNotice": [
+  "DataSinceNotice",
+  "formatDataSince"
+ ],
+ "@opex/metrics/KpiCard": [
+  "KpiCard",
+  "KpiGrid"
+ ],
+ "@opex/metrics/LastUsedKpi": [
+  "LastUsedKpi"
+ ],
+ "@opex/metrics/LineChartTooltip": [
+  "LineChartTooltip",
+  "emptyMessage",
+  "formatBucketTitle"
+ ],
+ "@opex/metrics/LineSwatch": [
+  "LineSwatch"
+ ],
+ "@opex/metrics/MetricsFiltersBar": [
+  "MetricsFiltersBar"
+ ],
+ "@opex/metrics/MetricsOverviewSkeleton": [
+  "MetricsOverviewSkeleton"
+ ],
+ "@opex/metrics/MetricsPeriodFilter": [
+  "MetricsPeriodFilter"
+ ],
+ "@opex/metrics/MultiLineChart": [
+  "MultiLineChart",
+  "lineSelectionKey"
+ ],
+ "@opex/metrics/PanelMessage": [
+  "PanelMessage"
+ ],
+ "@opex/metrics/RefreshIconButton": [
+  "RefreshIconButton"
+ ],
+ "@opex/metrics/SampleAxisTick": [
+  "SAMPLE_AXIS_HEIGHT",
+  "SampleAxisTick"
+ ],
+ "@opex/metrics/SelectableLegend": [
+  "SelectableLegend"
+ ],
+ "@opex/metrics/StaleBadge": [
+  "StaleBadge"
+ ],
+ "@opex/metrics/UsageBar": [
+  "UsageBar"
+ ],
+ "@opex/metrics/UsageByDateChart": [
+  "UsageByDateChart"
+ ],
+ "@opex/metrics/format": [
+  "EMPTY_METRIC",
+  "formatBucketLabel",
+  "formatMetricValue"
+ ],
+ "@opex/metrics/layout": [
+  "CHART_CARD_CHROME",
+  "CHART_GRID",
+  "CHART_HEIGHT",
+  "KPI_CARD_HEIGHT",
+  "KPI_GRID",
+  "LINE_CHART_CARD_CHROME"
+ ],
+ "@opex/metrics/line-chart-model": [
+  "isSmallSample",
+  "lineSeriesItems",
+  "sampleOf",
+  "valueAxis"
+ ],
+ "@opex/metrics/line-dots": [
+  "makeSampleDot"
+ ],
+ "@opex/metrics/usage-level": [
+  "USAGE_CRITICAL_PERCENT",
+  "USAGE_LEVEL_CLASSES",
+  "USAGE_PULSE_PERCENT",
+  "USAGE_UNKNOWN_DOT_CLASS",
+  "USAGE_WARNING_PERCENT",
+  "usageLevel",
+  "worstUsageLevel"
+ ],
+ "@opex/metrics/charts/BarsChart": [
+  "BarsChart"
+ ],
+ "@opex/metrics/charts/ChartCard": [
+  "ChartCard"
+ ],
+ "@opex/metrics/charts/ChartDataTable": [
+  "ChartDataTable"
+ ],
+ "@opex/metrics/charts/DonutChart": [
+  "DonutChart"
+ ],
+ "@opex/metrics/charts/EmptyChart": [
+  "EmptyChart"
+ ],
+ "@opex/metrics/charts/RankedBarsCard": [
+  "RankedBarsCard"
+ ],
+ "@opex/metrics/charts/TrendLineChart": [
+  "TrendLineChart"
+ ],
+ "@opex/metrics/charts/palette": [
+  "CHART_COLORS",
+  "LINE_SERIES_COLORS",
+  "LINE_SERIES_DASHES",
+  "SEMANTIC_COLORS",
+  "SINGLE_MEASURE_COLOR",
+  "colorAt",
+  "dashPattern",
+  "lineStyleAt"
+ ],
+ "@opex/metrics/charts/types": [],
+ "@opex/metrics/charts/use-chart-animation": [
+  "useChartAnimation"
+ ],
+ "@opex/feedback/AvailabilityNotice": [
+  "AvailabilityNotice"
+ ],
+ "@opex/feedback/EmptyState": [
+  "EmptyState"
+ ],
+ "@opex/feedback/ErrorState": [
+  "ErrorState"
+ ],
+ "@opex/feedback/InDevelopment": [
+  "InDevelopment"
+ ],
+ "@opex/feedback/PreviewSchedulerNotice": [
+  "PreviewSchedulerNotice"
+ ],
+ "@opex/theme": [
+  "FORM_GRID",
+  "FORM_GRID_3",
+  "FORM_GRID_COMPACT",
+  "FORM_GRID_WIDE",
+  "PRIMARY_HEX",
+  "cn"
+ ]
+}

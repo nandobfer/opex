@@ -15,8 +15,9 @@ import type { McpToolDescriptor } from "../mcp-protocol"
 
 export async function maddoxMcpCatalog(scope: MaddoxMcpScope): Promise<OpexTool[]> {
     if (scope === "owner") {
-        const { OPEX_TOOLS } = await import("@/features/opex-agent/server/tools/registry")
-        return OPEX_TOOLS.filter(maddoxIncludesOwnerTool)
+        // Inclui as ferramentas registradas pelos plugins do dono (OPE-172): aparecem sem build.
+        const [{ OPEX_TOOLS }, { pluginToolList }] = await Promise.all([import("@/features/opex-agent/server/tools/registry"), import("@/features/plugins/server/kernel/registries")])
+        return [...OPEX_TOOLS, ...pluginToolList()].filter(maddoxIncludesOwnerTool)
     }
     const { OPEX_CLIENT_SERVER_TOOLS } = await import("@/features/opex-agent/server/client-tools/registry")
     return OPEX_CLIENT_SERVER_TOOLS.filter((tool) => MADDOX_CLIENT_TOOL_NAMES.includes(tool.name))

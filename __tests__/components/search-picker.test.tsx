@@ -1,5 +1,6 @@
 /** @vitest-environment happy-dom */
 
+import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { framerMotionMock } from '../helpers/framer-motion'
@@ -209,5 +210,70 @@ describe('SearchPicker', () => {
       expect(option.parentElement!.getAttribute('class')).toBeNull()
       expect(option.className).not.toContain('pr-10')
     })
+  })
+})
+
+describe('SearchPicker: seleção múltipla e árvore (OPE-172)', () => {
+  interface Node {
+    id: string
+    nome: string
+    parent: string | null
+    depth: number
+  }
+  const TREE: Node[] = [
+    { id: 'frutas', nome: 'Frutas', parent: null, depth: 0 },
+    { id: 'citricas', nome: 'Cítricas', parent: 'frutas', depth: 1 },
+    { id: 'limao', nome: 'Limão', parent: 'citricas', depth: 2 },
+    { id: 'legumes', nome: 'Legumes', parent: null, depth: 0 },
+  ]
+
+  function Multi() {
+    const [selected, setSelected] = React.useState<string[]>([])
+    return (
+      <SearchPicker<Node>
+        trigger={<button type="button">Escolher</button>}
+        items={TREE}
+        getKey={(node) => node.id}
+        getParentKey={(node) => node.parent}
+        getDepth={(node) => node.depth}
+        selectedKeys={selected}
+        closeOnPick={false}
+        renderItem={(node, state) => <span>{state.searching ? `${node.nome} (busca)` : node.nome}</span>}
+        onPick={(node) => setSelected((current) => (current.includes(node.id) ? current.filter((id) => id !== node.id) : [...current, node.id]))}
+        searchKeys={['nome']}
+        searchLabel="Buscar nó"
+        listLabel="Nós"
+        emptyText="Vazio"
+        emptySearchText="Nada"
+      />
+    )
+  }
+
+  it('sem busca: opções recuadas por nível; marcar não fecha e alterna aria-checked', () => {
+    render(<Multi />)
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher' }))
+    const limao = screen.getByRole('option', { name: 'Limão' })
+    expect(limao.getAttribute('data-depth')).toBe('2')
+    expect(limao.getAttribute('aria-checked')).toBe('false')
+    fireEvent.click(limao)
+    expect(screen.getByRole('option', { name: 'Limão' }).getAttribute('aria-checked')).toBe('true')
+    fireEvent.click(screen.getByRole('option', { name: 'Legumes' }))
+    expect(screen.getAllByRole('option').filter((option) => option.getAttribute('aria-checked') === 'true')).toHaveLength(2)
+    fireEvent.click(screen.getByRole('option', { name: 'Limão' }))
+    expect(screen.getByRole('option', { name: 'Limão' }).getAttribute('aria-checked')).toBe('false')
+  })
+
+  it('com busca: o resultado aparece dentro do caminho (ancestrais visíveis), e o render sabe que é busca', async () => {
+    render(<Multi />)
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher' }))
+    fireEvent.change(screen.getByLabelText('Buscar nó'), { target: { value: 'Limão' } })
+    await waitFor(() => expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Frutas (busca)', 'Cítricas (busca)', 'Limão (busca)']))
+  })
+
+  it('sem selectedKeys continua escolha única que fecha ao escolher', () => {
+    const onPick = renderPicker()
+    fireEvent.click(screen.getByRole('option', { name: 'Banana' }))
+    expect(onPick).toHaveBeenCalledWith(FRUITS[1])
+    expect(screen.queryByRole('listbox')).toBeNull()
   })
 })

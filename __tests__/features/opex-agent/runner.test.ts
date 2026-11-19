@@ -135,8 +135,13 @@ const mcpTool = { name: 'mcp_gh_search', group: 'mcp', label: 'GitHub · search'
 vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ loadMcpTools: mocks.loadMcpTools }))
 const skillTool = { name: 'load_opex_skill', group: 'opex-skills', label: 'Carregar skill', risk: 'read', description: 'Carrega', input: { parse: (value: unknown) => value, safeParse: (value: unknown) => ({ success: true, data: value }) }, execute: async () => ({ available: true }) }
 vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: mocks.ownerSkillsForTurn }))
+// Prévias de plugin com que cada turno do dono resolveu o catálogo (OPE-172).
+const toolPreviews = vi.hoisted(() => [] as string[][])
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({
-  enabledOpexTools: () => [fakeTool],
+  enabledOpexTools: (_disabled: unknown, previewPlugins?: ReadonlySet<string>) => {
+    toolPreviews.push([...(previewPlugins ?? [])])
+    return [fakeTool]
+  },
   findOpexTool: (name: string) => (name === fakeTool.name ? fakeTool : undefined),
   needsConfirmation: () => false,
 }))
@@ -457,6 +462,26 @@ describe('runner no portal do cliente', () => {
     const scope = { kind: 'client', actor: clientActor } as never
     expect(instructionsFor(settings as never, scope)).not.toContain('schedule_job')
     expect(instructionsFor(settings as never, scope, '', { jobs: true })).toContain('schedule_job')
+  })
+})
+
+describe('prévia de plugin no turno do dono (OPE-172)', () => {
+  it('a continuação depois de uma confirmação resolve as ferramentas no canal da prévia do turno de origem', async () => {
+    const sessionId = await newSession()
+    toolPreviews.length = 0
+    mocks.parts = [{ type: 'text-delta', id: 'x', text: 'Ok.' }, { type: 'finish', finishReason: 'stop', totalUsage: {} }]
+    mocks.responseMessages = [{ role: 'assistant', content: 'Ok.' }]
+    await queueFollowUp(sessionId, { kind: 'confirmation', text: 'O usuário CONFIRMOU', previewPlugins: ['relogio'] })
+    await vi.waitFor(() => expect(toolPreviews).toEqual([['relogio']]))
+  })
+
+  it('sem prévia na continuação, o catálogo é o da versão estável', async () => {
+    const sessionId = await newSession()
+    toolPreviews.length = 0
+    mocks.parts = [{ type: 'text-delta', id: 'x', text: 'Ok.' }, { type: 'finish', finishReason: 'stop', totalUsage: {} }]
+    mocks.responseMessages = [{ role: 'assistant', content: 'Ok.' }]
+    await queueFollowUp(sessionId, { kind: 'confirmation', text: 'O usuário CONFIRMOU' })
+    await vi.waitFor(() => expect(toolPreviews).toEqual([[]]))
   })
 })
 

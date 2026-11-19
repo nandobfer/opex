@@ -102,3 +102,26 @@ describe('ActiveItemRow (card de item em uso, OPE-159)', () => {
     expect(handlers.onActivate).not.toHaveBeenCalled()
   })
 })
+
+describe('ActiveItemRow sem renomear/remover e não ativável (versões de plugin, OPE-172)', () => {
+  it('sem onRename/onRemove não há esses botões; badges aparecem ao lado do nome', () => {
+    render(
+      <ul>
+        <ActiveItemRow label="v3" active={false} activateLabel="Usar a versão v3" onActivate={vi.fn()} badges={<span>Prévia</span>} />
+      </ul>,
+    )
+    expect(screen.queryByRole('button', { name: 'Renomear v3' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Remover v3' })).toBeNull()
+    expect(screen.getByText('Prévia')).toBeTruthy()
+  })
+
+  it('activatable={false}: o card não vira botão e não ativa', () => {
+    const onActivate = vi.fn()
+    render(
+      <ul>
+        <ActiveItemRow label="v3" active={false} activatable={false} activateLabel="Usar a versão v3" onActivate={onActivate} />
+      </ul>,
+    )
+    expect(screen.queryByRole('button', { name: 'Usar a versão v3' })).toBeNull()
+  })
+})

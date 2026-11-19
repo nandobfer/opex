@@ -14,6 +14,9 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const mocks = vi.hoisted(() => ({ refinementAction: vi.fn(), workbenchAction: vi.fn(), refinementStream: vi.fn(), workbenchStream: vi.fn(), refinement: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+// Abas de plugins da mesa (slot `workbench.panel`, OPE-172): sem plugins ativos.
+vi.mock('@/features/plugins/client/usePluginSlotTabs', () => ({ usePluginSlotTabs: () => [], isPluginTabId: (id: string) => id.startsWith('plugin:') }))
+vi.mock('@/features/plugins/client/PluginContribution', () => ({ PluginContribution: () => null }))
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }))
 vi.mock('@/lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: () => ({ data: { id: 't1', description: 'Texto da descrição', technicalSpec: 'Critérios da spec' }, isLoading: false, isError: false, error: null, refetch: vi.fn() }) }))

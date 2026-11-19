@@ -178,6 +178,30 @@ describe("prévia do dono (servidor)", () => {
         )
     })
 
+    it("rascunho classificado como Plugin sem horas: com cliente vira plugin do portal dele; sem cliente, do dono (OPE-172)", async () => {
+        const withClient = await createOwnerDraft({ projectId, description: "Widget no portal" })
+        await saveDraftPreview(OWNER_SCOPE, withClient.id, { ...preview, taskType: "plugin" as never })
+        await setDraftEstimateClient(OWNER_SCOPE, withClient.id, String(client._id))
+        mocks.createTaskWithIssue.mockResolvedValue({ id: "t7", code: "APP-7" })
+        await approveOwnerDraft(withClient.id, "local")
+        expect(mocks.createTaskWithIssue.mock.calls[0][0]).toMatchObject({ taskType: "plugin", pluginTarget: { scope: "client", clientId: String(client._id), pluginId: null } })
+        expect((mocks.createTaskWithIssue.mock.calls[0][2] as { estimate?: unknown }).estimate).toBeUndefined()
+
+        const owner = await createOwnerDraft({ projectId, description: "Widget no dashboard" })
+        await saveDraftPreview(OWNER_SCOPE, owner.id, { ...preview, taskType: "plugin" as never })
+        await saveDraftEstimate(OWNER_SCOPE, owner.id, 2, "gemini/pro")
+        await approveOwnerDraft(owner.id, "local")
+        expect(mocks.createTaskWithIssue.mock.calls[1][0]).toMatchObject({ taskType: "plugin", pluginTarget: { scope: "owner", clientId: null } })
+    })
+
+    it("outro tipo não leva alvo de plugin", async () => {
+        const draft = await createOwnerDraft({ projectId, description: "Ajustar o rodapé" })
+        await saveDraftPreview(OWNER_SCOPE, draft.id, preview)
+        mocks.createTaskWithIssue.mockResolvedValue({ id: "t8", code: "APP-8" })
+        await approveOwnerDraft(draft.id, "local")
+        expect(mocks.createTaskWithIssue.mock.calls[0][0]).toMatchObject({ pluginTarget: null })
+    })
+
     it("a prioridade escolhida sobrepõe a sugerida pela IA", async () => {
         const draft = await createOwnerDraft({ projectId, description: "Ajustar o rodapé" })
         await saveDraftPreview(OWNER_SCOPE, draft.id, preview)

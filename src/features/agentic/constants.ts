@@ -125,6 +125,25 @@ export const WORKBENCH_STAGE_LABELS: Record<WorkbenchStage, string> = {
     done: "Concluída",
 }
 
+/**
+ * Rótulos que mudam numa mesa Plugin (OPE-172): o `fixing_ci` são os testes do plugin (Vitest no host)
+ * e o `finishing` é a consolidação da versão como `stable`.
+ */
+export const PLUGIN_STAGE_LABELS: Partial<Record<WorkbenchStage, string>> = {
+    implementing: "Desenvolvendo o plugin",
+    preview: "Prévia ao vivo",
+    fixing_ci: "Testes do plugin",
+    finishing: "Consolidando",
+}
+
+/** Rótulo da etapa conforme o tipo da mesa. */
+export function workbenchStageLabel(stage: WorkbenchStage, kind: "repo" | "plugin" = "repo"): string {
+    return (kind === "plugin" ? PLUGIN_STAGE_LABELS[stage] : undefined) ?? WORKBENCH_STAGE_LABELS[stage]
+}
+
+/** Etapas manuais que uma mesa Plugin aceita (sem PR). */
+export const PLUGIN_MANUAL_STAGES = ["plan_review", "preview", "done"] as const satisfies readonly WorkbenchStage[]
+
 /** Agente usado por etapa de execução. */
 export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
     planning: "planning",

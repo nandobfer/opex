@@ -290,7 +290,7 @@ do `opencode serve`, não uma chave de API.
   | Opex | `agente-opex` | Assistente por chat com ferramentas do app — `modules/opex-agent.md` |
   | Maddox | `agente-maddox` | Agente de chat sobre o OpenCode — `modules/maddox-agent.md` |
   | Orçamentista | `orcamentista` | Seções **Orçamentos** (prévia do portal) e **Estimar prazos** |
-  | Catalogador | `catalogador` | Seções **Resumos de tarefas** e **Tags de tarefas** |
+  | Catalogador | `catalogador` | Seções **Resumos de tarefas**, **Tags de tarefas** e **Descritivo de versão de plugin** (OPE-172) |
   | Refinador | `refinar-tarefa` | Refinar tarefa (texto ou skill) — `modules/refinement.md` |
   | Desenvolvedor | `desenvolvimento-agentico` | Ícone `</>` (`CodeXml`); abas internas **Agentes** (agentes padrão e colunas globais, OPE-79) e **Centrais de desenvolvimento** (`abaAgentic`; centrais em `/integracoes/ia/centrais/[id]`) — `modules/agentic-dev.md` |
   | Arquiteto | `agente-arquiteto` | Diagrama do plano aprovado (ícone `Network`) — `modules/architect-agent.md` |
@@ -845,3 +845,15 @@ recusa a API key). Filtro por chave: `provider-usage.test.ts`, `jev-usage.test.t
 `provider-usage-route.test.ts`, `provider-usage-card.test.tsx` e `jev-usage-card.test.tsx`; atribuição do
 consumo à chave em `__tests__/lib/ai/ai-stream.test.ts` e `jev-request-usage.test.ts`. Telas com o filtro
 sem QueryClient usam o mock `__tests__/helpers/ai-api-keys.ts`.
+
+## Descritivo de versão de plugin (OPE-172)
+
+- Feature `plugin-version-summary` (`AI_FEATURE_IDS`), seção do Catalogador (`PluginVersionSummarySection`),
+  configurada em `ai_feature_settings` (`pluginVersionSummarySettingsSchema`: liga/desliga, provedor,
+  modelo, agente, variante, temperatura, máximo de tokens e instruções, padrão
+  `DEFAULT_PLUGIN_VERSION_SUMMARY_INSTRUCTIONS`). Rotas `GET/PUT /api/ai/features/plugin-version-summary`;
+  o Agente Opex também a configura (`AI_FEATURES` das ferramentas de IA).
+- Uso: "Gerar descritivo" na página do plugin (`modules/plugins.md`, "Telas"), só por ação do dono, com
+  a diferença das fontes para a versão anterior. Consumo com origem `plugin-version-summary`.
+- Instruções, temperatura e máximo de tokens vêm do bloco compartilhado `PromptSamplingFieldsBlock`
+  (`components/shared/PromptSamplingFields.tsx`), também usado pelos Resumos de tarefas.

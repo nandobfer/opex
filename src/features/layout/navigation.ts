@@ -1,4 +1,4 @@
-import { Banknote, Bot, Clock, CodeXml, Landmark, ListTodo, Network, Palette, Plug, Server, Settings } from "lucide-react"
+import { Banknote, Blocks, Bot, Clock, CodeXml, Landmark, ListTodo, Network, Palette, Plug, Server, Settings } from "lucide-react"
 import { AGENT_CATALOG } from "@/features/agent-metrics/catalog"
 import { isNavGroup, type NavBadgeKey, type NavGroupDef, type NavItemDef, type NavSectionDef } from "./types"
 
@@ -41,6 +41,8 @@ export const APP_NAV: readonly NavSectionDef[] = [
                 items: [
                     { href: "/ambientes", label: "Ambientes", title: "Ambientes", icon: Server },
                     { href: "/configuracoes/aparencia", label: "Aparência", title: "Aparência", icon: Palette },
+                    // Plugins (OPE-172): lista, versões, diff, ativar/desativar e rollback.
+                    { href: "/plugins", label: "Plugins", title: "Plugins", icon: Blocks },
                 ],
             },
         ],

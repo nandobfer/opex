@@ -39,6 +39,8 @@ export interface TaskDto {
     /** Tags (ids da taxonomia da feature "Tags de tarefas"); vazio quando nenhuma. */
     tags: string[]
     taskType: TaskType | null
+    /** Tarefa do tipo Plugin (OPE-172). */
+    pluginTarget: { scope: "owner" | "client"; clientId: string | null; pluginId: string | null } | null
     priority: TaskPriority
     archived: boolean
     project: ProjectRef | null

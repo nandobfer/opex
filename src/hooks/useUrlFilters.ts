@@ -40,6 +40,13 @@ export const urlFilterCodecs = {
         }
     },
 
+    /** Liga/desliga: só `true` vai para a URL; ausente ou outro valor é o padrão. */
+    boolean(): UrlFilterCodec<boolean> {
+        return {
+            parse: (raw, fallback) => (raw === null ? fallback : raw === "true"),
+            serialize: (value) => (value ? "true" : ""),
+        }
+    },
     booleans(): UrlFilterCodec<boolean[]> {
         return {
             parse: (raw, fallback) => {

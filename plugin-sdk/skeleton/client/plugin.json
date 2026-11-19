@@ -1,0 +1,15 @@
+{
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "description": "",
+  "apiVersion": "1.0",
+  "scope": "client",
+  "entries": { "client": "client/index.tsx" },
+  "slots": [{ "slot": "portal.dashboard.widgets", "export": "Widget", "title": "__PLUGIN_NAME__" }],
+  "pages": [],
+  "nav": [],
+  "routes": [],
+  "tools": [],
+  "crons": [],
+  "services": []
+}

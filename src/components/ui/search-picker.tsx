@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, type KeyboardEvent, type ReactElement, type ReactNode } from "react"
 import Fuse, { type FuseOptionKey } from "fuse.js"
 import { AnimatePresence, motion } from "framer-motion"
-import { Loader2, Search } from "lucide-react"
+import { Check, Loader2, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -15,8 +15,8 @@ export interface SearchPickerProps<T> {
     trigger: ReactElement
     items: readonly T[]
     getKey: (item: T) => string
-    /** Conteúdo da opção (foto, nome, preço...). */
-    renderItem: (item: T) => ReactNode
+    /** Conteúdo da opção (foto, nome, preço...). `state.searching`: há termo (ex.: mostrar o caminho na árvore). */
+    renderItem: (item: T, state: { searching: boolean; selected: boolean }) => ReactNode
     onPick: (item: T) => void
     /**
      * Busca LOCAL (fuse.js, tolera erro de digitação) nestes campos. Sem `searchKeys`, a lista não é
@@ -67,6 +67,20 @@ export interface SearchPickerProps<T> {
     footer?: ReactNode
     /** Classe do popover (largura). */
     contentClassName?: string
+    /**
+     * Seleção múltipla: chaves marcadas (a opção mostra a marca e `aria-checked`). Combine com
+     * `closeOnPick={false}` para a lista ficar aberta enquanto o usuário marca e desmarca.
+     */
+    selectedKeys?: readonly string[]
+    /** Fecha ao escolher (padrão). Em seleção múltipla, `false`. */
+    closeOnPick?: boolean
+    /**
+     * Árvore: chave do pai de cada item (os itens vêm na ordem de leitura, pai antes dos filhos). Sem
+     * busca, as opções aparecem recuadas por nível (`getDepth`); com busca, os ancestrais de cada
+     * resultado continuam visíveis, para o resultado não perder o contexto.
+     */
+    getParentKey?: (item: T) => string | null
+    getDepth?: (item: T) => number
 }
 
 /**
@@ -81,6 +95,24 @@ export function pinItemsFirst<T>(items: readonly T[], isPinned: (item: T) => boo
     const rest: T[] = []
     for (const item of items) (isPinned(item) ? pinned : rest).push(item)
     return [...pinned, ...rest]
+}
+
+/**
+ * Resultados de busca numa árvore com os ancestrais de cada um (na ordem original), para o resultado
+ * aparecer dentro do seu caminho.
+ */
+export function withAncestors<T>(ordered: readonly T[], found: readonly T[], getKey: (item: T) => string, getParentKey: (item: T) => string | null): T[] {
+    const byKey = new Map(ordered.map((item) => [getKey(item), item]))
+    const keep = new Set<string>()
+    for (const item of found) {
+        let key: string | null = getKey(item)
+        while (key && !keep.has(key)) {
+            keep.add(key)
+            const node = byKey.get(key)
+            key = node ? getParentKey(node) : null
+        }
+    }
+    return ordered.filter((item) => keep.has(getKey(item)))
 }
 
 export function SearchPicker<T>({
@@ -111,6 +143,10 @@ export function SearchPicker<T>({
     matchTriggerWidth,
     footer,
     contentClassName,
+    selectedKeys,
+    closeOnPick = true,
+    getParentKey,
+    getDepth,
 }: SearchPickerProps<T>) {
     const listId = useId()
     const [open, setOpen] = useState(false)
@@ -121,8 +157,10 @@ export function SearchPicker<T>({
     const query = term.trim()
     const visible = useMemo(() => {
         const found = filterItems ? filterItems(ordered, query) : fuse && query ? fuse.search(query).map((result) => result.item) : [...ordered]
-        return (pinFirst ? pinItemsFirst(found, pinFirst) : found).slice(0, MAX_VISIBLE)
-    }, [filterItems, fuse, ordered, query, pinFirst])
+        const shaped = getParentKey && query ? withAncestors(ordered, found, getKey, getParentKey) : found
+        return (pinFirst ? pinItemsFirst(shaped, pinFirst) : shaped).slice(0, MAX_VISIBLE)
+    }, [filterItems, fuse, ordered, query, pinFirst, getParentKey, getKey])
+    const selectedSet = useMemo(() => (selectedKeys ? new Set(selectedKeys) : null), [selectedKeys])
 
     const changeTerm = (next: string) => {
         setTerm(next)
@@ -138,7 +176,7 @@ export function SearchPicker<T>({
     const pick = (item: T) => {
         if (disabledReason?.(item)) return
         onPick(item)
-        changeOpen(false)
+        if (closeOnPick) changeOpen(false)
     }
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.nativeEvent.isComposing || loading || fetching || disabled) return
@@ -182,12 +220,16 @@ export function SearchPicker<T>({
                         {visible.map((item, index) => {
                             const reason = disabledReason?.(item) || undefined
                             const action = renderItemAction?.(item)
+                            const checked = selectedSet ? selectedSet.has(getKey(item)) : undefined
+                            const depth = getDepth ? getDepth(item) : 0
                             const option = (
                                 <button
                                     type="button"
                                     id={optionDomId(index)}
                                     role="option"
                                     aria-selected={index === active}
+                                    aria-checked={checked}
+                                    data-depth={getDepth ? depth : undefined}
                                     aria-disabled={reason ? true : undefined}
                                     disabled={Boolean(reason)}
                                     title={reason}
@@ -199,8 +241,14 @@ export function SearchPicker<T>({
                                         reason && "cursor-not-allowed opacity-50 hover:bg-transparent",
                                         action && "pr-10",
                                     )}
+                                    style={depth ? { paddingLeft: `${0.5 + depth * 1}rem` } : undefined}
                                 >
-                                    {renderItem(item)}
+                                    {selectedSet && (
+                                        <span className={cn("flex h-4 w-4 shrink-0 items-center justify-center rounded-sm border border-primary/60", checked && "bg-primary text-primary-foreground")} aria-hidden>
+                                            {checked && <Check className="h-3 w-3" />}
+                                        </span>
+                                    )}
+                                    {renderItem(item, { searching: Boolean(query), selected: Boolean(checked) })}
                                 </button>
                             )
                             return (

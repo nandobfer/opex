@@ -71,7 +71,8 @@ describe('registro de ferramentas', () => {
       expect(tool.description.length).toBeGreaterThan(10)
       expect(OPEX_TOOL_GROUPS).toContain(tool.group)
     }
-    for (const group of OPEX_TOOL_GROUPS) expect(OPEX_TOOLS.some((tool) => tool.group === group)).toBe(true)
+    // `plugin-tools` (OPE-172) só tem as ferramentas registradas pelos plugins em tempo de execução.
+    for (const group of OPEX_TOOL_GROUPS.filter((name) => name !== 'plugin-tools')) expect(OPEX_TOOLS.some((tool) => tool.group === group)).toBe(true)
   })
 
   it('sem ferramentas de Go! Sipal nem de Recursos beta', () => {

@@ -91,6 +91,32 @@ fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hoo
 `useDialogPresence` e `useCreateDialogAction` (`src/hooks/`). Animações de diálogo e abas:
 `src/components/motion/dialog-panel-motion.ts` e `tab-motion.ts`.
 
+- **Nome como link** (OPE-172, padrão do projeto): o nome do item da lista é o link para a página dele,
+  com `ItemNameLink` (`src/components/list/ItemNameLink.tsx`; sublinhado no hover e anel de foco). Não
+  use ícone/botão "Visualizar"/"Abrir" para isso. Usado em Agentes rotineiros (configurações) e Plugins.
+- **Um item em uso** (`ActiveItemRow`, contas do OpenCode, chaves de IA e versões de plugin): o card
+  inteiro põe o item em uso; `onRename`/`onRemove` são opcionais (sem eles, sem os botões),
+  `activatable={false}` desenha o card sem o botão que cobre a linha (item que não pode ser posto em
+  uso) e `badges` entram ao lado do nome.
+- **Escolha com busca** (OPE-172, regra do projeto): filtro ou campo que escolhe numa lista de opções usa
+  o `SearchPicker` (`src/components/ui/search-picker.tsx`), com busca — nos filtros de lista, o
+  `CadastroSearchPicker` (`src/components/list`: fundo do card, resumo "Todos"/rótulo/"N itens", botão de
+  limpar e seleção múltipla). Nunca `Select` cru nem multiselect sem busca. Exceção: escolha única numa
+  lista pequena e fixa usa `OptionTabs`. A regra vale para o que for criado ou alterado; os filtros
+  antigos com `CadastroMultiSelect` migram quando a tela for mexida.
+  - `SearchPicker` em seleção múltipla: `selectedKeys` (a opção mostra a marca e `aria-checked`) +
+    `closeOnPick={false}`.
+  - Em árvore: `getParentKey`/`getDepth` (itens em ordem de leitura). Sem busca, recuo por nível
+    (`data-depth`); com busca, os ancestrais de cada resultado continuam visíveis e o `renderItem`
+    recebe `{ searching }` para mostrar o caminho. No `CadastroSearchPicker`, basta passar `parent`,
+    `depth` e `path` nas opções (ex.: filtro Slot de `/plugins`).
+- **Debug de logs** (terminal, coluna e modal): `DebugLogConsole` + `useDebugTerminal`,
+  `useDebugLogStream` (fonte: `fetch`, canal e evento), `DebugLogsPanel`, `DebugLogsDialog` e
+  `DebugToggleIconButton`, em `src/features/integrations/components` e `hooks`. As integrações
+  (`IntegrationDebugConsole`, `LogsPanel`, `IntegrationDebugDialog`, `DebugToggleButton`) e os plugins
+  (`PluginDebugConsole`, `PluginDebugDialog`) são adaptadores sobre eles: debug novo reaproveita esses
+  componentes, sem copiar o markup.
+
 ### Recursos instaláveis (`src/components/resources/`) e listas de liberação
 
 Extraídos da aba de recursos do OpenCode (OPE-153) e usados também pelas Skills do Agente Opex:
@@ -561,8 +587,8 @@ próprios.
 **Regra: toda tela de listagem usa este padrão** — `CadastroHeader` (título, descrição e ações à
 direita, como "Novo"/importar/atalhos da tela) + `*Filters` sobre `ListFilters`, com `onClear`
 ligado ao `resetFilters` do `useUrlFilters` e `total` no contador "N REGISTROS". Nada de barras
-próprias (inputs `h-8`, chips de status, contador ou busca no cabeçalho). Seleções múltiplas usam
-`CadastroMultiSelect`; escolha única pequena (sim/todos, ordenação) usa `OptionTabs` (`h-10`)
+próprias (inputs `h-8`, chips de status, contador ou busca no cabeçalho). Seleções múltiplas novas ou
+alteradas usam `CadastroSearchPicker` (com busca; as antigas ainda em `CadastroMultiSelect`); escolha única pequena (sim/todos, ordenação) usa `OptionTabs` (`h-10`)
 dentro de um `FilterGroup`. Telas com muitos filtros usam a prop `secondary` do `ListFilters` (uma
 segunda linha no mesmo cartão).
 

@@ -9,6 +9,7 @@ import { RankedBarsCard } from "@/components/metrics/charts/RankedBarsCard"
 import { colorAt } from "@/components/metrics/charts/palette"
 import { formatCount } from "../format"
 import type { DashboardDto } from "../types"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 
 type Data = Pick<DashboardDto, "workbenchFunnel" | "workbenchByProject">
 
@@ -86,6 +87,8 @@ export function DevCenterSection({ data, active, running }: { data: Data; active
                     </div>
                 </ChartCard>
             </div>
+            {/* Slot `dashboard.section.central` (OPE-172): cards de plugins no fim da seção. */}
+            <PluginSlot name="dashboard.section.central" props={{}} />
         </section>
     )
 }

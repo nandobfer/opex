@@ -16,6 +16,11 @@ export type OpexServerScope = ({ kind: "owner" } | { kind: "client"; actor: Clie
     agent?: OpexAgentKind
     /** Conversa com um agente rotineiro (`agent: "routine"`, OPE-160): o agente das sessões. */
     routineAgentId?: string
+    /**
+     * Plugins com a prévia ligada no navegador que disparou o turno (OPE-172): as ferramentas da
+     * versão `preview` substituem as da `stable` só nesse turno.
+     */
+    previewPlugins?: readonly string[]
 }
 
 export const OWNER_SCOPE: OpexServerScope = { kind: "owner" }

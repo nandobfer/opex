@@ -48,6 +48,8 @@ export const OPEX_TOOL_GROUPS = [
     "opencode-service",
     "opencode-resources",
     "mcps",
+    "plugins",
+    "plugin-tools",
 ] as const
 export type OpexToolGroup = (typeof OPEX_TOOL_GROUPS)[number]
 
@@ -86,6 +88,8 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     "opencode-service": { label: "Serviço do OpenCode", description: "Status, logs, iniciar, parar, reiniciar e atualizar o OpenCode; backups da configuração" },
     "opencode-resources": { label: "Recursos do OpenCode", description: "Skills, agentes, comandos, plugins e MCPs do OpenCode: listar, criar, editar, ligar/desligar, instalar, atualizar, excluir e testar MCPs" },
     mcps: { label: "MCPs do Agente Opex", description: "Cadastrar, editar, habilitar/desabilitar, testar e excluir os MCPs do agente, a confirmação de cada ferramenta e os MCPs liberados a cada cliente" },
+    plugins: { label: "Plugins", description: "Listar, ler fontes, comparar versões, inspecionar o runtime, ativar/desativar e fazer rollback dos plugins (OPE-172)" },
+    "plugin-tools": { label: "Ferramentas de plugins", description: "Ferramentas registradas pelos plugins do dono em tempo de execução (aparecem e somem com o plugin)" },
 }
 
 /** Eventos em `private-app`. Payload: `{ id }` (sessão). */

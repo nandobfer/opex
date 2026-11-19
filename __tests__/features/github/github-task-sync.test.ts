@@ -107,6 +107,45 @@ describe('pushTaskToIssue (tarefa → issue)', () => {
   })
 })
 
+describe('tarefa Plugin sincronizada com a issue (OPE-172)', () => {
+  it('issue sem label de tipo mantém o tipo Plugin (e, com ele, o alvo do plugin)', async () => {
+    const { task, link } = await seed({ task: { updatedAt: OLD, taskType: 'plugin', pluginTarget: { scope: 'client', clientId: 'cli1', pluginId: 'relogio' } } })
+    const status = await reconcileTaskIssue({ closedColumnKey: 'done', entryColumnKey: 'todo' } as never, issue({ labels: [] }), link as never, mapping)
+    expect(status).toBe('applied')
+    expect(mocks.updateTask).toHaveBeenCalledWith(task._id, expect.objectContaining({ title: expect.any(String) }), 'system', { origin: 'github', publish: false })
+    // Tipo inalterado não vai no update: nem tipo nem alvo são regravados.
+    expect(mocks.updateTask.mock.calls[0][1]).not.toHaveProperty('taskType')
+    expect(mocks.updateTask.mock.calls[0][1]).not.toHaveProperty('pluginTarget')
+  })
+
+  it('label plugin numa tarefa de outro tipo não a promove a Plugin (o update seria recusado sem alvo)', async () => {
+    const { resolvePluginTarget } = await import('@/features/tasks/plugin-target')
+    const { link } = await seed({ task: { updatedAt: OLD, taskType: 'bugfix' } })
+    const status = await reconcileTaskIssue({ closedColumnKey: 'done', entryColumnKey: 'todo' } as never, issue({ labels: ['plugin'] }), link as never, mapping)
+    expect(status).toBe('applied')
+    const payload = mocks.updateTask.mock.calls[0][1] as { taskType?: string | null }
+    expect(payload).not.toHaveProperty('taskType')
+    // O que o serviço real faria com esse payload não lança (com 'plugin' lançaria "Informe o escopo").
+    expect(() => resolvePluginTarget(payload.taskType ?? 'bugfix', null, null)).not.toThrow()
+    expect(() => resolvePluginTarget('plugin', null, null)).toThrow()
+  })
+
+  it('label plugin numa tarefa Plugin a mantém Plugin, com o alvo intacto', async () => {
+    const { link } = await seed({ task: { updatedAt: OLD, taskType: 'plugin', pluginTarget: { scope: 'owner', clientId: null, pluginId: 'relogio' } } })
+    await reconcileTaskIssue({ closedColumnKey: 'done', entryColumnKey: 'todo' } as never, issue({ labels: ['plugin'] }), link as never, mapping)
+    expect(mocks.updateTask.mock.calls[0][1]).not.toHaveProperty('taskType')
+  })
+
+  it('a label plugin vai e volta pelo mapeamento, inclusive num mapeamento já gravado sem a regra', async () => {
+    const { DEFAULT_PRIORITY_RULES, DEFAULT_TYPE_RULES, reverseLabels, mapTaskType, withPluginTypeRule } = await import('@/features/github/logic')
+    expect(reverseLabels('plugin', null, { typeRules: DEFAULT_TYPE_RULES, priorityRules: DEFAULT_PRIORITY_RULES })).toEqual(['plugin'])
+    const stored = withPluginTypeRule([{ kind: 'label', value: 'bug', taskType: 'bugfix' }])
+    expect(reverseLabels('plugin', null, { typeRules: stored, priorityRules: [] })).toEqual(['plugin'])
+    expect(mapTaskType({ type: null, labels: ['plugin'] }, stored).value).toBe('plugin')
+    expect(withPluginTypeRule([{ kind: 'label', value: 'widget', taskType: 'plugin' }])).toEqual([{ kind: 'label', value: 'widget', taskType: 'plugin' }])
+  })
+})
+
 describe('reconcileTaskIssue (last-write-wins)', () => {
   it('issue mais recente → aplica na tarefa (com origem GitHub) e move a coluna pelo estado', async () => {
     const { task, link } = await seed({ task: { updatedAt: OLD } })

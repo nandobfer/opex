@@ -45,7 +45,7 @@ export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]>
 }
 
 /** Features do app que usam IA (uma configuração salva por feature). */
-export const AI_FEATURE_IDS = ["task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review"] as const
+export const AI_FEATURE_IDS = ["task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review", "plugin-version-summary"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 
 export const AI_AUDIT_ENTITY = "FeatureIA"
@@ -70,6 +70,14 @@ export const DEFAULT_TASK_SUMMARY_INSTRUCTIONS = [
     "Você resume tarefas de desenvolvimento para um quadro kanban.",
     "Escreva em português do Brasil, com linguagem direta, o objetivo central da tarefa em UMA única linha.",
     "Não use Markdown, listas, aspas nem ponto final. Não repita o título.",
+].join("\n")
+
+// ── Descritivo de versão de plugin (OPE-172) ─────────────────────────────────
+
+export const DEFAULT_PLUGIN_VERSION_SUMMARY_INSTRUCTIONS = [
+    "Você descreve, em linguagem natural, o que mudou de uma versão de um plugin do Opex para a anterior.",
+    "Escreva em português do Brasil, para quem usa o plugin: o que aparece, some ou se comporta diferente na tela e no servidor.",
+    "Não cite código, nomes de arquivo, funções nem trechos do diff. Use de 1 a 4 frases curtas, sem Markdown.",
 ].join("\n")
 
 // ── Tags de tarefas ──────────────────────────────────────────────

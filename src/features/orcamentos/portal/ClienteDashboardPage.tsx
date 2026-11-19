@@ -13,6 +13,7 @@ import { DashboardKpis, type DashboardKpiItem } from "@/features/dashboard/compo
 import { formatBrl, formatCount, formatHours } from "@/features/dashboard/format"
 import { CLIENTE_COST_LABEL } from "../constants"
 import { useClientePortal } from "./ClientePortalContext"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 import { ClienteFinanceSection } from "./components/ClienteFinanceSection"
 import { ClienteTaskCreationButton } from "./components/ClienteTaskCreationButton"
 import { ClienteTasksOverviewSection } from "./components/ClienteTasksOverviewSection"
@@ -29,7 +30,7 @@ const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exi
  */
 export function ClienteDashboardPage() {
     const reduceMotion = useReducedMotion()
-    const { isAdmin } = useClientePortal()
+    const { isAdmin, clientId } = useClientePortal()
     const { period, setPeriod, ready, range, timeZone } = useClientePeriod()
     useClienteRealtime()
     const query = useClienteDashboard({ from: range.from, to: range.to, timeZone }, ready)
@@ -71,6 +72,9 @@ export function ClienteDashboardPage() {
                     )}
                 </motion.div>
             </AnimatePresence>
+
+            {/* Widgets dos plugins do cliente (OPE-172): só interface, com as APIs do portal. */}
+            <PluginSlot name="portal.dashboard.widgets" props={{ clientId }} />
         </motion.section>
     )
 }

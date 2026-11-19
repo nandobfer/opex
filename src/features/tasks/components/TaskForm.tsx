@@ -21,6 +21,7 @@ import { repoLabelOption, useRepoIndex } from "@/features/github/components/Repo
 import { useOwnerRepoRecents } from "@/features/repository-recency/hooks"
 import { orderByRecency } from "@/features/repository-recency/ordering"
 import { ColumnBadge, TaskPriorityBadge, TaskTypeBadge } from "./TaskBadges"
+import { TaskPluginTargetFields } from "./TaskPluginTargetFields"
 
 interface TaskFormProps {
     mode: "create" | "edit"
@@ -52,6 +53,7 @@ const emptyValues = (projectId: string, columnKey: string): TaskFormValues => ({
     description: "",
     taskType: null,
     priority: "medium",
+    pluginTarget: null,
 })
 
 /**
@@ -76,6 +78,7 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
                       description: task.description ?? "",
                       taskType: task.taskType,
                       priority: task.priority,
+                      pluginTarget: task.pluginTarget,
                   }
                 : emptyValues(projects[0]?.id ?? "", defaultColumnKey ?? columns[0]?.key ?? ""),
         )
@@ -184,7 +187,12 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
                                 getKey={(item) => item.value || "none"}
                                 searchKeys={["label"]}
                                 renderItem={(item) => (item.value ? <TaskTypeBadge type={item.value as TaskType} long /> : <span className="text-sm text-muted-foreground">Sem tipo</span>)}
-                                onPick={(item) => field.onChange(item.value === "" ? null : (item.value as TaskType))}
+                                onPick={(item) => {
+                                    const next = item.value === "" ? null : (item.value as TaskType)
+                                    field.onChange(next)
+                                    // Tipo Plugin (OPE-172): nasce no escopo do dono; os demais tipos não têm alvo.
+                                    form.setValue("pluginTarget", next === "plugin" ? (form.getValues("pluginTarget") ?? { scope: "owner", clientId: null, pluginId: null }) : null, { shouldValidate: true })
+                                }}
                                 matchTriggerWidth
                                 searchLabel="Buscar tipo"
                                 listLabel="Tipos"
@@ -217,6 +225,8 @@ export function TaskForm({ mode, task, projects, columns, defaultColumnKey, subm
                     />
                 </Field>
             </div>
+
+            {taskType === "plugin" && <TaskPluginTargetFields control={form.control} errors={errors} />}
 
             <FormFooter>
                 {uploading && (

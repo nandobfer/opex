@@ -5,6 +5,7 @@ import {
     estimateHoursSettingsSchema,
     taskRefinementSettingsSchema,
     taskSummarySettingsSchema,
+    pluginVersionSummarySettingsSchema,
     taskTagsSettingsSchema,
 } from "@/features/ai/schemas"
 import {
@@ -13,6 +14,8 @@ import {
     getPrReviewSettings,
     getTaskRefinementSettings,
     getTaskSummarySettings,
+    getPluginVersionSummarySettings,
+    savePluginVersionSummarySettings,
     getTaskTagsSettings,
     saveBudgetPreviewSettings,
     saveEstimateHoursSettings,
@@ -43,6 +46,7 @@ const AI_FEATURES = {
     "estimate-hours": { schema: estimateHoursSettingsSchema, get: getEstimateHoursSettings, save: saveEstimateHoursSettings },
     "task-refinement": { schema: taskRefinementSettingsSchema, get: getTaskRefinementSettings, save: saveTaskRefinementSettings },
     "pr-review": { schema: prReviewSettingsSchema, get: getPrReviewSettings, save: savePrReviewSettings },
+    "plugin-version-summary": { schema: pluginVersionSummarySettingsSchema, get: getPluginVersionSummarySettings, save: savePluginVersionSummarySettings },
 } satisfies Record<string, FeatureSettingsHandler>
 
 const AI_FEATURE_KEYS = Object.keys(AI_FEATURES) as [keyof typeof AI_FEATURES, ...(keyof typeof AI_FEATURES)[]]

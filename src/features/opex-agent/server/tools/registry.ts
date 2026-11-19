@@ -1,6 +1,7 @@
 import type { OpexToolGroup } from "../../constants"
 import { isAlwaysOnGroup, toolConfirms, type OpexToolMetaDto } from "../../tool-tree"
 import type { OpexTool } from "./define"
+import { pluginToolList } from "@/features/plugins/server/kernel/registries"
 import { appearanceTools } from "./appearance"
 import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
@@ -20,6 +21,7 @@ import { mcpTools } from "./mcp"
 import { memoryTools } from "./memories"
 import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
+import { pluginTools } from "./plugins"
 import { previewTools } from "./previews"
 import { routineAgentTools } from "./routine-agents"
 import { serviceTools } from "./services"
@@ -57,15 +59,25 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...opencodeServiceTools,
     ...opencodeResourceTools,
     ...mcpTools,
+    ...pluginTools,
 ] as readonly OpexTool[]
 
-export function findOpexTool(name: string): OpexTool | undefined {
-    return OPEX_TOOLS.find((tool) => tool.name === name)
+/**
+ * Catálogo completo: as ferramentas estáticas mais as registradas pelos plugins do dono em tempo de
+ * execução (OPE-172, grupo `plugin-tools`). Com a prévia de um plugin ligada no turno, valem as
+ * ferramentas da versão `preview` dele.
+ */
+export function allOpexTools(previewPlugins: ReadonlySet<string> = new Set()): OpexTool[] {
+    return [...OPEX_TOOLS, ...pluginToolList(previewPlugins)]
+}
+
+export function findOpexTool(name: string, previewPlugins?: ReadonlySet<string>): OpexTool | undefined {
+    return allOpexTools(previewPlugins).find((tool) => tool.name === name)
 }
 
 /** Metadados exibidos na configuração (sem a entrada nem a execução). */
 export function opexToolMetas(): OpexToolMetaDto[] {
-    return OPEX_TOOLS.map((tool) => ({
+    return allOpexTools().map((tool) => ({
         name: tool.name,
         group: tool.group as OpexToolGroup,
         label: tool.label,
@@ -77,9 +89,9 @@ export function opexToolMetas(): OpexToolMetaDto[] {
 }
 
 /** Ferramentas ligadas: todas menos as desligadas na configuração (o grupo Contexto fica sempre disponível). */
-export function enabledOpexTools(disabledTools: readonly string[]): OpexTool[] {
+export function enabledOpexTools(disabledTools: readonly string[], previewPlugins?: ReadonlySet<string>): OpexTool[] {
     const disabled = new Set(disabledTools)
-    return OPEX_TOOLS.filter((tool) => isAlwaysOnGroup(tool.group) || !disabled.has(tool.name))
+    return allOpexTools(previewPlugins).filter((tool) => isAlwaysOnGroup(tool.group) || !disabled.has(tool.name))
 }
 
 /** Pede Confirmar/Cancelar? Ajuste da ferramenta; sem ajuste, as destrutivas e as `confirmByDefault`. */

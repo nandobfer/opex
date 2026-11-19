@@ -32,7 +32,7 @@ export function buildBudgetPreviewInstructions(instructions: string): string {
     const contract = [
         "Responda APENAS com um objeto JSON válido, sem texto antes ou depois e sem cercas de código, com exatamente estas chaves:",
         "- \"title\": string, um título curto e específico da tarefa;",
-        `- "taskType": um de ${TASK_TYPES.map((type) => `"${type}"`).join(", ")} ou null quando não for possível classificar;`,
+        `- "taskType": um de ${TASK_TYPES.map((type) => `"${type}"`).join(", ")} ou null quando não for possível classificar ("plugin" = personalização do próprio portal, como dashboards, visões e fluxos sob medida, sem mexer no sistema do repositório);`,
         '- "priority": "urgent", "high", "medium" ou "low";',
         '- "technicalSpec": string em Markdown, a especificação técnica do que deve ser feito;',
         '- "summary": string, um resumo de UMA linha (sem Markdown);',

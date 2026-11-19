@@ -3,6 +3,7 @@ import { AI_PROVIDER_IDS, AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { DEFAULT_TASK_TAXONOMY, MAX_TASK_TAGS, MAX_TAXONOMY_TAGS, TASK_TAG_ID_MAX, TASK_TAG_LABEL_MAX } from "@/features/tasks/tags"
 import {
     DEFAULT_TASK_SUMMARY_INSTRUCTIONS,
+    DEFAULT_PLUGIN_VERSION_SUMMARY_INSTRUCTIONS,
     DEFAULT_TASK_TAGS_INSTRUCTIONS,
     DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS,
     DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS,
@@ -205,3 +206,34 @@ export const DEFAULT_TASK_REFINEMENT_SETTINGS: TaskRefinementSettings = {
     include: { comments: true, history: true },
 }
 
+
+/** Configuração da feature "Descritivo de versão de plugin" (OPE-172) — mesmo schema na tela e na API. */
+export const pluginVersionSummarySettingsSchema = z
+    .object({
+        enabled: z.boolean(),
+        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+        model: z.string().trim().max(200).nullable(),
+        agent: z.string().trim().max(100).nullable(),
+        variant: z.string().trim().max(50).nullable(),
+        temperature: z.number({ error: "Informe um número" }).min(0, "Mínimo 0").max(2, "Máximo 2").nullable(),
+        maxOutputTokens: z.number({ error: "Informe um número" }).int("Use um número inteiro").min(256, "Mínimo 256").max(65_536, "Máximo 65.536").nullable(),
+        instructions: z.string().trim().min(1, "Informe as instruções").max(8000, "Até 8.000 caracteres"),
+    })
+    .superRefine((value, ctx) => {
+        if (!value.enabled) return
+        if (!value.provider) ctx.addIssue({ code: "custom", path: ["provider"], message: "Selecione o provedor" })
+        if (!value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Selecione o modelo" })
+    })
+
+export type PluginVersionSummarySettings = z.infer<typeof pluginVersionSummarySettingsSchema>
+
+export const DEFAULT_PLUGIN_VERSION_SUMMARY_SETTINGS: PluginVersionSummarySettings = {
+    enabled: false,
+    provider: null,
+    model: null,
+    agent: null,
+    variant: null,
+    temperature: null,
+    maxOutputTokens: null,
+    instructions: DEFAULT_PLUGIN_VERSION_SUMMARY_INSTRUCTIONS,
+}

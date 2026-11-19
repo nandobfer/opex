@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
         "dist/**",
         "node_modules/**",
         "docs/**",
+        // SDK de plugins (OPE-172): arquivos exportados para a pasta de trabalho do plugin, fora do app.
+        "plugin-sdk/**",
     ]),
 ])
 

@@ -1,0 +1,10 @@
+node_modules/
+.opex-sdk/
+package.json
+package-lock.json
+pnpm-lock.yaml
+tsconfig.json
+vitest.config.mts
+.gitignore
+coverage/
+dist/

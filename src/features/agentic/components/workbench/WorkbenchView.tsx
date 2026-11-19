@@ -28,8 +28,10 @@ import { isRefinementStage } from "../../logic"
 import { AdversarialRoundsView, AdversarialTabNavProvider, useAdversarialTab } from "@/features/adversarial-agent/components/workbench/AdversarialRoundsView"
 import { ArchitectTab, useArchitectTab } from "@/features/architect-agent/components/workbench/ArchitectTab"
 import { MentorLearningTab, useMentorLearningTab } from "@/features/adversarial-agent/components/workbench/MentorLearningTab"
+import { PluginContribution } from "@/features/plugins/client/PluginContribution"
+import { isPluginTabId, usePluginSlotTabs, type PluginTabId } from "@/features/plugins/client/usePluginSlotTabs"
 
-type View = "description" | "spec" | "output" | "plan" | "build" | "adversarial" | "architect" | "learning" | "forks"
+type View = "description" | "spec" | "output" | "plan" | "build" | "adversarial" | "architect" | "learning" | "forks" | PluginTabId
 
 /**
  * Mesa de trabalho: cabeçalho, etapas, descrição e spec. da tarefa (só leitura), saída ao vivo (ou o
@@ -57,6 +59,9 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
     const architectTab = useArchitectTab(workbench)
     // Agente Mentor (OPE-165): o aprendizado de cada conclusão da mesa.
     const learningTab = useMentorLearningTab(workbench.id)
+    // Slot `workbench.panel` (OPE-172): abas dos plugins ativos.
+    const pluginTabs = usePluginSlotTabs("workbench.panel")
+    const pluginTab = pluginTabs.find((item) => item.id === selected) ?? null
     const openAdversarialRound = (reviewId: string) => {
         setAdversarialRound(reviewId)
         setView("adversarial")
@@ -68,7 +73,7 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
     const lastCheck = latestPrWatch(timeline.items)
     const prWatch = watchingPr && schedule ? { enabled: schedule.enabled, nextCheckAt: nextPrWatchAt(schedule.nextCheckAt, lastCheck?.nextCheckAt), checking: lastCheck?.outcome === null } : null
     // Sem forks (todos descartados) ou sem rodadas do adversário, a aba some e a visão volta para a saída.
-    const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) || (selected === "architect" && !architectTab.visible) || (selected === "learning" && !learningTab.visible) || (selected === "build" && !buildCount) ? "output" : selected
+    const view: View = (selected === "forks" && !forks.length) || (selected === "adversarial" && !adversarialTab.visible) || (selected === "architect" && !architectTab.visible) || (selected === "learning" && !learningTab.visible) || (selected === "build" && !buildCount) || (isPluginTabId(selected) && !pluginTab) ? "output" : selected
     const tabs: WorkbenchTab<View>[] = [
         { id: "description", label: "Descrição" },
         { id: "spec", label: "Especificação" },
@@ -79,6 +84,7 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
         { id: "architect", label: `Arquitetura (${architectTab.count})`, hidden: !architectTab.visible },
         { id: "learning", label: `Aprendizado (${learningTab.count})`, hidden: !learningTab.visible },
         { id: "forks", label: `Forks (${forks.length})`, hidden: !forks.length },
+        ...pluginTabs.map((item) => ({ id: item.id, label: item.label })),
     ]
 
     return (
@@ -86,7 +92,7 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
         <AdversarialTabNavProvider value={adversarialTab.visible ? openAdversarialRound : null}>
         <div className="flex min-h-0 flex-1 flex-col">
             <WorkbenchHeader workbench={workbench} central={central} connected={connected} />
-            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} adversarial={workbench.adversarial} refinement={workbench.refinementPhase} />
+            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} adversarial={workbench.adversarial} refinement={workbench.refinementPhase} kind={workbench.kind} />
             <WorkbenchTabs tabs={tabs} value={view} onChange={setView} label="Visão da mesa" indicatorId="workbench-view-tab" />
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} role="tabpanel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">
@@ -106,6 +112,10 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
                         <ArchitectTab workbench={workbench} />
                     ) : view === "learning" ? (
                         <MentorLearningTab workbenchId={workbench.id} />
+                    ) : pluginTab ? (
+                        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+                            <PluginContribution key={pluginTab.entry.revision} entry={pluginTab.entry} kind="slots" exportName={pluginTab.slot.export} props={{ workbenchId: workbench.id, taskId: workbench.taskId ?? null }} />
+                        </div>
                     ) : (
                         <ForkView workbench={workbench} forks={forks} selectedId={forkId} onSelect={setForkId} />
                     )}

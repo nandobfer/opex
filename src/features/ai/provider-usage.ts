@@ -95,6 +95,7 @@ export const AI_CONSUMPTION_ORIGIN_LABELS: Record<string, string> = {
     refinement: "Refinar tarefa",
     agentic: "Desenvolvimento agêntico (mesas)",
     "pr-review": "Agente Revisor",
+    "plugin-version-summary": "Descritivo de versão de plugin",
     "adversarial-agent": "Agente Adversário",
     "architect-agent": "Agente Arquiteto",
     "adversarial-mentor-decision": "Agente Mentor (decisor)",
