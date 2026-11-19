@@ -48,6 +48,11 @@ na `main` sem repeti-la, com dois jobs encadeados.
   numa versão fixada, o caminho de contenção é `next build --webpack` (o defeito é exclusivo do
   Turbopack; a flag existe no Next 16) e, para achar o gatilho, `next build --debug-build-paths`
   com um recorte de rotas.
+- **Compilador de plugins (OPE-172):** logo depois do `next build`, o `Dockerfile` copia para o
+  standalone o binário nativo do Rolldown (`node_modules/.pnpm/rolldown@*/node_modules/@rolldown/binding-*`)
+  e o pacote `tailwindcss` inteiro, e roda `node scripts/plugin-runtime-check.mjs .next/standalone`.
+  Sem isso a imagem subia, mas toda mesa Plugin falhava ao compilar (OPE-173); agora o build da imagem
+  falha com "Compilador de plugins indisponível na imagem: …". Detalhes em `modules/plugins.md`.
 - Versões recém-publicadas do `next` entram em `minimumReleaseAgeExclude` no
   `pnpm-workspace.yaml`: a política de idade mínima de release do pnpm bloquearia a atualização.
 

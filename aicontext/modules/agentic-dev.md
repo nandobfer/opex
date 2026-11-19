@@ -1018,6 +1018,12 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
   + `file.read`), valida o manifesto e compila a versão `draft`. Com problemas, volta ao agente
   (`pluginCompileFixPrompt`), no máximo 3 correções (`PLUGIN_COMPILE_ATTEMPTS_MAX`); depois disso a
   mesa falha.
+- **Compilador indisponível** (`PLUGIN_COMPILER_UNAVAILABLE`, ver `modules/plugins.md`): a mesa grava
+  `plugin.compilePending: true` antes de compilar e limpa ao terminar (versão gerada ou problemas
+  mandados ao agente). Se o compilador do servidor não carregar, a marca fica e a etapa falha com a
+  mensagem em pt-BR, sem turno de correção. O **Tentar novamente** dessa mesa refaz **só a compilação**
+  (turno sem o agente, `compileOnly`) e segue para a revisão adversária ou a prévia. Outras falhas da
+  implementação continuam com a retentativa pelo agente.
 - **Revisão adversária:** quando ativa, revisa o diff da pasta contra `origin/opex-base`.
 - **Prévia ao vivo:** `publishPluginPreview`
   - publica a `draft` como `preview` do plugin, carregada ao vivo **só para quem liga a prévia**

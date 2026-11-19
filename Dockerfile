@@ -53,6 +53,18 @@ ENV NODE_OPTIONS=--max-old-space-size=4096
 
 RUN pnpm run build
 
+# Compilador de plugins (OPE-172): o rastreamento do Next leva o JS do Rolldown e do Tailwind ao
+# standalone, mas não o binário nativo do Rolldown (dependência opcional, `require` dinâmico) nem as
+# folhas de estilo do Tailwind (`theme.css`, `utilities.css`, lidas do disco). Copia os dois e confere
+# na própria árvore do standalone: se o compilador não funcionar, o build da imagem falha aqui.
+RUN set -e; \
+    for binding in node_modules/.pnpm/rolldown@*/node_modules/@rolldown/binding-*; do \
+        dest=".next/standalone/$binding"; mkdir -p "$(dirname "$dest")"; rm -rf "$dest"; cp -RL "$binding" "$dest"; \
+    done; \
+    rm -rf .next/standalone/node_modules/tailwindcss; \
+    cp -RL node_modules/tailwindcss .next/standalone/node_modules/tailwindcss; \
+    node scripts/plugin-runtime-check.mjs .next/standalone
+
 # Stage 4: Runner
 FROM base AS runner
 WORKDIR /app

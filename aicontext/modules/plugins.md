@@ -76,6 +76,19 @@ que o `globals.css` também importa (fonte única dos tokens), sem preflight.
 Erros de manifesto ou de compilação **não gravam versão**: voltam em pt-BR para a mesa, que pede a
 correção ao agente.
 
+**Compilador indisponível** (`compiler/unavailable.ts`): se o Rolldown não carregar (binário nativo
+ausente) ou o Tailwind não achar as folhas de estilo dele, a compilação rejeita com 503
+`PLUGIN_COMPILER_UNAVAILABLE` ("O compilador de plugins não está disponível neste servidor (…). Não é
+um problema do plugin: atualize a imagem do Opex e use Tentar novamente."). Isso é falha da instalação,
+nunca um "problema do plugin": não vai para o agente corrigir.
+
+**Na imagem Docker:** o rastreamento do Next leva ao standalone o JS do Rolldown e do Tailwind, mas não
+o binário nativo `@rolldown/binding-*` (dependência opcional carregada por `require` dinâmico) nem os
+`.css` do Tailwind (`theme.css`, `utilities.css`, lidos do disco). O `Dockerfile` copia os dois depois
+do `next build` e roda `node scripts/plugin-runtime-check.mjs .next/standalone`, que compila um JSX
+mínimo e gera `bg-primary` com o tema do app **na própria árvore do standalone**. Se faltar algo, o
+build da imagem falha ali ("Compilador de plugins indisponível na imagem: …"), e não na mesa.
+
 ## Kernel do servidor (`server/kernel/`)
 
 | Arquivo | Papel |
@@ -290,6 +303,7 @@ Em `__tests__/features/plugins/`:
 | `manifest` | Manifesto e escopo |
 | `logic` | Regras puras |
 | `compiler` | Rolldown e Tailwind reais |
+| `compiler-unavailable` | Rolldown sem binário e Tailwind sem CSS rejeitam com `PLUGIN_COMPILER_UNAVAILABLE`; erro de código continua problema do plugin |
 | `kernel` | Cordis real: ativação, recarga transacional, dispose, manifesto restritivo, prévia, instância de prévia |
 | `registries` | Pilhas por chave |
 | `shared-modules` | Listas do compilador, do navegador e do SDK batem |
@@ -298,6 +312,7 @@ Em `__tests__/features/plugins/`:
 | `crons` | Crons de plugin |
 | `agent-tools` | Catálogo dos agentes |
 | `loader` | Carregador |
+| `__tests__/scripts/plugin-runtime-check` | O script do build da imagem passa na árvore completa e falha sem o binário do Rolldown ou sem o CSS do Tailwind |
 | `plugin-slot` | Slot, erro isolado e troca ao vivo |
 | `plugins-pages` | Telas do dono e do portal |
 
