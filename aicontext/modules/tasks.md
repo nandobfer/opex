@@ -76,6 +76,14 @@ semeado na primeira leitura (`ensureBoard`).
   `createTaskWithIssue` **antes** de criar a issue no GitHub: um alvo inválido não deixa issue órfã.
 - Rascunho de prévia do dono classificado como Plugin (`approveOwnerDraft`): com cliente, o alvo é o
   portal dele (`{ scope: "client", clientId }`, mesmo sem horas estimadas); sem cliente, plugin do dono.
+- Tarefa vinculada a um cliente (`clientId`, vinda do portal) é do escopo Cliente **desse** cliente:
+  sem alvo, ele é deduzido; um alvo com escopo do dono ou outro cliente é recusado com 400
+  `TASK_PLUGIN_SCOPE_CONFLICT` ("Esta tarefa é de um cliente: o plugin dela é do escopo Cliente, do
+  mesmo cliente da tarefa. Escolha o escopo Cliente."), nunca trocado em silêncio.
+- Sincronização com a issue do GitHub (`applyIssueToTask`): sem regra de tipo que case, a tarefa
+  mantém o tipo atual (não apaga o tipo Plugin nem o alvo). O tipo Plugin tem a label `plugin` nas
+  regras padrão, e `getMapping` a acrescenta a um mapeamento já gravado sem regra para o tipo
+  (`withPluginTypeRule`), para a label ir e voltar.
 - O `pluginTarget` não vai para o portal (`ClienteTaskDto`).
 - As ferramentas `create_task`/`update_task` dos agentes aceitam `pluginTarget`.
 - O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin".
