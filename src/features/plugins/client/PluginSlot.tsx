@@ -19,6 +19,8 @@ interface PluginSlotProps<N extends PluginComponentSlot> {
     props: PluginSlotPropsMap[N]
     /** Classe do contêiner (só renderizado quando há contribuições). */
     className?: string
+    /** Altura do esqueleto enquanto o módulo carrega (slots compactos, ex.: barra superior). */
+    skeletonClassName?: string
 }
 
 /**
@@ -26,7 +28,7 @@ interface PluginSlotProps<N extends PluginComponentSlot> {
  * para o slot. Sem contribuição não renderiza nada (a tela fica como antes). Cada contribuição tem a
  * própria fronteira de erro e troca ao vivo com o evento `plugin-updated`.
  */
-export function PluginSlot<N extends PluginComponentSlot>({ name, props, className = "grid gap-4 md:grid-cols-2" }: PluginSlotProps<N>) {
+export function PluginSlot<N extends PluginComponentSlot>({ name, props, className = "grid gap-4 md:grid-cols-2", skeletonClassName }: PluginSlotProps<N>) {
     usePluginsRealtime()
     const runtime = usePluginRuntime()
     const items = useMemo(() => slotContributions(runtime.data?.plugins ?? [], name), [runtime.data, name])
@@ -35,7 +37,7 @@ export function PluginSlot<N extends PluginComponentSlot>({ name, props, classNa
         <section className={className} data-plugin-slot={name} aria-label="Plugins">
             <AnimatePresence initial={false} mode="popLayout">
                 {items.map(({ entry, slot }) => (
-                    <PluginContribution key={`${entry.id}:${slot.export}:${entry.revision}`} entry={entry} kind="slots" exportName={slot.export} props={props} />
+                    <PluginContribution key={`${entry.id}:${slot.export}:${entry.revision}`} entry={entry} kind="slots" exportName={slot.export} props={props} skeletonClassName={skeletonClassName} />
                 ))}
             </AnimatePresence>
         </section>

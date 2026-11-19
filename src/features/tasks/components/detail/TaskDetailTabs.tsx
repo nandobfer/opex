@@ -1,14 +1,13 @@
 "use client"
 
-import { useId, useMemo, type ComponentType, type ReactNode } from "react"
+import { useId, type ComponentType, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { TaskDetailDto } from "../../types"
 import { TaskAttachmentsTab } from "../../attachments/components/TaskAttachmentsTab"
 import { CommentsSection, DescriptionSection, HistorySection, TechnicalSpecSection, TimeLogsSection } from "./TaskDetailSections"
 import { PluginContribution } from "@/features/plugins/client/PluginContribution"
-import { slotContributions } from "@/features/plugins/client/PluginSlot"
-import { usePluginRuntime, usePluginsRealtime } from "@/features/plugins/hooks/usePlugins"
+import { usePluginSlotTabs } from "@/features/plugins/client/usePluginSlotTabs"
 
 /** Abas fixas mais as abas de plugins (slot `task.panel`, OPE-172): `plugin:{id}:{export}`. */
 export type TaskDetailTabId = "description" | "spec" | "attachments" | "comments" | "history" | "time" | `plugin:${string}`
@@ -35,12 +34,7 @@ const TABS: readonly TabDef[] = [
  * especificação quando a aba "Especificação técnica" está ativa (painel do refinamento). */
 export function TaskDetailTabs({ task, value, onValueChange, specSlot }: { task: TaskDetailDto; value: TaskDetailTabId; onValueChange: (tab: TaskDetailTabId) => void; specSlot?: ReactNode }) {
     const baseId = useId()
-    usePluginsRealtime()
-    const runtime = usePluginRuntime()
-    const pluginTabs = useMemo(
-        () => slotContributions(runtime.data?.plugins ?? [], "task.panel").map(({ entry, slot }) => ({ id: `plugin:${entry.id}:${slot.export}` as TaskDetailTabId, label: slot.title ?? entry.name, entry, slot })),
-        [runtime.data],
-    )
+    const pluginTabs = usePluginSlotTabs("task.panel")
     const pluginTab = pluginTabs.find((item) => item.id === value) ?? null
     const active = pluginTab ? null : (TABS.find((item) => item.id === value) ?? TABS[0])
     const Section = active?.Component ?? null

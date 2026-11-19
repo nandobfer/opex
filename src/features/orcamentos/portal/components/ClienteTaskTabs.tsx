@@ -7,11 +7,14 @@ import { TaskDescription, TaskTechnicalSpec } from "@/features/tasks/components/
 import type { ClienteTaskDetailDto } from "../../types"
 import { ClienteAttachmentsSection } from "./ClienteAttachmentsSection"
 import { ClienteCommentsSection } from "./ClienteCommentsSection"
+import { PluginContribution } from "@/features/plugins/client/PluginContribution"
+import { usePluginSource } from "@/features/plugins/client/PluginSourceContext"
+import { usePluginSlotTabs, type PluginTabId } from "@/features/plugins/client/usePluginSlotTabs"
 
-export type ClienteTaskTabId = "description" | "spec" | "attachments" | "comments"
+export type ClienteTaskTabId = "description" | "spec" | "attachments" | "comments" | PluginTabId
 
 interface TabDef {
-    id: ClienteTaskTabId
+    id: Exclude<ClienteTaskTabId, PluginTabId>
     label: string
     count: ((task: ClienteTaskDetailDto) => number) | null
 }
@@ -24,22 +27,30 @@ const TABS: readonly TabDef[] = [
     { id: "comments", label: "Comentários", count: (task) => task.comments.length },
 ]
 
-function Section({ task, id }: { task: ClienteTaskDetailDto; id: ClienteTaskTabId }) {
+function Section({ task, id }: { task: ClienteTaskDetailDto; id: Exclude<ClienteTaskTabId, PluginTabId> }) {
     if (id === "description") return <TaskDescription description={task.description} />
     if (id === "spec") return <TaskTechnicalSpec technicalSpec={task.technicalSpec} />
     if (id === "attachments") return <ClienteAttachmentsSection task={task} />
     return <ClienteCommentsSection taskId={task.id} comments={task.comments} />
 }
 
-/** Abas da página da tarefa do cliente (Descrição, Especificação técnica e Comentários). */
+/** Abas da página da tarefa do cliente (Descrição, Especificação técnica e Comentários) e as dos plugins do portal (slot `portal.task.panel`). */
 export function ClienteTaskTabs({ task, value, onValueChange }: { task: ClienteTaskDetailDto; value: ClienteTaskTabId; onValueChange: (tab: ClienteTaskTabId) => void }) {
     const baseId = useId()
+    const source = usePluginSource()
+    const pluginTabs = usePluginSlotTabs("portal.task.panel")
+    const pluginTab = pluginTabs.find((item) => item.id === value) ?? null
+    const fixed = TABS.find((item) => item.id === value) ?? TABS[0]!
+    const tabs: ReadonlyArray<{ id: ClienteTaskTabId; label: string; count: number | null }> = [
+        ...TABS.map((item) => ({ id: item.id, label: item.label, count: item.count?.(task) ?? null })),
+        ...pluginTabs.map((item) => ({ id: item.id, label: item.label, count: null })),
+    ]
     return (
         <>
             <div role="tablist" aria-label="Seções da tarefa" className="flex gap-1 overflow-x-auto overflow-y-hidden border-b pb-px">
-                {TABS.map((item) => {
+                {tabs.map((item) => {
                     const isActive = value === item.id
-                    const count = item.count?.(task)
+                    const count = item.count
                     return (
                         <button
                             key={item.id}
@@ -69,7 +80,11 @@ export function ClienteTaskTabs({ task, value, onValueChange }: { task: ClienteT
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.18 }}
                 >
-                    <Section task={task} id={value} />
+                    {pluginTab ? (
+                        <PluginContribution key={pluginTab.entry.revision} entry={pluginTab.entry} kind="slots" exportName={pluginTab.slot.export} props={{ taskId: task.id, clientId: source.clientId ?? "" }} />
+                    ) : (
+                        <Section task={task} id={fixed.id} />
+                    )}
                 </motion.div>
             </AnimatePresence>
         </>

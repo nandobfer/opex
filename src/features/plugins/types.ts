@@ -18,6 +18,8 @@ export interface PluginVersionSummaryDto {
     promotedAt: string | null
     /** Slots declarados (inclui o de menu quando há `nav`). */
     slots: PluginSlotName[]
+    /** Tela onde ver esta versão (primeira página ou a tela do slot principal). */
+    previewPath: string
     changeSummary: string | null
     changeSummarySource: "agent" | "ai" | null
 }

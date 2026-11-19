@@ -9,7 +9,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { PLUGIN_UPDATED_EVENT, type PluginScope } from "../constants"
 import { usePluginSource } from "../client/PluginSourceContext"
 import type { PluginRuntimeSnapshot } from "../server/kernel/kernel"
-import type { PluginDetailDto, PluginDiffDto, PluginDto, PluginRuntimeManifestDto, PluginUpdatedPayload, PluginVersionDetailDto } from "../types"
+import type { PluginDetailDto, PluginDto, PluginRuntimeManifestDto, PluginUpdatedPayload, PluginVersionDetailDto } from "../types"
 
 /** Hooks de dados dos plugins (OPE-172), para o dono e para o portal (pela fonte do contexto). */
 
@@ -51,16 +51,6 @@ export function usePluginVersion(id: string, versionId: string | null) {
     })
 }
 
-export function usePluginDiff(id: string, to: string | null, from: string | null) {
-    const source = usePluginSource()
-    return useQuery({
-        queryKey: pluginKeys.diff(sourceKey(source), id, to ?? "", from),
-        enabled: Boolean(to),
-        queryFn: async () => unwrapApi((await source.api.get<ApiResponse<PluginDiffDto>>(`${source.base}/${id}/diff`, { params: { to, ...(from ? { from } : {}) } })).data),
-    })
-}
-
-/** O que o navegador monta agora (stable, ou preview com a prévia ligada). */
 export function usePluginRuntime(enabled = true) {
     const source = usePluginSource()
     return useQuery({
@@ -153,6 +143,23 @@ export function useApprovePluginPreview(id: string) {
             void invalidate()
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível aprovar a prévia")),
+    })
+}
+
+/** "Gerar descritivo" de uma versão (só o dono; IA a partir da diferença para a anterior). */
+export function useGeneratePluginVersionSummary(id: string) {
+    const source = usePluginSource()
+    const queryClient = useQueryClient()
+    const detailKey = pluginKeys.detail(sourceKey(source), id)
+    return useMutation({
+        mutationFn: async (versionId: string) => ({ versionId, ...unwrapApi((await source.api.post<ApiResponse<{ changeSummary: string }>>(`${source.base}/${id}/versions/${versionId}/summary`, {})).data) }),
+        onSuccess: ({ versionId, changeSummary }) => {
+            queryClient.setQueryData<PluginDetailDto>(detailKey, (current) =>
+                current ? { ...current, versions: current.versions.map((version) => (version.id === versionId ? { ...version, changeSummary, changeSummarySource: "ai" } : version)) } : current,
+            )
+            toast.success("Descritivo gerado")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível gerar o descritivo")),
     })
 }
 

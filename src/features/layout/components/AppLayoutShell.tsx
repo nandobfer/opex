@@ -9,6 +9,7 @@ import { AppShell } from "./AppShell"
 import type { AppSidebarItemPanels } from "./AppSidebar"
 import { APP_NAV, EVEN_PADDING_PAGE_HREFS, HOME_HREF, PERSISTENT_PAGE_HREFS } from "../navigation"
 import { useNavWithPlugins } from "@/features/plugins/client/usePluginNav"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 
 interface AppLayoutShellProps {
     ownerName: string
@@ -19,6 +20,8 @@ interface AppLayoutShellProps {
 /** Rodapé do menu do dono: "Servidor e quota" (OPE-145) acima do item único dos agentes de chat (Agente Opex e Agente Maddox). */
 const ownerFooterItems = (collapsed: boolean) => (
     <>
+        {/* Slot `topbar.actions` (OPE-172): no desktop não há barra no topo; as ações ficam no rodapé do menu. */}
+        {!collapsed && <PluginSlot name="topbar.actions" props={{}} className="flex flex-col gap-1 px-2" skeletonClassName="h-8" />}
         <ServerQuotaSidebarItem collapsed={collapsed} />
         <AgentChatNavItem collapsed={collapsed} />
     </>
@@ -30,6 +33,7 @@ const ownerFooterItems = (collapsed: boolean) => (
  */
 const ownerHeaderActions = (
     <>
+        <PluginSlot name="topbar.actions" props={{}} className="flex items-center gap-1" skeletonClassName="h-8 w-8" />
         <AgentChatNavItem variant="header" />
         <ServerQuotaSidebarItem variant="header" />
     </>

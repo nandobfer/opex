@@ -237,13 +237,19 @@ export async function releasePluginPreview(doc: IAgenticWorkbench): Promise<void
 }
 
 /**
- * Aprovação pelo admin do cliente no portal: a prévia do plugin do PRÓPRIO cliente segue para os
- * testes e a consolidação (a mesma ação "Aprovar" da mesa).
+ * "Aprovar prévia" na página do plugin (dono ou admin do cliente): a prévia segue para os testes e a
+ * consolidação (a mesma ação "Aprovar" da mesa dona da prévia). O portal só aprova plugin do
+ * PRÓPRIO cliente.
  */
-export async function approvePluginPreviewFromPortal(pluginId: string, clientId: string, actorId: string): Promise<void> {
+export async function approvePluginPreview(pluginId: string, access: { kind: "owner" } | { kind: "client"; clientId: string }, actorId: string): Promise<void> {
     const plugin = await findPlugin(pluginId)
-    if (!plugin || plugin.scope !== "client" || plugin.clientId !== clientId) throw new DomainError(404, "Plugin não encontrado", "PLUGIN_NOT_FOUND")
+    if (!plugin || (access.kind === "client" && (plugin.scope !== "client" || plugin.clientId !== access.clientId))) throw new DomainError(404, "Plugin não encontrado", "PLUGIN_NOT_FOUND")
     if (!plugin.previewVersionId || !plugin.previewWorkbenchId) throw new DomainError(409, "O plugin não tem uma prévia aguardando aprovação", "PLUGIN_NO_PREVIEW")
     const { approve } = await import("./workflow")
     await approve(plugin.previewWorkbenchId, { approvedBy: actorId })
+}
+
+/** Aprovação pelo admin do cliente no portal (`approvePluginPreview` no escopo do cliente). */
+export async function approvePluginPreviewFromPortal(pluginId: string, clientId: string, actorId: string): Promise<void> {
+    await approvePluginPreview(pluginId, { kind: "client", clientId }, actorId)
 }

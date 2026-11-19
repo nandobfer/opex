@@ -1,6 +1,7 @@
 "use client"
 
 import { useCallback, useEffect, useMemo, useState } from "react"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 import { useRouter } from "next/navigation"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { useQueryClient } from "@tanstack/react-query"
@@ -186,6 +187,9 @@ export function TasksPage() {
                     </Button>
                 </div>
             </header>
+
+            {/* Slot `tasks.header` (OPE-172): blocos dos plugins acima do quadro (sem plugin, nada muda). */}
+            <PluginSlot name="tasks.header" props={{}} className="grid shrink-0 gap-4 md:grid-cols-2" skeletonClassName="h-20" />
 
             <AnimatePresence initial={false}>
                 {ready && (

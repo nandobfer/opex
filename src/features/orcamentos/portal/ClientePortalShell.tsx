@@ -11,6 +11,7 @@ import type { ClientePortalSession } from "./ClientePortalContext"
 import { ClienteContextBar } from "./components/ClienteContextBar"
 import { useClientePortal } from "./ClientePortalContext"
 import { ClientPluginSourceProvider } from "@/features/plugins/client/PluginSourceContext"
+import { useNavWithPlugins } from "@/features/plugins/client/usePluginNav"
 
 /**
  * Casca do **portal do cliente** (layout autenticado): reusa o `AppShell` do app com a navegação do
@@ -31,9 +32,23 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
     // No celular o agente fica no cabeçalho (OPE-168), e a gaveta não o repete.
     const headerActions = <AgentChatNavItem variant="header" client={client} initial={initial} />
     return (
+        // Plugins do cliente (OPE-172): slots, páginas e o menu (`portal.nav`) leem do portal (APIs e canal do cliente).
+        <ClientPluginSourceProvider clientId={portal.clientId} api={portal.api}>
+            <PortalShellFrame session={session} version={version} footerItems={footerItems} headerActions={headerActions}>
+                {children}
+            </PortalShellFrame>
+        </ClientPluginSourceProvider>
+    )
+}
+
+/** Casca do portal dentro da fonte de plugins do cliente: o menu ganha a seção dos plugins do portal. */
+function PortalShellFrame({ session, version, footerItems, headerActions, children }: { session: ClientePortalSession; version?: string; footerItems: (collapsed: boolean) => ReactNode; headerActions: ReactNode; children: ReactNode }) {
+    const base = useMemo(() => clienteNav(session.isAdmin), [session.isAdmin])
+    const sections = useNavWithPlugins(base)
+    return (
         <AppShell
             brand={{ name: "Opex", subtitle: `Portal · ${session.clientName}`, homeHref: clienteDashboardPath() }}
-            sections={clienteNav(session.isAdmin)}
+            sections={sections}
             navLabel="Menu do portal"
             persistentHrefs={CLIENTE_PERSISTENT_HREFS}
             ownerName={session.user.username || session.user.email || "Usuário"}
@@ -41,13 +56,10 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
             sidebarFooterItems={footerItems}
             mobileHeaderActions={headerActions}
         >
-            {/* Plugins do cliente (OPE-172): slots e páginas leem do portal (APIs e canal do cliente). */}
-            <ClientPluginSourceProvider clientId={portal.clientId} api={portal.api}>
-                <div className="space-y-5">
-                    <ClienteContextBar />
-                    {children}
-                </div>
-            </ClientPluginSourceProvider>
+            <div className="space-y-5">
+                <ClienteContextBar />
+                {children}
+            </div>
         </AppShell>
     )
 }

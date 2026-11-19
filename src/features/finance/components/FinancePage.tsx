@@ -1,6 +1,7 @@
 "use client"
 
 import Link from "next/link"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Banknote, Filter, Loader2, Plus, RefreshCw } from "lucide-react"
@@ -86,6 +87,9 @@ export function FinancePage() {
                     </Button>
                 </div>
             </header>
+
+            {/* Slot `financeiro.widgets` (OPE-172): cards dos plugins no topo do Financeiro. */}
+            <PluginSlot name="financeiro.widgets" props={{}} />
 
             <FinanceFiltersBar
                 filters={filters}

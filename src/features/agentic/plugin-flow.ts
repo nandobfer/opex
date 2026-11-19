@@ -1,5 +1,4 @@
-import { PLUGIN_WORKDIR_SEGMENT, clientePluginPagePath, pluginPagePath } from "@/features/plugins/constants"
-import type { PluginManifest } from "@/features/plugins/manifest"
+import { PLUGIN_WORKDIR_SEGMENT } from "@/features/plugins/constants"
 import type { CentralConfig } from "./schemas"
 
 /**
@@ -24,14 +23,8 @@ export function pluginWorkDirFor(config: CentralConfig, code: string): string {
     return `${root}/${PLUGIN_WORKDIR_SEGMENT}/${code.toLowerCase()}`
 }
 
-/** Onde ver a prévia: a primeira página do plugin; sem página, a tela do slot principal. */
-export function pluginPreviewPath(plugin: { pluginId: string; scope: "owner" | "client" }, manifest: Pick<PluginManifest, "pages" | "slots">): string {
-    const page = manifest.pages[0]?.path
-    if (page !== undefined) return plugin.scope === "client" ? clientePluginPagePath(plugin.pluginId, page) : pluginPagePath(plugin.pluginId, page)
-    if (plugin.scope === "client") return "/cliente/dashboard"
-    const slot = manifest.slots[0]?.slot
-    return slot === "task.panel" ? "/tarefas" : "/dashboard"
-}
+/** Onde ver a prévia (regra em `plugins/logic.ts`). */
+export { pluginPreviewPath } from "@/features/plugins/logic"
 
 export type PluginTestsDecision = "consolidate" | "fix" | "fail"
 

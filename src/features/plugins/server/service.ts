@@ -5,7 +5,7 @@ import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { publishAppEvent, publishClientEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
 import { PLUGIN_CHANGE_SUMMARY_MAX, PLUGIN_UPDATED_EVENT, type PluginChannel, type PluginScope } from "../constants"
-import { diffPluginFiles, pluginSlotsOf, versionActionBlock } from "../logic"
+import { diffPluginFiles, pluginPreviewPath, pluginSlotsOf, versionActionBlock } from "../logic"
 import { isPluginTestFile, manifestScopeIssue, normalizePluginFiles, parsePluginManifest, type PluginSourceFile } from "../manifest"
 import type { PluginDetailDto, PluginDiffDto, PluginDto, PluginUpdatedPayload, PluginVersionDetailDto, PluginVersionSummaryDto } from "../types"
 
@@ -40,6 +40,7 @@ function summaryOf(version: VersionDoc): PluginVersionSummaryDto {
         createdAt: new Date(version.createdAt).toISOString(),
         promotedAt: version.promotedAt ? new Date(version.promotedAt).toISOString() : null,
         slots: pluginSlotsOf(version.manifest),
+        previewPath: pluginPreviewPath({ pluginId: version.pluginId, scope: version.manifest?.scope ?? "owner" }, { pages: version.manifest?.pages ?? [], slots: version.manifest?.slots ?? [] }),
         changeSummary: version.changeSummary ?? null,
         changeSummarySource: version.changeSummarySource ?? null,
     }

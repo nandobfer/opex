@@ -1,5 +1,5 @@
 import { createTwoFilesPatch } from "diff"
-import { PLUGIN_NAV_SLOT_BY_SCOPE, PLUGIN_SLOTS, type PluginChannel, type PluginSlotName, type PluginVersionState } from "./constants"
+import { PLUGIN_NAV_SLOT_BY_SCOPE, PLUGIN_SLOTS, clientePluginPagePath, pluginPagePath, type PluginChannel, type PluginComponentSlot, type PluginSlotName, type PluginVersionState } from "./constants"
 import type { PluginManifest, PluginSourceFile } from "./manifest"
 
 /** Regras puras dos plugins (OPE-172): ciclo das versões, escolha stable/preview e diff. */
@@ -132,4 +132,25 @@ export function pluginSlotsOf(manifest: Pick<PluginManifest, "scope" | "slots" |
     const slots = new Set<PluginSlotName>((manifest.slots ?? []).map((slot) => slot.slot))
     if (manifest.nav?.length) slots.add(PLUGIN_NAV_SLOT_BY_SCOPE[manifest.scope])
     return PLUGIN_SLOTS.filter((slot) => slots.has(slot))
+}
+
+/** Tela onde cada slot de componente aparece (para "Ver prévia"). */
+const SLOT_SCREENS: Record<PluginComponentSlot, string> = {
+    "dashboard.widgets": "/dashboard",
+    "task.panel": "/tarefas",
+    "topbar.actions": "/dashboard",
+    "workbench.panel": "/desenvolvimento",
+    "tasks.header": "/tarefas",
+    "financeiro.widgets": "/financeiro",
+    "portal.dashboard.widgets": "/cliente/dashboard",
+    "portal.task.panel": "/cliente/tarefas",
+}
+
+/** Onde ver a prévia: a primeira página do plugin; sem página, a tela do slot principal. */
+export function pluginPreviewPath(plugin: { pluginId: string; scope: "owner" | "client" }, manifest: Pick<PluginManifest, "pages" | "slots">): string {
+    const page = manifest.pages[0]?.path
+    if (page !== undefined) return plugin.scope === "client" ? clientePluginPagePath(plugin.pluginId, page) : pluginPagePath(plugin.pluginId, page)
+    const slot = manifest.slots.find((item) => item.slot in SLOT_SCREENS)?.slot as PluginComponentSlot | undefined
+    if (slot) return SLOT_SCREENS[slot]
+    return plugin.scope === "client" ? "/cliente/dashboard" : "/dashboard"
 }
