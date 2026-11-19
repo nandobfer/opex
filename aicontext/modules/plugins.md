@@ -86,7 +86,10 @@ fontes de um sistema de arquivos virtual (`virtual-fs.ts`, sem disco) e gera ESM
 
 **CSS:** o Tailwind 4 do app só gera as classes que existiam no build. Por isso
 `compiler/tailwind.ts` usa o `compile` do próprio `tailwindcss` (dependência de produção) para gerar,
-uma vez por versão, **só as utilidades usadas nas fontes**. O tema usado é `plugin-sdk/theme.css`,
+uma vez por versão, **só as utilidades usadas nas fontes**. O compilador é **novo a cada versão** (o
+`build()` do Tailwind acumula os candidatos já vistos; uma instância compartilhada faria o CSS de um
+plugin levar as classes das compilações anteriores do processo); só o tema e as folhas lidas do disco
+ficam em cache. O tema usado é `plugin-sdk/theme.css`,
 que o `globals.css` também importa (fonte única dos tokens), sem preflight.
 
 **Artefatos:** são guardados na versão, com `hash` sha256 de 16 caracteres.
@@ -126,7 +129,7 @@ Serviços disponíveis para o plugin (`ctx.*`):
 | `realtime` | Evento `plugin-event` `{ pluginId, event, data }` em `private-app` |
 | `integrations` | Configuração resolvida de uma integração |
 | `ai` | `streamAi` (`text`/`stream`) |
-| `tools` | Registro de ferramentas |
+| `tools` | Registro de ferramentas (`plugin_<id com _>_<nome>`; se o nome final já for de **outro** plugin — ex.: `foo-bar` + `baz` e `foo` + `bar_baz` —, a ativação falha com `PluginDeclarationError` em vez de tomar o lugar da ferramenta) |
 | `cron` | Registro de crons |
 | `routes` | Registro de rotas |
 | `kv` | `plugin_kv` |
@@ -152,7 +155,12 @@ disso a ativação falha.
 
 **Instância de prévia do app** (`OPEX_PREVIEW=1`, que usa o mesmo Mongo da produção): o kernel sobe
 em `mode: "preview-instance"` e **não ativa código de servidor de plugin**, para não duplicar crons e
-efeitos. Os artefatos de interface continuam servidos.
+efeitos. Os artefatos de interface continuam servidos. As mutações feitas na prévia (rollback, ativar,
+arquivar, consolidar) gravam no banco compartilhado; a produção aplica no próprio kernel pela
+**reconciliação** do tick do agendador (`reconcilePluginServers`, decisão da OPE-172): para cada plugin do
+dono, compara a versão que o banco manda carregar em cada canal (só versões com servidor, plugin ativo e
+não arquivado) com a fiber viva e chama `syncPluginServer` quando divergem; um erro de ativação já
+gravado para a mesma versão não é retentado a cada tick.
 
 **Fotografia do runtime:** `inspectPluginRuntime()` devolve modo, SDK, serviços, fibers com efeitos,
 ferramentas, rotas e crons. É exposta em `GET /api/plugins/kernel` e na ferramenta

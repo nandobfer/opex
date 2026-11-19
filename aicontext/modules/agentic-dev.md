@@ -1011,6 +1011,11 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
     compartilha disco com o host. A pasta recebe as fontes da base ou o esqueleto do SDK, o SDK em
     `.opex-sdk/` e os arquivos de ambiente;
   - inicia o git da pasta, com o commit base em `refs/remotes/origin/opex-base` e a branch `plugin`.
+  - Rodada nova (`plugin.workDir` vazio: primeira implementação, reabertura ou base desatualizada): a
+    pasta determinística da tarefa é **apagada antes** de exportar, para uma sobra de rodada antiga (com
+    as fontes de outra base) nunca ser reaproveitada; se o `rm -rf` falhar, a implementação não segue.
+    Concluir sem consolidar, excluir e reabrir removem a pasta direto (`releasePluginPreview` /
+    `removePluginWorkDir`), sem depender da limpeza de worktree da central.
 
   O prompt (`pluginImplementPrompt`) manda mover a sessão para a pasta (`session_move`) e ler
   `.opex-sdk/GUIA.md`, e proíbe push e PR. A mesa grava `worktreePath` = pasta, com `branch: null`.
@@ -1027,6 +1032,9 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
   plano de novo) e o recomeço pela base (`reopen`) zeram a marca e o descritivo da rodada anterior,
   para o Tentar novamente de uma falha desse turno rodar o agente, e não só recompilar a pasta antiga.
 - **Revisão adversária:** quando ativa, revisa o diff da pasta contra `origin/opex-base`.
+- **Parar nos testes do plugin:** os testes rodam desacoplados no host com o sinal da mesa
+  (`runPluginTests(workDir, signal)`); o "Parar" encerra o comando e, mesmo que os testes terminem
+  verdes, a versão **não** é consolidada — a mesa fica em "Testes do plugin" com `runState: "interrupted"`.
 - **Prévia ao vivo:** `publishPluginPreview`
   - publica a `draft` como `preview` do plugin, carregada ao vivo **só para quem liga a prévia**
     (cookie);
