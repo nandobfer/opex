@@ -47,6 +47,16 @@ beforeEach(() => {
 })
 
 describe('criação da tarefa com issue no GitHub', () => {
+  it('tipo Plugin sem alvo válido é recusado antes de criar a issue (sem issue órfã, OPE-172)', async () => {
+    const projectId = await seedProject()
+    const plugin = { title: 'Widget', projectId, columnId: 'todo', description: '', taskType: 'plugin', priority: 'high', pluginTarget: null } as never
+    await expect(createTaskWithIssue(plugin, 'local')).rejects.toMatchObject({ status: 400, message: 'Informe o escopo do plugin' })
+    const clientWithout = { title: 'Widget', projectId, columnId: 'todo', description: '', taskType: 'plugin', priority: 'high', pluginTarget: { scope: 'client', clientId: null } } as never
+    await expect(createTaskWithIssue(clientWithout, 'local')).rejects.toMatchObject({ message: 'Escolha o cliente do plugin' })
+    expect(mocks.githubRequest).not.toHaveBeenCalled()
+    expect(mocks.createTask).not.toHaveBeenCalled()
+  })
+
   it('cria a issue (título, corpo e labels) antes da tarefa e grava o vínculo com a marca d’água', async () => {
     const projectId = await seedProject()
     mocks.githubRequest.mockResolvedValue({ number: 7, html_url: 'https://github.com/o/app/issues/7', state: 'open', updated_at: '2026-10-10T12:00:00Z' })

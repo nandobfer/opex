@@ -91,6 +91,8 @@ export async function approveOwnerDraft(id: string, actorId: string, priority?: 
         technicalSpec: preview.technicalSpec,
         taskType: (preview.taskType as CreateTaskInput["taskType"]) ?? null,
         priority: (priority ?? preview.priority) as CreateTaskInput["priority"],
+        // Rascunho classificado como Plugin (OPE-172): com cliente, plugin do portal dele; sem cliente, plugin do dono.
+        pluginTarget: preview.taskType === "plugin" ? (client ? { scope: "client", clientId: String(client._id), pluginId: null } : { scope: "owner", clientId: null, pluginId: null }) : null,
     }
     const task = await createTaskWithIssue(input, actorId, {
         origin: "opex",

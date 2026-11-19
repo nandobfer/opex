@@ -1,4 +1,5 @@
 import { DomainError } from "@/lib/api/route"
+import { resolvePluginTarget } from "../plugin-target"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AuditLog, type IAuditLog } from "@/lib/db/models/AuditLog"
 import { DevTask, TaskComment, type IDevTask, type ITaskEstimate } from "@/lib/db/models/DevTask"
@@ -12,7 +13,7 @@ import { clientChannel } from "@/lib/pusher/channel-names"
 import { planAfterRefinementLabel, TASK_AGENTIC_FLOW_INHERIT_LABEL, TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
 import { formatLineComment, parseLineComment, TASK_COMMENT_MAX } from "../line-comments/format"
-import { pluginTargetIssue, type BulkTaskResult, type BulkTasksInput, type CommentInput, type CreateTaskInput, type MoveTaskInput, type TaskPluginTarget, type UpdateTaskEstimateInput, type UpdateTaskInput } from "../schemas"
+import { type BulkTaskResult, type BulkTasksInput, type CommentInput, type CreateTaskInput, type MoveTaskInput, type UpdateTaskEstimateInput, type UpdateTaskInput } from "../schemas"
 import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
 import { computeClientEstimate } from "@/features/orcamentos/logic"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "@/features/orcamentos/constants"
@@ -336,17 +337,7 @@ export interface TaskEstimateInput {
     model: string | null
 }
 
-/**
- * Alvo do plugin gravado na tarefa (OPE-172). Só o tipo Plugin tem alvo; tarefa vinda do portal é
- * sempre do escopo do próprio cliente. Sem alvo válido no tipo Plugin, recusa em pt-BR.
- */
-export function resolvePluginTarget(taskType: string | null, target: TaskPluginTarget | null, taskClientId: string | null): IDevTask["pluginTarget"] {
-    if (taskType !== "plugin") return null
-    const effective: TaskPluginTarget | null = taskClientId ? { scope: "client", clientId: taskClientId, pluginId: target?.pluginId ?? null } : target
-    const issue = pluginTargetIssue(taskType, effective)
-    if (issue) throw new DomainError(400, issue.message, "TASK_PLUGIN_TARGET")
-    return { scope: effective!.scope, clientId: effective!.scope === "client" ? (effective!.clientId ?? null) : null, pluginId: effective!.pluginId ?? null }
-}
+export { resolvePluginTarget }
 
 const pluginTargetLabel = (target: IDevTask["pluginTarget"]) => (target ? `${target.scope === "client" ? "cliente" : "dono"}${target.pluginId ? ` · ${target.pluginId}` : " · novo"}` : null)
 
