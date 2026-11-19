@@ -180,7 +180,7 @@ export async function buildPluginDraft(doc: IAgenticWorkbench): Promise<PluginDr
 export async function publishPluginPreview(doc: IAgenticWorkbench): Promise<{ previewUrl: string; number: number; runtimeError: string | null }> {
     const state = doc.plugin
     if (!state?.pluginId || !state.draftVersionId) throw new Error("A mesa de plugin não tem versão para a prévia")
-    const published = await publishPreviewVersion(state.pluginId, state.draftVersionId, { workbenchId: String(doc._id), actorId: getLocalUser().id })
+    const published = await publishPreviewVersion(state.pluginId, state.draftVersionId, { workbenchId: String(doc._id), actorId: getLocalUser().id }).catch((error: unknown) => restartOnOutdatedBase(doc, error))
     const { PluginVersion } = await import("@/lib/db/models/Plugin")
     const version = await PluginVersion.findById(state.draftVersionId, { manifest: 1 }).lean()
     // Com o subcaminho público: o link da mesa é um `<a>` comum (abre em nova guia).
@@ -199,9 +199,22 @@ export async function runPluginTests(workDir: string): Promise<{ exitCode: numbe
 export async function consolidatePluginWorkbench(doc: IAgenticWorkbench): Promise<{ number: number }> {
     const state = doc.plugin
     if (!state?.pluginId || !state.draftVersionId) throw new Error("A mesa de plugin não tem versão para consolidar")
-    const result = await consolidateVersion(state.pluginId, state.draftVersionId, getLocalUser().id)
+    const result = await consolidateVersion(state.pluginId, state.draftVersionId, getLocalUser().id).catch((error: unknown) => restartOnOutdatedBase(doc, error))
     await removePluginWorkDir(state.workDir)
     return result
+}
+
+/**
+ * Outra mesa consolidou o plugin depois que esta começou (`PLUGIN_BASE_OUTDATED`): a mesa volta a partir
+ * da estável atual — descarta a prévia dela, a pasta e a aprovação, e a próxima implementação (Voltar ao
+ * planejamento) exporta a estável de agora. O erro segue para a mesa com a orientação em pt-BR.
+ */
+async function restartOnOutdatedBase(doc: IAgenticWorkbench, error: unknown): Promise<never> {
+    if (!(error instanceof DomainError) || error.code !== "PLUGIN_BASE_OUTDATED" || !doc.plugin) throw error
+    await releasePluginPreview(doc).catch(() => undefined)
+    await removePluginWorkDir(doc.plugin.workDir)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.baseVersionId": null, "plugin.draftVersionId": null, "plugin.workDir": null, "plugin.approved": false, "plugin.testAttempts": 0, previewUrl: null } })
+    throw new DomainError(409, `${error.message}: use "Voltar ao planejamento" e a próxima implementação parte da estável atual.`, error.code)
 }
 
 /** Remove a pasta de trabalho (melhor esforço; idempotente). */

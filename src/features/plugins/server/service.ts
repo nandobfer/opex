@@ -238,12 +238,44 @@ async function setRuntimeError(pluginId: string, error: { channel: PluginChannel
     else await Plugin.updateOne({ pluginId, ...(channel ? { "runtimeError.channel": channel } : {}) }, { $set: { runtimeError: null } })
 }
 
+/** Número de uma versão para as mensagens (`v3`), ou "nenhuma". */
+async function versionLabel(pluginId: string, versionId: string | null): Promise<string> {
+    if (!versionId) return "nenhuma"
+    const version = await PluginVersion.findOne({ _id: versionId, pluginId }, { number: 1 }).lean()
+    return version ? `v${version.number}` : "desconhecida"
+}
+
+/**
+ * A versão precisa ter partido da estável ATUAL: senão, consolidá-la apagaria o que outra mesa
+ * consolidou nesse meio-tempo. Recusa com 409 `PLUGIN_BASE_OUTDATED` (a mesa refaz a partir da estável).
+ */
+async function assertBaseIsCurrentStable(plugin: PluginDoc, version: VersionDoc): Promise<void> {
+    const base = version.baseVersionId ?? null
+    const stable = plugin.stableVersionId ?? null
+    if (base === stable) return
+    throw new DomainError(
+        409,
+        `A versão v${version.number} partiu da estável ${await versionLabel(plugin.pluginId, base)}, mas a estável agora é ${await versionLabel(plugin.pluginId, stable)}. Refaça a alteração a partir da estável atual`,
+        "PLUGIN_BASE_OUTDATED",
+    )
+}
+
+/** A prévia é de uma mesa só: outra mesa não troca nem rebaixa a prévia que não é dela. */
+async function assertPreviewFree(plugin: PluginDoc, workbenchId: string | null): Promise<void> {
+    if (!plugin.previewVersionId || !plugin.previewWorkbenchId || plugin.previewWorkbenchId === workbenchId) return
+    const current = await PluginVersion.findOne({ _id: plugin.previewVersionId, pluginId: plugin.pluginId }, { number: 1, source: 1 }).lean()
+    const owner = current?.source?.taskCode ? ` da tarefa ${current.source.taskCode}` : " de outra mesa"
+    throw new DomainError(409, `O plugin já tem uma prévia${owner}${current ? ` (v${current.number})` : ""}. Aguarde ela ser consolidada ou descartada`, "PLUGIN_PREVIEW_BUSY")
+}
+
 /** Publica a versão como prévia (só para quem estiver com a prévia ligada). */
 export async function publishPreviewVersion(pluginId: string, versionId: string, options: { workbenchId: string | null; actorId: string }): Promise<{ number: number; runtimeError: string | null }> {
     const plugin = await loadPlugin(pluginId)
     const version = await loadVersion(pluginId, versionId)
     const block = versionActionBlock("publish-preview", version.state)
     if (block) throw new DomainError(409, block, "PLUGIN_VERSION_STATE")
+    await assertPreviewFree(plugin, options.workbenchId)
+    await assertBaseIsCurrentStable(plugin, version)
 
     const runtimeError = plugin.active ? await activateChannel(plugin, version, "preview") : null
     if (plugin.previewVersionId && plugin.previewVersionId !== versionId) await PluginVersion.updateOne({ _id: plugin.previewVersionId, state: "preview" }, { $set: { state: "draft" } })
@@ -306,6 +338,7 @@ export async function consolidateVersion(pluginId: string, versionId: string, ac
     const version = await loadVersion(pluginId, versionId)
     const block = versionActionBlock("consolidate", version.state)
     if (block) throw new DomainError(409, block, "PLUGIN_VERSION_STATE")
+    await assertBaseIsCurrentStable(plugin, version)
     await promoteToStable(plugin, version, actorId, "consolidate")
     return { number: version.number }
 }

@@ -1038,7 +1038,13 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
     central (`ciFixLimit`, sem limite = até passar). Com a aprovação mantida, a versão corrigida é
     publicada na prévia e testada de novo, sem pedir nova aprovação.
   - Passou: `consolidatePluginWorkbench` consolida (transacional no kernel; falha mantém a estável)
-    e remove a pasta. Depois vêm a auditoria `APROVAR` e a conclusão da mesa.
+    e remove a pasta; só então a mesa vai a "Consolidando" (`finishing`), com a auditoria `APROVAR` e a
+    conclusão. Se a consolidação falhar, a mesa fica em "Testes do plugin" com falha, e o **Tentar
+    novamente** refaz os testes e a consolidação (nunca só a limpeza).
+  - Outra mesa consolidou o plugin depois que esta começou (`PLUGIN_BASE_OUTDATED`, na prévia ou na
+    consolidação): a mesa descarta a prévia dela, remove a pasta, desfaz a aprovação e zera base e
+    versão; o erro orienta "Voltar ao planejamento", e a próxima implementação parte da estável atual.
+    Prévia de outra mesa (`PLUGIN_PREVIEW_BUSY`) só falha a etapa, sem mexer na mesa.
 - **Concluir à mão ou excluir a mesa:** descarta a prévia que era dela (`releasePluginPreview`). A
   limpeza só remove a pasta (`cleanupPrompt` com `plugin: true`).
 - **Reabrir:** a nova rodada parte da estável atual, numa pasta nova.

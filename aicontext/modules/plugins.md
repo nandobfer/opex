@@ -156,8 +156,9 @@ Todas as transições abaixo gravam auditoria (`entidade: "plugin"`) e publicam 
 | Operação | Função | Efeito |
 |---|---|---|
 | Criar versão | `createDraftVersion` | Normaliza as fontes (tira `.opex-sdk/`, `node_modules/`, `.git/` e os arquivos de ambiente), valida manifesto e escopo, compila e grava `draft` |
-| Publicar prévia | `publishPreviewVersion` | Ativa a fiber `preview` e grava `previewVersionId`/`previewWorkbenchId` |
+| Publicar prévia | `publishPreviewVersion` | Ativa a fiber `preview` e grava `previewVersionId`/`previewWorkbenchId`. A prévia é de **uma mesa só**: com prévia de outra mesa, 409 `PLUGIN_PREVIEW_BUSY` ("O plugin já tem uma prévia da tarefa X (vN). Aguarde ela ser consolidada ou descartada") |
 | Consolidar | `consolidateVersion` | A `preview` vira `stable`, com ativação da `stable` **antes** de gravar. Se a ativação falhar: 409 `PLUGIN_ACTIVATION_FAILED`, "A versão estável anterior continua ativa", e `runtimeError` gravado |
+| Base da versão | prévia e consolidação | A versão precisa ter partido da estável **atual** (`baseVersionId` = `stableVersionId`); senão, 409 `PLUGIN_BASE_OUTDATED` ("A versão vN partiu da estável vX, mas a estável agora é vY. Refaça a alteração a partir da estável atual"), para uma mesa não apagar o que outra consolidou |
 | Rollback | `rollbackPlugin` | Volta a `stable` para uma versão com `promotedAt` (já consolidada antes), arquivando a atual. É transacional como a consolidação |
 | Ativar/desativar | `setPluginActive` | Desativar desfaz as fibers e tira a interface das telas |
 | Descartar prévia | `discardPreview` | Usado na conclusão manual e na exclusão da mesa dona da prévia |

@@ -72,6 +72,10 @@ semeado na primeira leitura (`ensureBoard`).
   - plugin existente ou "Plugin novo".
 
   Trocar para outro tipo zera o alvo.
+- O alvo é conferido (`resolvePluginTarget`, `src/features/tasks/plugin-target.ts`) também em
+  `createTaskWithIssue` **antes** de criar a issue no GitHub: um alvo inválido não deixa issue órfã.
+- Rascunho de prévia do dono classificado como Plugin (`approveOwnerDraft`): com cliente, o alvo é o
+  portal dele (`{ scope: "client", clientId }`, mesmo sem horas estimadas); sem cliente, plugin do dono.
 - O `pluginTarget` não vai para o portal (`ClienteTaskDto`).
 - As ferramentas `create_task`/`update_task` dos agentes aceitam `pluginTarget`.
 - O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin".

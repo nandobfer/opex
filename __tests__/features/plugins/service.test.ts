@@ -56,8 +56,10 @@ beforeEach(() => {
   holder.compile.mockReset().mockResolvedValue({ ok: true, server: { code: 's', hash: 'a'.repeat(16), css: null, cssHash: null }, client: { code: 'c', hash: 'b'.repeat(16), css: null, cssHash: null }, log: 'ok' })
 })
 
-async function draft(id = 'relogio') {
-  const result = await createDraftVersion({ pluginId: id, files: files(id), baseVersionId: null, source, author: 'local' })
+/** Versão nova a partir da estável atual (`base` força outra base). */
+async function draft(id = 'relogio', base?: string | null, workbenchSource = source) {
+  const baseVersionId = base !== undefined ? base : ((holder.plugins.docs.find((doc) => doc.pluginId === id)?.stableVersionId as string | null) ?? null)
+  const result = await createDraftVersion({ pluginId: id, files: files(id), baseVersionId, source: workbenchSource, author: 'local' })
   if (!result.ok) throw new Error(result.issues.join('; '))
   return result
 }
@@ -115,6 +117,40 @@ describe('versões', () => {
     expect(await rollbackPlugin('relogio', v1.versionId, 'local')).toEqual({ number: 1 })
     expect(holder.plugins.docs[0]!.stableVersionId).toBe(v1.versionId)
     expect(holder.versions.docs.map((doc) => doc.state)).toEqual(['stable', 'archived', 'draft'])
+  })
+})
+
+describe('concorrência entre mesas do mesmo plugin', () => {
+  it('versão que partiu de uma estável antiga não vira prévia nem é consolidada (as mudanças da outra mesa ficam)', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    const v1 = await draft()
+    await publishPreviewVersion('relogio', v1.versionId, { workbenchId: 'wb0', actorId: 'local' })
+    await consolidateVersion('relogio', v1.versionId, 'local')
+    // As mesas A e B partem da v1; A consolida a v2.
+    const a = await draft('relogio', v1.versionId, { ...source, workbenchId: 'wbA', taskCode: 'OPE-1' })
+    const b = await draft('relogio', v1.versionId, { ...source, workbenchId: 'wbB', taskCode: 'OPE-2' })
+    await publishPreviewVersion('relogio', a.versionId, { workbenchId: 'wbA', actorId: 'local' })
+    await consolidateVersion('relogio', a.versionId, 'local')
+
+    await expect(publishPreviewVersion('relogio', b.versionId, { workbenchId: 'wbB', actorId: 'local' })).rejects.toMatchObject({ status: 409, code: 'PLUGIN_BASE_OUTDATED', message: 'A versão v3 partiu da estável v1, mas a estável agora é v2. Refaça a alteração a partir da estável atual' })
+    expect(holder.plugins.docs[0]).toMatchObject({ stableVersionId: a.versionId, previewVersionId: null })
+  })
+
+  it('a prévia de uma mesa não é trocada por outra; a consolidação também confere a base', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    const a = await draft('relogio', null, { ...source, workbenchId: 'wbA', taskCode: 'OPE-1' })
+    const b = await draft('relogio', null, { ...source, workbenchId: 'wbB', taskCode: 'OPE-2' })
+    await publishPreviewVersion('relogio', a.versionId, { workbenchId: 'wbA', actorId: 'local' })
+    await expect(publishPreviewVersion('relogio', b.versionId, { workbenchId: 'wbB', actorId: 'local' })).rejects.toMatchObject({ code: 'PLUGIN_PREVIEW_BUSY', message: 'O plugin já tem uma prévia da tarefa OPE-1 (v1). Aguarde ela ser consolidada ou descartada' })
+    expect(holder.versions.docs.find((doc) => String(doc._id) === a.versionId)?.state).toBe('preview')
+    // A própria mesa pode republicar a prévia (correção depois dos testes).
+    const a2 = await draft('relogio', null, { ...source, workbenchId: 'wbA', taskCode: 'OPE-1' })
+    await publishPreviewVersion('relogio', a2.versionId, { workbenchId: 'wbA', actorId: 'local' })
+    expect(holder.plugins.docs[0]!.previewVersionId).toBe(a2.versionId)
+
+    // Uma estável que mudou por fora (ex.: rollback) também bloqueia a consolidação da prévia antiga.
+    holder.plugins.docs[0]!.stableVersionId = b.versionId
+    await expect(consolidateVersion('relogio', a2.versionId, 'local')).rejects.toMatchObject({ code: 'PLUGIN_BASE_OUTDATED' })
   })
 })
 
