@@ -90,3 +90,39 @@ describe('slots de um plugin (OPE-172)', () => {
     expect(filterPlugins(plugins, DEFAULT_PLUGIN_FILTERS)).toHaveLength(2)
   })
 })
+
+describe('árvore de slots (OPE-172, rodada 4)', () => {
+  it('todo slot está na árvore uma vez só, com caminho; os ids de antes continuam', async () => {
+    const { flatSlotTree, slotPathLabel, PLUGIN_SLOT_NODE_IDS } = await import('@/features/plugins/slot-tree')
+    const { PLUGIN_SLOTS } = await import('@/features/plugins/constants')
+    const leaves = flatSlotTree().filter((node) => node.kind === 'slot').map((node) => node.id)
+    expect([...leaves].sort()).toEqual([...PLUGIN_SLOTS].sort())
+    expect(new Set(PLUGIN_SLOT_NODE_IDS).size).toBe(PLUGIN_SLOT_NODE_IDS.length)
+    for (const id of ['dashboard.widgets', 'sidebar.nav', 'task.panel', 'topbar.actions', 'workbench.panel', 'tasks.header', 'financeiro.widgets', 'portal.dashboard.widgets', 'portal.task.panel', 'portal.nav']) expect(leaves).toContain(id)
+    expect(slotPathLabel('sidebar.nav.agentes')).toBe('Casca do app › Barra lateral › Menu Agentes')
+    expect(slotPathLabel('task.sidebar')).toBe('Tarefas › Página da tarefa › Coluna lateral')
+  })
+
+  it('escolher uma área cobre todos os slots abaixo dela; a raiz do escopo cobre o escopo inteiro', async () => {
+    const { expandSlotSelection, flatSlotTree } = await import('@/features/plugins/slot-tree')
+    expect([...expandSlotSelection(['area:dashboard'])].sort()).toEqual(['dashboard.section.central', 'dashboard.section.financeiro', 'dashboard.section.horas', 'dashboard.section.tarefas', 'dashboard.widgets'])
+    expect(expandSlotSelection(['area:client']).size).toBe(flatSlotTree('client').filter((node) => node.kind === 'slot').length)
+    expect([...expandSlotSelection(['task.panel', 'desconhecido'])]).toEqual(['task.panel'])
+  })
+
+  it('filtro: área, arquivados fora por padrão', () => {
+    const plugins = [
+      { id: 'a', name: 'A', description: '', clientName: null, scope: 'owner', slots: ['dashboard.section.horas'], archivedAt: null },
+      { id: 'b', name: 'B', description: '', clientName: null, scope: 'owner', slots: ['tasks.header'], archivedAt: null },
+      { id: 'c', name: 'C', description: '', clientName: null, scope: 'owner', slots: ['dashboard.widgets'], archivedAt: '2026-11-19T12:00:00.000Z' },
+    ] as never[]
+    const ids = (filters: Partial<typeof DEFAULT_PLUGIN_FILTERS>) => filterPlugins(plugins, { ...DEFAULT_PLUGIN_FILTERS, ...filters }).map((p: { id: string }) => p.id)
+    expect(ids({ slots: ['area:dashboard'] })).toEqual(['a'])
+    expect(ids({ slots: ['area:dashboard'], showArchived: true })).toEqual(['a', 'c'])
+    expect(ids({})).toEqual(['a', 'b'])
+  })
+
+  it('itens nav com slot de menu aninhado contam como esse slot', () => {
+    expect(pluginSlotsOf({ scope: 'owner', slots: [], nav: [{ label: 'X', page: 'x', icon: 'Puzzle', slot: 'sidebar.nav.agentes' }, { label: 'Y', page: 'y', icon: 'Puzzle' }] } as never)).toEqual(['sidebar.nav', 'sidebar.nav.agentes'])
+  })
+})

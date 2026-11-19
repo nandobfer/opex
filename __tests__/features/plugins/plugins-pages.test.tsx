@@ -9,7 +9,8 @@ import { framerMotionMock } from '../../helpers/framer-motion'
  * Telas de Plugins (OPE-172, rodada 3): lista com o nome como link, debug e switch Ativo (confirmação
  * ao desligar) e o filtro Slot; detalhe só com o switch Ativo, Versões no componente "um item em uso"
  * (clicar numa consolidada a põe em uso, com confirmação; a prévia não é clicável e traz Ver/Aprovar),
- * o descritivo de cada mudança (e "Gerar descritivo") e a coluna de logs.
+ * o descritivo de cada mudança (e "Gerar descritivo") e a coluna de logs. Rodada 4: arquivar (botão no
+ * cabeçalho, filtro "Arquivados") e o filtro Slot com busca em árvore (SearchPicker).
  */
 
 const holder = vi.hoisted(() => ({
@@ -18,6 +19,7 @@ const holder = vi.hoisted(() => ({
   rollback: vi.fn(),
   approve: vi.fn(),
   setActive: vi.fn(),
+  archive: vi.fn(),
   preview: vi.fn(async () => ({ previewOn: ['relogio'] })),
   summary: vi.fn(),
   source: { kind: 'owner', clientId: null as string | null },
@@ -49,6 +51,7 @@ vi.mock('@/features/plugins/hooks/usePlugins', () => ({
   useTogglePluginPreview: () => ({ mutate: vi.fn(), mutateAsync: holder.preview, isPending: false }),
   useRollbackPlugin: () => ({ mutate: holder.rollback, isPending: false }),
   useSetPluginActive: () => ({ mutate: holder.setActive, isPending: false }),
+  useSetPluginArchived: () => ({ mutate: holder.archive, isPending: false }),
   useApprovePluginPreview: () => ({ mutate: holder.approve, isPending: false }),
   useGeneratePluginVersionSummary: () => ({ mutate: holder.summary, isPending: false, variables: undefined }),
 }))
@@ -82,6 +85,7 @@ const plugin = (overrides: Record<string, unknown> = {}) => ({
   clientName: null,
   apiVersion: '1.0',
   active: true,
+  archivedAt: null,
   stable: summary(2, 'stable'),
   preview: summary(3, 'preview'),
   slots: ['dashboard.widgets'],
@@ -97,7 +101,7 @@ beforeEach(() => {
   holder.list = { data: [], isLoading: false, isError: false, refetch: vi.fn() }
   holder.detail = { data: null, isPending: false, isError: false, error: null, refetch: vi.fn() }
   holder.search = new URLSearchParams()
-  for (const fn of [holder.rollback, holder.approve, holder.setActive, holder.summary, holder.push]) fn.mockReset()
+  for (const fn of [holder.rollback, holder.approve, holder.setActive, holder.archive, holder.summary, holder.push]) fn.mockReset()
   holder.preview.mockClear()
 })
 
@@ -140,6 +144,50 @@ describe('lista de plugins', () => {
     expect(screen.queryByTestId('plugin-row-relogio')).toBeNull()
     expect(screen.getByTestId('plugin-row-mesa')).toBeTruthy()
     window.history.replaceState(null, '', '/plugins')
+  })
+
+  it('filtro Slot com área: escolher "Dashboards" cobre as seções e o fim da página', () => {
+    holder.list.data = [plugin({ slots: ['dashboard.section.financeiro'] }), plugin({ id: 'mesa', name: 'Na mesa', slots: ['workbench.panel'] })]
+    window.history.replaceState(null, '', '/plugins?slots=area:dashboard')
+    render(<OwnerPluginsPage />)
+    expect(screen.getByTestId('plugin-row-relogio')).toBeTruthy()
+    expect(screen.queryByTestId('plugin-row-mesa')).toBeNull()
+    window.history.replaceState(null, '', '/plugins')
+  })
+
+  it('filtro Slot é uma busca em árvore: sem termo, recuada por nível; com termo, o resultado no caminho dele; marcar filtra', async () => {
+    holder.list.data = [plugin({ slots: ['sidebar.nav.agentes'] }), plugin({ id: 'mesa', name: 'Na mesa', slots: ['workbench.panel'] })]
+    render(<OwnerPluginsPage />)
+    fireEvent.click(screen.getByRole('button', { name: 'Slot' }))
+    const list = await screen.findByRole('listbox', { name: 'Slot' })
+    const agentes = within(list).getByRole('option', { name: /Menu Agentes/ })
+    expect(agentes.getAttribute('data-depth')).toBe('3')
+    fireEvent.change(screen.getByRole('textbox', { name: 'Buscar slot' }), { target: { value: 'Agentes' } })
+    await waitFor(() => expect(within(list).getAllByRole('option').map((option) => option.textContent)).toEqual(expect.arrayContaining([expect.stringContaining('Casca do app')])))
+    const match = within(list).getByRole('option', { name: /Menu Agentes/ })
+    expect(match.textContent).toContain('Dono › Casca do app › Barra lateral')
+    fireEvent.click(match)
+    expect(match.getAttribute('aria-checked')).toBe('true')
+    await waitFor(() => expect(screen.queryByTestId('plugin-row-mesa')).toBeNull())
+    expect(screen.getByTestId('plugin-row-relogio')).toBeTruthy()
+    window.history.replaceState(null, '', '/plugins')
+  })
+
+  it('arquivados ficam fora por padrão; "Arquivados: Mostrar" os traz com o selo e o switch desabilitado', async () => {
+    holder.list.data = [plugin(), plugin({ id: 'velho', name: 'Velho', active: false, archivedAt: '2026-11-19T12:00:00.000Z' })]
+    render(<OwnerPluginsPage />)
+    expect(screen.queryByTestId('plugin-row-velho')).toBeNull()
+    fireEvent.click(screen.getByLabelText('Mostrar plugins arquivados'))
+    const row = within(await screen.findByTestId('plugin-row-velho'))
+    expect(row.getByText('Arquivado')).toBeTruthy()
+    expect((row.getByRole('checkbox', { name: 'Ativar Velho' }) as HTMLInputElement).disabled).toBe(true)
+    window.history.replaceState(null, '', '/plugins')
+  })
+
+  it('a linha mostra os slots com o caminho completo', () => {
+    holder.list.data = [plugin({ slots: ['dashboard.section.financeiro'] })]
+    render(<OwnerPluginsPage />)
+    expect(screen.getByLabelText('Slot: Dashboards › Seção Financeiro').textContent).toBe('Seção Financeiro')
   })
 
   it('portal: switch sem debug', () => {
@@ -243,6 +291,26 @@ describe('detalhe do plugin', () => {
     expect(screen.queryByRole('button', { name: 'Abrir logs de debug' })).toBeNull()
     expect(screen.queryByRole('button', { name: /Gerar descritivo/ })).toBeNull()
     await waitFor(() => expect(screen.getAllByText('OPE-172').every((node) => node.tagName === 'SPAN')).toBe(true))
+  })
+
+  it('Arquivar pede confirmação; arquivado mostra o selo, Desarquivar, o switch desabilitado e nenhuma versão clicável', async () => {
+    holder.detail.data = { ...plugin({ preview: null, previewWorkbenchId: null }), versions: [summary(2, 'stable'), summary(1, 'archived')] }
+    const { unmount } = render(<OwnerPluginDetailPage id="relogio" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Arquivar Relógio' }))
+    expect(await screen.findByText('Arquivar Relógio?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Arquivar' }))
+    expect(holder.archive).toHaveBeenCalledWith(true)
+    unmount()
+
+    // Estado depois da mutação (o que a resposta otimista e o refetch deixam na tela).
+    holder.detail.data = { ...plugin({ active: false, archivedAt: '2026-11-19T13:00:00.000Z', preview: null, previewWorkbenchId: null }), versions: [summary(2, 'stable'), summary(1, 'archived')] }
+    render(<OwnerPluginDetailPage id="relogio" />)
+    expect(screen.getByText('Arquivado')).toBeTruthy()
+    expect((screen.getByRole('checkbox', { name: 'Ativar Relógio' }) as HTMLInputElement).disabled).toBe(true)
+    expect(screen.queryByRole('button', { name: 'Usar a versão v1' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Desarquivar Relógio' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Desarquivar' }))
+    expect(holder.archive).toHaveBeenLastCalledWith(false)
   })
 
   it('carregando: esqueleto do detalhe', () => {

@@ -36,7 +36,7 @@ vi.mock('@/lib/db/models/Plugin', () => ({
 vi.mock('@/features/plugins/server/kernel/kernel', () => ({ activatePluginServer: holder.activate, deactivatePluginServer: holder.deactivate }))
 vi.mock('@/features/plugins/server/compiler/rolldown', () => ({ compilePluginSources: holder.compile }))
 
-import { consolidateVersion, createDraftVersion, createPluginRecord, getPlugin, listPlugins, publishPreviewVersion, rollbackPlugin, setPluginActive } from '@/features/plugins/server/service'
+import { consolidateVersion, createDraftVersion, createPluginRecord, getPlugin, listPlugins, publishPreviewVersion, rollbackPlugin, setPluginActive, setPluginArchived } from '@/features/plugins/server/service'
 
 const files = (id = 'relogio', scope = 'owner') => [
   { path: 'plugin.json', content: JSON.stringify({ id, name: 'Relógio', apiVersion: '1.0', scope, entries: { client: 'client/index.tsx' }, slots: [{ slot: scope === 'owner' ? 'dashboard.widgets' : 'portal.dashboard.widgets', export: 'Widget' }] }) },
@@ -198,5 +198,54 @@ describe('descritivo da mudança (OPE-172)', () => {
     await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
     await draft()
     expect(holder.versions.docs[0]!.changeSummary ?? null).toBeNull()
+  })
+})
+
+describe('arquivar plugin (OPE-172)', () => {
+  it('arquivar desliga, tira do kernel, audita e publica; desarquivar volta desligado', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    holder.appEvents = []
+    expect(await setPluginArchived('relogio', true, 'local')).toEqual({ archived: true, changed: true })
+    expect(holder.plugins.docs[0]).toMatchObject({ active: false, archivedBy: 'local', archivedAt: expect.any(Date) })
+    expect(holder.deactivate).toHaveBeenCalledWith('relogio')
+    expect(holder.audit.at(-1)).toMatchObject({ entidadeId: 'relogio', antes: { arquivado: false, ativo: true }, depois: { arquivado: true, ativo: false } })
+    expect(holder.appEvents).toHaveLength(1)
+    expect((await getPlugin('relogio')).archivedAt).toEqual(expect.any(String))
+
+    // De novo: nada muda e nada é publicado.
+    expect(await setPluginArchived('relogio', true, 'local')).toEqual({ archived: true, changed: false })
+    expect(holder.appEvents).toHaveLength(1)
+
+    await setPluginArchived('relogio', false, 'local')
+    expect(holder.plugins.docs[0]).toMatchObject({ active: false, archivedAt: null, archivedBy: null })
+  })
+
+  it('arquivado não liga, não publica prévia nem troca de versão', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    const first = await draft()
+    await publishPreviewVersion('relogio', first.versionId, { workbenchId: 'wb1', actorId: 'local' })
+    await consolidateVersion('relogio', first.versionId, 'local')
+    const second = await draft()
+    await setPluginArchived('relogio', true, 'local')
+    await expect(setPluginActive('relogio', true, 'local')).rejects.toMatchObject({ code: 'PLUGIN_ARCHIVED' })
+    await expect(publishPreviewVersion('relogio', second.versionId, { workbenchId: 'wb1', actorId: 'local' })).rejects.toMatchObject({ code: 'PLUGIN_ARCHIVED' })
+    expect(holder.plugins.docs[0]!.active).toBe(false)
+  })
+
+  it('com uma prévia de mesa em andamento, arquivar é recusado com 409', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    const first = await draft()
+    await publishPreviewVersion('relogio', first.versionId, { workbenchId: 'wb1', actorId: 'local' })
+    await expect(setPluginArchived('relogio', true, 'local')).rejects.toMatchObject({ status: 409, code: 'PLUGIN_PREVIEW_BUSY', message: 'O plugin tem uma prévia da tarefa OPE-172. Conclua ou descarte antes de arquivar' })
+    expect(holder.plugins.docs[0]!.archivedAt ?? null).toBeNull()
+  })
+
+  it('o portal só arquiva plugin do próprio cliente', async () => {
+    await createPluginRecord({ pluginId: 'painel', name: 'Painel', scope: 'client', clientId: 'cli1', actorId: 'local' })
+    await expect(setPluginArchived('painel', true, 'u1', { kind: 'client', clientId: 'cli2' })).rejects.toMatchObject({ code: 'PLUGIN_NOT_FOUND' })
+    await setPluginArchived('painel', true, 'u1', { kind: 'client', clientId: 'cli1' })
+    expect(holder.plugins.docs[0]!.archivedAt).toEqual(expect.any(Date))
+    expect(holder.deactivate).not.toHaveBeenCalled()
+    expect(holder.clientEvents).toEqual(expect.arrayContaining([expect.objectContaining({ clientId: 'cli1' })]))
   })
 })

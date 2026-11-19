@@ -100,3 +100,18 @@ describe("AppLayoutShell: plugins (OPE-172)", () => {
         expect(screen.getByRole("link", { name: "Hora certa" }).getAttribute("href")).toBe("/x/relogio/hora")
     })
 })
+
+describe("AppLayoutShell: item de plugin dentro de um menu (OPE-172, rodada 4)", () => {
+    afterEach(resetPluginTestRuntime)
+    it("o item com slot sidebar.nav.agentes aparece no painel do grupo Agentes, não na seção Plugins", () => {
+        pluginTestRuntime.plugins = [pluginTestEntry(null, { pages: [{ path: "hora", title: "Hora", export: "Page" }], nav: [{ label: "Hora certa", page: "hora", icon: "Puzzle", slot: "sidebar.nav.agentes" }] })]
+        render(
+            <AppLayoutShell ownerName="Ana">
+                <p>conteúdo</p>
+            </AppLayoutShell>,
+        )
+        expect(screen.queryByRole("link", { name: "Hora certa" })).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "Agentes" }))
+        expect(screen.getByRole("link", { name: "Hora certa" }).getAttribute("href")).toBe("/x/relogio/hora")
+    })
+})

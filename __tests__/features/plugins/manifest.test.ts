@@ -118,3 +118,28 @@ describe('menu do portal (portal.nav, OPE-172)', () => {
     if (!result.ok) expect(result.issues.join('\n')).toContain('Use a lista "nav" do manifesto para o menu (sidebar.nav)')
   })
 })
+
+describe('slots aninhados no manifesto (OPE-172, rodada 4)', () => {
+  const ui = { entries: { client: 'client/index.tsx' }, routes: [], tools: [] }
+  const page = { pages: [{ path: 'hora', title: 'Hora', export: 'Page' }] }
+
+  it('item de menu dentro do menu Agentes é aceito; o slot novo de componente também', () => {
+    const result = parsePluginManifest(files(manifest({ ...ui, ...page, slots: [{ slot: 'task.sidebar', export: 'Card' }], nav: [{ label: 'Hora', page: 'hora', slot: 'sidebar.nav.agentes' }] })))
+    expect(result.ok).toBe(true)
+  })
+
+  it('área no lugar de slot é recusada com o caminho', () => {
+    const result = parsePluginManifest(files(manifest({ ...ui, slots: [{ slot: 'area:dashboard', export: 'Card' }] })))
+    expect(result).toEqual({ ok: false, issues: [expect.stringContaining('"area:dashboard" é uma área (Dashboards), não um slot')] })
+  })
+
+  it('slot de menu de outro escopo e menu usado como slot são recusados', () => {
+    const client = parsePluginManifest(files(manifest({ ...ui, ...page, scope: 'client', slots: [], nav: [{ label: 'Hora', page: 'hora', slot: 'sidebar.nav.agentes' }] }), []).filter((file) => !file.path.startsWith('server/')))
+    expect(client.ok).toBe(false)
+    expect(!client.ok && client.issues.join('\n')).toContain('não é um menu do cliente')
+    const asSlot = parsePluginManifest(files(manifest({ ...ui, slots: [{ slot: 'sidebar.nav.contabil', export: 'X' }] })))
+    expect(!asSlot.ok && asSlot.issues.join('\n')).toContain('Use a lista "nav"')
+    const notMenu = parsePluginManifest(files(manifest({ ...ui, ...page, slots: [], nav: [{ label: 'Hora', page: 'hora', slot: 'dashboard.widgets' }] })))
+    expect(!notMenu.ok && notMenu.issues.join('\n')).toContain('não é um menu do dono')
+  })
+})

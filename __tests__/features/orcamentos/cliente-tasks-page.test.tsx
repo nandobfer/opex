@@ -2,6 +2,7 @@
 
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 
 /**
  * Tela de Tarefas do portal: o cabeçalho usa o mesmo botão de criação do Dashboard ("Nova tarefa"),
@@ -15,6 +16,10 @@ const mocks = vi.hoisted(() => ({
     tasks: {} as { data?: { tasks: unknown[] }; isLoading: boolean; isFetching: boolean; error: unknown; refetch: () => void },
 }))
 
+// Slots de plugin (OPE-172).
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
+vi.mock("@/features/orcamentos/portal/ClientePortalContext", () => ({ useClientePortal: () => ({ clientId: "cli1", isAdmin: false }) }))
 vi.mock("framer-motion", async () => (await import("../../helpers/framer-motion")).framerMotionMock())
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock("@/features/orcamentos/portal/hooks", () => ({
@@ -71,5 +76,15 @@ describe("ClienteTasksPage", () => {
         render(<ClienteTasksPage />)
 
         expect(mocks.boardHrefFor?.({ code: "OPX-9" })).toBe("/cliente/tarefa/opx-9")
+    })
+})
+
+describe("ClienteTasksPage: slot de plugin (portal.tasks.header, OPE-172)", () => {
+    afterEach(resetPluginTestRuntime)
+    it("monta o bloco do plugin do cliente no topo da lista, com o clientId", () => {
+        pluginTestRuntime.plugins = [pluginTestEntry("portal.tasks.header")]
+        render(<ClienteTasksPage />)
+        const widget = document.querySelector('[data-plugin-slot="portal.tasks.header"] [data-plugin-contribution="relogio:Widget"]')
+        expect(JSON.parse(widget?.getAttribute("data-props") ?? "null")).toEqual({ clientId: "cli1" })
     })
 })

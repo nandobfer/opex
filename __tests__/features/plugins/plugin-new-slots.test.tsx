@@ -29,7 +29,9 @@ vi.mock('@/features/orcamentos/portal/components/ClienteCommentsSection', () => 
 vi.mock('@/features/tasks/components/detail/TaskDetailSections', () => ({ TaskDescription: () => <p>descrição</p>, TaskTechnicalSpec: () => null }))
 
 import { ClienteTaskTabs, type ClienteTaskTabId } from '@/features/orcamentos/portal/components/ClienteTaskTabs'
-import { pluginNavSection } from '@/features/plugins/client/usePluginNav'
+import { navWithPluginItems, pluginNavSection } from '@/features/plugins/client/usePluginNav'
+import { APP_NAV } from '@/features/layout/navigation'
+import { isNavGroup } from '@/features/layout/types'
 
 function Tabs() {
   const [tab, setTab] = React.useState<ClienteTaskTabId>('description')
@@ -49,5 +51,26 @@ describe('slots novos', () => {
     const section = pluginNavSection([{ id: 'painel', nav: [{ label: 'Painel', page: 'resumo', icon: 'Puzzle' }] }] as never, 'client')
     expect(section?.items.map((item) => item.href)).toEqual(['/cliente/x/painel/resumo'])
     expect(pluginNavSection([{ id: 'relogio', nav: [{ label: 'Hora', page: '', icon: 'Puzzle' }] }] as never)?.items[0]?.href).toBe('/x/relogio')
+  })
+})
+
+describe('menus dentro de menus (OPE-172, rodada 4)', () => {
+  const groupItems = (sections: ReturnType<typeof navWithPluginItems>, id: string) => {
+    const group = sections.flatMap((section) => section.items).find((entry) => isNavGroup(entry) && entry.id === id)
+    return group && isNavGroup(group) ? group.items.map((item) => item.label) : []
+  }
+
+  it('item com slot de menu aninhado entra dentro do grupo; sem slot, vai para a seção Plugins', () => {
+    const entries = [{ id: 'relogio', nav: [{ label: 'Hora certa', page: 'hora', icon: 'Puzzle', slot: 'sidebar.nav.agentes' }, { label: 'Notas', page: 'notas', icon: 'Puzzle', slot: 'sidebar.nav.configuracoes' }, { label: 'Solto', page: 'solto', icon: 'Puzzle' }] }] as never
+    const sections = navWithPluginItems(APP_NAV, entries)
+    expect(groupItems(sections, 'agentes').at(-1)).toBe('Hora certa')
+    expect(groupItems(sections, 'configuracoes').at(-1)).toBe('Notas')
+    expect(sections.at(-1)).toMatchObject({ id: 'plugins', items: [expect.objectContaining({ label: 'Solto', href: '/x/relogio/solto' })] })
+    // O menu original não é alterado.
+    expect(groupItems(APP_NAV, 'agentes')).not.toContain('Hora certa')
+  })
+
+  it('sem itens de plugin, o menu é o mesmo objeto (sem seção vazia)', () => {
+    expect(navWithPluginItems(APP_NAV, [])).toBe(APP_NAV)
   })
 })

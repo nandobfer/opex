@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   plugins: new Map<string, Record<string, unknown>>(),
   approve: vi.fn(async () => undefined),
   sendMessage: vi.fn(async () => ({ id: 'm1' })),
+  setArchived: vi.fn(async (_id: string, archived: boolean) => ({ archived, changed: true })),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
@@ -37,6 +38,7 @@ vi.mock('@/features/plugins/server/kernel/registries', () => ({
 vi.mock('@/features/plugins/server/service', () => ({
   getPlugin: async (id: string) => ({ id }),
   findPlugin: async (id: string) => mocks.plugins.get(id) ?? null,
+  setPluginArchived: mocks.setArchived,
 }))
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: {} }))
 vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: {} }))
@@ -55,6 +57,8 @@ import { POST as sendOpexMessage } from '@/app/api/opex/sessions/[id]/messages/r
 import { POST as approveFromOwner } from '@/app/api/plugins/[id]/approve/route'
 import { GET as ownerLogs, POST as ownerClientError } from '@/app/api/plugins/[id]/logs/route'
 import { POST as portalClientError } from '@/app/api/cliente/plugins/[id]/logs/route'
+import { POST as archiveFromOwner } from '@/app/api/plugins/[id]/archive/route'
+import { POST as archiveFromPortal } from '@/app/api/cliente/plugins/[id]/archive/route'
 
 const COOKIE = 'opex_plugin_preview'
 const request = (url: string, init: { method?: string; cookie?: string; body?: unknown } = {}) =>
@@ -147,10 +151,35 @@ describe('POST /api/cliente/plugins/[id]/approve (portal)', () => {
     expect(mocks.approve).not.toHaveBeenCalled()
   })
 
+  it('plugin arquivado não aprova a prévia (409)', async () => {
+    mocks.plugins.set('painel', { ...mocks.plugins.get('painel')!, name: 'Painel', archivedAt: new Date() })
+    const response = await approve('painel')
+    expect(response.status).toBe(409)
+    expect(mocks.approve).not.toHaveBeenCalled()
+  })
+
   it('sem prévia aguardando aprovação dá 409', async () => {
     mocks.plugins.set('painel', { ...mocks.plugins.get('painel')!, previewVersionId: null, previewWorkbenchId: null })
     expect((await approve('painel')).status).toBe(409)
     expect(mocks.approve).not.toHaveBeenCalled()
+  })
+})
+
+describe('POST .../plugins/[id]/archive (OPE-172, rodada 4)', () => {
+  it('o dono arquiva com o ator local', async () => {
+    const response = await archiveFromOwner(request('/api/plugins/relogio/archive', { method: 'POST', body: { archived: true } }), { params: Promise.resolve({ id: 'relogio' }) })
+    expect(response.status).toBe(200)
+    expect(mocks.setArchived).toHaveBeenCalledWith('relogio', true, 'local')
+  })
+
+  it('o admin do cliente arquiva no escopo do próprio cliente; não admin recebe 403; corpo inválido 400', async () => {
+    const call = (body: unknown) => archiveFromPortal(request('/api/cliente/plugins/painel/archive', { method: 'POST', body }), { params: Promise.resolve({ id: 'painel' }) })
+    expect((await call({ archived: false })).status).toBe(200)
+    expect(mocks.setArchived).toHaveBeenCalledWith('painel', false, 'u1', { kind: 'client', clientId: 'cli1' })
+    expect((await call({ archived: 'sim' })).status).toBe(400)
+    mocks.actor = { ...mocks.actor, isAdmin: false }
+    expect((await call({ archived: true })).status).toBe(403)
+    expect(mocks.setArchived).toHaveBeenCalledTimes(1)
   })
 })
 

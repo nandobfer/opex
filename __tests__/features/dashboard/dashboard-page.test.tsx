@@ -186,3 +186,18 @@ describe("DashboardPage: slot de plugin (OPE-172)", () => {
         expect(widget?.getAttribute("data-props")).toBe("{}")
     })
 })
+
+describe("DashboardPage: slots dentro das seções (OPE-172, rodada 4)", () => {
+    afterEach(resetPluginTestRuntime)
+    it.each([
+        ["dashboard.section.tarefas", "Visão geral de tarefas"],
+        ["dashboard.section.financeiro", "Financeiro"],
+        ["dashboard.section.horas", "Horas agênticas"],
+        ["dashboard.section.central", "Central de desenvolvimento"],
+    ])("%s monta dentro da seção %s", (slot, heading) => {
+        pluginTestRuntime.plugins = [pluginTestEntry(slot)]
+        render(<DashboardPage />)
+        const section = screen.getByRole("heading", { name: heading }).closest("section")
+        expect(section?.querySelector(`[data-plugin-slot="${slot}"] [data-plugin-contribution="relogio:Widget"]`)).toBeTruthy()
+    })
+})

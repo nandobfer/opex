@@ -15,7 +15,7 @@ import { RepoIndexProvider } from '@/features/github/components/RepoIndexProvide
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/github/hooks/useGithub', () => ({ useGithubRepoIndex: () => new Map() }))
 vi.mock('@/features/repository-recency/hooks', () => ({ useOwnerRepoRecents: () => ({ recents: [], record: vi.fn() }) }))
-vi.mock('@/features/plugins/hooks/usePlugins', () => ({ usePlugins: () => ({ data: [{ id: 'relogio', name: 'Relógio', clientId: null }] }) }))
+vi.mock('@/features/plugins/hooks/usePlugins', () => ({ usePlugins: () => ({ data: [{ id: 'relogio', name: 'Relógio', clientId: null, archivedAt: null }, { id: 'velho', name: 'Velho arquivado', clientId: null, archivedAt: '2026-11-19T12:00:00.000Z' }] }) }))
 vi.mock('@/features/orcamentos/hooks/useOrcamentos', () => ({ useOrcamentoClients: () => ({ data: [{ id: 'c'.repeat(24), name: 'ACME' }] }) }))
 
 import { TaskForm } from '@/features/tasks/components/TaskForm'
@@ -54,6 +54,15 @@ describe('alvo do plugin no formulário', () => {
     submit()
     expect(await screen.findByText('Escolha o cliente do plugin')).toBeTruthy()
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+})
+
+describe('plugin arquivado (OPE-172, rodada 4)', () => {
+  it('o seletor de plugin não oferece os arquivados', async () => {
+    renderForm({ scope: 'owner', clientId: null, pluginId: 'relogio' })
+    fireEvent.click(screen.getByText('Relógio'))
+    expect(await screen.findByRole('listbox')).toBeTruthy()
+    expect(screen.queryByText('Velho arquivado')).toBeNull()
   })
 })
 
