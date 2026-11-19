@@ -4,7 +4,7 @@ import { pushTaskToIssue } from "@/features/github/server/task-sync"
 import { loadTaskTagsSettings } from "@/features/ai/server/settings"
 import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "@/features/tasks/constants"
 import { applyTaskFilters, DEFAULT_TASK_FILTERS } from "@/features/tasks/filters"
-import { createTaskSchema, moveTaskSchema, updateTaskEstimateSchema, updateTaskSchema } from "@/features/tasks/schemas"
+import { createTaskSchema, moveTaskSchema, taskPluginTargetSchema, updateTaskEstimateSchema, updateTaskSchema } from "@/features/tasks/schemas"
 import { firstBoardColumnKey, getBoard } from "@/features/tasks/server/columns"
 import { addComment, deleteTask, getTask, getTaskOptions, listTasks, moveTask, setTaskArchived, updateTask, updateTaskEstimate } from "@/features/tasks/server/service"
 import { runAfterResponse } from "@/lib/after-response"
@@ -120,8 +120,12 @@ export const taskTools = [
             title: z.string(),
             description: z.string().optional().describe("Markdown, com o contexto que o usuário deu"),
             technicalSpec: z.string().optional().describe("Especificação técnica em Markdown (ex.: seções Critérios de aceite e Localização com o que o usuário disse, sem inventar)"),
-            taskType: z.enum(TASK_TYPES).nullable().optional(),
+            taskType: z.enum(TASK_TYPES).nullable().optional().describe('"plugin" (OPE-172): a mesa gera e publica uma versão de plugin, sem PR, build nem deploy; exige pluginTarget'),
             priority: z.enum(TASK_PRIORITIES).optional(),
+            pluginTarget: taskPluginTargetSchema
+                .nullable()
+                .optional()
+                .describe('Só no tipo plugin: scope "owner" (app do dono; servidor + interface) ou "client" (portal de um cliente; só interface, com clientId) e, opcionalmente, pluginId de um plugin existente a alterar (list_plugins)'),
             chatFileIds: z.array(z.string()).max(50).optional().describe("fileIds de arquivos do chat a anexar (ex.: prints do problema)"),
         }),
         summarize: (input) => `Criar a tarefa "${input.title}" (com issue no GitHub)${input.chatFileIds?.length ? ` com ${input.chatFileIds.length} anexo(s)` : ""}`,
@@ -138,7 +142,7 @@ export const taskTools = [
         group: "tasks",
         label: "Editar tarefa",
         risk: "write",
-        description: "Altera título, descrição, especificação técnica, tipo, prioridade, projeto ou o fluxo da mesa (preview/auto_pr; null = padrão da central) de uma tarefa. Envie só os campos que mudam.",
+        description: "Altera título, descrição, especificação técnica, tipo (com o alvo do plugin no tipo plugin), prioridade, projeto ou o fluxo da mesa (preview/auto_pr; null = padrão da central) de uma tarefa. Envie só os campos que mudam.",
         input: z.object({
             task: taskRefSchema,
             title: z.string().optional(),
@@ -146,6 +150,7 @@ export const taskTools = [
             technicalSpec: z.string().optional(),
             taskType: z.enum(TASK_TYPES).nullable().optional(),
             priority: z.enum(TASK_PRIORITIES).optional(),
+            pluginTarget: taskPluginTargetSchema.nullable().optional().describe("Só no tipo plugin: escopo, clientId e pluginId (opcional)"),
             projectId: z.string().optional(),
             agenticFlow: z.enum(TASK_AGENTIC_FLOWS).nullable().optional(),
         }),

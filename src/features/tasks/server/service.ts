@@ -12,7 +12,7 @@ import { clientChannel } from "@/lib/pusher/channel-names"
 import { planAfterRefinementLabel, TASK_AGENTIC_FLOW_INHERIT_LABEL, TASK_AGENTIC_FLOW_LABELS, TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASKS_UPDATED_EVENT, type TaskAgenticFlow, type TaskPriority, type TaskType } from "../constants"
 import { getBoard } from "./columns"
 import { formatLineComment, parseLineComment, TASK_COMMENT_MAX } from "../line-comments/format"
-import type { BulkTaskResult, BulkTasksInput, CommentInput, CreateTaskInput, MoveTaskInput, UpdateTaskEstimateInput, UpdateTaskInput } from "../schemas"
+import { pluginTargetIssue, type BulkTaskResult, type BulkTasksInput, type CommentInput, type CreateTaskInput, type MoveTaskInput, type TaskPluginTarget, type UpdateTaskEstimateInput, type UpdateTaskInput } from "../schemas"
 import type { ProjectRef, TaskDetailDto, TaskDto, TaskEstimate, TaskHistoryEntry, TaskListDto, TaskOptionsDto, TaskTimeLog } from "../types"
 import { computeClientEstimate } from "@/features/orcamentos/logic"
 import { CLIENTE_TASKS_UPDATED_EVENT } from "@/features/orcamentos/constants"
@@ -65,6 +65,7 @@ export function toTaskDto(task: IDevTask & { _id: unknown }, project: IProject |
         estimate: task.estimate ? toEstimateDto(task.estimate) : null,
         agenticFlow: (task.agenticFlow as TaskAgenticFlow | null) ?? null,
         planAfterRefinement: typeof task.planAfterRefinement === "boolean" ? task.planAfterRefinement : null,
+        pluginTarget: task.taskType === "plugin" && task.pluginTarget ? { scope: task.pluginTarget.scope, clientId: task.pluginTarget.clientId ?? null, pluginId: task.pluginTarget.pluginId ?? null } : null,
         createdAt: task.createdAt ? new Date(task.createdAt).toISOString() : null,
         updatedAt: task.updatedAt ? new Date(task.updatedAt).toISOString() : null,
     }
@@ -335,11 +336,26 @@ export interface TaskEstimateInput {
     model: string | null
 }
 
+/**
+ * Alvo do plugin gravado na tarefa (OPE-172). Só o tipo Plugin tem alvo; tarefa vinda do portal é
+ * sempre do escopo do próprio cliente. Sem alvo válido no tipo Plugin, recusa em pt-BR.
+ */
+export function resolvePluginTarget(taskType: string | null, target: TaskPluginTarget | null, taskClientId: string | null): IDevTask["pluginTarget"] {
+    if (taskType !== "plugin") return null
+    const effective: TaskPluginTarget | null = taskClientId ? { scope: "client", clientId: taskClientId, pluginId: target?.pluginId ?? null } : target
+    const issue = pluginTargetIssue(taskType, effective)
+    if (issue) throw new DomainError(400, issue.message, "TASK_PLUGIN_TARGET")
+    return { scope: effective!.scope, clientId: effective!.scope === "client" ? (effective!.clientId ?? null) : null, pluginId: effective!.pluginId ?? null }
+}
+
+const pluginTargetLabel = (target: IDevTask["pluginTarget"]) => (target ? `${target.scope === "client" ? "cliente" : "dono"}${target.pluginId ? ` · ${target.pluginId}` : " · novo"}` : null)
+
 export async function createTask(input: CreateTaskInput, options: CreateTaskOptions): Promise<TaskDto> {
     await dbConnect()
     const project = await Project.findById(input.projectId).lean()
     if (!project) throw new DomainError(400, "Projeto inválido", "PROJECT_NOT_FOUND")
     await assertColumn(input.columnId)
+    const pluginTarget = resolvePluginTarget(input.taskType ?? null, input.pluginTarget ?? null, options.clientId ?? null)
     const code = await nextProjectCode(project)
     const order = options.order ?? (await endOrder(input.columnId))
     const task = await DevTask.create({
@@ -351,6 +367,7 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
         description: input.description?.trim() || null,
         technicalSpec: input.technicalSpec?.trim() || null,
         taskType: input.taskType ?? null,
+        pluginTarget,
         priority: input.priority ?? "medium",
         archived: false,
         clientId: options.clientId ?? null,
@@ -397,6 +414,16 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
         set.taskType = input.taskType
         before.tipo = task.taskType ? TASK_TYPE_LABELS[task.taskType as TaskType] : null
         after.tipo = input.taskType ? TASK_TYPE_LABELS[input.taskType] : null
+    }
+    if (input.taskType !== undefined || input.pluginTarget !== undefined) {
+        const nextType = input.taskType !== undefined ? input.taskType : task.taskType
+        const nextTarget = input.pluginTarget !== undefined ? input.pluginTarget : (task.pluginTarget ?? null)
+        const resolved = resolvePluginTarget(nextType ?? null, nextTarget, task.clientId ?? null)
+        if (JSON.stringify(resolved) !== JSON.stringify(task.pluginTarget ?? null)) {
+            set.pluginTarget = resolved
+            before.plugin = pluginTargetLabel(task.pluginTarget ?? null)
+            after.plugin = pluginTargetLabel(resolved)
+        }
     }
     if (input.priority !== undefined) {
         set.priority = input.priority

@@ -32,6 +32,8 @@ export interface IDevTask {
     description: string | null
     technicalSpec: string | null
     taskType: string | null
+    /** Tarefa do tipo Plugin (OPE-172): escopo, cliente e o plugin existente a alterar (opcional). */
+    pluginTarget?: { scope: "owner" | "client"; clientId: string | null; pluginId: string | null } | null
     priority: string
     archived: boolean
     /**
@@ -91,6 +93,7 @@ const DevTaskSchema = new Schema<IDevTask>(
         description: { type: String, default: null },
         technicalSpec: { type: String, default: null },
         taskType: { type: String, default: null },
+        pluginTarget: { type: Schema.Types.Mixed, default: null },
         priority: { type: String, default: "medium" },
         archived: { type: Boolean, default: false },
         clientId: { type: String, default: null, index: true },
