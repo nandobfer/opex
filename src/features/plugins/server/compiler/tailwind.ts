@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises"
 import { createRequire } from "node:module"
 import path from "node:path"
 import type { PluginSourceFile } from "../../manifest"
+import { compilerUnavailable } from "./unavailable"
 
 /**
  * CSS dos plugins (OPE-172). O Tailwind 4 do app gera as classes no build: uma classe que só existe
@@ -34,7 +35,8 @@ async function getCompiler(): Promise<Compiler> {
         })
     })().catch((error: unknown) => {
         compilerPromise = null
-        throw error
+        // Tailwind ou as folhas de estilo dele ausentes: falha da instalação, não das classes do plugin.
+        throw compilerUnavailable("Tailwind", error)
     })
     return compilerPromise
 }

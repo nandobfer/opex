@@ -526,6 +526,42 @@ async function afterPluginImplementation(loaded: Loaded): Promise<TurnPlan | nul
 }
 
 /**
+ * Implementação concluída: o Agente Adversário revisa com contexto limpo antes da prévia/PR (a
+ * resposta do implementador segue no turno: traz as contestações de uma correção); sem ele, segue.
+ */
+async function implementationDone(loaded: Loaded, implementerText: string): Promise<TurnPlan | null> {
+    if (await (await adversaryModule()).adversaryApplies(loaded.doc.centralId)) {
+        publishWorkbenchEvent(String(loaded.doc._id), { type: "notice", level: "info", message: "Implementação concluída. O agente adversário vai revisar o código antes de seguir." })
+        return { stage: "adversarial_review", text: implementerText }
+    }
+    return afterImplementation(loaded)
+}
+
+/**
+ * Mesa Plugin (OPE-172), depois do turno de implementação: o Opex lê as fontes da pasta, valida o
+ * manifesto e compila a versão (Rolldown). Problema do plugin volta ao agente (até o limite);
+ * compilador indisponível no servidor (`PLUGIN_COMPILER_UNAVAILABLE`) falha a etapa e deixa
+ * `plugin.compilePending`, para o Tentar novamente refazer só a compilação, sem o agente.
+ */
+async function pluginCompileTurn(loaded: Loaded, implementerText: string): Promise<TurnPlan | null> {
+    const { doc } = loaded
+    const id = String(doc._id)
+    const notice = (level: "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": true } })
+    const fresh = (await AgenticWorkbench.findById(id).lean()) ?? doc
+    const draft = await (await pluginFlow()).buildPluginDraft(fresh)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": false } })
+    if (!draft.ok) {
+        const attempts = (fresh.plugin?.compileAttempts ?? 0) + 1
+        if (attempts > PLUGIN_COMPILE_ATTEMPTS_MAX) throw new Error(`A versão do plugin não compilou depois de ${PLUGIN_COMPILE_ATTEMPTS_MAX} correções: ${draft.issues.join("; ")}`)
+        notice("warn", `A versão do plugin não foi gerada (${draft.issues.length} problema(s)); pedindo a correção ao agente (${attempts}/${PLUGIN_COMPILE_ATTEMPTS_MAX}).`)
+        return { stage: "implementing", text: pluginCompileFixPrompt(draft.issues, contextOf(loaded).worktreePath) }
+    }
+    notice("success", `Versão ${draft.number} do plugin compilada.`)
+    return implementationDone(await loadAll(id), implementerText)
+}
+
+/**
  * Testes do plugin (etapa "Testes do plugin", OPE-172): o Opex roda `npx vitest run` na pasta de
  * trabalho pelo shell do OpenCode (sem agente). Passou → consolida a versão como `stable` e conclui a
  * mesa; falhou → turno de correção do agente desenvolvedor, até o limite de tentativas do CI.
@@ -698,6 +734,8 @@ interface TurnPlan {
     build?: { method: "local" | "github"; port: number; local: boolean; docker: PreviewDocker | null }
     /** Anexos da mensagem do usuário (`agentic_files`): vão no prompt deste turno (os encadeados não reenviam). */
     fileIds?: string[]
+    /** Mesa Plugin: refaz só a compilação da versão (sem turno do agente; o texto é a resposta anterior). */
+    compileOnly?: boolean
 }
 
 /** Log do build (aba Build): melhor esforço — uma falha no registro nunca derruba o build. */
@@ -803,6 +841,12 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                       notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
                       focus: { taskId: loaded.doc.taskId, code: loaded.doc.taskCode, title: loaded.doc.taskTitle, stage: WORKBENCH_STAGE_LABELS[stage] ?? stage, workbench: loaded.projectName },
                   })
+            if (turn.stage === "implementing" && turn.compileOnly && isPluginDoc(loaded.doc)) {
+                // Mesa Plugin (OPE-172): o compilador estava indisponível; refaz só a compilação (sem agente).
+                next = await pluginCompileTurn(await loadAll(id), turn.text)
+                turn = controller.signal.aborted ? null : next
+                continue
+            }
             if (turn.stage === "fixing_ci" && isPluginDoc(loaded.doc)) {
                 // Mesa Plugin (OPE-172): testes do plugin no host e consolidação (sem turno do agente).
                 next = await pluginTestsTurn(await loadAll(id))
@@ -1218,25 +1262,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
                 await client.session.move({ sessionID: doc.sessionId!, directory: ctx.worktreePath })
             }
             await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: ctx.worktreePath } })
-            if (isPluginDoc(doc)) {
-                // Mesa Plugin (OPE-172): o Opex lê as fontes da pasta, valida o manifesto e compila a versão (Rolldown).
-                const fresh = (await AgenticWorkbench.findById(id).lean()) ?? doc
-                const draft = await (await pluginFlow()).buildPluginDraft(fresh)
-                if (!draft.ok) {
-                    const attempts = (fresh.plugin?.compileAttempts ?? 0) + 1
-                    if (attempts > PLUGIN_COMPILE_ATTEMPTS_MAX) throw new Error(`A versão do plugin não compilou depois de ${PLUGIN_COMPILE_ATTEMPTS_MAX} correções: ${draft.issues.join("; ")}`)
-                    notice("warn", `A versão do plugin não foi gerada (${draft.issues.length} problema(s)); pedindo a correção ao agente (${attempts}/${PLUGIN_COMPILE_ATTEMPTS_MAX}).`)
-                    return { stage: "implementing", text: pluginCompileFixPrompt(draft.issues, ctx.worktreePath) }
-                }
-                notice("success", `Versão ${draft.number} do plugin compilada.`)
-            }
-            // Agente Adversário: revisão com contexto limpo antes da prévia/PR (a resposta do
-            // implementador segue no turno: traz as contestações de uma correção).
-            if (await (await adversaryModule()).adversaryApplies(doc.centralId)) {
-                notice("info", "Implementação concluída. O agente adversário vai revisar o código antes de seguir.")
-                return { stage: "adversarial_review", text: result.text }
-            }
-            return afterImplementation(loaded)
+            if (isPluginDoc(doc)) return pluginCompileTurn(loaded, result.text)
+            return implementationDone(loaded, result.text)
         }
         case "building":
             // O build roda em `buildTurn` (não é um turno comum do agente).
@@ -2198,6 +2225,11 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
     metricEvent(doc, METRIC_EVENT.retried, { stage })
+    if (stage === "implementing" && isPluginDoc(doc) && doc.plugin?.compilePending) {
+        // Mesa Plugin (OPE-172): o turno do agente terminou e só a compilação falhou (compilador indisponível).
+        await launchTurn({ ...loaded, doc }, { stage, text: "Implementação concluída; a versão do plugin foi recompilada pelo Opex.", compileOnly: true }, { userText: "Tentar a compilação do plugin novamente" })
+        return getWorkbench(id)
+    }
     if (stage === "fixing_ci" && isPluginDoc(doc)) {
         // Mesa Plugin (OPE-172): refaz os testes do plugin e a consolidação (sem turno do agente).
         await launchTurn({ ...loaded, doc }, { stage, text: "" }, { userText: "Tentar os testes e a consolidação do plugin novamente" })

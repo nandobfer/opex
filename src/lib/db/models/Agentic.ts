@@ -125,6 +125,11 @@ export interface IWorkbenchPlugin {
     approved: boolean
     compileAttempts: number
     testAttempts: number
+    /**
+     * O turno do agente terminou e a compilação pelo Opex ainda não: fica `true` se o compilador
+     * estiver indisponível no servidor, e o Tentar novamente refaz só a compilação.
+     */
+    compilePending?: boolean
 }
 
 export interface IAgenticWorkbench {

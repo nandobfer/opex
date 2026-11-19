@@ -218,6 +218,52 @@ describe('implementação de uma mesa Plugin', () => {
   })
 })
 
+describe('compilador de plugins indisponível no servidor', () => {
+  beforeEach(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    mocks.runTurn.mockClear()
+  })
+
+  it('falha a etapa sem mandar ao agente; o Tentar novamente só recompila e segue para a prévia', async () => {
+    const { compilerUnavailable } = await import('@/features/plugins/server/compiler/unavailable')
+    mocks.buildDraft.mockRejectedValueOnce(compilerUnavailable('Rolldown', new Error('Cannot find native binding.')))
+    const wb = await workbench()
+    await implement(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]).toMatchObject({ stage: 'implementing', runState: 'failed' }))
+    expect(model.docs[0]!.error).toBe('O compilador de plugins não está disponível neste servidor (Rolldown: Cannot find native binding.). Não é um problema do plugin: atualize a imagem do Opex e use Tentar novamente.')
+    expect(model.docs[0]!.plugin).toMatchObject({ compilePending: true })
+    expect(stages()).toEqual(['implementing'])
+
+    await retry(wb._id)
+    await waitForStage('preview')
+    // Nenhum turno novo do agente: só a compilação foi refeita.
+    expect(stages()).toEqual(['implementing'])
+    expect(mocks.buildDraft).toHaveBeenCalledTimes(2)
+    expect(model.docs[0]!.plugin).toMatchObject({ compilePending: false, draftVersionId: 'v1' })
+    expect(model.docs[0]!.previewUrl).toBe('/dashboard')
+  })
+
+  it('problema do plugin continua indo ao agente e não deixa a compilação pendente', async () => {
+    mocks.buildDraft.mockResolvedValueOnce({ ok: false, issues: ['Erro de compilação: Unexpected token'] })
+    const wb = await workbench()
+    await implement(wb._id)
+    await waitForStage('preview')
+    expect(stages()).toEqual(['implementing', 'implementing'])
+    expect(model.docs[0]!.plugin).toMatchObject({ compilePending: false })
+  })
+
+  it('outra falha na implementação mantém a retentativa pelo agente', async () => {
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Sessão caiu', costUsd: 0, durationMs: 1 })
+    const wb = await workbench()
+    await implement(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]).toMatchObject({ stage: 'implementing', runState: 'failed' }))
+    await retry(wb._id)
+    await waitForStage('preview')
+    expect(stages()).toEqual(['implementing', 'implementing'])
+    expect(mocks.runTurn.mock.calls[1][1].text).toContain('A execução anterior desta etapa não terminou (Sessão caiu)')
+  })
+})
+
 describe('aprovação, testes do plugin e consolidação', () => {
   beforeEach(async () => {
     await new Promise((resolve) => setTimeout(resolve, 50))

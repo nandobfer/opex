@@ -2,6 +2,7 @@ import { createHash } from "node:crypto"
 import type { PluginManifest, PluginSourceFile } from "../../manifest"
 import { isNodeBuiltin, isSharedModule, isUnknownSharedModule, sharedMarker } from "../../shared-modules"
 import { compilePluginCss } from "./tailwind"
+import { compilerUnavailable, isCompilerUnavailable } from "./unavailable"
 import { createVirtualFs } from "./virtual-fs"
 
 /**
@@ -39,7 +40,9 @@ class CompileIssues {
 }
 
 async function bundle(target: "client" | "server", entry: string, files: PluginSourceFile[], issues: CompileIssues): Promise<string | null> {
-    const { rolldown } = await import("rolldown")
+    const { rolldown } = await import("rolldown").catch((error: unknown) => {
+        throw compilerUnavailable("Rolldown", error)
+    })
     const vfs = createVirtualFs(files)
     let build: Awaited<ReturnType<typeof rolldown>> | null = null
     try {
@@ -118,6 +121,7 @@ export async function compilePluginSources(files: PluginSourceFile[], manifest: 
             try {
                 css = await compilePluginCss(files)
             } catch (error) {
+                if (isCompilerUnavailable(error)) throw error
                 issues.add(`Falha ao gerar o CSS do plugin: ${error instanceof Error ? error.message : String(error)}`)
             }
             client = { code, hash: contentHash(code), css, cssHash: css ? contentHash(css) : null }
