@@ -15,30 +15,52 @@ const THEME_FILE = "plugin-sdk/theme.css"
 const SOURCE_EXTENSIONS = /\.(tsx|ts|jsx|js)$/
 
 type Compiler = { build(candidates: string[]): string }
-let compilerPromise: Promise<Compiler> | null = null
+type CompileInputs = { compile: (css: string, options: { base: string; loadStylesheet: (id: string, base: string) => Promise<{ path: string; base: string; content: string }> }) => Promise<Compiler>; css: string; sheets: Map<string, Promise<{ path: string; base: string; content: string }>> }
+let inputsPromise: Promise<CompileInputs> | null = null
 
 async function themeCss(): Promise<string> {
     return readFile(path.join(process.cwd(), THEME_FILE), "utf8")
 }
 
-async function getCompiler(): Promise<Compiler> {
-    compilerPromise ??= (async () => {
+/** Tema e folhas do Tailwind em cache (só leitura de disco); a instância do compilador NÃO é reaproveitada. */
+async function compileInputs(): Promise<CompileInputs> {
+    inputsPromise ??= (async () => {
         const { compile } = await import("tailwindcss")
-        const require = createRequire(path.join(process.cwd(), "package.json"))
         const css = `@import "tailwindcss/theme.css" theme(reference);\n${await themeCss()}\n@import "tailwindcss/utilities.css" layer(utilities);`
-        return compile(css, {
-            base: process.cwd(),
-            loadStylesheet: async (id: string, base: string) => {
-                const file = require.resolve(id, { paths: [base] })
-                return { path: file, base: path.dirname(file), content: await readFile(file, "utf8") }
-            },
-        })
+        return { compile: compile as CompileInputs["compile"], css, sheets: new Map() }
     })().catch((error: unknown) => {
-        compilerPromise = null
-        // Tailwind ou as folhas de estilo dele ausentes: falha da instalação, não das classes do plugin.
+        inputsPromise = null
         throw compilerUnavailable("Tailwind", error)
     })
-    return compilerPromise
+    return inputsPromise
+}
+
+/**
+ * Um compilador NOVO por versão: o `build()` do Tailwind acumula os candidatos já vistos, então uma
+ * instância compartilhada faria o CSS de um plugin levar as classes de todas as compilações anteriores
+ * do processo (e o hash da mesma fonte mudaria com a ordem).
+ */
+async function newCompiler(): Promise<Compiler> {
+    const inputs = await compileInputs()
+    const require = createRequire(path.join(process.cwd(), "package.json"))
+    try {
+        return await inputs.compile(inputs.css, {
+            base: process.cwd(),
+            loadStylesheet: (id: string, base: string) => {
+                const file = require.resolve(id, { paths: [base] })
+                let sheet = inputs.sheets.get(file)
+                if (!sheet) {
+                    sheet = readFile(file, "utf8").then((content) => ({ path: file, base: path.dirname(file), content }))
+                    sheet.catch(() => inputs.sheets.delete(file))
+                    inputs.sheets.set(file, sheet)
+                }
+                return sheet
+            },
+        })
+    } catch (error) {
+        // Tailwind ou as folhas de estilo dele ausentes: falha da instalação, não das classes do plugin.
+        throw compilerUnavailable("Tailwind", error)
+    }
 }
 
 /** Candidatos a classe nas fontes (o Tailwind descarta o que não for utilidade). */
@@ -57,7 +79,7 @@ export function extractClassCandidates(files: PluginSourceFile[]): string[] {
 export async function compilePluginCss(files: PluginSourceFile[]): Promise<string | null> {
     const candidates = extractClassCandidates(files)
     if (!candidates.length) return null
-    const compiler = await getCompiler()
+    const compiler = await newCompiler()
     const css = compiler.build(candidates)
     return /\{/.test(css.replace(/\/\*[\s\S]*?\*\//g, "")) ? css : null
 }

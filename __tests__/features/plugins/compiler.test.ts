@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { compilePluginSources } from '@/features/plugins/server/compiler/rolldown'
-import { extractClassCandidates } from '@/features/plugins/server/compiler/tailwind'
+import { compilePluginCss, extractClassCandidates } from '@/features/plugins/server/compiler/tailwind'
 import { parsePluginManifest, type PluginSourceFile } from '@/features/plugins/manifest'
 
 /**
@@ -85,5 +85,18 @@ describe('extractClassCandidates', () => {
     ])
     expect(candidates).toEqual(expect.arrayContaining(['text-sm', 'bg-card']))
     expect(candidates).not.toContain('text-9xl')
+  })
+})
+
+describe('compilePluginCss: uma compilação não vaza para a seguinte', () => {
+  it('o CSS do segundo plugin não leva a classe do primeiro, e a mesma fonte dá o mesmo CSS', async () => {
+    const a = [{ path: 'client/index.tsx', content: 'export const A = () => <p className="text-red-500">a</p>' }]
+    const b = [{ path: 'client/index.tsx', content: 'export const B = () => <p className="underline">b</p>' }]
+    const cssA = await compilePluginCss(a)
+    const cssB = await compilePluginCss(b)
+    expect(cssA).toContain('text-red-500')
+    expect(cssB).toContain('underline')
+    expect(cssB).not.toContain('text-red-500')
+    expect(await compilePluginCss(b)).toBe(cssB)
   })
 })
