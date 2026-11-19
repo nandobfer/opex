@@ -3,6 +3,8 @@ import { parseBody, withRoute } from "@/lib/api/route"
 import { getLocalUser } from "@/lib/local-user"
 import { sendOpexMessageSchema } from "@/features/opex-agent/schemas"
 import { sendMessage } from "@/features/opex-agent/server/runner"
+import { OWNER_SCOPE } from "@/features/opex-agent/server/scope"
+import { previewListFromRequest } from "@/features/plugins/server/preview-cookie"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -15,5 +17,6 @@ export const dynamic = "force-dynamic"
 export const POST = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, sendOpexMessageSchema)
     if (!body.ok) return body.response
-    return created(await sendMessage(params.id, body.data, getLocalUser().id))
+    // Prévia de plugins ligada neste navegador (OPE-172): o turno usa as ferramentas da versão preview.
+    return created(await sendMessage(params.id, body.data, getLocalUser().id, { ...OWNER_SCOPE, previewPlugins: previewListFromRequest(req) }))
 })

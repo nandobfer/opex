@@ -100,7 +100,7 @@ async function memoriesForTurn(
 
 /** Ferramentas e política do turno, conforme o escopo. */
 async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings): Promise<{ tools: OpexTool[]; overrides: Record<string, boolean> }> {
-    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.disabledTools), overrides: settings.confirmationOverrides }
+    if (scope.kind === "owner") return { tools: enabledOpexTools(settings.disabledTools, new Set(scope.previewPlugins ?? [])), overrides: settings.confirmationOverrides }
     await assertClientOpexEnabled(scope.actor)
     const { names } = await enabledClientToolNamesFor(scope.actor)
     // Portal: catálogo próprio (nomes podem coincidir com os do dono), confirmação pelo padrão do risco.
@@ -111,7 +111,7 @@ async function toolsForTurn(scope: OpexServerScope, settings: OpexAgentSettings)
 type TurnToolMap = ReadonlyMap<string, OpexTool>
 
 function findTool(scope: OpexServerScope, name: string, extra?: TurnToolMap): OpexTool | undefined {
-    return (scope.kind === "owner" ? findOpexTool(name) : findOpexClientServerTool(name)) ?? extra?.get(name)
+    return (scope.kind === "owner" ? findOpexTool(name, new Set(scope.previewPlugins ?? [])) : findOpexClientServerTool(name)) ?? extra?.get(name)
 }
 
 const redactInput = (scope: OpexServerScope, toolName: string, input: unknown, extra?: TurnToolMap) => redactToolInput(findTool(scope, toolName, extra), input)

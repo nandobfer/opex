@@ -337,6 +337,14 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
         logger.error({ err: error }, "[scheduler] Falha no tick dos agentes rotineiros")
     }
 
+    // Plugins do dono (OPE-172): crons registrados pela fiber stable de cada plugin. Ver aicontext/modules/plugins.md.
+    try {
+        const { runPluginCrons } = await import("@/features/plugins/server/crons")
+        await runPluginCrons(now)
+    } catch (error) {
+        logger.error({ err: error }, "[scheduler] Falha nos crons dos plugins")
+    }
+
     return { executed }
 }
 
