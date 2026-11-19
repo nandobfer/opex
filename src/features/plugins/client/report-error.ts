@@ -16,7 +16,11 @@ export function reportPluginClientError(source: PluginSource, entry: Pick<Plugin
     if (reported.has(key)) return
     reported.add(key)
     const stack = error instanceof Error && error.stack ? error.stack.slice(0, 8192) : null
-    void source.api.post(`${source.base}/${entry.id}/logs`, { message, stack, channel: entry.channel, where }).catch(() => undefined)
+    try {
+        void Promise.resolve(source.api.post(`${source.base}/${entry.id}/logs`, { message, stack, channel: entry.channel, where })).catch(() => undefined)
+    } catch {
+        // Sem cliente HTTP utilizável: o erro continua só na tela.
+    }
 }
 
 /** Só para testes. */

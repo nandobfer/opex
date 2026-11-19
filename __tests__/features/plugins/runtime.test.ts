@@ -46,10 +46,10 @@ describe('buildRuntimeManifest', () => {
     expect(on.previewOn).toEqual(['relogio'])
   })
 
-  it('o portal só recebe os plugins do próprio cliente, sem menu', async () => {
+  it('o portal só recebe os plugins do próprio cliente, com o menu do portal (portal.nav)', async () => {
     const result = await buildRuntimeManifest({ kind: 'client', clientId: 'cli1' }, [])
     expect(result.plugins.map((plugin) => plugin.id)).toEqual(['painel'])
-    expect(result.plugins[0]).toMatchObject({ nav: [], bundleUrl: expect.stringMatching(/^\/cliente\/plugins\/bundles\//) })
+    expect(result.plugins[0]).toMatchObject({ nav: [expect.objectContaining({ label: 'Relógio', page: '' })], bundleUrl: expect.stringMatching(/^\/cliente\/plugins\/bundles\//) })
     expect((await buildRuntimeManifest({ kind: 'client', clientId: 'cli2' }, [])).plugins).toEqual([])
   })
 

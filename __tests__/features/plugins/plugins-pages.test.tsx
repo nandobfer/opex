@@ -6,8 +6,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
- * Telas de Plugins (OPE-172): lista com filtros e estados, detalhe com versões, diferença, prévia e
- * rollback (com confirmação e o estado depois da mutação), e a aprovação da prévia no portal.
+ * Telas de Plugins (OPE-172, rodada 3): lista com o nome como link, debug e switch Ativo (confirmação
+ * ao desligar) e o filtro Slot; detalhe só com o switch Ativo, Versões no componente "um item em uso"
+ * (clicar numa consolidada a põe em uso, com confirmação; a prévia não é clicável e traz Ver/Aprovar),
+ * o descritivo de cada mudança (e "Gerar descritivo") e a coluna de logs.
  */
 
 const holder = vi.hoisted(() => ({
@@ -16,30 +18,61 @@ const holder = vi.hoisted(() => ({
   rollback: vi.fn(),
   approve: vi.fn(),
   setActive: vi.fn(),
-  source: { kind: 'owner', clientId: null },
+  preview: vi.fn(async () => ({ previewOn: ['relogio'] })),
+  summary: vi.fn(),
+  source: { kind: 'owner', clientId: null as string | null },
   push: vi.fn(),
+  search: new URLSearchParams(),
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: holder.push }), usePathname: () => '/plugins', useSearchParams: () => new URLSearchParams() }))
-vi.mock('@/lib/api', () => ({ api: {}, apiErrorMessage: (_e: unknown, fallback: string) => fallback, apiErrorCode: () => null, unwrapApi: (v: unknown) => v }))
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: holder.push, replace: (url: string) => (holder.search = new URLSearchParams(url.split('?')[1] ?? '')) }),
+  usePathname: () => '/plugins',
+  useSearchParams: () => holder.search,
+}))
+vi.mock('@/lib/api', () => ({ api: { get: vi.fn(async () => ({ data: { data: [] } })) }, apiErrorMessage: (_e: unknown, fallback: string) => fallback, apiErrorCode: () => null, unwrapApi: (v: unknown) => v }))
 vi.mock('@/features/plugins/client/PluginSourceContext', () => ({ usePluginSource: () => holder.source }))
+vi.mock('@/features/integrations/components/IntegrationConsole', () => ({
+  SEARCH_HIGHLIGHT_LIMIT: 1000,
+  IntegrationConsole: React.forwardRef(function Console() {
+    return <div data-testid="console" />
+  }),
+}))
+vi.mock('@/features/plugins/hooks/usePluginDebugLogs', () => ({ usePluginDebugLogs: () => ({ mode: 'manual', loading: false, error: null, refresh: vi.fn() }) }))
 vi.mock('@/features/plugins/hooks/usePlugins', () => ({
   usePluginsRealtime: () => undefined,
   usePlugins: () => holder.list,
   usePlugin: () => holder.detail,
-  usePluginDiff: () => ({ isPending: false, isError: false, data: { from: { id: 'v1', number: 1 }, to: { id: 'v2', number: 2 }, files: [{ path: 'client/index.tsx', status: 'modified', additions: 1, deletions: 1, patch: '--- a/client/index.tsx\n+++ b/client/index.tsx\n@@ -1 +1 @@\n-antes\n+depois' }] } }),
   usePluginKernel: () => ({ isPending: false, data: { mode: 'full', fibers: [{ pluginId: 'relogio', channel: 'stable', effects: ['tool:plugin_relogio_hora'], warning: null }], tools: [{ pluginId: 'relogio', name: 'plugin_relogio_hora', channel: 'stable' }], routes: [], crons: [] } }),
   usePluginRuntime: () => ({ isPending: false, data: { plugins: [], previewOn: [] } }),
-  useTogglePluginPreview: () => ({ mutate: vi.fn(), isPending: false }),
+  useTogglePluginPreview: () => ({ mutate: vi.fn(), mutateAsync: holder.preview, isPending: false }),
   useRollbackPlugin: () => ({ mutate: holder.rollback, isPending: false }),
   useSetPluginActive: () => ({ mutate: holder.setActive, isPending: false }),
   useApprovePluginPreview: () => ({ mutate: holder.approve, isPending: false }),
+  useGeneratePluginVersionSummary: () => ({ mutate: holder.summary, isPending: false, variables: undefined }),
 }))
 
 import { OwnerPluginDetailPage, OwnerPluginsPage, ClientePluginDetailPage } from '@/features/plugins/components/PluginPages'
 
-const summary = (number: number, state: string, extra: Record<string, unknown> = {}) => ({ id: `v${number}`, number, state, author: 'local', source: { taskId: 't1', taskCode: 'OPE-172', workbenchId: 'wb1' }, baseVersionId: null, tests: ['client/index.test.tsx'], hasServer: true, hasClient: true, createdAt: '2026-11-19T12:00:00.000Z', promotedAt: state === 'draft' || state === 'preview' ? null : '2026-11-19T12:00:00.000Z', ...extra })
+const summary = (number: number, state: string, extra: Record<string, unknown> = {}) => ({
+  id: `v${number}`,
+  number,
+  state,
+  author: 'local',
+  source: { taskId: 't1', taskCode: 'OPE-172', workbenchId: 'wb1' },
+  baseVersionId: null,
+  tests: ['client/index.test.tsx'],
+  hasServer: true,
+  hasClient: true,
+  createdAt: '2026-11-19T12:00:00.000Z',
+  promotedAt: state === 'draft' || state === 'preview' ? null : '2026-11-19T12:00:00.000Z',
+  slots: ['dashboard.widgets'],
+  previewPath: '/dashboard',
+  changeSummary: `Mudança da v${number}`,
+  changeSummarySource: 'agent',
+  ...extra,
+})
 const plugin = (overrides: Record<string, unknown> = {}) => ({
   id: 'relogio',
   name: 'Relógio',
@@ -51,6 +84,7 @@ const plugin = (overrides: Record<string, unknown> = {}) => ({
   active: true,
   stable: summary(2, 'stable'),
   preview: summary(3, 'preview'),
+  slots: ['dashboard.widgets'],
   previewWorkbenchId: 'wb1',
   runtimeError: null,
   createdAt: '2026-11-19T12:00:00.000Z',
@@ -62,8 +96,9 @@ beforeEach(() => {
   holder.source = { kind: 'owner', clientId: null }
   holder.list = { data: [], isLoading: false, isError: false, refetch: vi.fn() }
   holder.detail = { data: null, isPending: false, isError: false, error: null, refetch: vi.fn() }
-  holder.rollback.mockReset()
-  holder.approve.mockReset()
+  holder.search = new URLSearchParams()
+  for (const fn of [holder.rollback, holder.approve, holder.setActive, holder.summary, holder.push]) fn.mockReset()
+  holder.preview.mockClear()
 })
 
 describe('lista de plugins', () => {
@@ -73,16 +108,47 @@ describe('lista de plugins', () => {
     expect(screen.getByText(/Crie uma tarefa do tipo Plugin/)).toBeTruthy()
   })
 
-  it('lista com escopo, versões e erro de runtime; abrir vai ao detalhe', () => {
-    holder.list.data = [plugin({ runtimeError: { channel: 'preview', versionId: 'v3', message: 'quebrou', at: '2026-11-19T12:00:00.000Z' } }), plugin({ id: 'painel', name: 'Painel', scope: 'client', clientName: 'ACME', preview: null })]
+  it('o nome é o link para a página; sem ícone de abrir; debug ao lado do switch Ativo', async () => {
+    holder.list.data = [plugin({ runtimeError: { channel: 'preview', versionId: 'v3', message: 'quebrou', at: '2026-11-19T12:00:00.000Z' } }), plugin({ id: 'painel', name: 'Painel', scope: 'client', clientName: 'ACME', preview: null, slots: ['portal.dashboard.widgets'] })]
     render(<OwnerPluginsPage />)
     const row = within(screen.getByTestId('plugin-row-relogio'))
+    expect(row.getByRole('link', { name: 'Relógio' }).getAttribute('href')).toBe('/plugins/relogio')
+    expect(row.queryByRole('button', { name: 'Visualizar' })).toBeNull()
     expect(row.getByText('Prévia: quebrou')).toBeTruthy()
-    expect(row.getByText('v2')).toBeTruthy()
-    expect(row.getByText('v3')).toBeTruthy()
     expect(within(screen.getByTestId('plugin-row-painel')).getByText('· ACME')).toBeTruthy()
-    fireEvent.click(row.getByRole('button', { name: 'Visualizar' }))
-    expect(holder.push).toHaveBeenCalledWith('/plugins/relogio')
+    expect((row.getByRole('checkbox', { name: 'Desativar Relógio' }) as HTMLInputElement).checked).toBe(true)
+
+    fireEvent.click(row.getByRole('button', { name: /Debug|Logs/ }))
+    expect(await screen.findByText('Logs — Relógio')).toBeTruthy()
+  })
+
+  it('desligar pede confirmação; ligar é direto', async () => {
+    holder.list.data = [plugin(), plugin({ id: 'painel', name: 'Painel', active: false })]
+    render(<OwnerPluginsPage />)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Ativar Painel' }))
+    expect(holder.setActive).toHaveBeenCalledWith(true)
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Desativar Relógio' }))
+    expect(holder.setActive).toHaveBeenCalledTimes(1)
+    fireEvent.click(await screen.findByRole('button', { name: 'Desativar' }))
+    expect(holder.setActive).toHaveBeenLastCalledWith(false)
+  })
+
+  it('filtro Slot mostra só os plugins do slot escolhido', () => {
+    holder.list.data = [plugin(), plugin({ id: 'mesa', name: 'Na mesa', slots: ['workbench.panel'] })]
+    window.history.replaceState(null, '', '/plugins?slots=workbench.panel')
+    render(<OwnerPluginsPage />)
+    expect(screen.queryByTestId('plugin-row-relogio')).toBeNull()
+    expect(screen.getByTestId('plugin-row-mesa')).toBeTruthy()
+    window.history.replaceState(null, '', '/plugins')
+  })
+
+  it('portal: switch sem debug', () => {
+    holder.source = { kind: 'client', clientId: 'cli1' }
+    holder.list.data = [plugin({ scope: 'client', clientId: 'cli1', clientName: 'ACME' })]
+    render(<OwnerPluginsPage />)
+    const row = within(screen.getByTestId('plugin-row-relogio'))
+    expect(row.getByRole('checkbox')).toBeTruthy()
+    expect(row.queryByRole('button', { name: /Debug|Logs/ })).toBeNull()
   })
 
   it('erro com tentar novamente', () => {
@@ -91,30 +157,72 @@ describe('lista de plugins', () => {
     fireEvent.click(screen.getByRole('button', { name: /Tentar novamente/ }))
     expect(holder.list.refetch).toHaveBeenCalled()
   })
+
+  it('carregando: esqueleto no formato da linha', () => {
+    holder.list = { data: [], isLoading: true, isError: false, refetch: vi.fn() }
+    render(<OwnerPluginsPage />)
+    expect(screen.getByTestId('plugin-rows-skeleton')).toBeTruthy()
+  })
 })
 
 describe('detalhe do plugin', () => {
-  it('mostra as versões, a diferença, o runtime e faz rollback com confirmação', async () => {
-    holder.detail.data = { ...plugin(), versions: [summary(3, 'preview'), summary(2, 'stable'), summary(1, 'archived')] }
+  const versions = () => [summary(3, 'preview'), summary(2, 'stable'), summary(1, 'archived', { changeSummary: null, changeSummarySource: null })]
+
+  it('só o switch Ativo; sem cards de diferença nem de prévia; Em uso na estável e o descritivo de cada versão', () => {
+    holder.detail.data = { ...plugin(), versions: versions() }
     render(<OwnerPluginDetailPage id="relogio" />)
-    expect(screen.getByText('Diferença v1 → v2')).toBeTruthy()
-    expect(screen.getByText('+depois')).toBeTruthy()
+    expect(screen.queryByText(/Diferença/)).toBeNull()
+    expect(screen.queryByText(/só aparece para quem ligar a prévia/)).toBeNull()
+    expect(screen.queryByText('Ligar prévia')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'Desativar Relógio' })).toBeTruthy()
+    expect(screen.getByText('Em uso')).toBeTruthy()
+    expect(screen.getByTestId('plugin-version-summary-3').textContent).toBe('Mudança da v3')
+    expect(screen.getByTestId('plugin-version-summary-1').textContent).toBe('Sem descritivo desta mudança')
     expect(screen.getByText(/Ferramentas: plugin_relogio_hora/)).toBeTruthy()
-    expect(screen.getByText(/só aparece para quem ligar a prévia/)).toBeTruthy()
-    // Só a v1 (consolidada antes) oferece rollback; a estável atual e a prévia não.
-    expect(within(screen.getByTestId('plugin-version-2')).queryByRole('button', { name: /Rollback/ })).toBeNull()
-    expect(within(screen.getByTestId('plugin-version-3')).queryByRole('button', { name: /Rollback/ })).toBeNull()
-    fireEvent.click(within(screen.getByTestId('plugin-version-1')).getByRole('button', { name: /Rollback/ }))
-    expect(await screen.findByText('Voltar para a versão 1?')).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Fazer rollback' }))
+  })
+
+  it('clicar numa versão arquivada pede confirmação e a põe em uso; a prévia e a estável não são clicáveis', async () => {
+    holder.detail.data = { ...plugin(), versions: versions() }
+    render(<OwnerPluginDetailPage id="relogio" />)
+    expect(screen.queryByRole('button', { name: 'Usar a versão v3' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Usar a versão v2' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Usar a versão v1' }))
+    expect(await screen.findByText('Usar a versão v1?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Usar esta versão' }))
     expect(holder.rollback).toHaveBeenCalledWith('v1', expect.anything())
   })
 
-  it('depois do rollback (v1 estável), a v2 arquivada passa a oferecer rollback', () => {
+  it('depois do rollback (v1 em uso), a v2 arquivada passa a ser clicável', () => {
     holder.detail.data = { ...plugin({ stable: summary(1, 'stable'), preview: null }), versions: [summary(2, 'archived'), summary(1, 'stable')] }
     render(<OwnerPluginDetailPage id="relogio" />)
-    expect(within(screen.getByTestId('plugin-version-2')).getByRole('button', { name: /Rollback/ })).toBeTruthy()
-    expect(within(screen.getByTestId('plugin-version-1')).queryByRole('button', { name: /Rollback/ })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Usar a versão v2' })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Usar a versão v1' })).toBeNull()
+  })
+
+  it('dono: a linha da prévia tem Ver prévia (liga a prévia e abre a tela) e Aprovar prévia', async () => {
+    holder.detail.data = { ...plugin(), versions: versions() }
+    render(<OwnerPluginDetailPage id="relogio" />)
+    fireEvent.click(screen.getByRole('button', { name: /Ver prévia/ }))
+    await waitFor(() => expect(holder.push).toHaveBeenCalledWith('/dashboard'))
+    expect(holder.preview).toHaveBeenCalledWith(true)
+    fireEvent.click(screen.getByRole('button', { name: /Aprovar prévia/ }))
+    expect(holder.approve).toHaveBeenCalled()
+  })
+
+  it('Gerar descritivo só na versão sem descritivo', () => {
+    holder.detail.data = { ...plugin(), versions: versions() }
+    render(<OwnerPluginDetailPage id="relogio" />)
+    const buttons = screen.getAllByRole('button', { name: /Gerar descritivo/ })
+    expect(buttons).toHaveLength(1)
+    fireEvent.click(buttons[0]!)
+    expect(holder.summary).toHaveBeenCalledWith('v1')
+  })
+
+  it('o debug do cabeçalho abre a coluna de logs', async () => {
+    holder.detail.data = { ...plugin(), versions: versions() }
+    render(<OwnerPluginDetailPage id="relogio" />)
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir logs de debug' }))
+    expect(await screen.findByTestId('console')).toBeTruthy()
   })
 
   it('erro de runtime aparece como alerta; sem versões, estado vazio', () => {
@@ -124,14 +232,22 @@ describe('detalhe do plugin', () => {
     expect(screen.getByText('Nenhuma versão ainda')).toBeTruthy()
   })
 
-  it('portal: o admin do cliente aprova a prévia e não vê o runtime do servidor', async () => {
+  it('portal: Ver e Aprovar prévia na linha da prévia; sem runtime, sem debug e sem Gerar descritivo', async () => {
     holder.source = { kind: 'client', clientId: 'cli1' }
-    holder.detail.data = { ...plugin({ scope: 'client', clientId: 'cli1', clientName: 'ACME' }), versions: [summary(3, 'preview'), summary(2, 'stable')] }
+    holder.detail.data = { ...plugin({ scope: 'client', clientId: 'cli1', clientName: 'ACME' }), versions: versions() }
     render(<ClientePluginDetailPage id="relogio" />)
     fireEvent.click(screen.getByRole('button', { name: /Aprovar prévia/ }))
     expect(holder.approve).toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: /Ver prévia/ })).toBeTruthy()
     expect(screen.queryByText('Runtime no servidor')).toBeNull()
-    // No portal a origem da versão é só o código (sem link para a tarefa do app do dono).
+    expect(screen.queryByRole('button', { name: 'Abrir logs de debug' })).toBeNull()
+    expect(screen.queryByRole('button', { name: /Gerar descritivo/ })).toBeNull()
     await waitFor(() => expect(screen.getAllByText('OPE-172').every((node) => node.tagName === 'SPAN')).toBe(true))
+  })
+
+  it('carregando: esqueleto do detalhe', () => {
+    holder.detail = { data: null, isPending: true, isError: false, error: null, refetch: vi.fn() }
+    render(<OwnerPluginDetailPage id="relogio" />)
+    expect(screen.getByTestId('plugin-detail-skeleton')).toBeTruthy()
   })
 })

@@ -12,6 +12,8 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 
 const state = vi.hoisted(() => ({ on: false, props: null as unknown, headerProps: null as unknown }))
 vi.mock('framer-motion', () => framerMotionMock())
+// Menu do portal com os plugins (slot `portal.nav`, OPE-172): sem plugins ativos.
+vi.mock('@/features/plugins/client/usePluginNav', () => ({ useNavWithPlugins: (base: unknown) => base }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/cliente/dashboard', useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('next/link', () => ({
   default: ({ children, href, ...props }: { children: React.ReactNode; href: string } & Record<string, unknown>) => (

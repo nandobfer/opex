@@ -14,6 +14,9 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const mocks = vi.hoisted(() => ({ remove: vi.fn(), replyPermission: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
+// Abas de plugins da mesa (slot `workbench.panel`, OPE-172): sem plugins ativos.
+vi.mock('@/features/plugins/client/usePluginSlotTabs', () => ({ usePluginSlotTabs: () => [], isPluginTabId: (id: string) => id.startsWith('plugin:') }))
+vi.mock('@/features/plugins/client/PluginContribution', () => ({ PluginContribution: () => null }))
 vi.mock('next/link', () => ({ default: ({ href, children, ...props }: { href: string; children: React.ReactNode }) => <a href={href} {...props}>{children}</a> }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: () => ({ data: undefined, isLoading: true, isError: false, error: null, refetch: vi.fn() }) }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({
