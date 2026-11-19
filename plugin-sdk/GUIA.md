@@ -100,7 +100,7 @@ export default definePlugin({
 | `realtime` | `publish(event, data)`: evento `plugin-event` em `private-app`. |
 | `integrations` | `get(id)`: configuração de uma integração de `/integracoes`. |
 | `ai` | `text(request)` e `stream(request)` pelos provedores configurados (`streamAi`). |
-| `tools` | `register({ name, label, description, risk, input, execute })`. O agente vê `plugin_{id}_{nome}` (grupo "Ferramentas de plugins" do Agente Opex e do MCP `opex_app`), com a política de desligar e confirmar do dono. |
+| `tools` | `register({ name, label, description, risk, input, execute })`. O agente vê `plugin_{id}_{nome}` (grupo "Ferramentas de plugins" do Agente Opex e do MCP `opex_app`), com a política de desligar e confirmar do dono. Toda ferramenta de plugin pede Confirmar/Cancelar por padrão e `risk: "read"` vale como `"write"`: só o dono libera a confirmação, ferramenta a ferramenta. |
 | `cron` | `schedule(nome, agendamento, run)`. Só intervalos em minutos, diário, semanal ou mensal, no fuso de Brasília. Roda pelo agendador interno, com lease. |
 | `routes` | `on(método, caminho, handler)`, `get`, `post`. Rotas em `/api/p/{id}{caminho}` com a sessão do dono. O handler devolve um `Response` ou um valor (vira `{ success: true, data }`). |
 | `kv` | `get`, `set`, `delete` e `list(prefixo)`: chave-valor só deste plugin. |

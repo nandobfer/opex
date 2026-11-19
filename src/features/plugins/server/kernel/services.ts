@@ -141,6 +141,9 @@ export interface PluginToolDef<I = unknown> {
     execute(input: I, context: OpexToolContext): Promise<unknown> | unknown
 }
 
+/** Risco efetivo de uma ferramenta de plugin: nunca "read" (o código do plugin roda no processo do Opex). */
+export const pluginToolRisk = (declared: OpexToolRisk | undefined): OpexToolRisk => (declared === "destructive" ? "destructive" : "write")
+
 /** Ferramentas do Agente Opex e do MCP `opex_app` (grupo `plugin-tools`). */
 export class ToolsService extends Service {
     constructor(ctx: Context) {
@@ -155,7 +158,11 @@ export class ToolsService extends Service {
             group: "plugin-tools",
             label: def.label,
             description: `[Plugin ${meta.manifest.name}] ${def.description}`,
-            risk: def.risk ?? "write",
+            // O plugin não decide a própria proteção: "read" (ou omitido) vira "write", e toda ferramenta de
+            // plugin pede Confirmar/Cancelar por padrão (no MCP, exige `mcp:owner:destructive`). Só o dono
+            // libera uma a uma, no ajuste de confirmação do Agente Opex.
+            risk: pluginToolRisk(def.risk),
+            confirmByDefault: true,
             input: def.input as ZodType<unknown>,
             execute: async (input, context) => (def.execute as (value: unknown, ctx: OpexToolContext) => unknown)(input, context),
         }

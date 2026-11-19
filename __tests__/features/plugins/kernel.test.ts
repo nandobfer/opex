@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { toolConfirms } from '@/features/opex-agent/tool-tree'
+import { toolNeedsDestructiveScope } from '@/features/integrations/api-tokens/scopes'
+import { pluginToolRisk } from '@/features/plugins/server/kernel/services'
 
 /**
  * Kernel de plugins (OPE-172) com o Cordis e o Rolldown reais: a versão é compilada, importada e
@@ -55,6 +58,15 @@ afterEach(async () => {
   await resetPluginKernelForTests()
 })
 
+describe('risco das ferramentas de plugin', () => {
+  it('nunca é "read": omitido ou "read" viram "write"; "destructive" se mantém', () => {
+    expect(pluginToolRisk(undefined)).toBe('write')
+    expect(pluginToolRisk('read')).toBe('write')
+    expect(pluginToolRisk('write')).toBe('write')
+    expect(pluginToolRisk('destructive')).toBe('destructive')
+  })
+})
+
 describe('ativação da stable', () => {
   it('compila com Rolldown, ativa no Cordis e registra ferramenta, rota e cron', async () => {
     const v1 = await build(SERVER('v1'))
@@ -62,6 +74,12 @@ describe('ativação da stable', () => {
 
     const tool = pluginToolList().find((item) => item.name === 'plugin_relogio_hora')
     expect(tool?.group).toBe('plugin-tools')
+    // O plugin declarou risk "read": não vale. Toda ferramenta de plugin pede confirmação por padrão,
+    // e no MCP exige o escopo de destrutivas; só o ajuste do dono libera.
+    expect(tool).toMatchObject({ risk: 'write', confirmByDefault: true })
+    expect(toolConfirms(tool!)).toBe(true)
+    expect(toolConfirms(tool!, { plugin_relogio_hora: false })).toBe(false)
+    expect(toolNeedsDestructiveScope(tool!)).toBe(true)
     expect(await tool!.execute({}, { actorId: 'local', sessionId: '' } as never)).toEqual({ v: 'v1' })
     const route = findPluginRoute('relogio', 'GET', '/hora/utc', 'stable')
     expect(await route!.entry.handler({ req: new Request('http://x'), params: route!.params, path: '/hora/utc' })).toEqual({ texto: 'hora:utc', versao: 'v1' })

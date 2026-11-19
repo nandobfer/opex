@@ -157,6 +157,10 @@ e a política do dono:
 - `findOpexTool` usa o mesmo catálogo;
 - o MCP do dono (`opex_app` e tokens) usa `OPEX_TOOLS` + `pluginToolList()`;
 - `disabledTools` e `confirmationOverrides` aceitam nomes de plugin mesmo com o plugin descarregado.
+- **Risco decidido pelo Opex, não pelo plugin** (`pluginToolRisk`): `risk: "read"` ou omitido vale como
+  `"write"` e toda ferramenta de plugin é `confirmByDefault` — pede Confirmar/Cancelar no chat e, no MCP,
+  exige `mcp:owner:destructive` (`toolNeedsDestructiveScope`). Só o dono libera, ferramenta a ferramenta,
+  no ajuste de confirmação do Agente Opex (`confirmationOverrides`).
 
 Num turno do Agente Opex disparado com a prévia do plugin ligada (cookie lido em
 `POST /api/opex/sessions/[id]/messages` → `scope.previewPlugins`), valem as ferramentas da versão
