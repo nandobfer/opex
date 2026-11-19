@@ -119,6 +119,9 @@ sem pedido explícito.
   `CadastroTableCard`, `TableAction`...).
 - **Em listas, o nome do item é o link para a página dele** (`ItemNameLink` de `src/components/list`):
   sem ícone/botão de "abrir" ou "visualizar" (decisão do dono, OPE-172).
+- **Escolha numa lista de opções usa o `SearchPicker`, com busca** (`CadastroSearchPicker` nos filtros de
+  lista, com seleção múltipla e árvore): nunca `Select` cru nem multiselect sem busca. Exceção: escolha
+  única numa lista pequena e fixa usa `OptionTabs` (decisão do dono, OPE-172).
 - **Skeleton acompanha a interface**: toda alteração visual numa tela ou bloco (layout, largura,
   altura, colunas, estrutura de cards ou linhas) atualiza **no mesmo commit** o skeleton de
   carregamento correspondente, para que ele continue com as dimensões e a estrutura do resultado

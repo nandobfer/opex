@@ -88,6 +88,9 @@ semeado na primeira leitura (`ensureBoard`).
   tarefa sem tipo, e a label numa tarefa de outro tipo mantém o tipo dela; o tipo só vai no
   `updateTask` quando muda, então a sincronização nunca falha por falta de alvo.
 - O `pluginTarget` não vai para o portal (`ClienteTaskDto`).
+- Alvo num plugin **arquivado** é recusado com 400 `TASK_PLUGIN_ARCHIVED` ("O plugin X está arquivado.
+  Desarquive-o ou escolha outro"), ao criar (inclusive antes da issue no GitHub) e ao trocar o alvo
+  (`assertPluginTargetNotArchived`); o seletor do formulário não oferece os arquivados.
 - As ferramentas `create_task`/`update_task` dos agentes aceitam `pluginTarget`.
 - O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin".
 

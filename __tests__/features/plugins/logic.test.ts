@@ -126,3 +126,11 @@ describe('árvore de slots (OPE-172, rodada 4)', () => {
     expect(pluginSlotsOf({ scope: 'owner', slots: [], nav: [{ label: 'X', page: 'x', icon: 'Puzzle', slot: 'sidebar.nav.agentes' }, { label: 'Y', page: 'y', icon: 'Puzzle' }] } as never)).toEqual(['sidebar.nav', 'sidebar.nav.agentes'])
   })
 })
+
+describe('SDK: slots.json (OPE-172)', () => {
+  it('plugin-sdk/slots.json é a mesma árvore do núcleo', async () => {
+    const { readFileSync } = await import('node:fs')
+    const { PLUGIN_SLOT_TREE } = await import('@/features/plugins/slot-tree')
+    expect(JSON.parse(readFileSync(`${process.cwd()}/plugin-sdk/slots.json`, 'utf8'))).toEqual(JSON.parse(JSON.stringify(PLUGIN_SLOT_TREE)))
+  })
+})

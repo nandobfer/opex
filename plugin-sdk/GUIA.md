@@ -27,13 +27,34 @@ voltam para a versão. Rode `pnpm install`, `npx tsc --noEmit` e `npx vitest run
 | `apiVersion` | `"1.0"`. Major diferente do núcleo é recusado; minor maior só gera aviso. |
 | `scope` | `"owner"` (app do dono) ou `"client"` (portal de um cliente). Não mude. |
 | `entries` | `client` e/ou `server` (caminho do arquivo de entrada). |
-| `slots` | `{ slot, export, title?, order? }`. Slots do dono: `dashboard.widgets` (Dashboard), `task.panel` (aba da tarefa), `topbar.actions` (ações da casca: rodapé do menu no desktop, cabeçalho no celular — use um botão de ícone compacto), `workbench.panel` (aba da mesa de desenvolvimento), `tasks.header` (acima do quadro de tarefas) e `financeiro.widgets` (Financeiro). Slots do cliente: `portal.dashboard.widgets` (Dashboard do portal) e `portal.task.panel` (aba da tarefa no portal). `title` é o rótulo da aba nos slots de aba. Os menus (`sidebar.nav`, `portal.nav`) vêm de `nav`, nunca de `slots`. |
+| `slots` | `{ slot, export, title?, order? }`. Os slots ficam numa árvore (seção "Slots" abaixo e `.opex-sdk/slots.json`); use só os ids de **slot**, nunca os de área (`area:…`). `title` é o rótulo da aba nos slots de aba. Os menus (`sidebar.nav*`, `portal.nav`) vêm de `nav`, nunca de `slots`. |
 | `pages` | `{ path, title, export }`: página em `/x/{id}/{path}` (dono) ou `/cliente/x/{id}/{path}` (portal). |
-| `nav` | `{ label, page, icon }`: item na seção "Plugins" do menu — a barra lateral do dono (`sidebar.nav`) ou o menu do portal para todos os usuários do cliente (`portal.nav`, páginas `/cliente/x/{id}/{página}`). Ícones: BarChart3, Blocks, Bot, Calendar, ClipboardList, FileText, LayoutDashboard, ListChecks, Puzzle, Settings, Sparkles, Users, Wrench. |
+| `nav` | `{ label, page, icon, slot? }`: sem `slot`, item na seção "Plugins" do menu; com `slot` (dono: `sidebar.nav.agentes`, `sidebar.nav.contabil`, `sidebar.nav.configuracoes`), o item entra **dentro** desse menu da barra lateral. A seção "Plugins" é a da barra lateral do dono (`sidebar.nav`) ou o menu do portal para todos os usuários do cliente (`portal.nav`, páginas `/cliente/x/{id}/{página}`). Ícones: BarChart3, Blocks, Bot, Calendar, ClipboardList, FileText, LayoutDashboard, ListChecks, Puzzle, Settings, Sparkles, Users, Wrench. |
 | `routes` | `{ method, path }` (só dono), ex.: `{ "method": "GET", "path": "/itens/:id" }`. |
 | `tools` | Nomes das ferramentas dos agentes (só dono). |
 | `crons` | Nomes dos crons (só dono). |
 | `services` | Serviços do núcleo usados em `inject` (só dono). |
+
+### Slots (árvore)
+
+| Área (dono) | Slots |
+|---|---|
+| Casca do app › Barra lateral | `sidebar.nav`, `sidebar.nav.agentes`, `sidebar.nav.contabil`, `sidebar.nav.configuracoes` (menus, via `nav`), `topbar.actions` (rodapé do menu no desktop, cabeçalho no celular — use um botão de ícone compacto) |
+| Dashboards | `dashboard.widgets` (fim da página), `dashboard.section.tarefas`, `dashboard.section.financeiro`, `dashboard.section.horas`, `dashboard.section.central` (fim de cada seção) |
+| Tarefas | `tasks.header` (acima do quadro); página da tarefa: `task.panel` (aba, `{ task }`), `task.sidebar` (coluna lateral, `{ task }`) |
+| Central de desenvolvimento | `workbench.panel` (aba da mesa, `{ workbenchId, taskId }`) |
+| Contábil | `financeiro.widgets` (Financeiro), `horas.widgets` (Horas agênticas) |
+
+| Área (portal) | Slots |
+|---|---|
+| (raiz) | `portal.nav` (menu, via `nav`), `portal.dashboard.widgets` (`{ clientId }`) |
+| Tarefas | `portal.tasks.header` (topo da lista, `{ clientId }`), `portal.task.panel` (aba, `{ taskId, clientId }`) |
+
+Exemplo — item dentro do menu Agentes:
+
+```json
+{ "pages": [{ "path": "hora", "title": "Hora certa", "export": "HoraPage" }], "nav": [{ "label": "Hora certa", "page": "hora", "icon": "Bot", "slot": "sidebar.nav.agentes" }] }
+```
 
 O manifesto é **restritivo**. O kernel recusa registrar rota, ferramenta ou cron que não esteja
 declarado, e a ativação falha (a versão anterior continua).

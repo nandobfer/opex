@@ -18,7 +18,7 @@ telas em `components/`). Modelos em `src/lib/db/models/Plugin.ts`. SDK de autori
 
 | Coleção | Conteúdo |
 |---|---|
-| `plugins` | `pluginId` (slug único), nome, descrição, escopo, `clientId`, `apiVersion`, `active`, `stableVersionId`, `previewVersionId`, `previewWorkbenchId` (a mesa dona da prévia), `runtimeError` (`{ channel, versionId, message, at }`) |
+| `plugins` | `pluginId` (slug único), nome, descrição, escopo, `clientId`, `apiVersion`, `active`, `archivedAt` + `archivedBy` (arquivado), `stableVersionId`, `previewVersionId`, `previewWorkbenchId` (a mesa dona da prévia), `runtimeError` (`{ channel, versionId, message, at }`) |
 | `plugin_versions` | `number` (sequencial por plugin), `state` (`draft` → `preview` → `stable`, a estável anterior vira `archived`), `files` (fontes), `manifest`, `artifacts.server`/`artifacts.client` (`{ code, hash, css, cssHash }`), `tests`, `compileLog`, `baseVersionId`, `source` (`taskId`, `taskCode`, `workbenchId`), `promotedAt`, `changeSummary` + `changeSummarySource` (`agent`/`ai`: o descritivo da mudança para a versão anterior) |
 | `plugin_kv` | Chave-valor de cada plugin (`ctx.kv`) |
 | `plugin_logs` | Logs de debug do plugin (48 h, TTL): `pluginId`, `channel`, `level`, `message`, `data`, `ts`, `instance` |
@@ -43,19 +43,36 @@ estejam declarados, e a ativação falha.
 | `entries` | `client` e/ou `server` |
 | `slots` | `{ slot, export, title, order }` |
 | `pages` | `{ path, title, export }` |
-| `nav` | `{ label, page, icon }` |
+| `nav` | `{ label, page, icon, slot? }` — `slot` é o menu onde o item entra (ex.: `sidebar.nav.agentes`); sem ele, o menu padrão do escopo |
 | `routes` | `{ method, path }` |
 | `tools`, `crons`, `services` | Nomes declarados |
 
 **Plugin de cliente:** a validação recusa `entries.server`, `routes`, `crons`, `tools`, `services`,
 `nav` e a pasta `server/` (mensagem "Plugin de cliente é só interface; remova: …").
 
-**Slots:**
+**Slots aninhados (árvore, `slot-tree.ts`, módulo puro):** os slots ficam numa árvore por escopo
+(`PLUGIN_SLOT_TREE`). Cada nó é uma **área** (só agrupa, id `area:…`, não é slot) ou um **slot**. Os ids
+dos slots não mudaram desde a primeira rodada (`apiVersion` continua 1.0). A árvore alimenta a validação,
+o filtro da lista (`slotFilterNodes`; escolher uma área cobre todos os slots abaixo dela,
+`expandSlotSelection`), os selos com o caminho completo (`slotPathLabel`, ex.: "Casca do app › Barra
+lateral › Menu Agentes") e o SDK (`plugin-sdk/slots.json`, gerado da mesma árvore).
 
-| Escopo | Slots |
+| Área (dono) | Slots |
 |---|---|
-| Dono | `dashboard.widgets` e `task.panel` (aba da página da tarefa). `sidebar.nav` vem da lista `nav` |
-| Cliente | `portal.dashboard.widgets` |
+| Casca do app › Barra lateral | `sidebar.nav` (seção Plugins), `sidebar.nav.agentes`, `sidebar.nav.contabil`, `sidebar.nav.configuracoes` (itens **dentro** desses menus), `topbar.actions` |
+| Dashboards | `dashboard.widgets` (fim da página), `dashboard.section.tarefas`, `dashboard.section.financeiro`, `dashboard.section.horas`, `dashboard.section.central` (fim de cada seção) |
+| Tarefas | `tasks.header`; Página da tarefa: `task.panel` (aba), `task.sidebar` (coluna lateral) |
+| Central de desenvolvimento | `workbench.panel` |
+| Contábil | `financeiro.widgets`, `horas.widgets` (topo de `/tarefas/horas`) |
+
+| Área (portal) | Slots |
+|---|---|
+| (raiz) | `portal.nav`, `portal.dashboard.widgets` |
+| Tarefas | `portal.tasks.header` (topo da lista), `portal.task.panel` (aba da tarefa) |
+
+O manifesto recusa, em pt-BR: área no lugar de slot ("… é uma área (Dashboards), não um slot"), slot
+desconhecido, slot de outro escopo, slot de menu em `slots` (menus vêm de `nav`) e `nav[].slot` que não é
+um menu do escopo (`PLUGIN_NAV_SLOTS_BY_SCOPE`; o cliente só tem `portal.nav`).
 
 ## Compilação (`server/compiler/`)
 
@@ -241,6 +258,11 @@ Há uma carga por revisão. O CSS entra num `<style id="opex-plugin-css-{id}">` 
 | `tasks.header` | dono | Bloco acima do quadro em `/tarefas` (`TasksPage`) | `{}` |
 | `financeiro.widgets` | dono | Cards no topo de `/financeiro` (`FinancePage`) | `{}` |
 | `sidebar.nav` | dono | Seção "Plugins" da barra lateral (`useNavWithPlugins`, ícones de `nav-icons.ts`), da lista `nav` | — |
+| `sidebar.nav.agentes` / `.contabil` / `.configuracoes` | dono | Itens `nav` com esse `slot` entram **dentro** do grupo do `APP_NAV` (`PLUGIN_NAV_GROUP_BY_SLOT`, `navWithPluginItems`) | — |
+| `dashboard.section.*` | dono | Fim de cada seção do Dashboard (`TasksOverviewSection`, `FinanceSection`, `AgenticHoursSection`, `DevCenterSection`) | `{}` |
+| `task.sidebar` | dono | Cards abaixo dos da coluna lateral da tarefa (`TaskDetailSidebar`) | `{ task }` |
+| `horas.widgets` | dono | Cards no topo de `/tarefas/horas` (`TimeLogsPage`) | `{}` |
+| `portal.tasks.header` | cliente | Bloco no topo da lista de tarefas do portal (`ClienteTasksPage`) | `{ clientId }` |
 | `portal.dashboard.widgets` | cliente | Fim do Dashboard do portal | `{ clientId }` |
 | `portal.task.panel` | cliente | Aba extra na tarefa do portal (`ClienteTaskTabs`) | `{ taskId, clientId }` |
 | `portal.nav` | cliente | Seção "Plugins" do menu do portal (`/cliente/x/{id}/{página}`), da lista `nav`, para todos os usuários do cliente | — |
@@ -279,8 +301,14 @@ plugin. Para o usuário do cliente nada muda.
 
 **`/plugins`** (Configurações › Plugins):
 
-- lista com busca, escopo e **slot** na URL (`filters.ts`; `PluginDto.slots` vem da estável ou, sem
-  ela, da prévia), versões, cliente e erro de runtime;
+- lista com busca, escopo, **slot** e **Arquivados** na URL (`filters.ts`; `PluginDto.slots` vem da
+  estável ou, sem ela, da prévia), versões, cliente, selos dos slots (com o caminho completo) e erro de
+  runtime;
+- Escopo e Slot usam o `CadastroSearchPicker` (busca + seleção múltipla). O Slot é a árvore: sem termo,
+  as opções aparecem recuadas por nível; com termo, cada resultado aparece no caminho dele (ancestrais
+  visíveis) e mostra o caminho por extenso. No dono, a raiz tem "Dono" e "Portal do cliente";
+- **Arquivados: Mostrar** (`FilterSwitch`, `showArchived`): desligado, os arquivados ficam fora; ligado,
+  aparecem com o selo "Arquivado" e o switch Ativo desabilitado;
 - o **nome é o link** para a página do plugin (`ItemNameLink`, padrão do projeto); à direita, o ícone de
   **debug** (modal de logs, `PluginDebugDialog`, igual ao de `/integracoes`) e o **switch Ativo**
   (`PluginActiveSwitch`: ligar é direto, desligar pede confirmação; resposta otimista com reversão);
@@ -297,6 +325,22 @@ plugin. Para o usuário do cliente nada muda.
 - cada versão mostra data, tarefa de origem (link no dono), testes e o **descritivo da mudança** em
   linguagem natural; sem descritivo, "Sem descritivo desta mudança" e, no dono, **"Gerar descritivo"**;
 - runtime no servidor (só plugin do dono).
+
+**Arquivar** (`setPluginArchived`, `POST /api/plugins/[id]/archive` e `POST /api/cliente/plugins/[id]/archive`
+para o admin do próprio cliente, `{ archived }`; ferramenta `archive_plugin`, destrutiva):
+
+- botão de ícone **Arquivar/Desarquivar** no cabeçalho da página do plugin, com confirmação; o
+  cabeçalho mostra o selo "Arquivado";
+- arquivar **desliga** o plugin (`active: false`): sai das telas e do kernel. É recusado com 409
+  (`PLUGIN_PREVIEW_BUSY`) se houver uma prévia de mesa ("O plugin tem uma prévia da tarefa X. Conclua ou
+  descarte antes de arquivar");
+- desarquivar traz de volta **desligado** (como nos agentes rotineiros);
+- arquivado não liga, não publica prévia, não consolida, não faz rollback nem aprova a prévia (409
+  `PLUGIN_ARCHIVED`, "O plugin X está arquivado. Desarquive-o antes"); na página, o switch fica
+  desabilitado ("Desarquive para ativar") e nenhuma versão é clicável;
+- tarefa Plugin com alvo num plugin arquivado é recusada com 400 (`TASK_PLUGIN_ARCHIVED`); o seletor de
+  plugin do formulário da tarefa não oferece os arquivados;
+- versões, logs e kv ficam intactos; auditoria e `plugin-updated` a cada mudança.
 
 **Descritivo da mudança:** o agente da mesa termina cada implementação ou correção com um bloco JSON
 `{"changeSummary": "…"}` (`PLUGIN_CHANGE_SUMMARY_REQUEST`, lido por `pluginChangeSummaryFrom`),
@@ -369,6 +413,7 @@ O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin (OPE-172)".
 | `types/client.d.ts` | `usePluginHost`, `usePluginEvent`, `definePluginClient` e `@opex/plugin-sdk/testing` |
 | `types/opex-modules.d.ts` | Gerado de `shared-exports.json` |
 | `shared-exports.json` | Exports de cada módulo `@opex/*` |
+| `slots.json` | Árvore de slots (`PLUGIN_SLOT_TREE`), para o agente da mesa; o teste `logic.test.ts` confere que bate com a do núcleo |
 | `theme.css` | Tokens do tema; o `globals.css` importa |
 | `testing/` | Plugin Vite que troca os módulos do Opex por stubs `data-opex="<Nome>"`, axios falso (`mockApi`), host falso e `createPluginTestContext(manifest)`, com as mesmas regras de declaração do kernel |
 | `template/` | `package.json`, `tsconfig.json`, `vitest.config.mts` e `gitignore` (sem ponto no repositório) |
