@@ -25,7 +25,7 @@ telas em `components/`). Modelos em `src/lib/db/models/Plugin.ts`. SDK de autori
 Os índices são criados pela migração idempotente `ensure-plugin-indexes`. Versão publicada não muda:
 o rollback só move `stableVersionId`.
 
-**Limites de uma versão:** 200 arquivos, 256 KB por arquivo e 2 MB no total.
+**Limites de uma versão:** 200 arquivos, 256 KB por arquivo, caminho no padrão (sem `..`, sem espaço) e 2 MB no total. `pluginManifestIssues` confere cada arquivo com `pluginSourceFileSchema` e devolve o problema com o caminho (ex.: `client/dump.json: Arquivo maior que o limite de 256 KB`); a versão não é gravada.
 
 ## Manifesto (`plugin.json`, `manifest.ts`)
 

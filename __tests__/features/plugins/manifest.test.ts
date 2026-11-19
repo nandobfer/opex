@@ -61,6 +61,27 @@ describe('parsePluginManifest', () => {
   })
 })
 
+describe('limites por arquivo das fontes (256 KB e caminho)', () => {
+  it('recusa arquivo maior que 256 KB, citando o caminho', () => {
+    const result = parsePluginManifest(files(manifest(), [{ path: 'client/dump.json', content: 'x'.repeat(256 * 1024 + 1) }]))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues).toContain('client/dump.json: Arquivo maior que o limite de 256 KB')
+  })
+
+  it('recusa caminho fora do padrão (subida de pasta ou caractere inválido)', () => {
+    const result = parsePluginManifest(files(manifest(), [{ path: 'client/../segredo.ts', content: 'x' }, { path: 'client/meu arquivo.ts', content: 'x' }]))
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.issues).toContain('client/../segredo.ts: Caminho de arquivo inválido')
+      expect(result.issues).toContain('client/meu arquivo.ts: Caminho de arquivo inválido')
+    }
+  })
+
+  it('arquivo no limite exato passa', () => {
+    expect(parsePluginManifest(files(manifest(), [{ path: 'client/dados.ts', content: 'x'.repeat(256 * 1024) }])).ok).toBe(true)
+  })
+})
+
 describe('checkPluginApiVersion', () => {
   it('major diferente recusa; minor maior só avisa', () => {
     expect(checkPluginApiVersion('1.0', '1.0')).toEqual({ ok: true, warning: null })

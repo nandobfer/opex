@@ -85,6 +85,9 @@ describe('versões', () => {
   it('manifesto inválido ou compilação com erro não grava versão', async () => {
     await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
     expect(await createDraftVersion({ pluginId: 'relogio', files: files('outro-id'), baseVersionId: null, source, author: 'local' })).toEqual({ ok: false, issues: ['O id do manifesto (outro-id) difere do plugin (relogio)'] })
+    // Arquivo grande demais não vira versão (limite por arquivo aplicado na criação da versão).
+    const big = [...files('relogio'), { path: 'client/dump.txt', content: 'x'.repeat(256 * 1024 + 1) }]
+    expect(await createDraftVersion({ pluginId: 'relogio', files: big, baseVersionId: null, source, author: 'local' })).toEqual({ ok: false, issues: ['client/dump.txt: Arquivo maior que o limite de 256 KB'] })
     holder.compile.mockResolvedValueOnce({ ok: false, errors: ['Erro de compilação: x'], log: '' })
     expect(await createDraftVersion({ pluginId: 'relogio', files: files(), baseVersionId: null, source, author: 'local' })).toEqual({ ok: false, issues: ['Erro de compilação: x'] })
     expect(holder.versions.docs).toHaveLength(0)

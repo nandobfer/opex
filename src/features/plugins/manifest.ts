@@ -123,6 +123,11 @@ export function pluginManifestIssues(manifest: PluginManifest, files: PluginSour
     const totalBytes = files.reduce((sum, file) => sum + file.content.length, 0)
     if (files.length > PLUGIN_MAX_FILES) issues.push(`O plugin tem ${files.length} arquivos (máximo ${PLUGIN_MAX_FILES})`)
     if (totalBytes > PLUGIN_MAX_TOTAL_BYTES) issues.push("As fontes passam do limite de 2 MB")
+    // Cada arquivo: caminho no padrão e até 256 KB (o mesmo schema das fontes).
+    for (const file of files) {
+        const checked = pluginSourceFileSchema.safeParse(file)
+        if (!checked.success) issues.push(`${file.path}: ${[...new Set(checked.error.issues.map((issue) => issue.message))].join("; ")}`)
+    }
 
     if (manifest.scope === "client") {
         const forbidden: string[] = []
