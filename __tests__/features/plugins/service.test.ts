@@ -183,3 +183,20 @@ describe('plugins de cliente e acesso do portal', () => {
     expect(holder.deactivate).toHaveBeenCalledWith('relogio')
   })
 })
+
+describe('descritivo da mudança (OPE-172)', () => {
+  it('o descritivo do agente é gravado na versão com origem agent; o DTO traz slots e o caminho da prévia', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    const result = await createDraftVersion({ pluginId: 'relogio', files: files('relogio'), baseVersionId: null, source, author: 'local', changeSummary: '  Mostra a hora no dashboard.  ' })
+    expect(result.ok).toBe(true)
+    expect(holder.versions.docs[0]).toMatchObject({ changeSummary: 'Mostra a hora no dashboard.', changeSummarySource: 'agent' })
+    const detail = await getPlugin('relogio')
+    expect(detail.versions[0]).toMatchObject({ changeSummary: 'Mostra a hora no dashboard.', changeSummarySource: 'agent', previewPath: expect.any(String), slots: expect.any(Array) })
+  })
+
+  it('sem descritivo do agente, a versão fica sem descritivo', async () => {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    await draft()
+    expect(holder.versions.docs[0]!.changeSummary ?? null).toBeNull()
+  })
+})

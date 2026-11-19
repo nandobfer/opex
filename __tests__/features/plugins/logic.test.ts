@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { diffPluginFiles, parsePreviewList, pluginIdFromTitle, resolvePluginVersion, togglePreviewList, uniquePluginId, versionActionBlock } from '@/features/plugins/logic'
+import { diffPluginFiles, parsePreviewList, pluginPreviewPath, pluginSlotsOf, pluginIdFromTitle, resolvePluginVersion, togglePreviewList, uniquePluginId, versionActionBlock } from '@/features/plugins/logic'
 import { pluginToolName } from '@/features/plugins/constants'
+import { filterPlugins, DEFAULT_PLUGIN_FILTERS } from '@/features/plugins/filters'
 
 /** Regras puras dos plugins (OPE-172): prévia por navegador, ciclo de versões, diff e ids. */
 
@@ -66,5 +67,26 @@ describe('ids', () => {
     expect(pluginIdFromTitle('42 métricas')).toBe('p-42-metricas')
     expect(uniquePluginId('relogio', new Set(['relogio', 'relogio-2']))).toBe('relogio-3')
     expect(pluginToolName('meu-plugin', 'hora')).toBe('plugin_meu_plugin_hora')
+  })
+})
+
+describe('slots de um plugin (OPE-172)', () => {
+  it('os de componente e, com nav, o menu do escopo', () => {
+    expect(pluginSlotsOf({ scope: 'owner', slots: [{ slot: 'workbench.panel', export: 'A', order: 100 }], nav: [{ label: 'X', page: '', icon: 'Puzzle' }] } as never)).toEqual(['sidebar.nav', 'workbench.panel'])
+    expect(pluginSlotsOf({ scope: 'client', slots: [{ slot: 'portal.task.panel', export: 'A', order: 100 }], nav: [{ label: 'X', page: '', icon: 'Puzzle' }] } as never)).toEqual(['portal.task.panel', 'portal.nav'])
+    expect(pluginSlotsOf(null)).toEqual([])
+  })
+
+  it('Ver prévia: a primeira página; sem página, a tela do slot', () => {
+    expect(pluginPreviewPath({ pluginId: 'relogio', scope: 'owner' }, { pages: [], slots: [{ slot: 'financeiro.widgets', export: 'A', order: 1 }] } as never)).toBe('/financeiro')
+    expect(pluginPreviewPath({ pluginId: 'relogio', scope: 'owner' }, { pages: [], slots: [{ slot: 'workbench.panel', export: 'A', order: 1 }] } as never)).toBe('/desenvolvimento')
+    expect(pluginPreviewPath({ pluginId: 'painel', scope: 'client' }, { pages: [], slots: [{ slot: 'portal.task.panel', export: 'A', order: 1 }] } as never)).toBe('/cliente/tarefas')
+    expect(pluginPreviewPath({ pluginId: 'relogio', scope: 'owner' }, { pages: [{ path: 'hora', title: 'H', export: 'P' }], slots: [] } as never)).toBe('/x/relogio/hora')
+  })
+
+  it('filtro Slot: qualquer um dos escolhidos', () => {
+    const plugins = [{ id: 'a', name: 'A', description: '', clientName: null, scope: 'owner', slots: ['dashboard.widgets'] }, { id: 'b', name: 'B', description: '', clientName: null, scope: 'owner', slots: ['tasks.header', 'sidebar.nav'] }] as never[]
+    expect(filterPlugins(plugins, { ...DEFAULT_PLUGIN_FILTERS, slots: ['sidebar.nav'] }).map((p: { id: string }) => p.id)).toEqual(['b'])
+    expect(filterPlugins(plugins, DEFAULT_PLUGIN_FILTERS)).toHaveLength(2)
   })
 })

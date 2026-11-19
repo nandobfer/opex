@@ -15,10 +15,11 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const holder = vi.hoisted(() => ({
   runtime: { plugins: [] as unknown[], previewOn: [] as string[] },
   modules: new Map<string, unknown>(),
+  post: vi.fn(async () => ({ data: {} })),
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/lib/api', () => ({ api: {}, apiErrorMessage: (_e: unknown, fallback: string) => fallback, unwrapApi: (value: unknown) => value }))
+vi.mock('@/lib/api', () => ({ api: { post: holder.post }, apiErrorMessage: (_e: unknown, fallback: string) => fallback, unwrapApi: (value: unknown) => value }))
 vi.mock('@/features/plugins/hooks/usePlugins', () => ({
   usePluginsRealtime: () => undefined,
   usePluginRuntime: () => ({ data: holder.runtime, isPending: false, isError: false }),
@@ -68,6 +69,7 @@ const renderSlot = () => {
 }
 
 beforeEach(() => {
+  holder.post.mockClear()
   holder.runtime = { plugins: [], previewOn: [] }
   holder.modules.clear()
 })
@@ -89,6 +91,16 @@ describe('PluginSlot', () => {
     expect(await screen.findByText('Relógio · v1 · stable')).toBeTruthy()
     expect(await screen.findByText('O plugin Quebrado falhou')).toBeTruthy()
     expect(screen.getByText('falha no render')).toBeTruthy()
+    // O erro vai para o debug do plugin (uma vez por revisão e mensagem).
+    await waitFor(() => expect(holder.post).toHaveBeenCalledWith('/plugins/quebrado/logs', expect.objectContaining({ message: 'falha no render', channel: 'stable', where: 'slot Widget' })))
+  })
+
+  it('falha ao carregar o módulo também vai para o debug', async () => {
+    holder.modules.set('4-c', new Error("Identifier 'm' has already been declared"))
+    holder.runtime = { plugins: [entry('relogio', '4-c')], previewOn: [] }
+    renderSlot()
+    expect(await screen.findByText("Identifier 'm' has already been declared")).toBeTruthy()
+    await waitFor(() => expect(holder.post).toHaveBeenCalledWith('/plugins/relogio/logs', expect.objectContaining({ message: "Identifier 'm' has already been declared", where: 'carregar o módulo (slot Widget)' })))
   })
 
   it('a troca de revisão (prévia ligada) troca o componente ao vivo, com o selo da prévia', async () => {

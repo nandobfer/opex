@@ -43,6 +43,8 @@ vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: {} }))
 vi.mock('@/lib/db/models/Plugin', () => ({ Plugin: {}, PluginVersion: {} }))
 vi.mock('@/features/agentic/server/workflow', () => ({ approve: mocks.approve }))
 vi.mock('@/features/opex-agent/server/runner', () => ({ sendMessage: mocks.sendMessage }))
+const logs = vi.hoisted(() => ({ record: vi.fn(), list: vi.fn(async () => [{ message: 'ok' }]) }))
+vi.mock('@/features/plugins/server/logs', () => ({ recordPluginClientError: logs.record, listPluginLogs: logs.list }))
 
 import { NextRequest } from 'next/server'
 import { encodePreviewCookie } from '@/features/plugins/server/preview-cookie'
@@ -50,6 +52,9 @@ import { GET as pluginRoute } from '@/app/api/p/[pluginId]/[[...path]]/route'
 import { POST as togglePreview } from '@/app/api/plugins/[id]/preview/route'
 import { POST as approveFromPortal } from '@/app/api/cliente/plugins/[id]/approve/route'
 import { POST as sendOpexMessage } from '@/app/api/opex/sessions/[id]/messages/route'
+import { POST as approveFromOwner } from '@/app/api/plugins/[id]/approve/route'
+import { GET as ownerLogs, POST as ownerClientError } from '@/app/api/plugins/[id]/logs/route'
+import { POST as portalClientError } from '@/app/api/cliente/plugins/[id]/logs/route'
 
 const COOKIE = 'opex_plugin_preview'
 const request = (url: string, init: { method?: string; cookie?: string; body?: unknown } = {}) =>
@@ -159,5 +164,32 @@ describe('POST /api/opex/sessions/[id]/messages (prévia no turno)', () => {
   it('cookie adulterado não liga prévia nenhuma', async () => {
     await sendOpexMessage(request('/api/opex/sessions/s1/messages', { method: 'POST', cookie: 'relogio.assinatura-falsa', body: { text: 'oi' } }), { params: Promise.resolve({ id: 's1' }) })
     expect(mocks.sendMessage).toHaveBeenCalledWith('s1', expect.anything(), 'local', expect.objectContaining({ previewPlugins: [] }))
+  })
+})
+
+describe('rodada 3 (OPE-172): aprovar pelo dono e logs', () => {
+  it('o dono aprova a prévia de qualquer plugin pela página dele', async () => {
+    const response = await approveFromOwner(request('/api/plugins/alheio/approve', { method: 'POST' }), { params: Promise.resolve({ id: 'alheio' }) })
+    expect(response.status).toBe(200)
+    expect(mocks.approve).toHaveBeenCalledWith('wb9', { approvedBy: 'local' })
+  })
+
+  it('logs do dono: leitura com after e gravação do erro de interface', async () => {
+    mocks.plugins.set('relogio', { pluginId: 'relogio', scope: 'owner', clientId: null })
+    const read = await ownerLogs(request('/api/plugins/relogio/logs?after=2026-11-19T10:00:00.000Z&limit=10'), { params: Promise.resolve({ id: 'relogio' }) })
+    expect((await read.json()).data).toEqual([{ message: 'ok' }])
+    expect(logs.list).toHaveBeenCalledWith('relogio', { after: '2026-11-19T10:00:00.000Z', limit: 10 })
+    const write = await ownerClientError(request('/api/plugins/relogio/logs', { method: 'POST', body: { message: 'boom', where: 'slot Widget', channel: 'preview' } }), { params: Promise.resolve({ id: 'relogio' }) })
+    expect(write.status).toBe(200)
+    expect(logs.record).toHaveBeenCalledWith('relogio', { message: 'boom', stack: null, channel: 'preview', where: 'slot Widget' })
+  })
+
+  it('portal: grava o erro só de plugin do próprio cliente (qualquer usuário do cliente)', async () => {
+    mocks.actor = { ...mocks.actor, isAdmin: false }
+    const own = await portalClientError(request('/api/cliente/plugins/painel/logs', { method: 'POST', body: { message: 'boom', where: 'slot Widget' } }), { params: Promise.resolve({ id: 'painel' }) })
+    expect(own.status).toBe(200)
+    const other = await portalClientError(request('/api/cliente/plugins/alheio/logs', { method: 'POST', body: { message: 'boom', where: 'slot Widget' } }), { params: Promise.resolve({ id: 'alheio' }) })
+    expect(other.status).toBe(404)
+    expect(logs.record).toHaveBeenCalledTimes(1)
   })
 })

@@ -102,3 +102,19 @@ describe('normalizePluginFiles', () => {
     expect(result.map((file) => file.path)).toEqual(['client/a.tsx', 'plugin.json'])
   })
 })
+
+describe('menu do portal (portal.nav, OPE-172)', () => {
+  it('plugin de cliente pode declarar nav (menu do portal) e os slots novos; servidor continua proibido', () => {
+    const client = manifest({ scope: 'client', entries: { client: 'client/index.tsx' }, routes: [], tools: [], slots: [{ slot: 'portal.task.panel', export: 'Aba' }], pages: [{ path: 'painel', title: 'Início', export: 'Home' }], nav: [{ label: 'Painel', page: 'painel' }] })
+    const ok = parsePluginManifest(files(client).filter((file) => file.path !== 'server/index.ts'))
+    expect(ok.ok).toBe(true)
+    const withServer = parsePluginManifest(files({ ...client, entries: { client: 'client/index.tsx', server: 'server/index.ts' } }))
+    expect(withServer.ok).toBe(false)
+  })
+
+  it('slot de menu declarado como slot é recusado', () => {
+    const result = parsePluginManifest(files(manifest({ slots: [{ slot: 'sidebar.nav', export: 'X' }] })))
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.issues.join('\n')).toContain('Use a lista "nav" do manifesto para o menu (sidebar.nav)')
+  })
+})
