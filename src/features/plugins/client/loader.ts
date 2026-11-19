@@ -24,6 +24,12 @@ function sharedTable(): SharedTable {
 }
 
 const IDENTIFIER = /^[A-Za-z_$][\w$]*$/
+/** Nome local da instância no shim: não pode colidir com um export (o framer-motion exporta `m`). */
+const SHIM_LOCAL = "__opexSharedModule__"
+/** Palavras que não podem virar nome de variável no `export const { … }` (ficam fora do shim). */
+const RESERVED = new Set(
+    "await break case catch class const continue debugger default delete do else enum export extends false finally for function if implements import in instanceof interface let new null package private protected public return static super switch this throw true try typeof var void while with yield arguments eval".split(" "),
+)
 const shimUrls = new Map<string, string>()
 const moduleCache = new Map<string, Promise<PluginClientModule>>()
 
@@ -36,9 +42,9 @@ export function sharedImportsOf(code: string): string[] {
 
 /** Código ESM do shim de um módulo compartilhado (reexporta as chaves da instância do shell). */
 export function shimSource(id: string, module: SharedModule): string {
-    const names = Object.keys(module).filter((name) => name !== "default" && name !== "__esModule" && IDENTIFIER.test(name))
-    const lines = [`const m = globalThis.${TABLE_KEY}[${JSON.stringify(id)}];`, "export default (m.default ?? m);"]
-    if (names.length) lines.push(`export const { ${names.join(", ")} } = m;`)
+    const names = Object.keys(module).filter((name) => name !== "__esModule" && name !== SHIM_LOCAL && !RESERVED.has(name) && IDENTIFIER.test(name))
+    const lines = [`const ${SHIM_LOCAL} = globalThis.${TABLE_KEY}[${JSON.stringify(id)}];`, `export default (${SHIM_LOCAL}.default ?? ${SHIM_LOCAL});`]
+    if (names.length) lines.push(`export const { ${names.join(", ")} } = ${SHIM_LOCAL};`)
     return lines.join("\n")
 }
 
