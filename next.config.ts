@@ -15,7 +15,9 @@ const nextConfig: NextConfig = {
     },
     output: "standalone",
     // `ssh2` (aba Controles do OpenCode) carrega binários opcionais em try/catch: fica fora do bundle.
-    serverExternalPackages: ["ssh2"],
+    // Plugins (OPE-172): o kernel Cordis, o Rolldown (binário nativo) e o compilador do Tailwind rodam
+    // no servidor fora do bundle do Next.
+    serverExternalPackages: ["ssh2", "cordis", "rolldown", "tailwindcss"],
     env: {
         APP_VERSION: pkg.version,
     },
