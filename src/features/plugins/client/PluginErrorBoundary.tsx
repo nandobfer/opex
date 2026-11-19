@@ -13,6 +13,8 @@ interface Props {
     children: ReactNode
     /** Troca de revisão limpa o erro (a versão nova tenta de novo). */
     resetKey: string
+    /** Erro de render pego aqui (vai para o debug do plugin). */
+    onError?: (error: Error) => void
 }
 
 interface State {
@@ -32,8 +34,8 @@ export class PluginErrorBoundary extends Component<Props, State> {
     }
 
     override componentDidCatch(error: Error, info: ErrorInfo): void {
-        void error
         void info
+        this.props.onError?.(error)
     }
 
     override render() {

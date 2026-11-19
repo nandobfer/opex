@@ -24,3 +24,18 @@ export const pluginDiffQuerySchema = z.object({
 
 export const pluginPreviewToggleSchema = z.object({ on: z.boolean() })
 export type PluginPreviewToggleInput = z.infer<typeof pluginPreviewToggleSchema>
+
+/** Erro de interface de um plugin, enviado pela fronteira de erro do navegador (OPE-172). */
+export const pluginClientErrorSchema = z.object({
+    message: z.string().trim().min(1).max(4096),
+    stack: z.string().max(8192).nullable().optional(),
+    channel: z.enum(["stable", "preview"]).nullable().optional(),
+    where: z.string().trim().min(1).max(200),
+})
+export type PluginClientErrorInput = z.infer<typeof pluginClientErrorSchema>
+
+/** Leitura dos logs de debug (`after` = ISO da última linha recebida). */
+export const pluginLogsQuerySchema = z.object({
+    after: z.string().datetime().optional(),
+    limit: z.coerce.number().int().min(1).max(1000).optional(),
+})

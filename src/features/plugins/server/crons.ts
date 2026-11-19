@@ -1,4 +1,5 @@
 import { dbConnect } from "@/lib/db"
+import { pluginLog } from "./logs"
 import { CronJobState } from "@/lib/db/models/CronJobState"
 import { INSTANCE_ID } from "@/lib/instance"
 import { nextRunAt, scheduleSignature } from "@/lib/integrations/schedule"
@@ -42,10 +43,12 @@ export async function runPluginCrons(now: Date = new Date()): Promise<string[]> 
         try {
             await entry.value.run()
             executed.push(jobId)
+            pluginLog(entry.owner.pluginId, "step", `Cron "${entry.value.name}" executado`, { duracaoMs: Date.now() - startedAt }, entry.owner.channel)
         } catch (error) {
             status = "error"
             message = error instanceof Error ? error.message : String(error)
             log().error({ err: error, jobId }, "[plugins] Cron de plugin falhou")
+            pluginLog(entry.owner.pluginId, "error", `Cron "${entry.value.name}" falhou`, { error: message }, entry.owner.channel)
         }
         await CronJobState.updateOne(
             { jobId, lockedBy: INSTANCE_ID },

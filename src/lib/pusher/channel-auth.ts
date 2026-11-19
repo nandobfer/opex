@@ -10,12 +10,13 @@
  *   usuário de cliente do seu `userId`. O histórico de um usuário nunca chega a outro.
  * - `private-opex-{clientId}-{userId}`: o **Agente Opex** do próprio usuário no cliente (sessões e
  *   configuração). O usuário de cliente só assina o seu; o dono assina o do `userId` local.
+ * - `private-plugin-{pluginId}`: logs de debug de um plugin (OPE-172), só o **dono**.
  */
 
 import { isIntegrationId } from "@/lib/integrations/catalog"
 import { LOCAL_USER_ID } from "@/lib/local-user"
 import type { SessionPayload } from "@/features/auth/session"
-import { appChannel, CLIENT_CHANNEL_PREFIX, OPEX_CHANNEL_PREFIX, REPO_RECENTS_CHANNEL_PREFIX } from "./channel-names"
+import { appChannel, CLIENT_CHANNEL_PREFIX, OPEX_CHANNEL_PREFIX, PLUGIN_DEBUG_CHANNEL_PREFIX, REPO_RECENTS_CHANNEL_PREFIX } from "./channel-names"
 import { parseOpexClientChannel } from "@/features/opex-agent/scope"
 
 export type ParsedChannel =
@@ -24,12 +25,17 @@ export type ParsedChannel =
     | { kind: "client"; clientId: string }
     | { kind: "repoRecents"; actorId: string }
     | { kind: "opex"; clientId: string; userId: string }
+    | { kind: "plugin"; pluginId: string }
     | { kind: "unknown" }
 
 export function parseChannel(channel: string): ParsedChannel {
     if (channel === appChannel()) return { kind: "app" }
     if (channel.startsWith("private-integration-")) {
         return { kind: "integration", integrationId: channel.slice("private-integration-".length) }
+    }
+    if (channel.startsWith(PLUGIN_DEBUG_CHANNEL_PREFIX)) {
+        const pluginId = channel.slice(PLUGIN_DEBUG_CHANNEL_PREFIX.length)
+        return /^[a-z][a-z0-9-]{1,39}$/.test(pluginId) ? { kind: "plugin", pluginId } : { kind: "unknown" }
     }
     if (channel.startsWith(REPO_RECENTS_CHANNEL_PREFIX)) {
         return { kind: "repoRecents", actorId: channel.slice(REPO_RECENTS_CHANNEL_PREFIX.length) }
@@ -50,6 +56,8 @@ export function isChannelAuthorized(channel: string, session: SessionPayload | n
             return session?.kind === "admin"
         case "integration":
             return session?.kind === "admin" && isIntegrationId(parsed.integrationId)
+        case "plugin":
+            return session?.kind === "admin"
         case "client":
             if (session?.kind === "admin") return true
             return session?.kind === "client" && session.clientId === parsed.clientId

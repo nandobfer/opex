@@ -90,6 +90,9 @@ export const pluginCronJobId = (pluginId: string, name: string) => `plugin:${plu
 /** Evento Pusher (`private-app` e `private-client-{clientId}`): `{ id, version, channel }`. */
 export const PLUGIN_UPDATED_EVENT = "plugin-updated"
 
+/** Evento Pusher dos logs de debug (`private-plugin-{id}`): `{ entries }`, como as integrações. */
+export const PLUGIN_DEBUG_EVENT = "plugin-debug"
+
 /** Cookie (assinado) com os plugins cuja prévia está ligada neste navegador. */
 export const PLUGIN_PREVIEW_COOKIE = "opex_plugin_preview"
 

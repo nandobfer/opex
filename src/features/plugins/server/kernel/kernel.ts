@@ -1,4 +1,5 @@
 import { mkdir, writeFile, access } from "node:fs/promises"
+import { pluginLog } from "../logs"
 import os from "node:os"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
@@ -198,12 +199,14 @@ export async function activatePluginServer(target: ActivationTarget): Promise<Ac
             if (fiber) await fiber.dispose().catch(() => undefined)
             const message = error instanceof Error ? error.message : String(error)
             log().warn({ err: error, pluginId: target.pluginId, channel: target.channel, versionId: target.versionId }, "[plugins] Falha ao ativar a versão; a anterior continua")
+            pluginLog(target.pluginId, "error", "Falha ao ativar a versão no servidor; a anterior continua", { versionId: target.versionId, error: message }, target.channel)
             return { ok: false, error: `Falha ao ativar o plugin: ${message}` }
         }
 
         state.fibers.set(key, { pluginId: target.pluginId, channel: target.channel, versionId: target.versionId, hash: target.artifact.hash, fiber, fiberId, activatedAt: new Date(), warning: compat.warning })
         if (current) await current.fiber.dispose().catch((error: unknown) => log().warn({ err: error, pluginId: target.pluginId }, "[plugins] Falha ao descartar a fiber anterior"))
         log().info({ pluginId: target.pluginId, channel: target.channel, versionId: target.versionId }, "[plugins] Versão ativada")
+        pluginLog(target.pluginId, "success", current ? "Versão recarregada no servidor (a anterior foi desfeita)" : "Versão ativada no servidor", { versionId: target.versionId, ...(compat.warning ? { aviso: compat.warning } : {}) }, target.channel)
         return { ok: true, warning: compat.warning }
     })
 }
@@ -213,6 +216,7 @@ async function disposeLoaded(state: KernelState, key: string): Promise<void> {
     if (!loaded) return
     state.fibers.delete(key)
     await loaded.fiber.dispose().catch((error: unknown) => log().warn({ err: error, key }, "[plugins] Falha ao descartar a fiber"))
+    pluginLog(loaded.pluginId, "info", "Código de servidor desfeito (rotas, ferramentas e crons removidos)", { versionId: loaded.versionId }, loaded.channel)
 }
 
 /** Desliga o código de servidor de um canal (ou dos dois). */

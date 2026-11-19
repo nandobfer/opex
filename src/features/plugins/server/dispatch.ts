@@ -2,6 +2,7 @@ import type { NextRequest } from "next/server"
 import type { PluginChannel } from "../constants"
 import { loadedPluginFiber } from "./kernel/kernel"
 import { findPluginRoute } from "./kernel/registries"
+import { pluginLog } from "./logs"
 import { previewListFromRequest } from "./preview-cookie"
 
 /**
@@ -14,5 +15,10 @@ export async function dispatchPluginRoute(req: NextRequest, pluginId: string, se
     const channel: PluginChannel = previewOn ? "preview" : "stable"
     const route = findPluginRoute(pluginId, req.method, path, channel)
     if (!route) return { found: false }
-    return { found: true, result: await route.entry.handler({ req, params: route.params, path }) }
+    try {
+        return { found: true, result: await route.entry.handler({ req, params: route.params, path }) }
+    } catch (error) {
+        pluginLog(pluginId, "error", `Rota ${req.method} ${path} falhou`, { error: error instanceof Error ? error.message : String(error) }, channel)
+        throw error
+    }
 }

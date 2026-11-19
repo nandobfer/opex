@@ -1,11 +1,11 @@
 import mongoose from "mongoose"
+import { pluginLog } from "../logs"
 import { z, type ZodType } from "zod"
 import * as dateFns from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { pluginToolName, type PluginRouteMethod } from "../../constants"
 import type { OpexTool, OpexToolContext, OpexToolRisk } from "@/features/opex-agent/server/tools/define"
 import { isSecondsSchedule, validateSchedule, type Schedule } from "@/lib/integrations/schedule"
-import { loggerFor } from "@/lib/logger"
 import { Service, fiberEffect, type Context } from "./cordis"
 import { requirePluginMeta } from "./identity"
 import { cronKey, pluginRegistries, routeKey, toolKey, type PluginRouteHandler } from "./registries"
@@ -51,21 +51,22 @@ export class LogService extends Service {
     constructor(ctx: Context) {
         super(ctx, "log")
     }
-    private get logger() {
+    /** Vai para o console (Pino), para `plugin_logs` e para o debug ao vivo da tela do plugin. */
+    private write(level: "info" | "warn" | "error" | "step", message: string, data: Record<string, unknown>) {
         const meta = requirePluginMeta(this.ctx, "log")
-        return loggerFor({ module: "plugin", plugin: meta.pluginId, channel: meta.channel })
+        pluginLog(meta.pluginId, level, message, Object.keys(data).length ? data : undefined, meta.channel)
     }
     info(message: string, data: Record<string, unknown> = {}) {
-        this.logger.info(data, message)
+        this.write("info", message, data)
     }
     warn(message: string, data: Record<string, unknown> = {}) {
-        this.logger.warn(data, message)
+        this.write("warn", message, data)
     }
     error(message: string, data: Record<string, unknown> = {}) {
-        this.logger.error(data, message)
+        this.write("error", message, data)
     }
     debug(message: string, data: Record<string, unknown> = {}) {
-        this.logger.debug(data, message)
+        this.write("step", message, data)
     }
 }
 
@@ -164,7 +165,14 @@ export class ToolsService extends Service {
             risk: pluginToolRisk(def.risk),
             confirmByDefault: true,
             input: def.input as ZodType<unknown>,
-            execute: async (input, context) => (def.execute as (value: unknown, ctx: OpexToolContext) => unknown)(input, context),
+            execute: async (input, context) => {
+                try {
+                    return await (def.execute as (value: unknown, ctx: OpexToolContext) => unknown)(input, context)
+                } catch (error) {
+                    pluginLog(meta.pluginId, "error", `Ferramenta "${def.name}" falhou`, { error: error instanceof Error ? error.message : String(error) }, meta.channel)
+                    throw error
+                }
+            },
         }
         fiberEffect(this.ctx, `tool:${def.name}`, () => pluginRegistries().tools.add(toolKey(meta.channel, name), meta, tool))
     }
