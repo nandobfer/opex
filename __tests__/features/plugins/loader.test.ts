@@ -45,21 +45,21 @@ describe('shims dos módulos reais', () => {
   }
 
   it.each(Object.keys(real))('%s: o shim importa e reexporta a mesma instância', async (id) => {
-    const module = { ...(await real[id]!()) }
-    ;(globalThis as Record<string, unknown>)[TABLE] = { [id]: module }
-    const shim = (await import(/* @vite-ignore */ `data:text/javascript,${encodeURIComponent(shimSource(id, module))}`)) as Record<string, unknown>
-    const sample = Object.keys(module).find((name) => /^[A-Za-z_$][\w$]*$/.test(name) && name !== 'default')!
-    expect(shim[sample]).toBe(module[sample])
+    const shared = { ...(await real[id]!()) }
+    ;(globalThis as Record<string, unknown>)[TABLE] = { [id]: shared }
+    const shim = (await import(/* @vite-ignore */ `data:text/javascript,${encodeURIComponent(shimSource(id, shared))}`)) as Record<string, unknown>
+    const sample = Object.keys(shared).find((name) => /^[A-Za-z_$][\w$]*$/.test(name) && name !== 'default')!
+    expect(shim[sample]).toBe(shared[sample])
     if (id === 'framer-motion') {
-      expect(shim.m).toBe(module.m)
-      expect(shim.motion).toBe(module.motion)
+      expect(shim.m).toBe(shared.m)
+      expect(shim.motion).toBe(shared.motion)
     }
   }, 30_000)
 
   it('palavra reservada e o nome local não entram na reexportação', async () => {
-    const module = { default: { a: 1 }, class: 1, delete: 2, __opexSharedModule__: 3, ok: 4 }
-    ;(globalThis as Record<string, unknown>)[TABLE] = { x: module }
-    const shim = (await import(/* @vite-ignore */ `data:text/javascript,${encodeURIComponent(shimSource('x', module))}`)) as Record<string, unknown>
+    const shared = { default: { a: 1 }, class: 1, delete: 2, __opexSharedModule__: 3, ok: 4 }
+    ;(globalThis as Record<string, unknown>)[TABLE] = { x: shared }
+    const shim = (await import(/* @vite-ignore */ `data:text/javascript,${encodeURIComponent(shimSource('x', shared))}`)) as Record<string, unknown>
     expect(shim.ok).toBe(4)
     expect(shim.default).toEqual({ a: 1 })
     expect('class' in shim).toBe(false)
