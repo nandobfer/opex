@@ -33,7 +33,17 @@ vi.mock('ai', () => ({ dynamicTool: (def: unknown) => def }))
 const tool = { name: 'delete_thing', group: 'tasks', label: 'Excluir', risk: 'destructive', description: 'd', input: z.object({ id: z.string() }), summarize: (input: { id: string }) => `Excluir ${input.id}`, execute: mocks.execute }
 vi.mock('@/features/opex-agent/server/mcp/tools', () => ({ resolveMcpTool: mocks.resolveMcpTool }))
 vi.mock('@/features/routine-agents/server/chat/turn', () => ({ assertRoutineChatToolAllowed: mocks.routineAllowed, routineChatSecrets: mocks.routineSecrets }))
-vi.mock('@/features/opex-agent/server/tools/registry', () => ({ findOpexTool: (name: string) => (name === tool.name ? tool : undefined) }))
+// Ferramenta de plugin (OPE-172): a versão em prévia só existe com a prévia do plugin ligada.
+const pluginStable = vi.hoisted(() => vi.fn(async () => 'stable'))
+const pluginPreview = vi.hoisted(() => vi.fn(async () => 'preview'))
+vi.mock('@/features/opex-agent/server/tools/registry', () => ({
+  findOpexTool: (name: string, previewPlugins?: ReadonlySet<string>) => {
+    if (name === tool.name) return tool
+    if (name === 'plugin_relogio_apagar') return { ...tool, name, group: 'plugin-tools', execute: previewPlugins?.has('relogio') ? pluginPreview : pluginStable }
+    if (name === 'plugin_relogio_novo' && previewPlugins?.has('relogio')) return { ...tool, name, group: 'plugin-tools', execute: pluginPreview }
+    return undefined
+  },
+}))
 
 import { decideAction, requestConfirmation } from '@/features/opex-agent/server/confirmations'
 import type { OpexTool } from '@/features/opex-agent/server/tools/define'
@@ -139,5 +149,38 @@ describe('conversa com um agente rotineiro (OPE-160)', () => {
     expect(result.status).toBe('failed')
     expect(mocks.execute).not.toHaveBeenCalled()
     expect(mocks.queueFollowUp).toHaveBeenCalledWith(SESSION, expect.objectContaining({ text: expect.stringContaining('não está mais liberada') }))
+  })
+})
+
+describe('ferramenta de plugin em prévia (OPE-172)', () => {
+  async function pendingPlugin(name: string, previewPlugins: string[]) {
+    const pluginTool = { ...tool, name, group: 'plugin-tools' }
+    const confirmation = await requestConfirmation(SESSION, MESSAGE, pluginTool as unknown as OpexTool, { id: 'x1' }, 'call-1', previewPlugins)
+    await messages().create({ _id: MESSAGE, parts: [{ type: 'tool', id: 'call-1', name, state: 'done', output: null, confirmation }] })
+    return confirmation.actionId
+  }
+
+  it('proposta com a prévia ligada: Confirmar executa a versão preview e o turno seguinte continua nela', async () => {
+    const actionId = await pendingPlugin('plugin_relogio_apagar', ['relogio'])
+    expect(actions().docs[0]).toMatchObject({ previewPlugins: ['relogio'] })
+    const result = await decideAction(actionId, 'confirm', 'local')
+    expect(result.status).toBe('confirmed')
+    expect(pluginPreview).toHaveBeenCalledTimes(1)
+    expect(pluginStable).not.toHaveBeenCalled()
+    expect(mocks.queueFollowUp).toHaveBeenCalledWith(SESSION, expect.objectContaining({ kind: 'confirmation', previewPlugins: ['relogio'] }))
+  })
+
+  it('ferramenta que só existe na prévia é encontrada na confirmação', async () => {
+    const actionId = await pendingPlugin('plugin_relogio_novo', ['relogio'])
+    expect((await decideAction(actionId, 'confirm', 'local')).status).toBe('confirmed')
+    expect(pluginPreview).toHaveBeenCalledTimes(1)
+  })
+
+  it('proposta sem prévia executa a versão estável', async () => {
+    const actionId = await pendingPlugin('plugin_relogio_apagar', [])
+    await decideAction(actionId, 'confirm', 'local')
+    expect(pluginStable).toHaveBeenCalledTimes(1)
+    expect(pluginPreview).not.toHaveBeenCalled()
+    expect(mocks.queueFollowUp).toHaveBeenCalledWith(SESSION, expect.not.objectContaining({ previewPlugins: expect.anything() }))
   })
 })

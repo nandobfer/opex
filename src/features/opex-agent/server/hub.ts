@@ -20,6 +20,11 @@ export interface OpexFollowUp {
     fileIds?: string[]
     /** Job agendado que disparou a mensagem (o fim do turno conclui o job). */
     job?: { id: string; title: string }
+    /**
+     * Plugins com a prévia ligada no navegador que originou o turno (OPE-172): o turno seguinte e a
+     * confirmação resolvem as ferramentas de plugin no mesmo canal (preview ou stable).
+     */
+    previewPlugins?: string[]
 }
 
 interface LiveTurn {

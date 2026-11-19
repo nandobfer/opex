@@ -114,6 +114,8 @@ export interface IOpexPendingAction {
     /** Entrada cifrada (`secretBox`): pode conter segredos; apagada depois da decisão. */
     input: unknown
     summary: string
+    /** Plugins com a prévia ligada no turno que propôs a ação (OPE-172): a confirmação usa o mesmo canal. */
+    previewPlugins?: string[]
     status: OpexConfirmationStatus
     /** Resultado da execução confirmada (JSON). */
     result: string | null
@@ -182,6 +184,7 @@ const OpexPendingActionSchema = new Schema<IOpexPendingAction>(
         toolName: { type: String, required: true },
         input: { type: Schema.Types.Mixed, default: null },
         summary: { type: String, required: true },
+        previewPlugins: { type: [String], default: [] },
         status: { type: String, enum: ["pending", "confirmed", "cancelled", "failed", "expired"], default: "pending" },
         result: { type: String, default: null },
         error: { type: String, default: null },
