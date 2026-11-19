@@ -91,6 +91,20 @@ fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hoo
 `useDialogPresence` e `useCreateDialogAction` (`src/hooks/`). Animações de diálogo e abas:
 `src/components/motion/dialog-panel-motion.ts` e `tab-motion.ts`.
 
+- **Nome como link** (OPE-172, padrão do projeto): o nome do item da lista é o link para a página dele,
+  com `ItemNameLink` (`src/components/list/ItemNameLink.tsx`; sublinhado no hover e anel de foco). Não
+  use ícone/botão "Visualizar"/"Abrir" para isso. Usado em Agentes rotineiros (configurações) e Plugins.
+- **Um item em uso** (`ActiveItemRow`, contas do OpenCode, chaves de IA e versões de plugin): o card
+  inteiro põe o item em uso; `onRename`/`onRemove` são opcionais (sem eles, sem os botões),
+  `activatable={false}` desenha o card sem o botão que cobre a linha (item que não pode ser posto em
+  uso) e `badges` entram ao lado do nome.
+- **Debug de logs** (terminal, coluna e modal): `DebugLogConsole` + `useDebugTerminal`,
+  `useDebugLogStream` (fonte: `fetch`, canal e evento), `DebugLogsPanel`, `DebugLogsDialog` e
+  `DebugToggleIconButton`, em `src/features/integrations/components` e `hooks`. As integrações
+  (`IntegrationDebugConsole`, `LogsPanel`, `IntegrationDebugDialog`, `DebugToggleButton`) e os plugins
+  (`PluginDebugConsole`, `PluginDebugDialog`) são adaptadores sobre eles: debug novo reaproveita esses
+  componentes, sem copiar o markup.
+
 ### Recursos instaláveis (`src/components/resources/`) e listas de liberação
 
 Extraídos da aba de recursos do OpenCode (OPE-153) e usados também pelas Skills do Agente Opex:

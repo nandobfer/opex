@@ -117,6 +117,8 @@ sem pedido explícito.
   novamente) e confirmação explícita em ações críticas (excluir, revogar, parar timer).
 - Telas de listagem usam o kit de `src/components/list` (`CadastroHeader`, `ListFilters`,
   `CadastroTableCard`, `TableAction`...).
+- **Em listas, o nome do item é o link para a página dele** (`ItemNameLink` de `src/components/list`):
+  sem ícone/botão de "abrir" ou "visualizar" (decisão do dono, OPE-172).
 - **Skeleton acompanha a interface**: toda alteração visual numa tela ou bloco (layout, largura,
   altura, colunas, estrutura de cards ou linhas) atualiza **no mesmo commit** o skeleton de
   carregamento correspondente, para que ele continue com as dimensões e a estrutura do resultado
@@ -174,8 +176,9 @@ sem pedido explícito.
   Compatível com Soketi (modo "Host próprio").
 - Eventos são disparados **somente pelo servidor**, depois da mutação persistida e da auditoria
   (`publishAppEvent` de `src/lib/pusher/channels.ts`). O cliente nunca publica eventos.
-- Canais **privados** conhecidos: `private-app` (dados das telas) e `private-integration-{id}`
-  (debug/status das integrações) — só o dono —, `private-client-{clientId}` (portal do cliente),
+- Canais **privados** conhecidos: `private-app` (dados das telas), `private-integration-{id}`
+  (debug/status das integrações) e `private-plugin-{pluginId}` (debug dos plugins) — só o dono —,
+  `private-client-{clientId}` (portal do cliente),
   `private-repo-recents-{ator}` (histórico do próprio ator) e `private-opex-{clientId}-{userId}`
   (Agente Opex de um usuário no portal). Canal novo exige regra em
   `src/lib/pusher/channel-auth.ts`.
@@ -220,8 +223,9 @@ sem pedido explícito.
   `opencode-go-usage-refresh` ou por uma leitura da tela (ver `aicontext/modules/opencode-quota.md`).
 - Plugins (OPE-172): `plugin-updated` (`{ id, version, channel }`) em `private-app` e, nos plugins de cliente,
   em `private-client-{clientId}` (a interface troca de versão ao vivo); `plugin-event`
-  (`{ pluginId, event, data }`) em `private-app`, publicado pelo servidor de um plugin com `ctx.realtime.publish`
-  (ver `aicontext/modules/plugins.md`).
+  (`{ pluginId, event, data }`) em `private-app`, publicado pelo servidor de um plugin com `ctx.realtime.publish`;
+  `plugin-debug` (`{ entries }`, linhas de log) em `private-plugin-{pluginId}` (só o dono), para o debug do
+  plugin (ver `aicontext/modules/plugins.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`

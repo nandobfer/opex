@@ -1028,15 +1028,19 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
 - **Prévia ao vivo:** `publishPluginPreview`
   - publica a `draft` como `preview` do plugin, carregada ao vivo **só para quem liga a prévia**
     (cookie);
-  - grava `previewUrl`: a primeira página do plugin, o Dashboard ou `/tarefas`, com o subcaminho
+  - grava `previewUrl`: a primeira página do plugin ou a tela do slot principal (`pluginPreviewPath`:
+    Dashboard, `/tarefas`, `/desenvolvimento`, `/financeiro` ou a tela do portal), com o subcaminho
     público;
   - se o código de servidor não ativou, avisa e marca `previewHealthy: false`.
 
-  Na barra da mesa, a chave "Gerar prévia" vira **"Ligar prévia"** (`PluginPreviewToggle`) e não há
-  "Gerar nova prévia".
+  Na barra da mesa, a chave "Gerar prévia" vira **"Ligar prévia"** (`PluginPreviewToggle`, o único
+  switch de prévia do app) e não há "Gerar nova prévia".
+- **Descritivo da mudança**: os prompts de implementação e de correção pedem o bloco
+  `{"changeSummary": "…"}`; `pluginCompileTurn` guarda o texto em `plugin.changeSummary` (vale também
+  no Tentar novamente que só recompila) e a versão compilada o grava com origem `agent`.
 - **Aprovar e consolidar** (`approve`): grava `plugin.approved` e enfileira `fixing_ci`. A mesma
-  ação pode vir do portal, quando o admin do cliente aprova a prévia de um plugin de cliente
-  (`approvePluginPreviewFromPortal`).
+  ação vem da página do plugin ("Aprovar prévia" na linha da versão em prévia), no dono
+  (`POST /api/plugins/[id]/approve`) e no portal pelo admin do cliente (`approvePluginPreview`).
 - **Testes do plugin** (`fixing_ci`, sem turno do agente): o Opex roda `npx vitest run` na pasta pelo
   shell do OpenCode (instala as dependências na primeira vez; teto de 15 min). Plugin sem testes
   falha como teste que não passou (o agente precisa escrevê-los).

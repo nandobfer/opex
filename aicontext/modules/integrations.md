@@ -148,6 +148,10 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   cabeçalho mostra à direita do título um botão de ícone de debug (`DebugToggleButton`, "Abrir/Fechar
   logs de debug", `aria-expanded` + `aria-controls` apontando para a coluna). Sem o modo debug, o botão
   não aparece e os logs não abrem. O botão é um liga/desliga só de visualização: nada é salvo.
+  - Os componentes do terminal são compartilhados com o debug dos plugins (OPE-172): `DebugLogConsole`
+    (+ `useDebugTerminal`), `useDebugLogStream`, `DebugLogsPanel`, `DebugLogsDialog` e
+    `DebugToggleIconButton`. `IntegrationDebugConsole`, `LogsPanel`, `IntegrationDebugDialog` e
+    `DebugToggleButton` são os adaptadores da integração (mesmo comportamento de antes).
   - Estado no `IntegrationEditor` (`debugOpen`), entregue ao `DetailHeader` de todos os formulários
     pelo contexto `IntegrationDebugToggleProvider` (`detail/debug-toggle-context.tsx`). Começa
     **fechado** ao entrar ou trocar de integração e fecha sozinho quando o modo debug salvo vira `false`.

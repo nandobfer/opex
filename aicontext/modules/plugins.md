@@ -19,10 +19,11 @@ telas em `components/`). Modelos em `src/lib/db/models/Plugin.ts`. SDK de autori
 | Coleção | Conteúdo |
 |---|---|
 | `plugins` | `pluginId` (slug único), nome, descrição, escopo, `clientId`, `apiVersion`, `active`, `stableVersionId`, `previewVersionId`, `previewWorkbenchId` (a mesa dona da prévia), `runtimeError` (`{ channel, versionId, message, at }`) |
-| `plugin_versions` | `number` (sequencial por plugin), `state` (`draft` → `preview` → `stable`, a estável anterior vira `archived`), `files` (fontes), `manifest`, `artifacts.server`/`artifacts.client` (`{ code, hash, css, cssHash }`), `tests`, `compileLog`, `baseVersionId`, `source` (`taskId`, `taskCode`, `workbenchId`), `promotedAt` |
+| `plugin_versions` | `number` (sequencial por plugin), `state` (`draft` → `preview` → `stable`, a estável anterior vira `archived`), `files` (fontes), `manifest`, `artifacts.server`/`artifacts.client` (`{ code, hash, css, cssHash }`), `tests`, `compileLog`, `baseVersionId`, `source` (`taskId`, `taskCode`, `workbenchId`), `promotedAt`, `changeSummary` + `changeSummarySource` (`agent`/`ai`: o descritivo da mudança para a versão anterior) |
 | `plugin_kv` | Chave-valor de cada plugin (`ctx.kv`) |
+| `plugin_logs` | Logs de debug do plugin (48 h, TTL): `pluginId`, `channel`, `level`, `message`, `data`, `ts`, `instance` |
 
-Os índices são criados pela migração idempotente `ensure-plugin-indexes`. Versão publicada não muda:
+Os índices (inclusive o TTL de `plugin_logs`) são criados pela migração idempotente `ensure-plugin-indexes`. Versão publicada não muda:
 o rollback só move `stableVersionId`.
 
 **Limites de uma versão:** 200 arquivos, 256 KB por arquivo, caminho no padrão (sem `..`, sem espaço) e 2 MB no total. `pluginManifestIssues` confere cada arquivo com `pluginSourceFileSchema` e devolve o problema com o caminho (ex.: `client/dump.json: Arquivo maior que o limite de 256 KB`); a versão não é gravada.
@@ -198,7 +199,10 @@ portal; `server/runtime-manifest.ts`):
 1. Busca o bundle pelo axios do contexto.
 2. Para cada marcador `opex-shared:<id>`, cria um shim ESM (blob URL) que reexporta a instância
    **única** do shell, guardada em `globalThis.__OPEX_SHARED__` e carregada de
-   `shared-registry.ts` (mesma lista de `shared-modules.ts`, conferida por teste).
+   `shared-registry.ts` (mesma lista de `shared-modules.ts`, conferida por teste). A variável local do
+   shim é `__opexSharedModule__` (nunca um nome que um módulo exporte: o framer-motion exporta `m`, e o
+   shim antigo com `const m` quebrava com "Identifier 'm' has already been declared"); palavras
+   reservadas ficam fora do `export const { … }`. O teste importa o shim de cada módulo real.
 3. Importa o bundle com `webpackIgnore`/`turbopackIgnore`.
 
 Há uma carga por revisão. O CSS entra num `<style id="opex-plugin-css-{id}">` trocado por revisão.
@@ -218,16 +222,30 @@ Há uma carga por revisão. O CSS entra num `<style id="opex-plugin-css-{id}">` 
 - a `key` é a revisão, então consolidação, prévia ou rollback trocam o componente **sem recarregar a
   página**;
 - na prévia aparece o selo "Prévia vN";
-- slot sem contribuição não renderiza nada.
+- slot sem contribuição não renderiza nada;
+- erro de carregamento do módulo ou de render vai para o debug do plugin (`report-error.ts`:
+  `POST /api/plugins/[id]/logs` no dono, `POST /api/cliente/plugins/[id]/logs` no portal, uma vez por
+  revisão e mensagem, até 4 KB).
 
 **Pontos de extensão:**
 
-| Slot | Onde |
-|---|---|
-| `dashboard.widgets` | Fim do Dashboard |
-| `task.panel` | Abas extras `plugin:{id}:{export}` em `TaskDetailTabs` |
-| `portal.dashboard.widgets` | Fim do Dashboard do portal |
-| Menu | Seção "Plugins" da barra lateral (`useNavWithPlugins`, ícones de `nav-icons.ts`) |
+| Slot | Escopo | Onde | Props |
+|---|---|---|---|
+| `dashboard.widgets` | dono | Fim do Dashboard | `{}` |
+| `task.panel` | dono | Abas extras `plugin:{id}:{export}` em `TaskDetailTabs` | `{ task }` |
+| `topbar.actions` | dono | Ações da casca: no desktop (sem barra no topo), o rodapé do menu; no celular, as ações do `MobileAppHeader` | `{}` |
+| `workbench.panel` | dono | Aba extra na mesa (`WorkbenchView`) | `{ workbenchId, taskId }` |
+| `tasks.header` | dono | Bloco acima do quadro em `/tarefas` (`TasksPage`) | `{}` |
+| `financeiro.widgets` | dono | Cards no topo de `/financeiro` (`FinancePage`) | `{}` |
+| `sidebar.nav` | dono | Seção "Plugins" da barra lateral (`useNavWithPlugins`, ícones de `nav-icons.ts`), da lista `nav` | — |
+| `portal.dashboard.widgets` | cliente | Fim do Dashboard do portal | `{ clientId }` |
+| `portal.task.panel` | cliente | Aba extra na tarefa do portal (`ClienteTaskTabs`) | `{ taskId, clientId }` |
+| `portal.nav` | cliente | Seção "Plugins" do menu do portal (`/cliente/x/{id}/{página}`), da lista `nav`, para todos os usuários do cliente | — |
+
+As abas de slot usam `usePluginSlotTabs(slot)`. Plugin de cliente pode declarar `nav` (vira o
+`portal.nav`); os slots de menu nunca entram em `slots` (recusado pelo manifesto). `pluginSlotsOf`
+lista os slots de um manifesto (filtro da lista) e `pluginPreviewPath` dá a tela de cada slot para o
+"Ver prévia".
 
 **Páginas coringa:** `src/app/(app)/x/[...path]` e `src/app/cliente/(portal)/x/[...path]`, com
 `PluginPageHost` e `error.tsx` próprio.
@@ -238,7 +256,9 @@ O cookie `opex_plugin_preview` é **assinado** (HMAC com `AUTH_SECRET`; valor ad
 nenhuma prévia), tem 7 dias e traz a lista de ids com a prévia ligada.
 
 - Liga e desliga em `POST /api/plugins/[id]/preview { on }` e no equivalente do portal (admin).
-- O botão "Ligar prévia" (`PluginPreviewToggle`) aparece na mesa, no detalhe do plugin e no portal.
+- O switch "Ligar prévia" (`PluginPreviewToggle`) fica **só na mesa**. Na página do plugin (dono e
+  portal), a linha da versão em prévia tem **"Ver prévia"** (liga a prévia neste navegador e abre a tela
+  da versão, `previewPath`) e **"Aprovar prévia"**.
 - Só aquele navegador vê a `preview`; o resto continua na `stable`.
 - A chave mostra a lista do cookie que o ator enxerga (`previewOn` do runtime): no app do dono, os
   plugins de **qualquer** escopo (o dono também gerencia os de cliente); no portal, os do cliente. Ao
@@ -256,21 +276,62 @@ plugin. Para o usuário do cliente nada muda.
 
 **`/plugins`** (Configurações › Plugins):
 
-- lista com busca e escopo na URL (`filters.ts`), versões, cliente, ativo e erro de runtime;
-- `/plugins/[id]` mostra o detalhe: ativo (desativar pede confirmação), card da prévia com "Ligar
-  prévia", versões com link para a tarefa, "Diferença" (diff unificado por arquivo,
-  `diffPluginFiles`) e "Rollback" (só em versão já consolidada, com confirmação), e o runtime no
-  servidor (só plugin do dono).
+- lista com busca, escopo e **slot** na URL (`filters.ts`; `PluginDto.slots` vem da estável ou, sem
+  ela, da prévia), versões, cliente e erro de runtime;
+- o **nome é o link** para a página do plugin (`ItemNameLink`, padrão do projeto); à direita, o ícone de
+  **debug** (modal de logs, `PluginDebugDialog`, igual ao de `/integracoes`) e o **switch Ativo**
+  (`PluginActiveSwitch`: ligar é direto, desligar pede confirmação; resposta otimista com reversão);
+- esqueleto no formato da linha (`PluginRowsSkeleton`).
+
+**`/plugins/[id]`** (detalhe):
+
+- cabeçalho com o ícone de **debug** (abre a coluna de logs à direita, como na página da integração;
+  abaixo de `xl`, o modal) e o switch Ativo — não há switch de prévia nem cards de diferença ou de
+  prévia;
+- **Versões** no `ActiveItemRow` (o das contas do OpenCode e das chaves de IA): a estável é "Em uso";
+  clicar numa versão já consolidada (estável anterior ou arquivada) a põe em uso para todos (rollback,
+  com confirmação); a versão em prévia e os rascunhos não são clicáveis (chegam a "Em uso" pela mesa);
+- cada versão mostra data, tarefa de origem (link no dono), testes e o **descritivo da mudança** em
+  linguagem natural; sem descritivo, "Sem descritivo desta mudança" e, no dono, **"Gerar descritivo"**;
+- runtime no servidor (só plugin do dono).
+
+**Descritivo da mudança:** o agente da mesa termina cada implementação ou correção com um bloco JSON
+`{"changeSummary": "…"}` (`PLUGIN_CHANGE_SUMMARY_REQUEST`, lido por `pluginChangeSummaryFrom`),
+guardado em `plugin.changeSummary` da mesa e gravado na próxima versão com origem `agent`. "Gerar
+descritivo" (`POST /api/plugins/[id]/versions/[versionId]/summary`, `server/version-summary.ts`) chama a
+IA pela feature **"Descritivo de versão de plugin"** (Integrações › IA › Catalogador) com a diferença
+para a versão anterior de número menor, grava com origem `ai`, audita e publica `plugin-updated`.
+Nenhuma leitura gera descritivo.
+
+## Debug (logs)
+
+`server/logs.ts`: `pluginLog` grava em `plugin_logs`, manda para o Pino e publica `plugin-debug`
+(`{ entries }`, agrupado a cada 500 ms) em `private-plugin-{id}` (só o dono). Chaves sensíveis são
+mascaradas. Plugin não tem "modo debug": o log é sempre gravado.
+
+| Origem | Linha |
+|---|---|
+| `ctx.log.info/warn/error/debug` | Nível correspondente (`debug` vira `step`) |
+| Kernel | Versão ativada ou recarregada, falha ao ativar, código de servidor desfeito |
+| Rotas `/api/p/...` | Erro do handler |
+| Crons | Executado (com a duração) ou falhou |
+| Ferramentas | Erro da ferramenta |
+| Navegador | Erro de carregamento ou de render (`[interface] …`) |
+
+Leitura: `GET /api/plugins/[id]/logs?after=&limit=`. Na tela, `usePluginDebugLogs` + `PluginDebugConsole`
+sobre o terminal compartilhado das integrações (`DebugLogConsole`, `useDebugLogStream`,
+`DebugLogsPanel`, `DebugLogsDialog`, `DebugToggleIconButton`). O admin do cliente não tem debug.
 
 **Portal `/cliente/plugins`** (só admin; item "Plugins" no menu do admin):
 
-- mesma lista e detalhe, pelos mesmos componentes (`PluginPages.tsx`);
-- o detalhe tem o botão **"Aprovar prévia"** (`POST /api/cliente/plugins/[id]/approve`), que chama o
-  `approve` da mesa dona da prévia: segue para os testes do plugin e a consolidação, sem novo passo
-  do dono (decisão do dono no planejamento da OPE-172: o admin do cliente aprova a versão em prévia e
-  isso consolida). O que protege o dono é a regra acima: plugin de cliente só roda na sessão dele com
-  a prévia ligada por ele;
-- o admin também liga a prévia, faz rollback e ativa ou desativa;
+- mesma lista e detalhe, pelos mesmos componentes (`PluginPages.tsx`), sem o debug e sem "Gerar
+  descritivo";
+- "Aprovar prévia" (`POST /api/cliente/plugins/[id]/approve`; no dono, `POST /api/plugins/[id]/approve`,
+  `approvePluginPreview`) chama o `approve` da mesa dona da prévia: segue para os testes do plugin e a
+  consolidação, sem novo passo do dono (decisão do dono no planejamento da OPE-172: o admin do cliente
+  aprova a versão em prévia e isso consolida). O que protege o dono é a regra acima: plugin de cliente
+  só roda na sessão dele com a prévia ligada por ele;
+- o admin também vê a prévia, põe uma versão consolidada em uso e ativa ou desativa;
 - a origem da versão aparece só como código, sem link para o app do dono.
 
 Plugins de cliente nascem de tarefas Plugin criadas pelo dono ou pelos agentes (Agente Opex e
@@ -282,6 +343,7 @@ Maddox, com `create_task` e `taskType: "plugin"` + `pluginTarget`). No portal n�
 |---|---|---|---|
 | `plugin-updated` | `private-app` (sempre) e `private-client-{clientId}` (plugin de cliente) | `{ id, version, channel }` | `usePluginsRealtime` invalida lista, detalhe e manifesto de runtime |
 | `plugin-event` | `private-app` | `{ pluginId, event, data }` | Publicado por `ctx.realtime.publish`; o plugin escuta com `usePluginEvent` |
+| `plugin-debug` | `private-plugin-{id}` (só o dono) | `{ entries }` (linhas de log) | Terminal de debug do plugin |
 
 ## Ferramentas dos agentes (grupo `plugins`)
 
@@ -333,8 +395,11 @@ Em `__tests__/features/plugins/`:
 | `plugin-routes` | `/api/p/...` despacha na preview só com o cookie válido e a fiber de prévia; a chave grava e limpa o cookie; aprovação do portal só pelo admin do próprio cliente; a rota de mensagens leva a prévia ao turno |
 | `plugin-preview-toggle` | A chave reflete o cookie também para plugin de cliente no app do dono |
 | `__tests__/scripts/plugin-runtime-check` | O script do build da imagem passa na árvore completa e falha sem o binário do Rolldown ou sem o CSS do Tailwind |
-| `plugin-slot` | Slot, erro isolado e troca ao vivo |
-| `plugins-pages` | Telas do dono e do portal |
+| `plugin-slot` | Slot, erro isolado, troca ao vivo e erro (render ou carga) enviado ao debug |
+| `plugins-pages` | Lista (link no nome, debug, switch com confirmação, filtro Slot, esqueleto) e detalhe (Em uso, versão clicável com confirmação, Ver/Aprovar prévia, descritivo, Gerar descritivo, coluna de logs) no dono e no portal |
+| `plugin-logs` | `plugin_logs`, mascaramento, canal `private-plugin-{id}`, leitura com `after`, erro de interface em 4 KB |
+| `version-summary` | Descritivo do agente e "Gerar descritivo" (diferença para a anterior, origem `ai`, 409 sem a feature, 502 no erro) |
+| `plugin-new-slots` | Aba `portal.task.panel` e menu `portal.nav` |
 
 Também:
 
