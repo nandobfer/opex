@@ -86,7 +86,7 @@ export function WorkbenchMobileBar({ workbench, central, items, notices, editing
                         {adversarialAvailable && !adversarialBlocked && <ActionSheetItem icon={ShieldAlert} label="Revisão adversária" hint="Seguir sem a revisão que falhou" onSelect={() => setSheet("adversarial")} />}
                     </ActionSheetSection>
                 )}
-                {(workbench.previewUrl || workbench.pr || previewSwitchVisible(workbench.stage)) && (
+                {(workbench.previewUrl || workbench.pr || previewSwitchVisible(workbench.stage, workbench)) && (
                     <ActionSheetSection title="Prévia e PR">
                         {workbench.previewUrl && <ActionSheetItem icon={ExternalLink} label="Abrir prévia" hint="Abre em nova guia" href={workbench.previewUrl} />}
                         {workbench.pr && <ActionSheetItem icon={GitPullRequest} label={`Abrir PR #${workbench.pr.number}`} hint="Abre em nova guia" href={workbench.pr.url} />}

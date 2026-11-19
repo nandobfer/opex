@@ -86,7 +86,7 @@ function WorkbenchMainView({ workbench, central }: { workbench: WorkbenchDto; ce
         <AdversarialTabNavProvider value={adversarialTab.visible ? openAdversarialRound : null}>
         <div className="flex min-h-0 flex-1 flex-col">
             <WorkbenchHeader workbench={workbench} central={central} connected={connected} />
-            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} adversarial={workbench.adversarial} refinement={workbench.refinementPhase} />
+            <StageSteps stage={workbench.stage} runState={workbench.runState} flow={workbench.agenticFlow} adversarial={workbench.adversarial} refinement={workbench.refinementPhase} kind={workbench.kind} />
             <WorkbenchTabs tabs={tabs} value={view} onChange={setView} label="Visão da mesa" indicatorId="workbench-view-tab" />
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={view} role="tabpanel" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex min-h-0 flex-1 flex-col">

@@ -14,8 +14,17 @@ const ADVERSARIAL_STAGES: readonly WorkbenchStage[] = ["adversarial_review", "ad
 /** Etapas do refinamento na mesa (OPE-137): o passo "Refinamento" só aparece nas mesas que passaram por ele. */
 const REFINEMENT_STAGES: readonly WorkbenchStage[] = ["refining", "spec_ready"]
 
-export function workbenchSteps(flow: TaskAgenticFlow, adversarial: boolean, refinement = false): Step[] {
-    const base: Step[] = WORKBENCH_STEPS.filter((step) => (step.id !== "preview" || flow !== "auto_pr") && (step.id !== "refine" || refinement))
+/** Trilha de uma mesa Plugin (OPE-172): prévia ao vivo, testes do plugin e consolidação (sem PR). */
+const PLUGIN_STEPS: readonly Step[] = WORKBENCH_STEPS.map((step): Step => {
+    if (step.id === "preview") return { id: "preview", label: "Prévia ao vivo", stages: ["preview"] }
+    if (step.id === "pr") return { id: "tests", label: "Testes do plugin", stages: ["fixing_ci"] }
+    if (step.id === "done") return { id: "done", label: "Consolidada", stages: ["finishing", "done"] }
+    return step
+})
+
+export function workbenchSteps(flow: TaskAgenticFlow, adversarial: boolean, refinement = false, kind: "repo" | "plugin" = "repo"): Step[] {
+    const source: readonly Step[] = kind === "plugin" ? PLUGIN_STEPS : WORKBENCH_STEPS
+    const base: Step[] = source.filter((step) => (kind === "plugin" || step.id !== "preview" || flow !== "auto_pr") && (step.id !== "refine" || refinement))
     if (!adversarial) return base
     return base.flatMap((step) =>
         step.id === "implement" ? [{ ...step, stages: step.stages.filter((stage) => !ADVERSARIAL_STAGES.includes(stage)) }, { id: "adversarial", label: "Revisão adversária", stages: ADVERSARIAL_STAGES }] : [step],
@@ -28,8 +37,8 @@ export function workbenchSteps(flow: TaskAgenticFlow, adversarial: boolean, refi
  * Agente Adversário se aplica à mesa (passo "Revisão adversária"). `refinement`: a mesa passou pelo
  * refinamento (passo "Refinamento" antes do Plano).
  */
-export function StageSteps({ stage, runState, flow = "preview", adversarial = false, refinement = false }: { stage: WorkbenchStage; runState: RunState; flow?: TaskAgenticFlow; adversarial?: boolean; refinement?: boolean }) {
-    const steps = workbenchSteps(flow, adversarial || ADVERSARIAL_STAGES.includes(stage), refinement || REFINEMENT_STAGES.includes(stage))
+export function StageSteps({ stage, runState, flow = "preview", adversarial = false, refinement = false, kind = "repo" }: { stage: WorkbenchStage; runState: RunState; flow?: TaskAgenticFlow; adversarial?: boolean; refinement?: boolean; kind?: "repo" | "plugin" }) {
+    const steps = workbenchSteps(flow, adversarial || ADVERSARIAL_STAGES.includes(stage), refinement || REFINEMENT_STAGES.includes(stage), kind)
     const current = steps.findIndex((step) => step.stages.includes(stage))
     return (
         <>

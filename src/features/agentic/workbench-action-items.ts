@@ -65,6 +65,8 @@ export interface ActionItemsInput {
     deleting: boolean
     /** Anexo do "Informações adicionais" ainda subindo (bloqueia Implementar). */
     implementBlockReason: string | null
+    /** Mesa Plugin (OPE-172): aprovar roda os testes do plugin e consolida (sem PR). */
+    plugin?: boolean
 }
 
 /** Ações que não viram botão da linha: a prévia abre pelo cabeçalho; as do adversário têm bloco próprio. */
@@ -94,6 +96,7 @@ function actionItem(action: WorkbenchAction, input: ActionItemsInput): Workbench
         case "implement":
             return item(action, { kind: "run", label: "Implementar", ariaLabel: false, disabledReason: busy ?? input.implementBlockReason, title: input.implementBlockReason, ctrlEnter: true })
         case "approve":
+            if (input.plugin) return item(action, { kind: "confirm", label: "Aprovar e consolidar", disabledReason: busy })
             return input.prOpen ? item(action, { kind: "confirm", label: "Aprovar", disabledReason: busy }) : item(action, { kind: "confirm", label: "Aprovar e abrir PR", disabledReason: busy })
         case "reconnect":
             return item(action, { kind: "reconnect", label: "Reconectar ao agente", variant: "outline", hint: "Acompanha a sessão existente sem reenviar a mensagem (use se o agente ainda estiver rodando)." })

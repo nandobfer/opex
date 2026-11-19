@@ -6,6 +6,7 @@ import { AgenticWorkbench, type IAgenticWorkbench, type IWorkbenchPlugin } from 
 import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { Plugin } from "@/lib/db/models/Plugin"
 import { getLocalUser } from "@/lib/local-user"
+import { withBasePath } from "@/lib/base-path"
 import { loggerFor } from "@/lib/logger"
 import { isPluginTaskType } from "@/features/tasks/constants"
 import { pluginIdFromTitle, uniquePluginId } from "@/features/plugins/logic"
@@ -181,7 +182,8 @@ export async function publishPluginPreview(doc: IAgenticWorkbench): Promise<{ pr
     const published = await publishPreviewVersion(state.pluginId, state.draftVersionId, { workbenchId: String(doc._id), actorId: getLocalUser().id })
     const { PluginVersion } = await import("@/lib/db/models/Plugin")
     const version = await PluginVersion.findById(state.draftVersionId, { manifest: 1 }).lean()
-    const previewUrl = pluginPreviewPath({ pluginId: state.pluginId, scope: state.scope }, version?.manifest ?? { pages: [], slots: [] })
+    // Com o subcaminho público: o link da mesa é um `<a>` comum (abre em nova guia).
+    const previewUrl = withBasePath(pluginPreviewPath({ pluginId: state.pluginId, scope: state.scope }, version?.manifest ?? { pages: [], slots: [] }))
     return { previewUrl, number: published.number, runtimeError: published.runtimeError }
 }
 

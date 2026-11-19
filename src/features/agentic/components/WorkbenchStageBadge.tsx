@@ -2,7 +2,7 @@
 
 import { motion } from "framer-motion"
 import { cn } from "@/lib/utils"
-import { WORKBENCH_STAGE_LABELS, type RunState, type WorkbenchStage } from "../constants"
+import { workbenchStageLabel as stageLabelFor, type RunState, type WorkbenchStage } from "../constants"
 
 type ToneName = "primary" | "sky" | "amber" | "emerald" | "destructive" | "muted"
 
@@ -47,13 +47,14 @@ export function workbenchToneClasses(stage: WorkbenchStage, runState: RunState) 
     return TONE_CLASSES[workbenchStageTone(stage, runState)]
 }
 
-export function workbenchStageLabel(stage: WorkbenchStage, runState: RunState): string {
-    const label = WORKBENCH_STAGE_LABELS[stage]
+export function workbenchStageLabel(stage: WorkbenchStage, runState: RunState, kind: "repo" | "plugin" = "repo"): string {
+    // Mesa Plugin (OPE-172): "Testes do plugin", "Consolidando"...
+    const label = stageLabelFor(stage, kind)
     return runState === "failed" ? `${label}: falhou` : runState === "interrupted" ? `${label}: parada` : label
 }
 
 /** Etapa da mesa; executando pulsa, falha/interrupção ficam em destaque. `running` permite ao chamador desligar o pulso quando o agente está parado aguardando o usuário. */
-export function WorkbenchStageBadge({ stage, runState, running = runState === "running", className }: { stage: WorkbenchStage; runState: RunState; running?: boolean; className?: string }) {
+export function WorkbenchStageBadge({ stage, runState, running = runState === "running", className, kind = "repo" }: { stage: WorkbenchStage; runState: RunState; running?: boolean; className?: string; kind?: "repo" | "plugin" }) {
     return (
         <motion.span
             key={`${stage}-${runState}`}
@@ -68,7 +69,7 @@ export function WorkbenchStageBadge({ stage, runState, running = runState === "r
                     <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-current" />
                 </span>
             )}
-            {workbenchStageLabel(stage, runState)}
+            {workbenchStageLabel(stage, runState, kind)}
         </motion.span>
     )
 }

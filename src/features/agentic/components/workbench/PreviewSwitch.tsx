@@ -7,9 +7,15 @@ import { useSetWorkbenchPreview } from "../../hooks/useAgentic"
 import type { WorkbenchStage } from "../../constants"
 import type { WorkbenchDto } from "../../types"
 import { ActionSheetItem, ActionSheetSwitch } from "./mobile/ActionSheet"
+import { PluginPreviewToggle } from "@/features/plugins/components/PluginPreviewToggle"
 
 /** A chave (e o divisor antes dela) some em Finalizando e Concluída. */
-export const previewSwitchVisible = (stage: WorkbenchStage) => stage !== "finishing" && stage !== "done"
+export const previewSwitchVisible = (stage: WorkbenchStage, workbench?: Pick<WorkbenchDto, "kind" | "plugin" | "previewUrl">) => {
+    if (stage === "finishing" || stage === "done") return false
+    // Mesa Plugin (OPE-172): no lugar da chave "Gerar prévia", o "Ligar prévia" do plugin (quando já há prévia).
+    if (workbench?.kind === "plugin") return Boolean(workbench.plugin?.pluginId && workbench.previewUrl)
+    return true
+}
 
 /** Motivo do bloqueio de "Gerar nova prévia" (ou `null` quando disponível). */
 export function rebuildBlockedReason({ saving, enabled, rebuildAvailable, actionPending }: { saving: boolean; enabled: boolean; rebuildAvailable: boolean; actionPending: boolean }): string | null {
@@ -43,7 +49,8 @@ interface PreviewSwitchProps {
  */
 export function PreviewSwitch({ workbench, rebuildAvailable, actionPending, onRebuild, layout = "bar" }: PreviewSwitchProps) {
     const mutation = useSetWorkbenchPreview(workbench)
-    if (!previewSwitchVisible(workbench.stage)) return null
+    if (!previewSwitchVisible(workbench.stage, workbench)) return null
+    if (workbench.kind === "plugin" && workbench.plugin?.pluginId) return <PluginPreviewToggle pluginId={workbench.plugin.pluginId} previewUrl={workbench.previewUrl} layout={layout} />
     const id = `workbench-preview-${workbench.id}`
     const enabled = workbench.agenticFlow !== "auto_pr"
     const hint = enabled
