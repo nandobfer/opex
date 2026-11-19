@@ -1,13 +1,17 @@
 "use client"
 
-import { useId, type ComponentType, type ReactNode } from "react"
+import { useId, useMemo, type ComponentType, type ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { cn } from "@/lib/utils"
 import type { TaskDetailDto } from "../../types"
 import { TaskAttachmentsTab } from "../../attachments/components/TaskAttachmentsTab"
 import { CommentsSection, DescriptionSection, HistorySection, TechnicalSpecSection, TimeLogsSection } from "./TaskDetailSections"
+import { PluginContribution } from "@/features/plugins/client/PluginContribution"
+import { slotContributions } from "@/features/plugins/client/PluginSlot"
+import { usePluginRuntime, usePluginsRealtime } from "@/features/plugins/hooks/usePlugins"
 
-export type TaskDetailTabId = "description" | "spec" | "attachments" | "comments" | "history" | "time"
+/** Abas fixas mais as abas de plugins (slot `task.panel`, OPE-172): `plugin:{id}:{export}`. */
+export type TaskDetailTabId = "description" | "spec" | "attachments" | "comments" | "history" | "time" | `plugin:${string}`
 
 interface TabDef {
     id: TaskDetailTabId
@@ -31,8 +35,16 @@ const TABS: readonly TabDef[] = [
  * especificação quando a aba "Especificação técnica" está ativa (painel do refinamento). */
 export function TaskDetailTabs({ task, value, onValueChange, specSlot }: { task: TaskDetailDto; value: TaskDetailTabId; onValueChange: (tab: TaskDetailTabId) => void; specSlot?: ReactNode }) {
     const baseId = useId()
-    const active = TABS.find((item) => item.id === value) ?? TABS[0]
-    const Section = active.Component
+    usePluginsRealtime()
+    const runtime = usePluginRuntime()
+    const pluginTabs = useMemo(
+        () => slotContributions(runtime.data?.plugins ?? [], "task.panel").map(({ entry, slot }) => ({ id: `plugin:${entry.id}:${slot.export}` as TaskDetailTabId, label: slot.title ?? entry.name, entry, slot })),
+        [runtime.data],
+    )
+    const pluginTab = pluginTabs.find((item) => item.id === value) ?? null
+    const active = pluginTab ? null : (TABS.find((item) => item.id === value) ?? TABS[0])
+    const Section = active?.Component ?? null
+    const pluginTask = { id: task.id, code: task.code, title: task.title, taskType: task.taskType, projectId: task.project?.id ?? null }
 
     return (
         <>
@@ -57,6 +69,24 @@ export function TaskDetailTabs({ task, value, onValueChange, specSlot }: { task:
                         </button>
                     )
                 })}
+                {pluginTabs.map((item) => {
+                    const isActive = value === item.id
+                    return (
+                        <button
+                            key={item.id}
+                            id={tabElementId(baseId, item.id)}
+                            type="button"
+                            role="tab"
+                            aria-selected={isActive}
+                            aria-controls={panelElementId(baseId, item.id)}
+                            onClick={() => onValueChange(item.id)}
+                            className={cn("relative whitespace-nowrap px-3 pb-2.5 pt-1 text-sm transition-colors", isActive ? "text-foreground" : "text-muted-foreground hover:text-foreground")}
+                        >
+                            {item.label}
+                            {isActive && <motion.span layoutId="task-detail-tab" className="absolute inset-x-0 -bottom-px h-0.5 rounded bg-primary" transition={{ type: "spring", stiffness: 500, damping: 40 }} />}
+                        </button>
+                    )
+                })}
             </div>
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div
@@ -69,8 +99,9 @@ export function TaskDetailTabs({ task, value, onValueChange, specSlot }: { task:
                     exit={{ opacity: 0, x: -10 }}
                     transition={{ duration: 0.18 }}
                 >
-                    <Section task={task} />
-                    {active.id === "spec" && specSlot}
+                    {Section && <Section task={task} />}
+                    {active?.id === "spec" && specSlot}
+                    {pluginTab && <PluginContribution key={pluginTab.entry.revision} entry={pluginTab.entry} kind="slots" exportName={pluginTab.slot.export} props={{ task: pluginTask }} />}
                 </motion.div>
             </AnimatePresence>
         </>

@@ -109,6 +109,24 @@ export interface IForkNote {
     createdAt: Date
 }
 
+/** Andamento de uma mesa Plugin (OPE-172). */
+export interface IWorkbenchPlugin {
+    /** Plugin alvo (`null` até a primeira implementação criar um plugin novo). */
+    pluginId: string | null
+    scope: "owner" | "client"
+    clientId: string | null
+    /** Versão de origem (a stable no início): base do diff e das fontes exportadas. */
+    baseVersionId: string | null
+    /** Última versão compilada nesta mesa. */
+    draftVersionId: string | null
+    /** Pasta de trabalho no host do OpenCode. */
+    workDir: string | null
+    /** Prévia aprovada: depois de uma correção dos testes, a mesa testa e consolida sem nova aprovação. */
+    approved: boolean
+    compileAttempts: number
+    testAttempts: number
+}
+
 export interface IAgenticWorkbench {
     _id: Types.ObjectId
     centralId: string
@@ -165,6 +183,13 @@ export interface IAgenticWorkbench {
     previewHealthy: boolean | null
     /** Fluxo escolhido na abertura da mesa (`preview` sobe a prévia; `auto_pr` vai direto ao PR). */
     agenticFlow: string
+    /**
+     * Tipo da mesa (OPE-172), congelado na abertura: `repo` (worktree, prévia em container, PR) ou
+     * `plugin` (tarefa do tipo Plugin: versões de plugin, prévia ao vivo, sem PR, build nem deploy).
+     */
+    kind?: "repo" | "plugin"
+    /** Mesa Plugin: o plugin, a pasta de trabalho e o andamento do ciclo de versões. */
+    plugin?: IWorkbenchPlugin | null
     /** A mesa passou pelo refinamento (OPE-137): passo "Refinamento" na trilha. */
     refinementPhase?: boolean
     /** "Gerar plano após refinar" desta mesa (tarefa > central na abertura; o switch da barra muda). */
@@ -236,6 +261,8 @@ const AgenticWorkbenchSchema = new Schema<IAgenticWorkbench>(
         previewUrl: { type: String, default: null },
         previewHealthy: { type: Boolean, default: null },
         agenticFlow: { type: String, default: "preview" },
+        kind: { type: String, enum: ["repo", "plugin"], default: "repo" },
+        plugin: { type: Schema.Types.Mixed, default: null },
         refinementPhase: { type: Boolean, default: false },
         planAfterRefinement: { type: Boolean, default: false },
         refinementId: { type: String, default: null },

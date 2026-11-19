@@ -23,7 +23,7 @@ const ACTION_BUTTON = "gap-1.5 max-md:shrink-0 max-md:px-2.5"
  * que falhou, Seguir mesmo assim (Tentar novamente é o botão da mesa).
  */
 export function AdversarialActions({ workbench }: { workbench: WorkbenchDto }) {
-    const actions = workbenchActions(workbench.stage, workbench.runState, false, Boolean(workbench.sessionId), Boolean(workbench.slotQueue))
+    const actions = workbenchActions(workbench.stage, workbench.runState, false, Boolean(workbench.sessionId), Boolean(workbench.slotQueue), workbench.kind)
     const blocked = actions.includes("adversarial-fix")
     const canSkip = actions.includes("adversarial-skip")
     const review = useWorkbenchAdversarialReview(workbench.id, blocked)

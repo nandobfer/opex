@@ -9,6 +9,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { useDashboard, useDashboardRealtime } from "../hooks/useDashboard"
 import { useDashboardPeriod } from "../hooks/useDashboardPeriod"
 import { TaskCreationActions } from "@/features/tasks/components/TaskCreationActions"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 import { TimerIndicator } from "@/features/time/components/TimerIndicator"
 import { AgenticHoursSection } from "./AgenticHoursSection"
 import { DashboardHeader } from "./DashboardHeader"
@@ -69,6 +70,9 @@ export function DashboardPage() {
                     )}
                 </motion.div>
             </AnimatePresence>
+
+            {/* Widgets de plugins (OPE-172): independentes do estado da consulta dos dashboards. */}
+            <PluginSlot name="dashboard.widgets" props={{}} />
         </motion.section>
     )
 }

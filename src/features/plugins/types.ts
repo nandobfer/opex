@@ -80,3 +80,10 @@ export interface PluginUpdatedPayload {
     version: number | null
     channel: PluginChannel | null
 }
+
+/** Props de cada slot de componente (contrato do SDK, `plugin-sdk/types/client.d.ts`). */
+export interface PluginSlotPropsMap {
+    "dashboard.widgets": Record<string, never>
+    "task.panel": { task: { id: string; code: string; title: string; taskType: string | null; projectId: string | null } }
+    "portal.dashboard.widgets": { clientId: string }
+}

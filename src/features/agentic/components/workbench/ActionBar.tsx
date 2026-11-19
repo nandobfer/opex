@@ -47,7 +47,7 @@ export function ActionBar({ workbench, central = null, onForkOpened }: { workben
     const mutation = useWorkbenchAction(workbench)
     const reconnect = useWorkbenchReconnect(workbench.id)
     const slotQueue = workbench.slotQueue
-    const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId), Boolean(slotQueue))
+    const actions = workbenchActions(workbench.stage, workbench.runState, Boolean(workbench.previewUrl), Boolean(workbench.sessionId), Boolean(slotQueue), workbench.kind)
     const failed = workbench.runState === "failed" || workbench.runState === "interrupted"
     // Ciclo automático de reconexão: dispara quando a tela passa a oferecer Reconectar (e ao abrir
     // já nesse estado). Nunca depois de um Parar do usuário; um ciclo por episódio de queda.

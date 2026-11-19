@@ -10,6 +10,7 @@ import { CLIENTE_PERSISTENT_HREFS, clienteNav } from "./navigation"
 import type { ClientePortalSession } from "./ClientePortalContext"
 import { ClienteContextBar } from "./components/ClienteContextBar"
 import { useClientePortal } from "./ClientePortalContext"
+import { ClientPluginSourceProvider } from "@/features/plugins/client/PluginSourceContext"
 
 /**
  * Casca do **portal do cliente** (layout autenticado): reusa o `AppShell` do app com a navegação do
@@ -40,10 +41,13 @@ export function ClientePortalShell({ session, version, children }: { session: Cl
             sidebarFooterItems={footerItems}
             mobileHeaderActions={headerActions}
         >
-            <div className="space-y-5">
-                <ClienteContextBar />
-                {children}
-            </div>
+            {/* Plugins do cliente (OPE-172): slots e páginas leem do portal (APIs e canal do cliente). */}
+            <ClientPluginSourceProvider clientId={portal.clientId} api={portal.api}>
+                <div className="space-y-5">
+                    <ClienteContextBar />
+                    {children}
+                </div>
+            </ClientPluginSourceProvider>
         </AppShell>
     )
 }

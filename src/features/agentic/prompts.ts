@@ -1,4 +1,5 @@
 import type { CiFailure } from "./ci"
+import { PLUGIN_BASE_BRANCH } from "./plugin-flow"
 import type { AgentRole } from "./constants"
 import { backupExistsCommand, shellQuote } from "./preview-backup"
 import { previewMarkerEnv } from "@/lib/preview-marker"
@@ -124,6 +125,79 @@ export function reopenPrompt(config: CentralConfig, ctx: WorkbenchContext, feedb
     ]
         .filter(Boolean)
         .join("\n") + extra(config, "planning")
+}
+
+/** Alvo de uma mesa Plugin no prompt (OPE-172). */
+export interface PluginPromptTarget {
+    pluginId: string | null
+    scope: "owner" | "client"
+    clientName?: string | null
+    workDir: string
+    /** Fontes da versão base exportadas para a pasta (resumo para o planejador). */
+    baseFiles?: string[]
+}
+
+const PLUGIN_GUIDE = ".opex-sdk/GUIA.md"
+
+/** Bloco do planejamento de uma tarefa Plugin: o que muda no fluxo e o contrato do SDK. */
+export function pluginPlanningNotes(target: Omit<PluginPromptTarget, "workDir">): string {
+    const scope = target.scope === "client" ? `plugin de CLIENTE (${target.clientName ?? "cliente da tarefa"}): SÓ interface no portal, sem código de servidor (rotas, crons, ferramentas e serviços são recusados); dados apenas pelas APIs do portal que o cliente já acessa` : "plugin do DONO: pode ter código de servidor (kernel Cordis: rotas em /api/p/{id}, crons, ferramentas do Agente Opex/MCP, eventos, chave-valor) e interface (slots dashboard.widgets, task.panel, menu e páginas /x/{id})"
+    return [
+        "",
+        "## Tarefa do tipo Plugin (OPE-172)",
+        `- É um ${scope}.`,
+        target.pluginId ? `- Plugin existente a alterar: \`${target.pluginId}\`${target.baseFiles?.length ? ` (arquivos da versão estável: ${target.baseFiles.join(", ")})` : ""}.` : "- Plugin NOVO: o id é gerado a partir do título da tarefa.",
+        "- NÃO há worktree do repositório, PR, build de imagem nem deploy: a implementação acontece numa pasta própria com o SDK do Opex, o Opex compila com Rolldown, publica a versão `preview` ao vivo, roda os testes do plugin (Vitest) e consolida como `stable`.",
+        `- O contrato (manifesto plugin.json, slots, serviços, testes) está no guia ${PLUGIN_GUIDE}, exportado para a pasta na implementação. Planeje arquivos do plugin (plugin.json, client/, server/, testes *.test.ts(x)), nunca arquivos do repositório do app.`,
+    ].join("\n")
+}
+
+/** Implementação de uma tarefa Plugin: pasta de trabalho exportada pelo Opex, sem worktree nem PR. */
+export function pluginImplementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number, target: PluginPromptTarget & { pluginId: string }, additionalInfo: string | null = null): string {
+    const info = (additionalInfo ?? "").trim()
+    const base = [
+        `Você agora é o agente de IMPLEMENTAÇÃO de um PLUGIN do Opex. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
+        "",
+        "## 1. Pasta de trabalho (obrigatório antes de editar)",
+        `- O Opex já exportou as fontes do plugin \`${target.pluginId}\` (${target.scope === "client" ? "escopo cliente: só interface" : "escopo dono"}) e o SDK para ${target.workDir} (repositório git local; o commit base é \`origin/${PLUGIN_BASE_BRANCH}\`).`,
+        `- MOVA ESTA SESSÃO para ${target.workDir} com a ferramenta de mover sessão do OpenCode (session_move) e confirme o diretório atual.`,
+        `- Leia ${PLUGIN_GUIDE} (contrato do SDK, manifesto, slots, serviços e testes) antes de escrever código.`,
+        "- Rode `pnpm install` (ou `npm install`) na pasta para ter o Vitest e os tipos.",
+        "",
+        "## 2. Implementação",
+        "- Edite SÓ os arquivos do plugin nesta pasta (plugin.json, client/, server/ e os testes). Não altere o repositório do app nem a pasta .opex-sdk/.",
+        `- O id em plugin.json precisa ser \`${target.pluginId}\` e o escopo \`${target.scope}\`.`,
+        "- Escreva testes Vitest do plugin (*.test.ts/*.test.tsx) e rode `npx tsc --noEmit` e `npx vitest run` na pasta até passarem.",
+        "- Pode fazer commits locais na pasta. NÃO faça push e NÃO abra Pull Request: o Opex lê as fontes daqui, compila e publica a prévia sozinho.",
+        "- Ao terminar, responda com um resumo do que foi feito, arquivos alterados e resultado dos testes.",
+    ].join("\n")
+    const withInfo = info ? `${base}\n\n## Informações adicionais\n${info}` : base
+    void ctx
+    return withInfo + extra(config, "implementation")
+}
+
+
+/** Correção depois de uma falha de manifesto ou de compilação (Rolldown) da versão. */
+export function pluginCompileFixPrompt(issues: readonly string[], workDir: string): string {
+    return [
+        "O Opex não conseguiu gerar a versão do plugin a partir da pasta de trabalho. Corrija os problemas abaixo e responda com um resumo:",
+        ...issues.map((issue) => `- ${issue}`),
+        "",
+        `- Trabalhe em ${workDir}; rode \`npx tsc --noEmit\` e \`npx vitest run\` de novo. Sem push nem PR.`,
+    ].join("\n")
+}
+
+/** Correção depois de falha nos testes do plugin (etapa "Testes do plugin"). */
+export function pluginTestsFixPrompt(output: string, workDir: string): string {
+    return [
+        "Os testes do plugin (Vitest, rodados pelo Opex na pasta de trabalho) falharam antes da consolidação. Corrija o plugin (ou o teste, se ele estiver errado) e responda com um resumo.",
+        `- Pasta: ${workDir}. Rode \`npx vitest run\` até passar. Sem push nem PR.`,
+        "",
+        "## Saída dos testes (fim)",
+        "```",
+        output.slice(-6000),
+        "```",
+    ].join("\n")
 }
 
 export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number, additionalInfo: string | null = null): string {
@@ -400,17 +474,20 @@ export function cleanupPrompt(
     config: CentralConfig,
     ctx: WorkbenchContext,
     backup: PreviewBackupPaths | null,
-    options: { preview?: boolean; reason?: "merge" | "deletion" | "manual" } = {},
+    options: { preview?: boolean; reason?: "merge" | "deletion" | "manual"; plugin?: boolean } = {},
 ): string {
     const hasPreview = options.preview !== false
-    const steps = [
+    // Mesa Plugin (OPE-172): a pasta de trabalho não é worktree do repositório (sem branch nem prévia em container).
+    const steps = options.plugin
+        ? [`- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`, ctx.worktreePath ? `- Remova a pasta de trabalho do plugin (se ainda existir): \`rm -rf ${shellQuote(ctx.worktreePath)}\`.` : ""].filter(Boolean)
+        : [
         `- Primeiro MOVA ESTA SESSÃO de volta para ${ctx.sessionDirectory} com a ferramenta session_move.`,
         backup ? `- Apague o backup do MongoDB da prévia (obrigatório): \`rm -rf ${shellQuote(backup.dir)}\` — o arquivo ${shellQuote(backup.path)} não pode continuar existindo.` : "",
         hasPreview && config.cleanup.teardownEnvironment ? `- Derrube a prévia: \`docker compose -p ${ctx.composeProject} down --remove-orphans\` (rode no worktree, se ele ainda existir).` : "",
         config.cleanup.removeWorktree && ctx.worktreePath ? `- Remova o worktree (se ainda existir): \`git worktree remove --force ${ctx.worktreePath}\` e depois \`git worktree prune\`.` : "",
         config.cleanup.deleteBranch && ctx.branch ? `- Apague a branch local \`${ctx.branch}\` se ela ainda existir (\`git branch -D ${ctx.branch}\`); não apague a remota.` : "",
         `- \`git fetch origin\` e, se for seguro (sem alterações locais), atualize ${config.git.prTargetBranch} no repositório principal.`,
-    ].filter(Boolean)
+          ].filter(Boolean)
     const intro =
         options.reason === "deletion"
             ? `A mesa da tarefa ${ctx.code} foi EXCLUÍDA pelo usuário: faça a LIMPEZA do ambiente dela. A limpeza é idempotente (o que já não existir conta como removido) e NÃO toque no Pull Request nem na branch remota.`

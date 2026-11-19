@@ -97,3 +97,5 @@ export const PLUGIN_MAX_TOTAL_BYTES = 2 * 1024 * 1024
 export const PLUGIN_WORKDIR_SEGMENT = "plugins"
 /** Arquivos que não voltam para a versão (ambiente local do agente). */
 export const PLUGIN_IGNORED_PREFIXES = ["node_modules/", ".opex-sdk/", ".git/", "dist/", "coverage/"] as const
+/** Arquivos de ambiente na raiz da pasta (vêm do template do SDK). */
+export const PLUGIN_ENVIRONMENT_FILES = ["package.json", "package-lock.json", "pnpm-lock.yaml", "tsconfig.json", "vitest.config.mts", ".gitignore"] as const

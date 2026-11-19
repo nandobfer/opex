@@ -8,6 +8,7 @@ import { useRoutineAttentionToasts } from "@/features/routine-agents/hooks/useRo
 import { AppShell } from "./AppShell"
 import type { AppSidebarItemPanels } from "./AppSidebar"
 import { APP_NAV, EVEN_PADDING_PAGE_HREFS, HOME_HREF, PERSISTENT_PAGE_HREFS } from "../navigation"
+import { useNavWithPlugins } from "@/features/plugins/client/usePluginNav"
 
 interface AppLayoutShellProps {
     ownerName: string
@@ -41,10 +42,12 @@ const ownerItemPanels: AppSidebarItemPanels = { integrations: IntegrationsSideba
 export function AppLayoutShell({ ownerName, version, children }: AppLayoutShellProps) {
     // Agentes rotineiros (OPE-130): confirmação pendente e fim de execução viram toast em qualquer tela.
     useRoutineAttentionToasts()
+    // Slot `sidebar.nav` (OPE-172): itens de menu declarados pelos plugins ativos.
+    const sections = useNavWithPlugins(APP_NAV)
     return (
         <AppShell
             brand={{ name: "Opex", subtitle: "Tarefas e integrações", homeHref: HOME_HREF }}
-            sections={APP_NAV}
+            sections={sections}
             navLabel="Menu principal"
             persistentHrefs={PERSISTENT_PAGE_HREFS}
             evenPaddingHrefs={EVEN_PADDING_PAGE_HREFS}

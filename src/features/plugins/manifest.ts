@@ -1,6 +1,7 @@
 import { z } from "zod"
 import {
     PLUGIN_API_VERSION,
+    PLUGIN_ENVIRONMENT_FILES,
     PLUGIN_ID_PATTERN,
     PLUGIN_IGNORED_PREFIXES,
     PLUGIN_MAX_FILE_BYTES,
@@ -85,7 +86,7 @@ export function normalizePluginFiles(files: PluginSourceFile[]): PluginSourceFil
     for (const file of files) {
         const path = file.path.replace(/^\.\//, "").trim()
         if (!path || PLUGIN_IGNORED_PREFIXES.some((prefix) => path.startsWith(prefix) || path === prefix.slice(0, -1))) continue
-        if (path === "package-lock.json" || path === "pnpm-lock.yaml") continue
+        if ((PLUGIN_ENVIRONMENT_FILES as readonly string[]).includes(path)) continue
         byPath.set(path, file.content)
     }
     return [...byPath.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([path, content]) => ({ path, content }))
