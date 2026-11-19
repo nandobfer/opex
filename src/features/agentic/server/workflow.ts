@@ -552,8 +552,10 @@ async function pluginTestsTurn(loaded: Loaded): Promise<TurnPlan | null> {
     }
     if (decision === "fail") throw new Error(`Os testes do plugin continuaram falhando depois de ${attempts} correções. Fim da saída: ${result.output.slice(-500)}`)
     notice("success", "Testes do plugin passaram. Consolidando a versão.")
-    await update(doc, { stage: "finishing" })
+    // Consolida ANTES de ir a "Finalizando": se a ativação falhar, a mesa fica em "Testes do plugin" e o
+    // Tentar novamente refaz testes e consolidação (em "Finalizando" ele só refaria a limpeza).
     const consolidated = await flow.consolidatePluginWorkbench(fresh)
+    await update(doc, { stage: "finishing" })
     notice("success", `Versão ${consolidated.number} consolidada como estável: as telas abertas trocam ao vivo.`)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.APROVAR, depois: { tarefa: doc.taskCode, plugin: fresh.plugin?.pluginId ?? null, versao: consolidated.number } })
     await applyDoneEffects(loaded)
@@ -2196,6 +2198,11 @@ export async function retry(id: string): Promise<WorkbenchDto> {
     const stage = asStage(doc.stage)
     if (!RUNNING_STAGES.includes(stage) || !doc.lastPrompt) throw new DomainError(409, "Não há etapa para tentar de novo", "WORKBENCH_INVALID_STATE")
     metricEvent(doc, METRIC_EVENT.retried, { stage })
+    if (stage === "fixing_ci" && isPluginDoc(doc)) {
+        // Mesa Plugin (OPE-172): refaz os testes do plugin e a consolidação (sem turno do agente).
+        await launchTurn({ ...loaded, doc }, { stage, text: "" }, { userText: "Tentar os testes e a consolidação do plugin novamente" })
+        return getWorkbench(id)
+    }
     if (stage === "finishing" && doc.manualCompletion) {
         // Conclusão manual: refaz só a limpeza do que a mesa registrou (nunca caminhos inferidos).
         const ready = { ...loaded, doc }

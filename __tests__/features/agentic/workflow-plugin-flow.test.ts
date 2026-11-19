@@ -110,7 +110,7 @@ vi.mock('@/features/ai/server/self-memory/mcp', async () => (await import('../..
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
-import { approve, implement, requestCorrection, startWorkbench } from '@/features/agentic/server/workflow'
+import { approve, implement, requestCorrection, retry, startWorkbench } from '@/features/agentic/server/workflow'
 
 const model = AgenticWorkbench as unknown as {
   docs: Record<string, unknown>[]
@@ -245,6 +245,21 @@ describe('aprovação, testes do plugin e consolidação', () => {
     expect(mocks.publishPreview).toHaveBeenCalledTimes(1)
     expect(mocks.runTests).toHaveBeenCalledTimes(2)
     expect(mocks.consolidate).toHaveBeenCalledTimes(1)
+  })
+
+  it('consolidação que falha deixa a mesa em Testes do plugin e o Tentar novamente refaz a consolidação (não a limpeza)', async () => {
+    mocks.consolidate.mockRejectedValueOnce(new Error('Falha ao ativar a versão do plugin: quebrou. A versão estável anterior continua ativa.')).mockResolvedValue({ number: 1 })
+    const wb = await workbench({ stage: 'preview', previewUrl: '/dashboard', worktreePath: WORKDIR, plugin: pluginState({ pluginId: 'relogio', workDir: WORKDIR, draftVersionId: 'v1' }) })
+    await approve(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]).toMatchObject({ stage: 'fixing_ci', runState: 'failed' }))
+    expect(model.docs[0]!.error).toContain('A versão estável anterior continua ativa')
+
+    await retry(wb._id)
+    await waitForStage('done')
+    expect(mocks.consolidate).toHaveBeenCalledTimes(2)
+    expect(mocks.runTests).toHaveBeenCalledTimes(2)
+    // Nenhum turno de limpeza do agente: a mesa só conclui depois de consolidar.
+    expect(stages()).toEqual([])
   })
 
   it('pedir correção na prévia desfaz a aprovação e volta ao planejamento', async () => {
