@@ -170,12 +170,27 @@ export function pluginImplementPrompt(config: CentralConfig, ctx: WorkbenchConte
         "- Escreva testes Vitest do plugin (*.test.ts/*.test.tsx) e rode `npx tsc --noEmit` e `npx vitest run` na pasta até passarem.",
         "- Pode fazer commits locais na pasta. NÃO faça push e NÃO abra Pull Request: o Opex lê as fontes daqui, compila e publica a prévia sozinho.",
         "- Ao terminar, responda com um resumo do que foi feito, arquivos alterados e resultado dos testes.",
+        PLUGIN_CHANGE_SUMMARY_REQUEST,
     ].join("\n")
     const withInfo = info ? `${base}\n\n## Informações adicionais\n${info}` : base
     void ctx
     return withInfo + extra(config, "implementation")
 }
 
+
+/** Pedido do descritivo da mudança (OPE-172): gravado na versão e mostrado em Versões. */
+export const PLUGIN_CHANGE_SUMMARY_REQUEST = [
+    "- Termine a resposta com um bloco ```json``` assim: `{\"changeSummary\": \"…\"}` — o que mudou no plugin em relação à versão anterior, para quem usa o plugin:",
+    "  em português do Brasil, linguagem natural, de 1 a 4 frases, sem código, sem nomes de arquivos ou funções.",
+].join("\n")
+
+/** Descritivo da mudança do bloco final do agente (`{ changeSummary }`), ou `null`. */
+export function pluginChangeSummaryFrom(text: string): string | null {
+    const block = extractJsonBlock(text)
+    if (!block || typeof block !== "object") return null
+    const value = (block as { changeSummary?: unknown }).changeSummary
+    return typeof value === "string" && value.trim() ? value.trim().slice(0, 2000) : null
+}
 
 /** Correção depois de uma falha de manifesto ou de compilação (Rolldown) da versão. */
 export function pluginCompileFixPrompt(issues: readonly string[], workDir: string): string {
@@ -184,6 +199,7 @@ export function pluginCompileFixPrompt(issues: readonly string[], workDir: strin
         ...issues.map((issue) => `- ${issue}`),
         "",
         `- Trabalhe em ${workDir}; rode \`npx tsc --noEmit\` e \`npx vitest run\` de novo. Sem push nem PR.`,
+        PLUGIN_CHANGE_SUMMARY_REQUEST,
     ].join("\n")
 }
 
@@ -192,6 +208,7 @@ export function pluginTestsFixPrompt(output: string, workDir: string): string {
     return [
         "Os testes do plugin (Vitest, rodados pelo Opex na pasta de trabalho) falharam antes da consolidação. Corrija o plugin (ou o teste, se ele estiver errado; sem testes, escreva-os) e responda com um resumo.",
         `- Pasta: ${workDir}. Rode \`npx vitest run\` até passar. Sem push nem PR.`,
+        PLUGIN_CHANGE_SUMMARY_REQUEST,
         "",
         "## Saída dos testes (fim)",
         "```",

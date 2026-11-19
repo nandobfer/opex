@@ -11,8 +11,8 @@ import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib
 import type { IntegrationListItemDto } from "@/features/integrations/types"
 import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
-import type { TaskSummarySettings, TaskTagsSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, AiSkillDto, TaskSummarySettingsDto, TaskTagsSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto } from "../types"
+import type { TaskSummarySettings, TaskTagsSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings, PluginVersionSummarySettings } from "../schemas"
+import type { AiAgentDto, AiModelDto, AiSkillDto, TaskSummarySettingsDto, TaskTagsSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, PluginVersionSummarySettingsDto } from "../types"
 
 /** Consultas e mutações dos provedores e features de IA. */
 
@@ -83,6 +83,20 @@ export function useSaveTaskSummarySettings() {
         onSuccess: (saved) => {
             queryClient.setQueryData(key("feature", "task-summary"), saved)
             toast.success("Configuração de \"Resumos de tarefas\" salva")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
+    })
+}
+
+export const usePluginVersionSummarySettings = () => useQuery({ queryKey: key("feature", "plugin-version-summary"), queryFn: () => get<PluginVersionSummarySettingsDto>("/ai/features/plugin-version-summary") })
+
+export function useSavePluginVersionSummarySettings() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (input: PluginVersionSummarySettings) => unwrapApi((await api.put<ApiResponse<PluginVersionSummarySettingsDto>>("/ai/features/plugin-version-summary", input)).data),
+        onSuccess: (saved) => {
+            queryClient.setQueryData(key("feature", "plugin-version-summary"), saved)
+            toast.success('Configuração de "Descritivo de versão de plugin" salva')
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar a configuração")),
     })

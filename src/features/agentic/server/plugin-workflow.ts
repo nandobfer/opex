@@ -167,6 +167,7 @@ export async function buildPluginDraft(doc: IAgenticWorkbench): Promise<PluginDr
         baseVersionId: state.baseVersionId,
         source: { taskId: doc.taskId, taskCode: doc.taskCode, workbenchId: String(doc._id) },
         author: getLocalUser().id,
+        changeSummary: state.changeSummary ?? null,
     })
     if (!result.ok) {
         await AgenticWorkbench.updateOne({ _id: doc._id }, { $inc: { "plugin.compileAttempts": 1 } })
@@ -213,7 +214,7 @@ async function restartOnOutdatedBase(doc: IAgenticWorkbench, error: unknown): Pr
     if (!(error instanceof DomainError) || error.code !== "PLUGIN_BASE_OUTDATED" || !doc.plugin) throw error
     await releasePluginPreview(doc).catch(() => undefined)
     await removePluginWorkDir(doc.plugin.workDir)
-    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.baseVersionId": null, "plugin.draftVersionId": null, "plugin.workDir": null, "plugin.approved": false, "plugin.testAttempts": 0, previewUrl: null } })
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.baseVersionId": null, "plugin.draftVersionId": null, "plugin.workDir": null, "plugin.approved": false, "plugin.testAttempts": 0, "plugin.changeSummary": null, previewUrl: null } })
     throw new DomainError(409, `${error.message}: use "Voltar ao planejamento" e a próxima implementação parte da estável atual.`, error.code)
 }
 

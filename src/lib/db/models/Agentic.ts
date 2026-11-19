@@ -130,6 +130,8 @@ export interface IWorkbenchPlugin {
      * estiver indisponível no servidor, e o Tentar novamente refaz só a compilação.
      */
     compilePending?: boolean
+    /** Último descritivo da mudança escrito pelo agente (bloco `changeSummary`), gravado na próxima versão. */
+    changeSummary?: string | null
 }
 
 export interface IAgenticWorkbench {

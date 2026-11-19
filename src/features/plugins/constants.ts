@@ -115,3 +115,6 @@ export const PLUGIN_WORKDIR_SEGMENT = "plugins"
 export const PLUGIN_IGNORED_PREFIXES = ["node_modules/", ".opex-sdk/", ".git/", "dist/", "coverage/"] as const
 /** Arquivos de ambiente na raiz da pasta (vêm do template do SDK). */
 export const PLUGIN_ENVIRONMENT_FILES = ["package.json", "package-lock.json", "pnpm-lock.yaml", "tsconfig.json", "vitest.config.mts", ".gitignore"] as const
+
+/** Tamanho máximo do descritivo da mudança de uma versão (caracteres). */
+export const PLUGIN_CHANGE_SUMMARY_MAX = 2000

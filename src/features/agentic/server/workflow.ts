@@ -30,6 +30,7 @@ import {
     pluginImplementPrompt,
     pluginPlanningNotes,
     pluginTestsFixPrompt,
+    pluginChangeSummaryFrom,
     prChangesPrompt,
     previewCorrectionPrompt,
     prPrompt,
@@ -547,7 +548,9 @@ async function pluginCompileTurn(loaded: Loaded, implementerText: string): Promi
     const { doc } = loaded
     const id = String(doc._id)
     const notice = (level: "warn" | "success", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
-    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": true } })
+    // O descritivo do agente vale para a próxima versão (também no Tentar novamente que só recompila).
+    const changeSummary = pluginChangeSummaryFrom(implementerText)
+    await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": true, ...(changeSummary ? { "plugin.changeSummary": changeSummary } : {}) } })
     const fresh = (await AgenticWorkbench.findById(id).lean()) ?? doc
     const draft = await (await pluginFlow()).buildPluginDraft(fresh)
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.compilePending": false } })

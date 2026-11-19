@@ -4,7 +4,7 @@ import { Plugin, PluginVersion, type IPlugin, type IPluginVersion } from "@/lib/
 import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { publishAppEvent, publishClientEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
-import { PLUGIN_UPDATED_EVENT, type PluginChannel, type PluginScope } from "../constants"
+import { PLUGIN_CHANGE_SUMMARY_MAX, PLUGIN_UPDATED_EVENT, type PluginChannel, type PluginScope } from "../constants"
 import { diffPluginFiles, pluginSlotsOf, versionActionBlock } from "../logic"
 import { isPluginTestFile, manifestScopeIssue, normalizePluginFiles, parsePluginManifest, type PluginSourceFile } from "../manifest"
 import type { PluginDetailDto, PluginDiffDto, PluginDto, PluginUpdatedPayload, PluginVersionDetailDto, PluginVersionSummaryDto } from "../types"
@@ -190,6 +190,8 @@ export interface DraftInput {
     baseVersionId: string | null
     source: { taskId: string | null; taskCode: string | null; workbenchId: string | null }
     author: string
+    /** Descritivo da mudança escrito pelo agente da mesa (pt-BR, sem código). */
+    changeSummary?: string | null
 }
 
 export type DraftResult = { ok: true; versionId: string; number: number; log: string } | { ok: false; issues: string[] }
@@ -222,6 +224,7 @@ export async function createDraftVersion(input: DraftInput): Promise<DraftResult
         baseVersionId: input.baseVersionId,
         author: input.author,
         source: input.source,
+        ...(input.changeSummary?.trim() ? { changeSummary: input.changeSummary.trim().slice(0, PLUGIN_CHANGE_SUMMARY_MAX), changeSummarySource: "agent" } : {}),
     })
     await Plugin.updateOne({ pluginId: plugin.pluginId }, { $set: { name: parsed.manifest.name, description: parsed.manifest.description, apiVersion: parsed.manifest.apiVersion } })
     await recordAudit({ userId: input.author, entidade: ENTITY, entidadeId: plugin.pluginId, acao: "CRIAR", depois: { versao: created.number, estado: "draft", tarefa: input.source.taskCode } })
