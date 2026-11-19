@@ -154,6 +154,13 @@ export class ToolsService extends Service {
         const meta = requirePluginMeta(this.ctx, "tools")
         if (!meta.manifest.tools.includes(def.name)) throw new PluginDeclarationError(`Ferramenta "${def.name}" não declarada em plugin.json (tools)`)
         const name = pluginToolName(meta.pluginId, def.name)
+        // O nome final achata o id (`-` vira `_`): plugins diferentes podem chegar ao mesmo nome (`foo-bar`
+        // + `baz` e `foo` + `bar_baz`). O segundo a registrar falha a ativação, em vez de tomar o lugar
+        // da ferramenta do outro.
+        const taken = pluginRegistries()
+            .tools.all()
+            .find((entry) => entry.value.name === name && entry.owner.pluginId !== meta.pluginId)
+        if (taken) throw new PluginDeclarationError(`A ferramenta "${def.name}" vira "${name}", nome já usado pelo plugin "${taken.owner.pluginId}". Renomeie a ferramenta em plugin.json e no código`)
         const tool: OpexTool = {
             name,
             group: "plugin-tools",

@@ -134,3 +134,32 @@ describe('prévia', () => {
     expect(pluginToolList()).toEqual([])
   }, 30_000)
 })
+
+describe('nome de ferramenta igual entre plugins', () => {
+  const toolServer = (tool: string) => `
+import { definePlugin } from "@opex/plugin-sdk/server"
+export default definePlugin({
+  inject: ["tools", "sdk"],
+  apply(ctx) {
+    ctx.tools.register({ name: "${tool}", label: "${tool}", description: "x", input: ctx.sdk.z.object({}), execute: async () => "${tool}" })
+  },
+})
+`
+  const manifest = (id: string, tool: string) => ({ id, name: id, apiVersion: '1.0', scope: 'owner', entries: { server: 'server/index.ts' }, tools: [tool], services: ['tools', 'sdk'] })
+
+  it('o segundo plugin que chega ao mesmo nome final falha a ativação; a ferramenta do primeiro continua dele', async () => {
+    const first = await build(toolServer('baz'), manifest('foo-bar', 'baz'))
+    const second = await build(toolServer('bar_baz'), manifest('foo', 'bar_baz'))
+    expect(await activatePluginServer({ pluginId: 'foo-bar', channel: 'stable', versionId: 'v1', ...first })).toMatchObject({ ok: true })
+    const result = await activatePluginServer({ pluginId: 'foo', channel: 'stable', versionId: 'v1', ...second })
+    expect(result).toEqual({ ok: false, error: expect.stringContaining('nome já usado pelo plugin "foo-bar"') })
+    expect(pluginToolList().map((tool) => tool.name)).toEqual(['plugin_foo_bar_baz'])
+    expect(await pluginToolList()[0]!.execute({} as never, {} as never)).toBe('baz')
+  }, 60_000)
+
+  it('o mesmo plugin pode recarregar a própria ferramenta (stable e prévia)', async () => {
+    const v1 = await build(toolServer('baz'), manifest('foo-bar', 'baz'))
+    expect(await activatePluginServer({ pluginId: 'foo-bar', channel: 'stable', versionId: 'v1', ...v1 })).toMatchObject({ ok: true })
+    expect(await activatePluginServer({ pluginId: 'foo-bar', channel: 'preview', versionId: 'v2', ...v1 })).toMatchObject({ ok: true })
+  }, 60_000)
+})
