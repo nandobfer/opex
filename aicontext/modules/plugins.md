@@ -330,6 +330,8 @@ Em `__tests__/features/plugins/`:
 | `crons` | Crons de plugin |
 | `agent-tools` | Catálogo dos agentes |
 | `loader` | Carregador |
+| `plugin-routes` | `/api/p/...` despacha na preview só com o cookie válido e a fiber de prévia; a chave grava e limpa o cookie; aprovação do portal só pelo admin do próprio cliente; a rota de mensagens leva a prévia ao turno |
+| `plugin-preview-toggle` | A chave reflete o cookie também para plugin de cliente no app do dono |
 | `__tests__/scripts/plugin-runtime-check` | O script do build da imagem passa na árvore completa e falha sem o binário do Rolldown ou sem o CSS do Tailwind |
 | `plugin-slot` | Slot, erro isolado e troca ao vivo |
 | `plugins-pages` | Telas do dono e do portal |
