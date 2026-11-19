@@ -2058,6 +2058,7 @@ export async function reopen(id: string, feedback: string, fileIds?: string[]): 
     const files = await loadClaimableFiles(fileIds, id)
     if (isPluginDoc(loaded.doc) && loaded.doc.plugin) {
         // Mesa Plugin reaberta (OPE-172): a nova rodada parte da stable atual, numa pasta de trabalho nova.
+        await (await pluginFlow()).removePluginWorkDir(loaded.doc.plugin.workDir)
         await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { plugin: { ...loaded.doc.plugin, baseVersionId: null, draftVersionId: null, workDir: null, approved: false, compileAttempts: 0, testAttempts: 0, compilePending: false, changeSummary: null }, worktreePath: null } })
     }
     // Com o limite cheio, a reabertura aguarda vaga; os efeitos (PR para o histórico, card) só rodam ao ganhar a vaga.

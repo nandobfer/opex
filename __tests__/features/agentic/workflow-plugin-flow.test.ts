@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const mocks = vi.hoisted(() => ({
+  removeWorkDir: vi.fn(async () => undefined),
   controller: null as AbortController | null,
   prepareHub: vi.fn(),
   publish: vi.fn(),
@@ -44,6 +45,7 @@ vi.mock('@/features/agentic/server/plugin-workflow', async () => {
     runPluginTests: mocks.runTests,
     consolidatePluginWorkbench: mocks.consolidate,
     releasePluginPreview: mocks.release,
+    removePluginWorkDir: mocks.removeWorkDir,
   }
 })
 

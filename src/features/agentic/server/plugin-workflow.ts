@@ -129,6 +129,13 @@ export async function preparePluginImplementation(doc: IAgenticWorkbench, config
     const next = { ...state, pluginId: plugin.pluginId, baseVersionId, workDir, compileAttempts: 0, compilePending: false, changeSummary: null }
 
     const h = await host()
+    // Rodada nova (`workDir` zerado: primeira implementação, reabertura ou base desatualizada): a pasta
+    // determinística da tarefa pode ter sobrado de uma rodada antiga, com as fontes de outra base. Ela é
+    // apagada e reexportada da base de agora; se a remoção falhar, a implementação não segue.
+    if (!state.workDir) {
+        const removed = await h.run(`rm -rf ${shellQuote(workDir)}`, 60_000)
+        if (removed.exitCode !== 0) throw new Error(`Não foi possível limpar a pasta de trabalho do plugin: ${removed.output.slice(-300)}`)
+    }
     const exists = await h.run(`test -d ${shellQuote(`${workDir}/.git`)}`, 15_000, { quiet: true })
     if (exists.exitCode !== 0) {
         const sdk = await sdkFiles()
@@ -215,8 +222,8 @@ export async function consolidatePluginWorkbench(doc: IAgenticWorkbench): Promis
  */
 async function restartOnOutdatedBase(doc: IAgenticWorkbench, error: unknown): Promise<never> {
     if (!(error instanceof DomainError) || error.code !== "PLUGIN_BASE_OUTDATED" || !doc.plugin) throw error
+    // Descarta a prévia da mesa e remove a pasta de trabalho.
     await releasePluginPreview(doc).catch(() => undefined)
-    await removePluginWorkDir(doc.plugin.workDir)
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { "plugin.baseVersionId": null, "plugin.draftVersionId": null, "plugin.workDir": null, "plugin.approved": false, "plugin.testAttempts": 0, "plugin.changeSummary": null, previewUrl: null } })
     throw new DomainError(409, `${error.message}: use "Voltar ao planejamento" e a próxima implementação parte da estável atual.`, error.code)
 }
@@ -231,8 +238,12 @@ export async function removePluginWorkDir(workDir: string | null): Promise<void>
     }
 }
 
-/** Mesa Plugin concluída sem consolidar (manual) ou excluída: a prévia que era dela é descartada. */
+/**
+ * Mesa Plugin concluída sem consolidar (manual), excluída ou reaberta: a prévia que era dela é descartada
+ * e a pasta de trabalho é removida — sem depender da limpeza de worktree da central.
+ */
 export async function releasePluginPreview(doc: IAgenticWorkbench): Promise<void> {
+    await removePluginWorkDir(doc.plugin?.workDir ?? null)
     const pluginId = doc.plugin?.pluginId
     if (!pluginId) return
     const plugin = await findPlugin(pluginId)
