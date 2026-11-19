@@ -353,7 +353,7 @@ Maddox, com `create_task` e `taskType: "plugin"` + `pluginTarget`). No portal n�
 | Ferramenta | Tipo |
 |---|---|
 | `list_plugins`, `get_plugin`, `read_plugin_source`, `diff_plugin_versions`, `inspect_plugin_runtime` | Leitura |
-| `set_plugin_active`, `rollback_plugin` | `destructive` (pedem confirmação por padrão) |
+| `set_plugin_active`, `archive_plugin`, `rollback_plugin` | `destructive` (pedem confirmação por padrão) |
 
 Criar ou alterar um plugin é sempre pela mesa: uma tarefa do tipo Plugin.
 

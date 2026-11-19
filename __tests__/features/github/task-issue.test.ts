@@ -4,12 +4,13 @@ const mocks = vi.hoisted(() => ({
   githubRequest: vi.fn(),
   createTask: vi.fn(),
   assertColumn: vi.fn(),
+  assertPluginTargetNotArchived: vi.fn(async () => undefined),
   createIssueLink: vi.fn(),
   models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }>,
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/features/tasks/server/service', () => ({ assertColumn: mocks.assertColumn, createTask: mocks.createTask }))
+vi.mock('@/features/tasks/server/service', () => ({ assertColumn: mocks.assertColumn, assertPluginTargetNotArchived: mocks.assertPluginTargetNotArchived, createTask: mocks.createTask }))
 vi.mock('@/features/github/server/issue-links', () => ({ createIssueLink: mocks.createIssueLink }))
 vi.mock('@/features/github/server/mappings', async () => {
   const { DEFAULT_PRIORITY_RULES, DEFAULT_TYPE_RULES } = await import('@/features/github/logic')
@@ -85,5 +86,17 @@ describe('criação da tarefa com issue no GitHub', () => {
   it('projeto inválido falha antes de chamar o GitHub', async () => {
     await expect(createTaskWithIssue(input('a'.repeat(24)), 'local')).rejects.toMatchObject({ status: 400, code: 'PROJECT_NOT_FOUND' })
     expect(mocks.githubRequest).not.toHaveBeenCalled()
+  })
+})
+
+describe('createTaskWithIssue: plugin arquivado (OPE-172)', () => {
+  it('alvo num plugin arquivado é recusado antes de criar a issue no GitHub', async () => {
+    const { DomainError } = await import('@/lib/api/route')
+    mocks.assertPluginTargetNotArchived.mockRejectedValueOnce(new DomainError(400, 'O plugin Relógio está arquivado. Desarquive-o ou escolha outro', 'TASK_PLUGIN_ARCHIVED'))
+    const projectId = await seedProject()
+    const body = { ...(input(String(projectId)) as object), taskType: 'plugin', pluginTarget: { scope: 'owner', clientId: null, pluginId: 'relogio' } } as never
+    await expect(createTaskWithIssue(body, 'local')).rejects.toMatchObject({ code: 'TASK_PLUGIN_ARCHIVED' })
+    expect(mocks.githubRequest).not.toHaveBeenCalled()
+    expect(mocks.createTask).not.toHaveBeenCalled()
   })
 })

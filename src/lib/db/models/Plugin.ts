@@ -24,6 +24,9 @@ export interface IPlugin {
     clientId: string | null
     apiVersion: string
     active: boolean
+    /** Arquivado (OPE-172): fora da interface e do kernel, desligado; versões, logs e kv intactos. */
+    archivedAt: Date | null
+    archivedBy: string | null
     stableVersionId: string | null
     previewVersionId: string | null
     /** Mesa que publicou a prévia atual (a prévia é dela). */
@@ -44,6 +47,8 @@ const pluginSchema = new Schema<IPlugin>(
         clientId: { type: String, default: null },
         apiVersion: { type: String, required: true },
         active: { type: Boolean, default: true },
+        archivedAt: { type: Date, default: null },
+        archivedBy: { type: String, default: null },
         stableVersionId: { type: String, default: null },
         previewVersionId: { type: String, default: null },
         previewWorkbenchId: { type: String, default: null },

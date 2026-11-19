@@ -116,6 +116,34 @@ export function useSetPluginActive(id: string) {
     })
 }
 
+/** Arquiva (desliga) ou desarquiva (volta desligado), com resposta otimista na lista e no detalhe. */
+export function useSetPluginArchived(id: string) {
+    const source = usePluginSource()
+    const queryClient = useQueryClient()
+    const invalidate = useInvalidatePlugins()
+    const listPrefix = ["plugins", sourceKey(source), "list"] as const
+    const detailKey = pluginKeys.detail(sourceKey(source), id)
+    return useMutation({
+        mutationFn: async (archived: boolean) => unwrapApi((await source.api.post<ApiResponse<{ archived: boolean }>>(`${source.base}/${id}/archive`, { archived })).data),
+        onMutate: async (archived: boolean) => {
+            await queryClient.cancelQueries({ queryKey: listPrefix })
+            const lists = queryClient.getQueriesData<PluginDto[]>({ queryKey: listPrefix })
+            const detail = queryClient.getQueryData<PluginDetailDto>(detailKey)
+            const patch = { archivedAt: archived ? new Date().toISOString() : null, active: false }
+            queryClient.setQueriesData<PluginDto[]>({ queryKey: listPrefix }, (current) => current?.map((plugin) => (plugin.id === id ? { ...plugin, ...patch } : plugin)))
+            if (detail) queryClient.setQueryData<PluginDetailDto>(detailKey, { ...detail, ...patch })
+            return { lists, detail }
+        },
+        onSuccess: (data) => toast.success(data.archived ? "Plugin arquivado" : "Plugin desarquivado: ligue-o quando quiser"),
+        onError: (error, _archived, context) => {
+            for (const [key, value] of context?.lists ?? []) queryClient.setQueryData(key, value)
+            if (context?.detail) queryClient.setQueryData(detailKey, context.detail)
+            toast.error(apiErrorMessage(error, "Não foi possível alterar o plugin"))
+        },
+        onSettled: () => void invalidate(),
+    })
+}
+
 /** Liga/desliga a prévia do plugin neste navegador (cookie): a tela troca de versão ao vivo. */
 export function useTogglePluginPreview(id: string) {
     const source = usePluginSource()

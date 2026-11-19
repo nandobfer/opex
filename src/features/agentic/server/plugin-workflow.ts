@@ -246,6 +246,7 @@ export async function releasePluginPreview(doc: IAgenticWorkbench): Promise<void
 export async function approvePluginPreview(pluginId: string, access: { kind: "owner" } | { kind: "client"; clientId: string }, actorId: string): Promise<void> {
     const plugin = await findPlugin(pluginId)
     if (!plugin || (access.kind === "client" && (plugin.scope !== "client" || plugin.clientId !== access.clientId))) throw new DomainError(404, "Plugin não encontrado", "PLUGIN_NOT_FOUND")
+    if (plugin.archivedAt) throw new DomainError(409, `O plugin ${plugin.name} está arquivado. Desarquive-o antes`, "PLUGIN_ARCHIVED")
     if (!plugin.previewVersionId || !plugin.previewWorkbenchId) throw new DomainError(409, "O plugin não tem uma prévia aguardando aprovação", "PLUGIN_NO_PREVIEW")
     const { approve } = await import("./workflow")
     await approve(plugin.previewWorkbenchId, { approvedBy: actorId })

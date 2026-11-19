@@ -9,7 +9,7 @@ import { useSetPluginActive } from "../hooks/usePlugins"
  * Switch "Ativo" de um plugin (lista e detalhe): ligar é imediato; desligar pede confirmação, porque o
  * plugin sai das telas na hora. Resposta otimista com reversão (`useSetPluginActive`).
  */
-export function PluginActiveSwitch({ pluginId, pluginName, active, showLabel = false }: { pluginId: string; pluginName: string; active: boolean; showLabel?: boolean }) {
+export function PluginActiveSwitch({ pluginId, pluginName, active, archived = false, showLabel = false }: { pluginId: string; pluginName: string; active: boolean; archived?: boolean; showLabel?: boolean }) {
     const mutation = useSetPluginActive(pluginId)
     const [confirmOff, setConfirmOff] = useState(false)
     const id = `plugin-active-${pluginId}`
@@ -20,7 +20,13 @@ export function PluginActiveSwitch({ pluginId, pluginName, active, showLabel = f
                     Ativo
                 </label>
             ) : null}
-            <Switch id={id} aria-label={`${active ? "Desativar" : "Ativar"} ${pluginName}`} checked={active} disabled={mutation.isPending} onCheckedChange={(checked) => (checked ? mutation.mutate(true) : setConfirmOff(true))} />
+            <Switch
+                id={id}
+                aria-label={`${active ? "Desativar" : "Ativar"} ${pluginName}`}
+                title={archived ? "Desarquive para ativar" : undefined}
+                checked={active}
+                disabled={mutation.isPending || archived}
+                onCheckedChange={(checked) => (checked ? mutation.mutate(true) : setConfirmOff(true))} />
             <ConfirmDialog
                 open={confirmOff}
                 onOpenChange={setConfirmOff}

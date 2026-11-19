@@ -68,6 +68,7 @@ async function toDtos(plugins: PluginDoc[]): Promise<PluginDto[]> {
         clientName: plugin.clientId ? (names.get(plugin.clientId) ?? null) : null,
         apiVersion: plugin.apiVersion,
         active: plugin.active,
+        archivedAt: plugin.archivedAt ? new Date(plugin.archivedAt).toISOString() : null,
         stable: plugin.stableVersionId ? (byId.get(plugin.stableVersionId) ?? null) : null,
         preview: plugin.previewVersionId ? (byId.get(plugin.previewVersionId) ?? null) : null,
         slots: (plugin.stableVersionId ? byId.get(plugin.stableVersionId) : undefined)?.slots ?? (plugin.previewVersionId ? byId.get(plugin.previewVersionId) : undefined)?.slots ?? [],
@@ -117,6 +118,11 @@ export async function getPlugin(pluginId: string, access: PluginAccess = OWNER_A
     const [dto] = await toDtos([plugin])
     const versions = (await PluginVersion.find({ pluginId }, SUMMARY_PROJECTION).sort({ number: -1 }).lean()) as VersionDoc[]
     return { ...dto!, versions: versions.map(summaryOf) }
+}
+
+/** Plugin arquivado não muda de versão, de prévia nem de estado: desarquive antes. */
+export function assertNotArchived(plugin: Pick<IPlugin, "archivedAt" | "name">): void {
+    if (plugin.archivedAt) throw new DomainError(409, `O plugin ${plugin.name} está arquivado. Desarquive-o antes`, "PLUGIN_ARCHIVED")
 }
 
 export async function findPlugin(pluginId: string): Promise<PluginDoc | null> {
@@ -282,6 +288,7 @@ export async function publishPreviewVersion(pluginId: string, versionId: string,
     const version = await loadVersion(pluginId, versionId)
     const block = versionActionBlock("publish-preview", version.state)
     if (block) throw new DomainError(409, block, "PLUGIN_VERSION_STATE")
+    assertNotArchived(plugin)
     await assertPreviewFree(plugin, options.workbenchId)
     await assertBaseIsCurrentStable(plugin, version)
 
@@ -346,6 +353,7 @@ export async function consolidateVersion(pluginId: string, versionId: string, ac
     const version = await loadVersion(pluginId, versionId)
     const block = versionActionBlock("consolidate", version.state)
     if (block) throw new DomainError(409, block, "PLUGIN_VERSION_STATE")
+    assertNotArchived(plugin)
     await assertBaseIsCurrentStable(plugin, version)
     await promoteToStable(plugin, version, actorId, "consolidate")
     return { number: version.number }
@@ -358,6 +366,7 @@ export async function rollbackPlugin(pluginId: string, versionId: string, actorI
     const block = versionActionBlock("rollback", version.state, { isCurrentStable: plugin.stableVersionId === versionId })
     if (block) throw new DomainError(409, block, "PLUGIN_VERSION_STATE")
     if (!version.promotedAt) throw new DomainError(409, "O rollback só volta para uma versão já consolidada antes", "PLUGIN_VERSION_STATE")
+    assertNotArchived(plugin)
     await promoteToStable(plugin, version, actorId, "rollback")
     return { number: version.number }
 }
@@ -366,6 +375,7 @@ export async function rollbackPlugin(pluginId: string, versionId: string, actorI
 export async function setPluginActive(pluginId: string, active: boolean, actorId: string, access: PluginAccess = OWNER_ACCESS): Promise<void> {
     const plugin = await loadPlugin(pluginId, access)
     if (plugin.active === active) return
+    if (active) assertNotArchived(plugin)
     await Plugin.updateOne({ pluginId }, { $set: { active } })
     if (plugin.scope === "owner") {
         if (active) await syncPluginServer(pluginId)
@@ -379,6 +389,29 @@ export async function setPluginActive(pluginId: string, active: boolean, actorId
 }
 
 /**
+ * Arquiva ou desarquiva. Arquivar desliga o plugin (tira das telas e do kernel) e é recusado com uma
+ * prévia de mesa em andamento; desarquivar volta DESLIGADO (o ator liga de propósito). Nada é apagado.
+ */
+export async function setPluginArchived(pluginId: string, archived: boolean, actorId: string, access: PluginAccess = OWNER_ACCESS): Promise<{ archived: boolean; changed: boolean }> {
+    const plugin = await loadPlugin(pluginId, access)
+    if (Boolean(plugin.archivedAt) === archived) return { archived, changed: false }
+    if (archived && plugin.previewVersionId) {
+        const current = await PluginVersion.findOne({ _id: plugin.previewVersionId, pluginId }, { number: 1, source: 1 }).lean()
+        const owner = current?.source?.taskCode ? ` da tarefa ${current.source.taskCode}` : ""
+        throw new DomainError(409, `O plugin tem uma prévia${owner}. Conclua ou descarte antes de arquivar`, "PLUGIN_PREVIEW_BUSY")
+    }
+    const set = archived ? { archivedAt: new Date(), archivedBy: actorId, active: false } : { archivedAt: null, archivedBy: null, active: false }
+    await Plugin.updateOne({ pluginId }, { $set: set })
+    if (archived && plugin.active && plugin.scope === "owner") {
+        const { deactivatePluginServer } = await import("./kernel/kernel")
+        await deactivatePluginServer(pluginId)
+    }
+    await recordAudit({ userId: actorId, entidade: ENTITY, entidadeId: pluginId, acao: "ATUALIZAR", antes: { arquivado: Boolean(plugin.archivedAt), ativo: plugin.active }, depois: { arquivado: archived, ativo: false } })
+    await publishPluginUpdated(plugin, { version: null, channel: null })
+    return { archived, changed: true }
+}
+
+/**
  * Reconcilia o kernel com o banco para um plugin do dono: ativa a stable e a prévia vigentes e
  * desfaz o que não vale mais. Erro de ativação fica em `runtimeError` (a fiber anterior continua).
  */
@@ -388,7 +421,7 @@ export async function syncPluginServer(pluginId: string): Promise<void> {
     const { deactivatePluginServer } = await import("./kernel/kernel")
     for (const channel of ["stable", "preview"] as const) {
         const versionId = channel === "stable" ? plugin.stableVersionId : plugin.previewVersionId
-        if (!plugin.active || !versionId) {
+        if (!plugin.active || plugin.archivedAt || !versionId) {
             await deactivatePluginServer(pluginId, channel)
             continue
         }
@@ -405,7 +438,7 @@ export async function syncPluginServer(pluginId: string): Promise<void> {
 /** Sobe todos os plugins ativos do dono (boot do kernel). */
 export async function syncAllPluginServers(): Promise<void> {
     await dbConnect()
-    const plugins = await Plugin.find({ scope: "owner", active: true }, { pluginId: 1 }).lean()
+    const plugins = await Plugin.find({ scope: "owner", active: true, archivedAt: null }, { pluginId: 1 }).lean()
     for (const plugin of plugins) {
         try {
             await syncPluginServer(plugin.pluginId)

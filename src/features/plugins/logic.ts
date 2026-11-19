@@ -130,7 +130,7 @@ export function uniquePluginId(base: string, taken: ReadonlySet<string>): string
 export function pluginSlotsOf(manifest: Pick<PluginManifest, "scope" | "slots" | "nav"> | null | undefined): PluginSlotName[] {
     if (!manifest) return []
     const slots = new Set<PluginSlotName>((manifest.slots ?? []).map((slot) => slot.slot))
-    if (manifest.nav?.length) slots.add(PLUGIN_NAV_SLOT_BY_SCOPE[manifest.scope])
+    for (const item of manifest.nav ?? []) slots.add(item.slot ?? PLUGIN_NAV_SLOT_BY_SCOPE[manifest.scope])
     return PLUGIN_SLOTS.filter((slot) => slots.has(slot))
 }
 
@@ -138,6 +138,13 @@ export function pluginSlotsOf(manifest: Pick<PluginManifest, "scope" | "slots" |
 const SLOT_SCREENS: Record<PluginComponentSlot, string> = {
     "dashboard.widgets": "/dashboard",
     "task.panel": "/tarefas",
+    "task.sidebar": "/tarefas",
+    "dashboard.section.tarefas": "/dashboard",
+    "dashboard.section.financeiro": "/dashboard",
+    "dashboard.section.horas": "/dashboard",
+    "dashboard.section.central": "/dashboard",
+    "horas.widgets": "/tarefas/horas",
+    "portal.tasks.header": "/cliente/tarefas",
     "topbar.actions": "/dashboard",
     "workbench.panel": "/desenvolvimento",
     "tasks.header": "/tarefas",

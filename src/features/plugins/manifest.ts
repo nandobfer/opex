@@ -13,9 +13,13 @@ import {
     PLUGIN_SERVICES,
     PLUGIN_SLOTS,
     PLUGIN_SLOTS_BY_SCOPE,
+    PLUGIN_NAV_SLOTS_BY_SCOPE,
     isPluginNavSlot,
+    type PluginNavSlot,
     type PluginScope,
+    type PluginSlotName,
 } from "./constants"
+import { isSlotArea, slotNode, slotPathLabel } from "./slot-tree"
 
 /**
  * Manifesto do plugin (`plugin.json` na raiz das fontes). Módulo PURO.
@@ -33,6 +37,16 @@ const pagePath = z
 const exportName = z.string().trim().regex(/^[A-Za-z_$][\w$]*$/, "Nome de exportação inválido")
 const pluginName = z.string().trim().regex(PLUGIN_NAME_PATTERN, "Use minúsculas, números e _ (2 a 40 caracteres, começando por letra)")
 
+/** Id de slot: área da árvore ou id desconhecido é recusado com a mensagem em pt-BR. */
+const slotIdSchema = z
+    .string()
+    .trim()
+    .superRefine((value, ctx) => {
+        if (isSlotArea(value) || slotNode(value)?.kind === "area") ctx.addIssue({ code: "custom", message: `"${value}" é uma área (${slotPathLabel(value)}), não um slot: escolha um dos slots dentro dela` })
+        else if (!(PLUGIN_SLOTS as readonly string[]).includes(value)) ctx.addIssue({ code: "custom", message: `Slot desconhecido: "${value}"` })
+    })
+    .transform((value) => value as PluginSlotName)
+
 export const pluginManifestSchema = z.object({
     id: z.string().trim().regex(PLUGIN_ID_PATTERN, "Id do plugin inválido (minúsculas, números e -, 2 a 40 caracteres)"),
     name: z.string().trim().min(1, "Informe o nome do plugin").max(80),
@@ -48,7 +62,7 @@ export const pluginManifestSchema = z.object({
     slots: z
         .array(
             z.object({
-                slot: z.enum(PLUGIN_SLOTS),
+                slot: slotIdSchema,
                 export: exportName,
                 title: z.string().trim().max(80).optional(),
                 order: z.number().int().min(0).max(1000).default(100),
@@ -56,7 +70,17 @@ export const pluginManifestSchema = z.object({
         )
         .default([]),
     pages: z.array(z.object({ path: pagePath, title: z.string().trim().min(1).max(80), export: exportName })).default([]),
-    nav: z.array(z.object({ label: z.string().trim().min(1).max(40), page: pagePath, icon: z.string().trim().min(1).max(60).default("Puzzle") })).default([]),
+    nav: z
+        .array(
+            z.object({
+                label: z.string().trim().min(1).max(40),
+                page: pagePath,
+                icon: z.string().trim().min(1).max(60).default("Puzzle"),
+                /** Menu onde o item entra (ex.: `sidebar.nav.agentes`); sem ele, o menu padrão do escopo. */
+                slot: slotIdSchema.optional(),
+            }),
+        )
+        .default([]),
     routes: z.array(z.object({ method: z.enum(PLUGIN_ROUTE_METHODS), path: z.string().trim().regex(/^\/[A-Za-z0-9\-_/:]*$/, "Rota inválida (ex.: /itens/:id)") })).default([]),
     tools: z.array(pluginName).default([]),
     crons: z.array(pluginName).default([]),
@@ -145,6 +169,12 @@ export function pluginManifestIssues(manifest: PluginManifest, files: PluginSour
     for (const slot of manifest.slots) {
         if (!allowedSlots.includes(slot.slot)) issues.push(`O slot "${slot.slot}" não existe no escopo ${manifest.scope === "owner" ? "do dono" : "do cliente"} (válidos: ${allowedSlots.filter((s) => !isPluginNavSlot(s)).join(", ")})`)
         if (isPluginNavSlot(slot.slot)) issues.push(`Use a lista "nav" do manifesto para o menu (${slot.slot}), não um slot`)
+    }
+    const navSlots = PLUGIN_NAV_SLOTS_BY_SCOPE[manifest.scope]
+    for (const item of manifest.nav) {
+        if (item.slot && !navSlots.includes(item.slot as PluginNavSlot)) {
+            issues.push(`O item de menu "${item.label}" usa o slot "${item.slot}", que não é um menu ${manifest.scope === "owner" ? "do dono" : "do cliente"} (válidos: ${navSlots.join(", ")})`)
+        }
     }
 
     const uiDeclared = manifest.slots.length > 0 || manifest.pages.length > 0

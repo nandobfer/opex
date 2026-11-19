@@ -19,10 +19,13 @@ import { ClienteFiltersBar } from "./components/ClienteFiltersBar"
 import { ClienteTaskCreationButton } from "./components/ClienteTaskCreationButton"
 import { ClienteTaskBoard } from "./components/ClienteTaskBoard"
 import { ClienteTaskTable } from "./components/ClienteTaskTable"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
+import { useClientePortal } from "./ClientePortalContext"
 
 /** Portal do cliente: lista somente leitura das tarefas que ele solicitou. */
 export function ClienteTasksPage() {
     const router = useRouter()
+    const { clientId } = useClientePortal()
     const options = useClienteOptions()
     const [filters, setFilters] = useState<TaskFilters>(DEFAULT_TASK_FILTERS)
     const tasks = useClienteTasks(filters.showArchived)
@@ -61,6 +64,9 @@ export function ClienteTasksPage() {
                     </Button>
                 </div>
             </header>
+
+            {/* Slot `portal.tasks.header` (OPE-172): bloco de plugins do cliente no topo da lista. */}
+            <PluginSlot name="portal.tasks.header" props={{ clientId }} skeletonClassName="h-20" />
 
             {loading ? (
                 <Skeleton className="h-[420px] w-full" aria-label="Carregando tarefas" />

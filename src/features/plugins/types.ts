@@ -33,6 +33,8 @@ export interface PluginDto {
     clientName: string | null
     apiVersion: string
     active: boolean
+    /** Arquivado em (ISO) ou `null`. */
+    archivedAt: string | null
     stable: PluginVersionSummaryDto | null
     preview: PluginVersionSummaryDto | null
     /** Slots do plugin (da estável; sem estável, da prévia) — filtro da lista. */
@@ -73,7 +75,7 @@ export interface PluginRuntimeEntry {
     cssUrl: string | null
     slots: Array<{ slot: PluginComponentSlot; export: string; title: string | null; order: number }>
     pages: Array<{ path: string; title: string; export: string }>
-    nav: Array<{ label: string; page: string; icon: string }>
+    nav: Array<{ label: string; page: string; icon: string; slot?: string }>
 }
 
 export interface PluginRuntimeManifestDto {
@@ -89,10 +91,26 @@ export interface PluginUpdatedPayload {
     channel: PluginChannel | null
 }
 
+/** Tarefa entregue aos slots da página da tarefa. */
+export interface PluginTaskProp {
+    id: string
+    code: string
+    title: string
+    taskType: string | null
+    projectId: string | null
+}
+
 /** Props de cada slot de componente (contrato do SDK, `plugin-sdk/types/client.d.ts`). */
 export interface PluginSlotPropsMap {
     "dashboard.widgets": Record<string, never>
-    "task.panel": { task: { id: string; code: string; title: string; taskType: string | null; projectId: string | null } }
+    "task.panel": { task: PluginTaskProp }
+    "task.sidebar": { task: PluginTaskProp }
+    "dashboard.section.tarefas": Record<string, never>
+    "dashboard.section.financeiro": Record<string, never>
+    "dashboard.section.horas": Record<string, never>
+    "dashboard.section.central": Record<string, never>
+    "horas.widgets": Record<string, never>
+    "portal.tasks.header": { clientId: string }
     "topbar.actions": Record<string, never>
     "workbench.panel": { workbenchId: string; taskId: string | null }
     "tasks.header": Record<string, never>

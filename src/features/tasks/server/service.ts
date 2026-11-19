@@ -339,6 +339,14 @@ export interface TaskEstimateInput {
 
 export { resolvePluginTarget }
 
+/** Tarefa Plugin não aponta para plugin arquivado (OPE-172): desarquive-o ou escolha outro. */
+export async function assertPluginTargetNotArchived(target: IDevTask["pluginTarget"] | null | undefined): Promise<void> {
+    if (!target?.pluginId) return
+    const { Plugin } = await import("@/lib/db/models/Plugin")
+    const plugin = await Plugin.findOne({ pluginId: target.pluginId }, { name: 1, archivedAt: 1 }).lean()
+    if (plugin?.archivedAt) throw new DomainError(400, `O plugin ${plugin.name} está arquivado. Desarquive-o ou escolha outro`, "TASK_PLUGIN_ARCHIVED")
+}
+
 const pluginTargetLabel = (target: IDevTask["pluginTarget"]) => (target ? `${target.scope === "client" ? "cliente" : "dono"}${target.pluginId ? ` · ${target.pluginId}` : " · novo"}` : null)
 
 export async function createTask(input: CreateTaskInput, options: CreateTaskOptions): Promise<TaskDto> {
@@ -347,6 +355,7 @@ export async function createTask(input: CreateTaskInput, options: CreateTaskOpti
     if (!project) throw new DomainError(400, "Projeto inválido", "PROJECT_NOT_FOUND")
     await assertColumn(input.columnId)
     const pluginTarget = resolvePluginTarget(input.taskType ?? null, input.pluginTarget ?? null, options.clientId ?? null)
+    await assertPluginTargetNotArchived(pluginTarget)
     const code = await nextProjectCode(project)
     const order = options.order ?? (await endOrder(input.columnId))
     const task = await DevTask.create({
@@ -411,6 +420,7 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
         const nextTarget = input.pluginTarget !== undefined ? input.pluginTarget : (task.pluginTarget ?? null)
         const resolved = resolvePluginTarget(nextType ?? null, nextTarget, task.clientId ?? null)
         if (JSON.stringify(resolved) !== JSON.stringify(task.pluginTarget ?? null)) {
+            if (resolved?.pluginId && resolved.pluginId !== task.pluginTarget?.pluginId) await assertPluginTargetNotArchived(resolved)
             set.pluginTarget = resolved
             before.plugin = pluginTargetLabel(task.pluginTarget ?? null)
             after.plugin = pluginTargetLabel(resolved)

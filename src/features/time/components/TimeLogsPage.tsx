@@ -24,6 +24,7 @@ import { useTimeLogs } from "../hooks/useTime"
 import { TimeLogFiltersBar } from "./TimeLogFiltersBar"
 import { TimeLogTaskGroup } from "./TimeLogTaskGroup"
 import { TimerIndicator } from "./TimerIndicator"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 
 const swap = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, y: -8 }, transition: { duration: 0.2 } }
 
@@ -102,6 +103,9 @@ export function TimeLogsPage() {
                     </Button>
                 </div>
             </header>
+
+            {/* Slot `horas.widgets` (OPE-172): cards de plugins no topo de Horas agênticas. */}
+            <PluginSlot name="horas.widgets" props={{}} skeletonClassName="h-20" />
 
             <TimeLogFiltersBar
                 filters={filters}

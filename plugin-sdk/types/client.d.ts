@@ -30,6 +30,13 @@ declare module "@opex/plugin-sdk/client" {
         "financeiro.widgets": Record<string, never>
         "portal.dashboard.widgets": { clientId: string }
         "portal.task.panel": { taskId: string; clientId: string }
+        "task.sidebar": { task: { id: string; code: string; title: string; taskType: string | null; projectId: string | null } }
+        "dashboard.section.tarefas": Record<string, never>
+        "dashboard.section.financeiro": Record<string, never>
+        "dashboard.section.horas": Record<string, never>
+        "dashboard.section.central": Record<string, never>
+        "horas.widgets": Record<string, never>
+        "portal.tasks.header": { clientId: string }
     }
 
     export function usePluginHost(): PluginHost

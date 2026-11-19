@@ -20,7 +20,8 @@ import { useScrollViewportHeight } from "@/features/integrations/hooks/useScroll
 import { usePluginSource } from "../client/PluginSourceContext"
 import { usePlugin, usePluginsRealtime } from "../hooks/usePlugins"
 import { PluginActiveSwitch } from "./PluginActiveSwitch"
-import { PluginScopeBadge, PluginVersionBadge } from "./PluginBadges"
+import { PluginArchivedBadge, PluginScopeBadge, PluginSlotBadges, PluginVersionBadge } from "./PluginBadges"
+import { PluginArchiveButton } from "./PluginArchiveButton"
 import { PluginRuntimeCard } from "./PluginRuntimeCard"
 import { PluginVersionsCard } from "./PluginVersionsCard"
 import { PluginDebugConsole } from "./debug/PluginDebugConsole"
@@ -63,12 +64,15 @@ export function PluginDetailView({ id, backHref }: { id: string; backHref: strin
                     <PluginScopeBadge scope={plugin.scope} clientName={plugin.clientName} />
                     {plugin.stable && <PluginVersionBadge state="stable" number={plugin.stable.number} />}
                     {plugin.preview && <PluginVersionBadge state="preview" number={plugin.preview.number} />}
+                    {plugin.archivedAt && <PluginArchivedBadge />}
                     <div className="ml-auto flex items-center gap-2">
                         {owner && <DebugToggleIconButton open={debugOpen} onToggle={() => setDebugOpen((open) => !open)} panelId={panelId} className="shrink-0" />}
-                        <PluginActiveSwitch pluginId={plugin.id} pluginName={plugin.name} active={plugin.active} showLabel />
+                        <PluginArchiveButton pluginId={plugin.id} pluginName={plugin.name} archived={Boolean(plugin.archivedAt)} />
+                        <PluginActiveSwitch pluginId={plugin.id} pluginName={plugin.name} active={plugin.active} archived={Boolean(plugin.archivedAt)} showLabel />
                     </div>
                 </div>
                 {plugin.description && <p className="text-sm text-muted-foreground">{plugin.description}</p>}
+                <PluginSlotBadges slots={plugin.slots} />
             </div>
 
             <AnimatePresence initial={false}>
@@ -122,8 +126,11 @@ export function PluginDetailSkeleton() {
                 <Skeleton className="h-3 w-16" />
                 <div className="flex items-center gap-3">
                     <Skeleton className="h-8 w-64" />
-                    <Skeleton className="ml-auto h-6 w-20" />
+                    <Skeleton className="ml-auto h-8 w-8" />
+                    <Skeleton className="h-8 w-8" />
+                    <Skeleton className="h-6 w-20" />
                 </div>
+                <Skeleton className="h-5 w-24 rounded-full" />
             </div>
             <div className="space-y-2 rounded-xl border p-6">
                 <Skeleton className="mb-4 h-5 w-24" />

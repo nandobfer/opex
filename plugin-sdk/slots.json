@@ -1,0 +1,190 @@
+{
+  "owner": [
+    {
+      "kind": "area",
+      "id": "area:shell",
+      "label": "Casca do app",
+      "description": "Partes fixas em todas as telas do dono",
+      "children": [
+        {
+          "kind": "area",
+          "id": "area:sidebar",
+          "label": "Barra lateral",
+          "description": "Menu do app",
+          "children": [
+            {
+              "kind": "slot",
+              "id": "sidebar.nav",
+              "label": "Seção Plugins",
+              "description": "Itens na seção Plugins do menu (lista `nav` do manifesto)"
+            },
+            {
+              "kind": "slot",
+              "id": "sidebar.nav.agentes",
+              "label": "Menu Agentes",
+              "description": "Itens dentro do menu Agentes (`nav[].slot`)"
+            },
+            {
+              "kind": "slot",
+              "id": "sidebar.nav.contabil",
+              "label": "Menu Contábil",
+              "description": "Itens dentro do menu Contábil (`nav[].slot`)"
+            },
+            {
+              "kind": "slot",
+              "id": "sidebar.nav.configuracoes",
+              "label": "Menu Configurações",
+              "description": "Itens dentro do menu Configurações (`nav[].slot`)"
+            },
+            {
+              "kind": "slot",
+              "id": "topbar.actions",
+              "label": "Ações",
+              "description": "Ações: no desktop, no rodapé da barra lateral; no celular, no cabeçalho"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "area",
+      "id": "area:dashboard",
+      "label": "Dashboards",
+      "description": "Tela inicial (/dashboard)",
+      "children": [
+        {
+          "kind": "slot",
+          "id": "dashboard.widgets",
+          "label": "Fim da página",
+          "description": "Cards no fim da página"
+        },
+        {
+          "kind": "slot",
+          "id": "dashboard.section.tarefas",
+          "label": "Seção Visão geral de tarefas",
+          "description": "Cards no fim da seção Visão geral de tarefas"
+        },
+        {
+          "kind": "slot",
+          "id": "dashboard.section.financeiro",
+          "label": "Seção Financeiro",
+          "description": "Cards no fim da seção Financeiro"
+        },
+        {
+          "kind": "slot",
+          "id": "dashboard.section.horas",
+          "label": "Seção Horas agênticas",
+          "description": "Cards no fim da seção Horas agênticas"
+        },
+        {
+          "kind": "slot",
+          "id": "dashboard.section.central",
+          "label": "Seção Central de desenvolvimento",
+          "description": "Cards no fim da seção Central de desenvolvimento"
+        }
+      ]
+    },
+    {
+      "kind": "area",
+      "id": "area:tasks",
+      "label": "Tarefas",
+      "description": "Quadro e página da tarefa",
+      "children": [
+        {
+          "kind": "slot",
+          "id": "tasks.header",
+          "label": "Topo do quadro",
+          "description": "Bloco acima do quadro em /tarefas"
+        },
+        {
+          "kind": "area",
+          "id": "area:task-page",
+          "label": "Página da tarefa",
+          "description": "Detalhe de uma tarefa",
+          "children": [
+            {
+              "kind": "slot",
+              "id": "task.panel",
+              "label": "Aba",
+              "description": "Aba extra (props `{ task }`)"
+            },
+            {
+              "kind": "slot",
+              "id": "task.sidebar",
+              "label": "Coluna lateral",
+              "description": "Cards na coluna lateral (props `{ task }`)"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "kind": "area",
+      "id": "area:dev-center",
+      "label": "Central de desenvolvimento",
+      "description": "Mesas de desenvolvimento",
+      "children": [
+        {
+          "kind": "slot",
+          "id": "workbench.panel",
+          "label": "Aba da mesa",
+          "description": "Aba extra da mesa (props `{ workbenchId, taskId }`)"
+        }
+      ]
+    },
+    {
+      "kind": "area",
+      "id": "area:contabil",
+      "label": "Contábil",
+      "description": "Telas do menu Contábil",
+      "children": [
+        {
+          "kind": "slot",
+          "id": "financeiro.widgets",
+          "label": "Financeiro",
+          "description": "Cards no topo de /financeiro"
+        },
+        {
+          "kind": "slot",
+          "id": "horas.widgets",
+          "label": "Horas agênticas",
+          "description": "Cards no topo de /tarefas/horas"
+        }
+      ]
+    }
+  ],
+  "client": [
+    {
+      "kind": "slot",
+      "id": "portal.nav",
+      "label": "Menu",
+      "description": "Itens no menu do portal (lista `nav` do manifesto)"
+    },
+    {
+      "kind": "slot",
+      "id": "portal.dashboard.widgets",
+      "label": "Dashboard",
+      "description": "Cards no Dashboard do portal (props `{ clientId }`)"
+    },
+    {
+      "kind": "area",
+      "id": "area:portal-tasks",
+      "label": "Tarefas",
+      "description": "Lista e página da tarefa no portal",
+      "children": [
+        {
+          "kind": "slot",
+          "id": "portal.tasks.header",
+          "label": "Topo da lista",
+          "description": "Bloco no topo da lista de tarefas (props `{ clientId }`)"
+        },
+        {
+          "kind": "slot",
+          "id": "portal.task.panel",
+          "label": "Aba da tarefa",
+          "description": "Aba na página da tarefa (props `{ taskId, clientId }`)"
+        }
+      ]
+    }
+  ]
+}

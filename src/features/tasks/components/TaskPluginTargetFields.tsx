@@ -32,7 +32,7 @@ export function TaskPluginTargetFields({ control, errors }: { control: Control<T
     const scope: PluginScope = target?.scope ?? "owner"
     const clients = useOrcamentoClients({ enabled: scope === "client" })
     const plugins = usePlugins(scope === "client" ? (target?.clientId ? { scope, clientId: target.clientId } : { scope }) : { scope })
-    const pluginItems = useMemo(() => [NEW_PLUGIN, ...(plugins.data ?? []).filter((plugin) => scope === "owner" || plugin.clientId === target?.clientId).map((plugin) => ({ id: plugin.id, name: plugin.name }))], [plugins.data, scope, target?.clientId])
+    const pluginItems = useMemo(() => [NEW_PLUGIN, ...(plugins.data ?? []).filter((plugin) => !plugin.archivedAt && (scope === "owner" || plugin.clientId === target?.clientId)).map((plugin) => ({ id: plugin.id, name: plugin.name }))], [plugins.data, scope, target?.clientId])
     const client = clients.data?.find((item) => item.id === target?.clientId) ?? null
     const plugin = pluginItems.find((item) => item.id === (target?.pluginId ?? "")) ?? NEW_PLUGIN
     const targetErrors = errors.pluginTarget as (FieldErrors<TaskPluginTarget> & { message?: string }) | undefined

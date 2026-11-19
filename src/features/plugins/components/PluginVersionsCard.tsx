@@ -33,6 +33,8 @@ export function PluginVersionsCard({ plugin, showTaskLinks, canGenerateSummary }
     const summary = useGeneratePluginVersionSummary(plugin.id)
     const [target, setTarget] = useState<PluginVersionSummaryDto | null>(null)
     const stableId = plugin.stable?.id ?? null
+    // Arquivado: nenhuma versão troca de uso nem a prévia segue (desarquive antes).
+    const archived = Boolean(plugin.archivedAt)
 
     const openPreview = async (version: PluginVersionSummaryDto) => {
         await preview.mutateAsync(true)
@@ -55,7 +57,7 @@ export function PluginVersionsCard({ plugin, showTaskLinks, canGenerateSummary }
                                     key={version.id}
                                     label={`v${version.number}`}
                                     active={version.id === stableId}
-                                    activatable={canUseVersion(version, stableId)}
+                                    activatable={!archived && canUseVersion(version, stableId)}
                                     activateLabel={`Usar a versão v${version.number}`}
                                     activateDisabled={rollback.isPending}
                                     onActivate={() => setTarget(version)}
@@ -73,7 +75,7 @@ export function PluginVersionsCard({ plugin, showTaskLinks, canGenerateSummary }
                                     <p className="mt-1.5 text-xs leading-relaxed text-muted-foreground" data-testid={`plugin-version-summary-${version.number}`}>
                                         {version.changeSummary ?? "Sem descritivo desta mudança"}
                                     </p>
-                                    {isPreview && (
+                                    {isPreview && !archived && (
                                         <div className="pointer-events-auto mt-2 flex flex-wrap items-center gap-2">
                                             <Button type="button" size="sm" variant="outline" className="h-8 gap-1.5" disabled={preview.isPending} onClick={() => void openPreview(version)}>
                                                 <Eye className="h-3.5 w-3.5" aria-hidden />

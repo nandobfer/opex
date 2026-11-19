@@ -35,9 +35,9 @@ describe('catálogo com ferramentas de plugin', () => {
     expect(enabledOpexTools([], new Set(['relogio'])).find((tool) => tool.name === 'plugin_relogio_hora')?.label).toBe('prévia')
   })
 
-  it('as ferramentas de gestão de plugins são do grupo plugins, com set/rollback destrutivos', () => {
+  it('as ferramentas de gestão de plugins são do grupo plugins, com set/archive/rollback destrutivos', () => {
     const tools = OPEX_TOOLS.filter((tool) => tool.group === 'plugins')
-    expect(tools.map((tool) => tool.name).sort()).toEqual(['diff_plugin_versions', 'get_plugin', 'inspect_plugin_runtime', 'list_plugins', 'read_plugin_source', 'rollback_plugin', 'set_plugin_active'])
-    expect(tools.filter((tool) => tool.risk === 'destructive').map((tool) => tool.name).sort()).toEqual(['rollback_plugin', 'set_plugin_active'])
+    expect(tools.map((tool) => tool.name).sort()).toEqual(['archive_plugin', 'diff_plugin_versions', 'get_plugin', 'inspect_plugin_runtime', 'list_plugins', 'read_plugin_source', 'rollback_plugin', 'set_plugin_active'])
+    expect(tools.filter((tool) => tool.risk === 'destructive').map((tool) => tool.name).sort()).toEqual(['archive_plugin', 'rollback_plugin', 'set_plugin_active'])
   })
 })

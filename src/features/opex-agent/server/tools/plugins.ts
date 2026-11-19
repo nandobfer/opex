@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { PLUGIN_SCOPES } from "@/features/plugins/constants"
 import { diffAsText } from "@/features/plugins/logic"
-import { diffPluginVersions, getPlugin, getPluginVersion, listPlugins, OWNER_ACCESS, rollbackPlugin, setPluginActive } from "@/features/plugins/server/service"
+import { diffPluginVersions, getPlugin, getPluginVersion, listPlugins, OWNER_ACCESS, rollbackPlugin, setPluginActive, setPluginArchived } from "@/features/plugins/server/service"
 import { defineTool } from "./define"
 
 /**
@@ -77,6 +77,19 @@ export const pluginTools = [
         execute: async ({ pluginId, active }, context) => {
             await setPluginActive(pluginId, active, context.actorId)
             return { ok: true, pluginId, active }
+        },
+    }),
+    defineTool({
+        name: "archive_plugin",
+        group: "plugins",
+        label: "Arquivar/desarquivar plugin",
+        risk: "destructive",
+        description: "Arquiva ou desarquiva um plugin. Arquivar desliga o plugin (sai das telas e do servidor) e é recusado se houver uma prévia de mesa em andamento; desarquivar volta desligado. Nada é apagado.",
+        input: z.object({ pluginId: z.string().min(1), archived: z.boolean() }),
+        summarize: ({ pluginId, archived }) => `${archived ? "Arquivar" : "Desarquivar"} o plugin ${pluginId}`,
+        execute: async ({ pluginId, archived }, context) => {
+            await setPluginArchived(pluginId, archived, context.actorId)
+            return { ok: true, pluginId, archived }
         },
     }),
     defineTool({

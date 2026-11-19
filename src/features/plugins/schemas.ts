@@ -14,6 +14,9 @@ export type PluginRollbackInput = z.infer<typeof pluginRollbackSchema>
 export const pluginActiveSchema = z.object({ active: z.boolean() })
 export type PluginActiveInput = z.infer<typeof pluginActiveSchema>
 
+export const pluginArchiveSchema = z.object({ archived: z.boolean() })
+export type PluginArchiveInput = z.infer<typeof pluginArchiveSchema>
+
 export const pluginDiffQuerySchema = z.object({
     to: z.string().regex(/^[a-f0-9]{24}$/, "Versão inválida"),
     from: z

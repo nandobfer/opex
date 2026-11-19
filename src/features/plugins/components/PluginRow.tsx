@@ -8,7 +8,7 @@ import { TableAction } from "@/components/list/TableAction"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { PluginDto } from "../types"
 import { PluginActiveSwitch } from "./PluginActiveSwitch"
-import { PluginScopeBadge, PluginVersionBadge } from "./PluginBadges"
+import { PluginArchivedBadge, PluginScopeBadge, PluginSlotBadges, PluginVersionBadge } from "./PluginBadges"
 
 /**
  * Linha de um plugin: o nome leva à página dele; à direita, o debug (só o dono) e o switch Ativo,
@@ -24,7 +24,9 @@ export function PluginRow({ plugin, href, onDebug }: { plugin: PluginDto; href: 
                     <PluginScopeBadge scope={plugin.scope} clientName={plugin.clientName} />
                     {plugin.stable ? <PluginVersionBadge state="stable" number={plugin.stable.number} /> : <span className="text-xs text-muted-foreground">Sem versão estável</span>}
                     {plugin.preview && <PluginVersionBadge state="preview" number={plugin.preview.number} />}
+                    {plugin.archivedAt && <PluginArchivedBadge />}
                 </div>
+                <PluginSlotBadges slots={plugin.slots} />
                 <p className="text-xs text-muted-foreground">
                     {plugin.description || "Sem descrição"} · atualizado {formatDistanceToNow(new Date(plugin.updatedAt), { addSuffix: true, locale: ptBR })}
                 </p>
@@ -37,7 +39,7 @@ export function PluginRow({ plugin, href, onDebug }: { plugin: PluginDto; href: 
             </div>
             <div className="flex shrink-0 items-center gap-2">
                 {onDebug && <TableAction type="debug" onClick={onDebug} />}
-                <PluginActiveSwitch pluginId={plugin.id} pluginName={plugin.name} active={plugin.active} />
+                <PluginActiveSwitch pluginId={plugin.id} pluginName={plugin.name} active={plugin.active} archived={Boolean(plugin.archivedAt)} />
             </div>
         </div>
     )
@@ -55,6 +57,9 @@ export function PluginRowsSkeleton({ rows = 4, withDebug = true }: { rows?: numb
                             <Skeleton className="h-3 w-20" />
                             <Skeleton className="h-5 w-16 rounded-full" />
                             <Skeleton className="h-5 w-12 rounded-full" />
+                        </div>
+                        <div className="flex items-center gap-1">
+                            <Skeleton className="h-5 w-24 rounded-full" />
                         </div>
                         <Skeleton className="h-3 w-64" />
                     </div>

@@ -36,18 +36,46 @@ export type PluginChannel = (typeof PLUGIN_CHANNELS)[number]
  * vêm das entradas `nav` do manifesto, integradas ao menu; os demais montam componentes exportados
  * pelo bundle do cliente.
  */
-export const OWNER_PLUGIN_SLOTS = ["dashboard.widgets", "sidebar.nav", "task.panel", "topbar.actions", "workbench.panel", "tasks.header", "financeiro.widgets"] as const
-export const CLIENT_PLUGIN_SLOTS = ["portal.dashboard.widgets", "portal.task.panel", "portal.nav"] as const
+export const OWNER_PLUGIN_SLOTS = [
+    "dashboard.widgets",
+    "sidebar.nav",
+    "task.panel",
+    "topbar.actions",
+    "workbench.panel",
+    "tasks.header",
+    "financeiro.widgets",
+    "sidebar.nav.agentes",
+    "sidebar.nav.contabil",
+    "sidebar.nav.configuracoes",
+    "dashboard.section.tarefas",
+    "dashboard.section.financeiro",
+    "dashboard.section.horas",
+    "dashboard.section.central",
+    "task.sidebar",
+    "horas.widgets",
+] as const
+export const CLIENT_PLUGIN_SLOTS = ["portal.dashboard.widgets", "portal.task.panel", "portal.nav", "portal.tasks.header"] as const
 export const PLUGIN_SLOTS = [...OWNER_PLUGIN_SLOTS, ...CLIENT_PLUGIN_SLOTS] as const
 export type PluginSlotName = (typeof PLUGIN_SLOTS)[number]
 /** Slots de menu: vêm da lista `nav` do manifesto, não de um componente. */
-export const PLUGIN_NAV_SLOTS = ["sidebar.nav", "portal.nav"] as const
+export const PLUGIN_NAV_SLOTS = ["sidebar.nav", "sidebar.nav.agentes", "sidebar.nav.contabil", "sidebar.nav.configuracoes", "portal.nav"] as const
 export type PluginNavSlot = (typeof PLUGIN_NAV_SLOTS)[number]
 export const isPluginNavSlot = (slot: string): slot is PluginNavSlot => (PLUGIN_NAV_SLOTS as readonly string[]).includes(slot)
 /** Slots que montam componentes (os de menu vêm do manifesto). */
 export type PluginComponentSlot = Exclude<PluginSlotName, PluginNavSlot>
 /** Slot de menu de cada escopo. */
 export const PLUGIN_NAV_SLOT_BY_SCOPE: Record<PluginScope, PluginNavSlot> = { owner: "sidebar.nav", client: "portal.nav" }
+/** Menus de cada escopo onde um item `nav` pode entrar (`nav[].slot`; sem ele, o padrão do escopo). */
+export const PLUGIN_NAV_SLOTS_BY_SCOPE: Record<PluginScope, readonly PluginNavSlot[]> = {
+    owner: ["sidebar.nav", "sidebar.nav.agentes", "sidebar.nav.contabil", "sidebar.nav.configuracoes"],
+    client: ["portal.nav"],
+}
+/** Grupo do menu do dono (`APP_NAV`, `kind: "group"`) de cada slot de menu aninhado. */
+export const PLUGIN_NAV_GROUP_BY_SLOT: Partial<Record<PluginNavSlot, string>> = {
+    "sidebar.nav.agentes": "agentes",
+    "sidebar.nav.contabil": "contabil",
+    "sidebar.nav.configuracoes": "configuracoes",
+}
 
 export const PLUGIN_SLOTS_BY_SCOPE: Record<PluginScope, readonly PluginSlotName[]> = {
     owner: OWNER_PLUGIN_SLOTS,
@@ -55,16 +83,26 @@ export const PLUGIN_SLOTS_BY_SCOPE: Record<PluginScope, readonly PluginSlotName[
 }
 
 export const PLUGIN_SLOT_LABELS: Record<PluginSlotName, string> = {
-    "dashboard.widgets": "Widgets do Dashboard",
-    "sidebar.nav": "Menu lateral",
-    "task.panel": "Aba da tarefa",
-    "topbar.actions": "Barra superior",
+    "dashboard.widgets": "Fim da página",
+    "sidebar.nav": "Seção Plugins",
+    "sidebar.nav.agentes": "Menu Agentes",
+    "sidebar.nav.contabil": "Menu Contábil",
+    "sidebar.nav.configuracoes": "Menu Configurações",
+    "dashboard.section.tarefas": "Seção Visão geral de tarefas",
+    "dashboard.section.financeiro": "Seção Financeiro",
+    "dashboard.section.horas": "Seção Horas agênticas",
+    "dashboard.section.central": "Seção Central de desenvolvimento",
+    "task.sidebar": "Coluna lateral",
+    "horas.widgets": "Horas agênticas",
+    "portal.tasks.header": "Topo da lista",
+    "task.panel": "Aba",
+    "topbar.actions": "Ações",
     "workbench.panel": "Aba da mesa",
-    "tasks.header": "Topo do quadro de tarefas",
-    "financeiro.widgets": "Widgets do Financeiro",
-    "portal.dashboard.widgets": "Widgets do Dashboard do portal",
-    "portal.task.panel": "Aba da tarefa no portal",
-    "portal.nav": "Menu do portal",
+    "tasks.header": "Topo do quadro",
+    "financeiro.widgets": "Financeiro",
+    "portal.dashboard.widgets": "Dashboard",
+    "portal.task.panel": "Aba da tarefa",
+    "portal.nav": "Menu",
 }
 
 /** Serviços do núcleo que um plugin do dono pode injetar (Cordis `inject`). */

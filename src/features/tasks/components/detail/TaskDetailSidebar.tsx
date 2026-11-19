@@ -15,6 +15,7 @@ import { TaskTagsBadge } from "../TaskTagsBadge"
 import { TaskPriorityMenu } from "../TaskPriorityMenu"
 import { TaskEstimateCard } from "./TaskEstimateCard"
 import { TaskClientCard } from "./TaskClientCard"
+import { PluginSlot } from "@/features/plugins/client/PluginSlot"
 
 function Row({ icon: Icon, label, children }: { icon: typeof Clock; label: string; children: ReactNode }) {
     return (
@@ -69,6 +70,8 @@ export function TaskDetailSidebar({ task, updating, onUpdate }: TaskDetailSideba
                 </Card>
                 <TaskClientCard task={task} />
                 <TaskEstimateCard task={task} />
+                {/* Slot `task.sidebar` (OPE-172): cards de plugins abaixo dos da tarefa. */}
+                <PluginSlot name="task.sidebar" props={{ task: { id: task.id, code: task.code, title: task.title, taskType: task.taskType, projectId: task.project?.id ?? null } }} className="flex flex-col gap-4" skeletonClassName="h-24" />
             </div>
         </motion.aside>
     )

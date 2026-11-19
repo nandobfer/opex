@@ -2,9 +2,10 @@
 
 import { useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { Blocks } from "lucide-react"
+import { Archive, Blocks, LayoutTemplate, Users } from "lucide-react"
 import { CadastroHeader } from "@/components/list/CadastroHeader"
-import { CadastroMultiSelect } from "@/components/list/CadastroMultiSelect"
+import { CadastroSearchPicker, type CadastroSearchPickerOption } from "@/components/list/CadastroSearchPicker"
+import { FilterSwitch } from "@/components/list/FilterSwitch"
 import { CadastroTableCard } from "@/components/list/CadastroTableCard"
 import { FilterGroup } from "@/components/list/FilterGroup"
 import { ListFilters } from "@/components/list/ListFilters"
@@ -12,17 +13,20 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { useUrlFilters } from "@/hooks/useUrlFilters"
-import { CLIENT_PLUGIN_SLOTS, PLUGIN_SCOPE_LABELS, PLUGIN_SCOPES, PLUGIN_SLOT_LABELS, PLUGIN_SLOTS } from "../constants"
+import { PLUGIN_SCOPE_LABELS, PLUGIN_SCOPES } from "../constants"
+import { slotFilterNodes } from "../slot-tree"
 import { DEFAULT_PLUGIN_FILTERS, PLUGIN_FILTER_SCHEMA, filterPlugins, type PluginFilters } from "../filters"
 import { usePlugins, usePluginsRealtime } from "../hooks/usePlugins"
 import { usePluginSource } from "../client/PluginSourceContext"
 import { PluginRow, PluginRowsSkeleton } from "./PluginRow"
 import { PluginDebugDialog } from "./debug/PluginDebugDialog"
 
-const SCOPE_OPTIONS = PLUGIN_SCOPES.map((value) => ({ value, label: PLUGIN_SCOPE_LABELS[value] }))
-const slotOptions = (slots: readonly (keyof typeof PLUGIN_SLOT_LABELS)[]) => slots.map((value) => ({ value, label: PLUGIN_SLOT_LABELS[value] }))
-const OWNER_SLOT_OPTIONS = slotOptions(PLUGIN_SLOTS)
-const CLIENT_SLOT_OPTIONS = slotOptions(CLIENT_PLUGIN_SLOTS)
+const SCOPE_OPTIONS: CadastroSearchPickerOption[] = PLUGIN_SCOPES.map((value) => ({ value, label: PLUGIN_SCOPE_LABELS[value] }))
+/** Opções do filtro Slot: a árvore (áreas e slots); escolher uma área cobre os slots dela. */
+const slotOptions = (nodes: ReturnType<typeof slotFilterNodes>): CadastroSearchPickerOption[] =>
+    nodes.map((node) => ({ value: node.id, label: node.label, description: node.description, parent: node.parentId, depth: node.depth, path: node.path }))
+const OWNER_SLOT_OPTIONS = slotOptions(slotFilterNodes())
+const CLIENT_SLOT_OPTIONS = slotOptions(slotFilterNodes("client"))
 
 /** Lista de plugins (dono: todos; portal: só os do cliente), com filtros na URL e tempo real. */
 export function PluginsListView({ title, description, detailHref, emptyDescription }: { title: string; description: string; detailHref: (id: string) => string; emptyDescription: string }) {
@@ -39,11 +43,14 @@ export function PluginsListView({ title, description, detailHref, emptyDescripti
             <ListFilters total={items.length} search={{ value: filters.q, onChange: (q) => setFilters((prev) => ({ ...prev, q })), placeholder: "Buscar por nome, id ou cliente", label: "Busca" }} onClear={resetFilters}>
                 {source.kind === "owner" && (
                     <FilterGroup label="Escopo" className="min-w-[160px] flex-1">
-                        <CadastroMultiSelect aria-label="Escopo" placeholder="Todos" options={SCOPE_OPTIONS} selected={filters.scopes} onSelect={(values) => setFilters((prev) => ({ ...prev, scopes: values as PluginFilters["scopes"] }))} />
+                        <CadastroSearchPicker icon={Users} aria-label="Escopo" pluralNoun="escopos" searchPlaceholder="Buscar escopo..." options={SCOPE_OPTIONS} selected={filters.scopes} onSelect={(values) => setFilters((prev) => ({ ...prev, scopes: values as PluginFilters["scopes"] }))} />
                     </FilterGroup>
                 )}
-                <FilterGroup label="Slot" className="min-w-[200px] flex-1">
-                    <CadastroMultiSelect aria-label="Slot" placeholder="Todos" options={source.kind === "owner" ? OWNER_SLOT_OPTIONS : CLIENT_SLOT_OPTIONS} selected={filters.slots} onSelect={(values) => setFilters((prev) => ({ ...prev, slots: values as PluginFilters["slots"] }))} />
+                <FilterGroup label="Slot" className="min-w-[220px] flex-1">
+                    <CadastroSearchPicker icon={LayoutTemplate} aria-label="Slot" pluralNoun="slots" searchPlaceholder="Buscar slot ou área..." options={source.kind === "owner" ? OWNER_SLOT_OPTIONS : CLIENT_SLOT_OPTIONS} selected={filters.slots} onSelect={(values) => setFilters((prev) => ({ ...prev, slots: values }))} />
+                </FilterGroup>
+                <FilterGroup label="Arquivados" className="shrink-0">
+                    <FilterSwitch icon={Archive} text="Mostrar" ariaLabel="Mostrar plugins arquivados" checked={filters.showArchived} onCheckedChange={(showArchived) => setFilters((prev) => ({ ...prev, showArchived }))} />
                 </FilterGroup>
             </ListFilters>
             {query.isLoading ? (
@@ -53,7 +60,7 @@ export function PluginsListView({ title, description, detailHref, emptyDescripti
             ) : query.isError ? (
                 <ErrorState title="Não foi possível carregar os plugins" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
             ) : !items.length ? (
-                <EmptyState icon={Blocks} title={query.data?.length ? "Nenhum plugin com estes filtros" : "Nenhum plugin ainda"} description={query.data?.length ? "Ajuste a busca, o escopo ou o slot." : emptyDescription} />
+                <EmptyState icon={Blocks} title={query.data?.length ? "Nenhum plugin com estes filtros" : "Nenhum plugin ainda"} description={query.data?.length ? "Ajuste a busca, o escopo, o slot ou mostre os arquivados." : emptyDescription} />
             ) : (
                 <CadastroTableCard>
                     <ul className="divide-y">
