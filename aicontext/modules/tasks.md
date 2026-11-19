@@ -57,6 +57,25 @@ semeado na primeira leitura (`ensureBoard`).
   em "Tags de tarefas" (Integrações › Inteligência Artificial); a tarefa guarda só os ids. `slugifyTag`,
   `normalizeTaxonomy`, `filterKnownTags`, `tagLabel`. Ver `modules/ai.md`.
 
+
+### Tipo Plugin (OPE-172)
+
+- `TASK_TYPES` tem `plugin` ("Plugin"), e `isPluginTaskType` identifica o tipo.
+- O alvo fica em `DevTask.pluginTarget` `{ scope: "owner" | "client", clientId, pluginId }`. Sem
+  `pluginId`, a mesa cria um plugin novo.
+- O mesmo schema (`taskPluginTargetSchema` + `pluginTargetIssue`) vale no formulário e na API:
+  - tipo Plugin sem alvo: "Informe o escopo do plugin";
+  - escopo cliente sem cliente: "Escolha o cliente do plugin".
+- No formulário, escolher o tipo Plugin mostra o bloco `TaskPluginTargetFields`, com:
+  - escopo em `OptionTabs`;
+  - cliente, no escopo cliente;
+  - plugin existente ou "Plugin novo".
+
+  Trocar para outro tipo zera o alvo.
+- O `pluginTarget` não vai para o portal (`ClienteTaskDto`).
+- As ferramentas `create_task`/`update_task` dos agentes aceitam `pluginTarget`.
+- O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin".
+
 ## Servidor (`src/features/tasks/server/`)
 
 - `service.ts` (`TASK_AUDIT_ENTITY = "Tarefa"`): `listTasks(includeArchived)` (junta projeto e issue),

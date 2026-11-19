@@ -218,6 +218,10 @@ sem pedido explícito.
 - Assinatura OpenCode Go (OPE-167): `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app` quando os
   percentuais da assinatura (5h, semanal, mensal, com uma casa) ou os resets mudam, publicado pela rotina
   `opencode-go-usage-refresh` ou por uma leitura da tela (ver `aicontext/modules/opencode-quota.md`).
+- Plugins (OPE-172): `plugin-updated` (`{ id, version, channel }`) em `private-app` e, nos plugins de cliente,
+  em `private-client-{clientId}` (a interface troca de versão ao vivo); `plugin-event`
+  (`{ pluginId, event, data }`) em `private-app`, publicado pelo servidor de um plugin com `ctx.realtime.publish`
+  (ver `aicontext/modules/plugins.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
@@ -361,6 +365,10 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - OpenCode (serviço e recursos, `aicontext/modules/opencode-resources.md`): `ssh2` (só o ciclo de vida
   do serviço, exceção à regra de Ambientes), `jsonc-parser` (edição do `opencode.jsonc` preservando
   comentários) e `yaml` (frontmatter de skills/agentes/comandos)
+- Plugins (OPE-172, `aicontext/modules/plugins.md`): kernel do servidor com `cordis` (4.0.0-rc.13, fixado e
+  encapsulado em `src/features/plugins/server/kernel/cordis.ts`), compilação das versões com `rolldown` (1.3.3,
+  fixado) e CSS das classes do plugin com o `compile` do `tailwindcss` (dependência de produção); diff entre
+  versões com `diff`
 - Integrações: terminal de logs com `@xterm/xterm` (+ `@xterm/addon-fit`, `@xterm/addon-search`),
   Swagger UI via `swagger-ui-dist` (CDN)
 

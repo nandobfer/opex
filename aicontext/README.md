@@ -71,6 +71,7 @@ horas, com um módulo de **Integrações** para guardar credenciais e configurar
 | `modules/routine-agents.md` | Agentes rotineiros | Agentes autônomos configuráveis (OPE-130): aba Rotineiros de `/integracoes/ia`, subagente de provisionamento no Engramind, motores Opex e OpenCode no host, execuções (fila, espera viva, hibernação, confirmação), limites, gatilhos (agendados e webhook `POST /api/v1/routine-agents/{id}/runs`), páginas `/agentes-rotineiros`, entradas do dono e ferramentas do Agente Opex |
 | `modules/pr-review.md` | Agente Revisor | Critérios, agente/skill, revisão por commit, página `/agente-revisor` com filtros e integração com replanejamento e merge automático |
 | `modules/github.md` | GitHub | Vínculos repositório ↔ Opex (= Projeto), mapeamento, rotina de issues → tarefas, issue ↔ tarefa |
+| `modules/plugins.md` | Plugins | Extensões em runtime (OPE-172): kernel Cordis no servidor, compilação com Rolldown, versões draft → preview → stable com rollback, prévia por navegador, slots de interface, plugins de cliente só interface, telas `/plugins` e `/cliente/plugins`, SDK `plugin-sdk/` |
 | `modules/deployment.md` | Deploy (CI/CD) | GitHub Actions (testes, build da imagem no runner, transferência por SCP e recriação via Compose), configuração de secrets/variables e rollback |
 
 Novos módulos ganham um arquivo aqui quando forem implementados, conforme o fluxo obrigatório do
@@ -86,6 +87,7 @@ Novos módulos ganham um arquivo aqui quando forem implementados, conforme o flu
 | Modo Vim nos campos de texto (atalhos, selo, números de linha) | `modules/editor-mode.md` |
 | Tempo real (Pusher) | `use-sempre-que-desenvolver.md`, seção "Tempo real" + `modules/integrations.md` |
 | Issues do GitHub viram tarefas | `modules/github.md` |
+| Plugins (kernel, versões, slots, tarefa do tipo Plugin) | `modules/plugins.md` + `modules/agentic-dev.md`, "Mesa Plugin" |
 | Trazer recursos do My Tasks (o que falta e o que já existe) | `my-tasks-port-ope-80.md` |
 | Componente que existe no CRM e ainda não foi copiado | `~/code/crm-marketing-campanhas` (somente leitura; copie e adapte) |
 

@@ -982,6 +982,73 @@ qualquer etapa (exceto done) → Definir etapa (manual, com motivo) → plan_rev
   `ai_consumption_logs` (origem `agentic`) para o painel de consumo do OpenCode — ver
   `modules/ai.md`, "Medição de consumo".
 
+## Mesa Plugin (OPE-172)
+
+Uma tarefa do **tipo Plugin** (`taskType: "plugin"`, com `pluginTarget { scope, clientId, pluginId }`)
+abre uma mesa com `kind: "plugin"` e o estado `plugin` (`IWorkbenchPlugin`). O tipo é congelado na
+abertura por `workbenchKindFor` (`server/plugin-workflow.ts`).
+
+A mesa usa as mesmas etapas, mas **sem worktree do repositório, prévia em container, porta, PR,
+build de imagem nem deploy**. O plugin e as versões estão em `modules/plugins.md`.
+
+```
+planning → plan_review → Implementar → implementing → (adversarial_review) → preview (prévia ao vivo)
+preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
+         └─ Aprovar e consolidar → fixing_ci ("Testes do plugin") ─┬─ passou → finishing ("Consolidando") → done
+                                                                    └─ falhou → implementing (correção) → preview publicada de novo → fixing_ci
+```
+
+**Etapas:**
+
+- **Planejamento:** o prompt ganha o bloco "Tarefa do tipo Plugin" (`pluginPlanningNotes`): escopo
+  (cliente = só interface), plugin a alterar com os arquivos da estável, e o aviso de que não há
+  repositório, PR nem deploy.
+- **Implementação:** `preparePluginImplementation`
+  - cadastra o plugin, se for novo (id pelo título, `pluginIdFromTitle`/`uniquePluginId`);
+  - fixa a versão base (a `stable` do início);
+  - na primeira rodada, exporta para a pasta de trabalho `{worktreeRoot}/plugins/{código}`, **no
+    host do OpenCode**, pela API dele (`file.write`/`shell`), porque o servidor do Opex não
+    compartilha disco com o host. A pasta recebe as fontes da base ou o esqueleto do SDK, o SDK em
+    `.opex-sdk/` e os arquivos de ambiente;
+  - inicia o git da pasta, com o commit base em `refs/remotes/origin/opex-base` e a branch `plugin`.
+
+  O prompt (`pluginImplementPrompt`) manda mover a sessão para a pasta (`session_move`) e ler
+  `.opex-sdk/GUIA.md`, e proíbe push e PR. A mesa grava `worktreePath` = pasta, com `branch: null`.
+- **Versão:** ao fim do turno, `buildPluginDraft` lê a pasta (`git ls-files -co --exclude-standard`
+  + `file.read`), valida o manifesto e compila a versão `draft`. Com problemas, volta ao agente
+  (`pluginCompileFixPrompt`), no máximo 3 correções (`PLUGIN_COMPILE_ATTEMPTS_MAX`); depois disso a
+  mesa falha.
+- **Revisão adversária:** quando ativa, revisa o diff da pasta contra `origin/opex-base`.
+- **Prévia ao vivo:** `publishPluginPreview`
+  - publica a `draft` como `preview` do plugin, carregada ao vivo **só para quem liga a prévia**
+    (cookie);
+  - grava `previewUrl`: a primeira página do plugin, o Dashboard ou `/tarefas`, com o subcaminho
+    público;
+  - se o código de servidor não ativou, avisa e marca `previewHealthy: false`.
+
+  Na barra da mesa, a chave "Gerar prévia" vira **"Ligar prévia"** (`PluginPreviewToggle`) e não há
+  "Gerar nova prévia".
+- **Aprovar e consolidar** (`approve`): grava `plugin.approved` e enfileira `fixing_ci`. A mesma
+  ação pode vir do portal, quando o admin do cliente aprova a prévia de um plugin de cliente
+  (`approvePluginPreviewFromPortal`).
+- **Testes do plugin** (`fixing_ci`, sem turno do agente): o Opex roda `npx vitest run` na pasta pelo
+  shell do OpenCode (instala as dependências na primeira vez; teto de 15 min). "No test files found"
+  não bloqueia.
+  - Falhou: turno de correção (`pluginTestsFixPrompt`) com o mesmo limite de correções do CI da
+    central (`ciFixLimit`, sem limite = até passar). Com a aprovação mantida, a versão corrigida é
+    publicada na prévia e testada de novo, sem pedir nova aprovação.
+  - Passou: `consolidatePluginWorkbench` consolida (transacional no kernel; falha mantém a estável)
+    e remove a pasta. Depois vêm a auditoria `APROVAR` e a conclusão da mesa.
+- **Concluir à mão ou excluir a mesa:** descarta a prévia que era dela (`releasePluginPreview`). A
+  limpeza só remove a pasta (`cleanupPrompt` com `plugin: true`).
+- **Reabrir:** a nova rodada parte da estável atual, numa pasta nova.
+
+**Na tela:**
+
+- a trilha (`StageSteps kind="plugin"`) mostra Prévia ao vivo → Testes do plugin → Consolidada;
+- os rótulos das etapas vêm de `workbenchStageLabel(stage, kind)`;
+- "Definir etapa" não oferece as etapas do PR ("Mesa de plugin não tem Pull Request").
+
 ## Forks da conversa
 
 - Agente **Fork** configurável globalmente e por central, com instruções próprias. Conversas

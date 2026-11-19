@@ -97,8 +97,10 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   Desenvolvedor, Arquiteto, Adversário, Revisor e Mentor —, com os mesmos nomes e ícones das abas de
   `/integracoes/ia`; cada item leva a `/agente-<nome>`, ver `modules/agent-metrics.md`), **Contábil** (`Landmark`: Horas
   agênticas, Financeiro), o item **Integrações** (`Plug`, `panel: "integrations"`) e o grupo
-  **Configurações** (`Settings`: Ambientes e Aparência — `/configuracoes/aparencia`, ícone `Palette`;
-  `/configuracoes` redireciona para ela, ver `modules/settings.md`). Dashboards não tem
+  **Configurações** (`Settings`: Ambientes, Aparência — `/configuracoes/aparencia`, ícone `Palette`;
+  `/configuracoes` redireciona para ela, ver `modules/settings.md` — e Plugins, `/plugins`, ícone `Blocks`, ver
+  `modules/plugins.md`). Os plugins ativos que declaram `nav` acrescentam, ao vivo, a seção **"Plugins"** no fim do
+  menu (`useNavWithPlugins` no `AppLayoutShell`, páginas em `/x/{id}/...`). Dashboards não tem
   item (a logo leva a ela). Também exporta `HOME_HREF` (`/dashboard`), `PERSISTENT_PAGE_HREFS`,
   `pageTransitionKey`, `flattenNav` (expande os grupos: `APP_NAV_ITEMS` tem todas as rotas
   navegáveis), `navGroupActive`, `formatBadge`, `badgeLabel`, `isActiveHref` e `activeNavHref`.
