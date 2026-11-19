@@ -6,7 +6,7 @@ import { getIntegrationConfig } from "@/lib/integrations/config"
 import { integrationDebug } from "@/lib/integrations/debug"
 import { createTaskFromIssue } from "@/features/tasks/server/service"
 import { githubPaginate, githubRequestFull } from "../client"
-import { columnForIssueState, mapPriority, mapTaskType, mentionsIssue, taskDescriptionFromIssue, toIssueLite, type GithubIssueLite } from "../logic"
+import { columnForIssueState, mapPriority, issueTaskType, mapTaskType, mentionsIssue, taskDescriptionFromIssue, toIssueLite, type GithubIssueLite } from "../logic"
 import type { GithubMappingDto } from "../types"
 import { errorMessage } from "./errors"
 import { createIssueLink, findIssueLink, updateIssueState } from "./issue-links"
@@ -74,7 +74,7 @@ export async function processIssue(project: ProjectDoc, issue: GithubIssueLite, 
         description: taskDescriptionFromIssue(issue.body),
         projectId: String(project._id),
         columnId,
-        taskType: type.value,
+        taskType: issueTaskType(type.value, null),
         priority: priority.value,
     })
     await createIssueLink({

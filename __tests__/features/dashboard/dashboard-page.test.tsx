@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { InProgressWorkbenchDto } from "@/features/agentic/types"
 import type { DashboardDto } from "@/features/dashboard/types"
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 vi.mock("framer-motion", async () => (await import("../../helpers/framer-motion")).framerMotionMock())
 // Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
 vi.mock("@/features/plugins/hooks/usePlugins", async () => (await import("../../helpers/plugins")).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock("@/features/dashboard/hooks/useDashboard", () => ({
     useDashboard: () => mocks.query,
@@ -172,5 +174,15 @@ describe("DashboardPage: Trabalhos em andamento", () => {
         const button = await screen.findByRole("button", { name: "Aguardando ação em OPX-1" })
         expect(button.className).toContain("max-md:w-full")
         expect(button.className).toContain("max-md:justify-center")
+    })
+})
+
+describe("DashboardPage: slot de plugin (OPE-172)", () => {
+    afterEach(resetPluginTestRuntime)
+    it("monta o widget do plugin vigente no slot dashboard.widgets", () => {
+        pluginTestRuntime.plugins = [pluginTestEntry("dashboard.widgets")]
+        render(<DashboardPage />)
+        const widget = document.querySelector('[data-plugin-slot="dashboard.widgets"] [data-plugin-contribution="relogio:Widget"]')
+        expect(widget?.getAttribute("data-props")).toBe("{}")
     })
 })

@@ -149,7 +149,10 @@ valor devolvido vira `{ success: true, data }`.
 **Crons:** `runPluginCrons` (`server/crons.ts`) roda no tick de minuto do agendador
 (`runSchedulerTick`, que já não roda em instância de prévia), com lease por cron em `CronJobState`
 (`jobId` = `plugin:{id}:{nome}`). Só os crons da fiber `stable` agendam; os da prévia ficam
-registrados com `scheduled: false`. Só aceita agendamento em minutos ou mais.
+registrados com `scheduled: false`. Só aceita agendamento em minutos ou mais. Cada execução tem teto de
+`PLUGIN_CRON_TIMEOUT_MS` (10 min, abaixo do lease de 15 min): passou, fecha como erro ("Tempo esgotado") e
+o tick segue para o próximo cron. O fim da execução só libera o próprio lease (mesmo `lockedBy` e
+`lockedUntil`), nunca o de uma reivindicação posterior.
 
 **Ferramentas:** ganham o nome `plugin_{id}_{nome}` (o `-` do id vira `_`), o grupo `plugin-tools`
 e a política do dono:
@@ -233,7 +236,7 @@ Há uma carga por revisão. O CSS entra num `<style id="opex-plugin-css-{id}">` 
 |---|---|---|---|
 | `dashboard.widgets` | dono | Fim do Dashboard | `{}` |
 | `task.panel` | dono | Abas extras `plugin:{id}:{export}` em `TaskDetailTabs` | `{ task }` |
-| `topbar.actions` | dono | Ações da casca: no desktop (sem barra no topo), o rodapé do menu; no celular, as ações do `MobileAppHeader` | `{}` |
+| `topbar.actions` | dono | Ações da casca: no desktop (sem barra no topo), o rodapé do menu — que no desktop é a barra recolhida de ícones, então o slot monta sempre, empilhado e centralizado; no celular, as ações do `MobileAppHeader` | `{}` |
 | `workbench.panel` | dono | Aba extra na mesa (`WorkbenchView`) | `{ workbenchId, taskId }` |
 | `tasks.header` | dono | Bloco acima do quadro em `/tarefas` (`TasksPage`) | `{}` |
 | `financeiro.widgets` | dono | Cards no topo de `/financeiro` (`FinancePage`) | `{}` |
@@ -403,6 +406,10 @@ Em `__tests__/features/plugins/`:
 
 Também:
 
+- cada tela com slot tem um teste com um plugin vigente (`pluginTestRuntime`, `pluginTestEntry` e
+  `pluginContributionMock` de `__tests__/helpers/plugins.ts`) que prova o ponto de montagem e as props:
+  Dashboard, Dashboard do portal, aba da tarefa, mesa, `/tarefas`, Financeiro, rodapé do menu e menu do
+  dono e do portal;
 - `__tests__/features/agentic/workflow-plugin-flow.test.ts` e `plugin-workbench.test.tsx` (mesa Plugin);
 - `__tests__/features/tasks/task-plugin-target.test.tsx` (formulário e schema);
 - telas com slot mockam os hooks com `__tests__/helpers/plugins.ts`.

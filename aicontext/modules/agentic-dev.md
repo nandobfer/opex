@@ -1023,7 +1023,9 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
   mandados ao agente). Se o compilador do servidor não carregar, a marca fica e a etapa falha com a
   mensagem em pt-BR, sem turno de correção. O **Tentar novamente** dessa mesa refaz **só a compilação**
   (turno sem o agente, `compileOnly`) e segue para a revisão adversária ou a prévia. Outras falhas da
-  implementação continuam com a retentativa pelo agente.
+  implementação continuam com a retentativa pelo agente. Um novo turno de implementação (aprovar o
+  plano de novo) e o recomeço pela base (`reopen`) zeram a marca e o descritivo da rodada anterior,
+  para o Tentar novamente de uma falha desse turno rodar o agente, e não só recompilar a pasta antiga.
 - **Revisão adversária:** quando ativa, revisa o diff da pasta contra `origin/opex-base`.
 - **Prévia ao vivo:** `publishPluginPreview`
   - publica a `draft` como `preview` do plugin, carregada ao vivo **só para quem liga a prévia**

@@ -20,8 +20,11 @@ interface AppLayoutShellProps {
 /** Rodapé do menu do dono: "Servidor e quota" (OPE-145) acima do item único dos agentes de chat (Agente Opex e Agente Maddox). */
 const ownerFooterItems = (collapsed: boolean) => (
     <>
-        {/* Slot `topbar.actions` (OPE-172): no desktop não há barra no topo; as ações ficam no rodapé do menu. */}
-        {!collapsed && <PluginSlot name="topbar.actions" props={{}} className="flex flex-col gap-1 px-2" skeletonClassName="h-8" />}
+        {/* Slot `topbar.actions` (OPE-172): no desktop não há barra no topo; as ações ficam no rodapé do
+            menu (que no desktop é a barra recolhida de ícones), empilhadas e centralizadas. */}
+        <li className="empty:hidden">
+            <PluginSlot name="topbar.actions" props={{}} className={collapsed ? "flex flex-col items-center gap-1" : "flex flex-col gap-1 px-2"} skeletonClassName="h-8 w-8" />
+        </li>
         <ServerQuotaSidebarItem collapsed={collapsed} />
         <AgentChatNavItem collapsed={collapsed} />
     </>

@@ -1929,6 +1929,9 @@ export async function implement(id: string, additionalInfo?: string, fileIds?: s
         const flow = await pluginFlow()
         const prepared = await flow.preparePluginImplementation(loaded.doc, loaded.config)
         const text = pluginImplementPrompt(loaded.config, ctx, approvedPlanVersion, { pluginId: prepared.pluginId, scope: prepared.scope, workDir: prepared.workDir }, info)
+        // Novo turno do agente: a marca de compilação pendente e o descritivo de uma rodada anterior não
+        // valem mais (o Tentar novamente de uma falha deste turno precisa rodar o agente de novo).
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { "plugin.compilePending": false, "plugin.changeSummary": null } })
         await launchOrQueue(loaded, "implement", { stage: "implementing", text, ...fileIdsOf(files) }, { userText, extraSet: { worktreePath: prepared.workDir, branch: null } })
     } else {
         await launchOrQueue(
@@ -2050,7 +2053,7 @@ export async function reopen(id: string, feedback: string, fileIds?: string[]): 
     const files = await loadClaimableFiles(fileIds, id)
     if (isPluginDoc(loaded.doc) && loaded.doc.plugin) {
         // Mesa Plugin reaberta (OPE-172): a nova rodada parte da stable atual, numa pasta de trabalho nova.
-        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { plugin: { ...loaded.doc.plugin, baseVersionId: null, draftVersionId: null, workDir: null, approved: false, compileAttempts: 0, testAttempts: 0 }, worktreePath: null } })
+        await AgenticWorkbench.updateOne({ _id: loaded.doc._id }, { $set: { plugin: { ...loaded.doc.plugin, baseVersionId: null, draftVersionId: null, workDir: null, approved: false, compileAttempts: 0, testAttempts: 0, compilePending: false, changeSummary: null }, worktreePath: null } })
     }
     // Com o limite cheio, a reabertura aguarda vaga; os efeitos (PR para o histórico, card) só rodam ao ganhar a vaga.
     await launchOrQueue(

@@ -130,6 +130,15 @@ export function withPluginTypeRule(rules: readonly GithubTypeRule[]): GithubType
     return rules.some((rule) => rule.taskType === "plugin") ? [...rules] : [...rules, PLUGIN_TYPE_RULE]
 }
 
+/**
+ * Tipo que a issue pode dar à tarefa (OPE-172): o tipo Plugin exige um alvo (escopo, cliente, plugin)
+ * que só existe no Opex, então a issue nunca **promove** uma tarefa a Plugin — a label `plugin` só
+ * mantém a tarefa que já é Plugin. Issue nova com a label vira tarefa sem tipo.
+ */
+export function issueTaskType(mapped: TaskType | null, current: TaskType | null): TaskType | null {
+    return mapped === "plugin" && current !== "plugin" ? current : mapped
+}
+
 export const DEFAULT_PRIORITY_RULES: GithubPriorityRule[] = [
     { label: "urgent", priority: "urgent" },
     { label: "P0", priority: "urgent" },

@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import type { ClienteDashboardDto } from "@/features/orcamentos/types"
 
@@ -20,8 +21,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("framer-motion", async () => (await import("../../helpers/framer-motion")).framerMotionMock())
 // Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
 vi.mock("@/features/plugins/hooks/usePlugins", async () => (await import("../../helpers/plugins")).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
-vi.mock("@/features/orcamentos/portal/ClientePortalContext", () => ({ useClientePortal: () => ({ isAdmin: mocks.isAdmin }) }))
+vi.mock("@/features/orcamentos/portal/ClientePortalContext", () => ({ useClientePortal: () => ({ isAdmin: mocks.isAdmin, clientId: 'cli1' }) }))
 vi.mock("@/features/orcamentos/portal/useClientePeriod", () => ({
     useClientePeriod: () => ({ period: "30d", setPeriod: vi.fn(), ready: true, range: { from: "2026-10-01T00:00:00.000Z", to: "2026-10-31T23:59:59.999Z" }, timeZone: "UTC" }),
 }))
@@ -144,5 +146,15 @@ describe("ClienteDashboardPage", () => {
         render(<ClienteDashboardPage />)
         expect(screen.getByRole("alert")).toBeTruthy()
         expect(screen.getByRole("button", { name: /Tentar novamente/ })).toBeTruthy()
+    })
+})
+
+describe("ClienteDashboardPage: slot de plugin (OPE-172)", () => {
+    afterEach(resetPluginTestRuntime)
+    it("monta o widget do plugin do cliente no slot portal.dashboard.widgets com o clientId", () => {
+        pluginTestRuntime.plugins = [pluginTestEntry("portal.dashboard.widgets")]
+        render(<ClienteDashboardPage />)
+        const widget = document.querySelector('[data-plugin-slot="portal.dashboard.widgets"] [data-plugin-contribution="relogio:Widget"]')
+        expect(JSON.parse(widget?.getAttribute("data-props") ?? "null")).toEqual({ clientId: 'cli1' })
     })
 })

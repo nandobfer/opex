@@ -3,14 +3,15 @@
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 const mocks = vi.hoisted(() => ({ useTaskDetail: vi.fn(), forks: [] as { id: string }[], builds: [] as { id: string }[], refetch: vi.fn(), rounds: 0, diagrams: 0, learning: 0 }))
 
+// Slots de plugin (OPE-172).
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock('framer-motion', () => framerMotionMock())
-// Abas de plugins da mesa (slot `workbench.panel`, OPE-172): sem plugins ativos.
-vi.mock('@/features/plugins/client/usePluginSlotTabs', () => ({ usePluginSlotTabs: () => [], isPluginTabId: (id: string) => id.startsWith('plugin:') }))
-vi.mock('@/features/plugins/client/PluginContribution', () => ({ PluginContribution: () => null }))
 vi.mock('next/link', () => ({ default: ({ href, children }: { href: string; children: React.ReactNode }) => <a href={href}>{children}</a> }))
 vi.mock('@/lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
 vi.mock('@/components/agent-reply/ReplyTargetProvider', () => ({ ReplyTargetProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
@@ -157,5 +158,17 @@ describe('WorkbenchView — aba Aprendizado (OPE-165)', () => {
     render(<WorkbenchView workbench={workbench({ stage: 'done' })} central={central} />)
     fireEvent.click(screen.getAllByRole('tab', { name: 'Aprendizado (2)' })[0]!)
     expect(screen.getByText('aprendizado do mentor')).toBeTruthy()
+  })
+})
+
+describe('WorkbenchView: aba de plugin (workbench.panel, OPE-172)', () => {
+  afterEach(resetPluginTestRuntime)
+  it('a aba do plugin aparece e monta o componente com a mesa e a tarefa', () => {
+    pluginTestRuntime.plugins = [pluginTestEntry('workbench.panel')]
+    const wb = workbench()
+    render(<WorkbenchView workbench={wb} central={central} />)
+    fireEvent.click(tab('Aba do relógio'))
+    const panel = document.querySelector('[data-plugin-contribution="relogio:Widget"]')
+    expect(JSON.parse(panel?.getAttribute('data-props') ?? 'null')).toEqual({ workbenchId: wb.id, taskId: wb.taskId })
   })
 })

@@ -4,6 +4,7 @@ import React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import type { FinanceByClientDto } from '@/features/finance/types'
 
 const mocks = vi.hoisted(() => ({
@@ -13,6 +14,9 @@ const mocks = vi.hoisted(() => ({
   taskOptions: { data: { projects: [] as unknown[] } },
 }))
 
+// Slots de plugin (OPE-172).
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('@/features/finance/hooks/useFinance', () => ({
   useFinanceByClient: (filters: unknown) => {
@@ -194,5 +198,14 @@ describe('FinancePage', () => {
     })
     const values = await screen.findByTestId('finance-task-values')
     expect(values.className).toContain('max-md:basis-full')
+  })
+})
+
+describe('FinancePage: slot de plugin (financeiro.widgets, OPE-172)', () => {
+  afterEach(resetPluginTestRuntime)
+  it('monta o card do plugin no topo do Financeiro', () => {
+    pluginTestRuntime.plugins = [pluginTestEntry('financeiro.widgets')]
+    renderPage()
+    expect(document.querySelector('[data-plugin-slot="financeiro.widgets"] [data-plugin-contribution="relogio:Widget"]')?.getAttribute('data-props')).toBe('{}')
   })
 })

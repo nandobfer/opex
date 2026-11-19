@@ -112,3 +112,19 @@ describe('processIssue', () => {
     expect(out).toEqual({ created: 0, linked: 0, updated: 0 })
   })
 })
+
+describe('issue com a label plugin (OPE-172)', () => {
+  it('issue nova com a label plugin vira tarefa sem tipo (Plugin exige alvo do Opex); o lote segue', async () => {
+    const { resolvePluginTarget } = await import('@/features/tasks/plugin-target')
+    mocks.findIssueLink.mockResolvedValue(null)
+    mocks.createTaskFromIssue.mockResolvedValue({ id: 't9', code: 'APP-9' })
+    const out = result()
+    await processIssue(project, issue({ labels: ['plugin'] }), mapping, out)
+    await processIssue(project, issue({ number: 8, labels: ['bug'] }), mapping, out)
+    expect(mocks.createTaskFromIssue.mock.calls[0][0]).toMatchObject({ taskType: null })
+    expect(mocks.createTaskFromIssue.mock.calls[1][0]).toMatchObject({ taskType: 'bugfix' })
+    // O createTask real não recusa esse tipo (com 'plugin' recusaria por falta de alvo).
+    expect(() => resolvePluginTarget(mocks.createTaskFromIssue.mock.calls[0][0].taskType, null, null)).not.toThrow()
+    expect(out.created).toBe(2)
+  })
+})

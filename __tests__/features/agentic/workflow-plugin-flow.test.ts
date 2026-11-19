@@ -262,6 +262,21 @@ describe('compilador de plugins indisponível no servidor', () => {
     expect(stages()).toEqual(['implementing', 'implementing'])
     expect(mocks.runTurn.mock.calls[1][1].text).toContain('A execução anterior desta etapa não terminou (Sessão caiu)')
   })
+
+  it('marca de compilação pendente de uma rodada anterior não faz o Tentar novamente pular o agente', async () => {
+    const wb = await workbench()
+    // Rodada anterior: compilador indisponível deixou a marca (e um descritivo) gravados.
+    await model.updateOne({ _id: wb._id }, { $set: { 'plugin.compilePending': true, 'plugin.changeSummary': 'Antigo' } })
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Erro do modelo', costUsd: 0, durationMs: 1 })
+    await implement(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]).toMatchObject({ stage: 'implementing', runState: 'failed' }))
+    expect(model.docs[0]!.plugin).toMatchObject({ compilePending: false, changeSummary: null })
+    await retry(wb._id)
+    await waitForStage('preview')
+    // O agente roda de novo (não só a recompilação da pasta antiga).
+    expect(stages()).toEqual(['implementing', 'implementing'])
+    expect(mocks.runTurn.mock.calls[1][1].text).toContain('A execução anterior desta etapa não terminou (Erro do modelo)')
+  })
 })
 
 describe('aprovação, testes do plugin e consolidação', () => {

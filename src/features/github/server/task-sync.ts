@@ -6,7 +6,7 @@ import { Project, type IProject } from "@/lib/db/models/Project"
 import { publishTasksUpdated, updateTask, moveTask } from "@/features/tasks/server/service"
 import { type TaskPriority, type TaskType } from "@/features/tasks/constants"
 import { githubRequest } from "../client"
-import { columnForIssueState, issueStateForColumn, mapPriority, mapTaskType, reverseLabels, taskDescriptionFromIssue, type GithubIssueLite } from "../logic"
+import { columnForIssueState, issueStateForColumn, mapPriority, issueTaskType, mapTaskType, reverseLabels, taskDescriptionFromIssue, type GithubIssueLite } from "../logic"
 import type { GithubMappingDto } from "../types"
 import { errorMessage } from "./errors"
 import { findIssueLinkByTaskId, recordIssueWatermark, setIssueNotice } from "./issue-links"
@@ -79,11 +79,13 @@ export async function applyIssueToTask(project: ProjectDoc, issue: GithubIssueLi
 
     // Sem regra que case, a tarefa mantém o tipo atual: a issue sem label de tipo não apaga o tipo (nem o
     // alvo de uma tarefa Plugin, que só existe no tipo Plugin).
-    const type = mapTaskType(issue, mapping.typeRules, (task.taskType as TaskType | null) ?? null).value
+    const current = (task.taskType as TaskType | null) ?? null
+    const type = issueTaskType(mapTaskType(issue, mapping.typeRules, current).value, current)
     const priority = mapPriority(issue, mapping.priorityRules).value
     await updateTask(
         link.taskId,
-        { title: issue.title, description: taskDescriptionFromIssue(issue.body), taskType: type, priority },
+        // O tipo só vai quando muda: a issue não promove a tarefa a Plugin (sem alvo) nem regrava o alvo.
+        { title: issue.title, description: taskDescriptionFromIssue(issue.body), ...(type !== current ? { taskType: type } : {}), priority },
         "system",
         { origin: "github", publish: false },
     )

@@ -83,7 +83,10 @@ semeado na primeira leitura (`ensureBoard`).
 - Sincronização com a issue do GitHub (`applyIssueToTask`): sem regra de tipo que case, a tarefa
   mantém o tipo atual (não apaga o tipo Plugin nem o alvo). O tipo Plugin tem a label `plugin` nas
   regras padrão, e `getMapping` a acrescenta a um mapeamento já gravado sem regra para o tipo
-  (`withPluginTypeRule`), para a label ir e voltar.
+  (`withPluginTypeRule`), para a label ir e voltar. A issue **nunca promove** uma tarefa a Plugin
+  (`issueTaskType`): o tipo exige um alvo que só existe no Opex. Issue nova com a label `plugin` vira
+  tarefa sem tipo, e a label numa tarefa de outro tipo mantém o tipo dela; o tipo só vai no
+  `updateTask` quando muda, então a sincronização nunca falha por falta de alvo.
 - O `pluginTarget` não vai para o portal (`ClienteTaskDto`).
 - As ferramentas `create_task`/`update_task` dos agentes aceitam `pluginTarget`.
 - O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin".

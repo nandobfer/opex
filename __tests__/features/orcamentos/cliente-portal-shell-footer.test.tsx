@@ -3,6 +3,7 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { pluginTestEntry, pluginTestRuntime, resetPluginTestRuntime } from '../../helpers/plugins'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
@@ -11,9 +12,10 @@ import { framerMotionMock } from '../../helpers/framer-motion'
  */
 
 const state = vi.hoisted(() => ({ on: false, props: null as unknown, headerProps: null as unknown }))
+// Slots de plugin (OPE-172).
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
+vi.mock('@/features/plugins/client/PluginContribution', async () => (await import('../../helpers/plugins')).pluginContributionMock())
 vi.mock('framer-motion', () => framerMotionMock())
-// Menu do portal com os plugins (slot `portal.nav`, OPE-172): sem plugins ativos.
-vi.mock('@/features/plugins/client/usePluginNav', () => ({ useNavWithPlugins: (base: unknown) => base }))
 vi.mock('next/navigation', () => ({ usePathname: () => '/cliente/dashboard', useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('next/link', () => ({
   default: ({ children, href, ...props }: { children: React.ReactNode; href: string } & Record<string, unknown>) => (
@@ -101,5 +103,14 @@ describe('cabeçalho do portal no celular (OPE-168)', () => {
     const actions = screen.getByTestId('mobile-app-header-actions')
     expect(actions.matches(':empty')).toBe(true)
     expect(actions.classList.contains('empty:hidden')).toBe(true)
+  })
+})
+
+describe('ClientePortalShell: menu do portal (portal.nav, OPE-172)', () => {
+  afterEach(resetPluginTestRuntime)
+  it('o nav do plugin do cliente entra no menu do portal apontando para /cliente/x/...', () => {
+    pluginTestRuntime.plugins = [pluginTestEntry(null, { id: 'painel', pages: [{ path: 'resumo', title: 'Resumo', export: 'Page' }], nav: [{ label: 'Painel do cliente', page: 'resumo', icon: 'Puzzle' }] })]
+    renderShell(base)
+    expect(screen.getAllByRole('link', { name: 'Painel do cliente' })[0]!.getAttribute('href')).toBe('/cliente/x/painel/resumo')
   })
 })

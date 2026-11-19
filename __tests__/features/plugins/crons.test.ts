@@ -24,7 +24,7 @@ vi.mock('@/lib/db/models/CronJobState', () => ({
   },
 }))
 
-import { runPluginCrons } from '@/features/plugins/server/crons'
+import { PLUGIN_CRON_TIMEOUT_MS, runPluginCrons } from '@/features/plugins/server/crons'
 import { cronKey, pluginRegistries } from '@/features/plugins/server/kernel/registries'
 
 const owner = (channel: 'stable' | 'preview') => ({ pluginId: 'relogio', channel, versionId: 'v1', fiberId: channel })
@@ -58,5 +58,38 @@ describe('runPluginCrons', () => {
     await runPluginCrons(start)
     await runPluginCrons(new Date(start.getTime() + 6 * 60_000))
     expect(holder.jobs.docs[0]).toMatchObject({ lastStatus: 'error', lastError: 'sem rede', lockedUntil: null })
+  })
+
+  it('cron que nunca resolve é encerrado por tempo como erro, libera o lease e não trava o seguinte', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] })
+    try {
+      const next = vi.fn()
+      pluginRegistries().crons.add(cronKey('stable', 'relogio', 'pendurado'), owner('stable'), { name: 'pendurado', schedule: { type: 'interval', minutes: 5 }, run: () => new Promise<void>(() => undefined), scheduled: true })
+      pluginRegistries().crons.add(cronKey('stable', 'relogio', 'seguinte'), owner('stable'), { name: 'seguinte', schedule: { type: 'interval', minutes: 5 }, run: next, scheduled: true })
+      const start = new Date('2026-11-19T12:00:00Z')
+      await runPluginCrons(start)
+      const tick = runPluginCrons(new Date(start.getTime() + 6 * 60_000))
+      await vi.advanceTimersByTimeAsync(PLUGIN_CRON_TIMEOUT_MS + 1)
+      expect(await tick).toEqual(['plugin:relogio:seguinte'])
+      expect(next).toHaveBeenCalledTimes(1)
+      expect(holder.jobs.docs.find((doc) => doc.jobId === 'plugin:relogio:pendurado')).toMatchObject({ lastStatus: 'error', lastError: expect.stringContaining('Tempo esgotado'), lockedUntil: null, lockedBy: null })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('o fim de uma execução não libera o lease de uma reivindicação posterior', async () => {
+    let finish: () => void = () => undefined
+    pluginRegistries().crons.add(cronKey('stable', 'relogio', 'lento'), owner('stable'), { name: 'lento', schedule: { type: 'interval', minutes: 5 }, run: () => new Promise<void>((resolve) => (finish = resolve)), scheduled: true })
+    const start = new Date('2026-11-19T12:00:00Z')
+    await runPluginCrons(start)
+    const first = runPluginCrons(new Date(start.getTime() + 6 * 60_000))
+    await vi.waitFor(() => expect(holder.jobs.docs[0]!.lockedBy).toBe('inst-1'))
+    // Outra reivindicação (lease vencido) troca o lockedUntil enquanto a primeira ainda roda.
+    const otherLease = new Date(start.getTime() + 60 * 60_000)
+    await holder.jobs.updateOne({ jobId: 'plugin:relogio:lento' }, { $set: { lockedUntil: otherLease } })
+    finish()
+    await first
+    expect(holder.jobs.docs[0]).toMatchObject({ lockedBy: 'inst-1', lockedUntil: otherLease })
   })
 })

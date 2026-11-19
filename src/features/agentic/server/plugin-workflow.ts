@@ -124,7 +124,9 @@ export async function preparePluginImplementation(doc: IAgenticWorkbench, config
     if (plugin.scope !== state.scope || (plugin.scope === "client" && plugin.clientId !== state.clientId)) throw new DomainError(409, "O plugin escolhido é de outro escopo ou cliente", "PLUGIN_SCOPE_MISMATCH")
     const workDir = state.workDir ?? pluginWorkDirFor(config, doc.taskCode)
     const baseVersionId = state.baseVersionId ?? plugin.stableVersionId ?? null
-    const next = { ...state, pluginId: plugin.pluginId, baseVersionId, workDir, compileAttempts: 0 }
+    // Novo turno do agente: a marca de compilação pendente e o descritivo da rodada anterior não valem
+    // mais (senão o Tentar novamente de uma falha deste turno só recompilaria a pasta, sem o agente).
+    const next = { ...state, pluginId: plugin.pluginId, baseVersionId, workDir, compileAttempts: 0, compilePending: false, changeSummary: null }
 
     const h = await host()
     const exists = await h.run(`test -d ${shellQuote(`${workDir}/.git`)}`, 15_000, { quiet: true })
