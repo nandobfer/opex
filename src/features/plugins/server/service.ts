@@ -447,3 +447,42 @@ export async function syncAllPluginServers(): Promise<void> {
         }
     }
 }
+
+/**
+ * Reconciliação periódica (tick do agendador, OPE-172): compara, para cada plugin do dono, a versão que
+ * o banco manda carregar em cada canal com a fiber viva neste processo e chama `syncPluginServer` só
+ * quando divergem. Cobre as mudanças gravadas por outra instância (uma prévia do Opex usa o mesmo banco,
+ * mas não ativa código de servidor): rollback, desativar, arquivar ou consolidar feitos lá passam a valer
+ * aqui em até um tick. Versão sem servidor conta como "nada carregado"; um erro de ativação já registrado
+ * para a mesma versão não é retentado a cada tick.
+ */
+export async function reconcilePluginServers(): Promise<string[]> {
+    const { kernelMode, loadedPluginFiber } = await import("./kernel/kernel")
+    if ((await kernelMode()) === "preview-instance") return []
+    await dbConnect()
+    const plugins = (await Plugin.find({ scope: "owner" }, { pluginId: 1, active: 1, archivedAt: 1, stableVersionId: 1, previewVersionId: 1, runtimeError: 1 }).lean()) as PluginDoc[]
+    const versionIds = plugins.flatMap((plugin) => [plugin.stableVersionId, plugin.previewVersionId]).filter((id): id is string => Boolean(id))
+    const withServer = new Set(
+        versionIds.length ? ((await PluginVersion.find({ _id: { $in: versionIds }, "artifacts.server": { $ne: null } }, { _id: 1 }).lean()) as VersionDoc[]).map((version) => String(version._id)) : [],
+    )
+    const synced: string[] = []
+    for (const plugin of plugins) {
+        let diverged = false
+        for (const channel of ["stable", "preview"] as const) {
+            const versionId = channel === "stable" ? plugin.stableVersionId : plugin.previewVersionId
+            const wanted = plugin.active && !plugin.archivedAt && versionId && withServer.has(versionId) ? versionId : null
+            const loaded = (await loadedPluginFiber(plugin.pluginId, channel))?.versionId ?? null
+            if (wanted === loaded) continue
+            if (wanted && plugin.runtimeError?.channel === channel && plugin.runtimeError.versionId === wanted) continue
+            diverged = true
+        }
+        if (!diverged) continue
+        try {
+            await syncPluginServer(plugin.pluginId)
+            synced.push(plugin.pluginId)
+        } catch (error) {
+            log().error({ err: error, pluginId: plugin.pluginId }, "[plugins] Falha ao reconciliar o plugin com o banco")
+        }
+    }
+    return synced
+}

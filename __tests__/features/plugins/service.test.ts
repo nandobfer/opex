@@ -16,6 +16,8 @@ const holder = vi.hoisted(() => ({
   activate: vi.fn(),
   deactivate: vi.fn(async () => undefined),
   compile: vi.fn(),
+  mode: 'full' as 'full' | 'preview-instance',
+  loaded: new Map<string, { versionId: string }>(),
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined, recordAudit: async (input: Record<string, unknown>) => void holder.audit.push(input) }))
@@ -33,10 +35,15 @@ vi.mock('@/lib/db/models/Plugin', () => ({
     return holder.versions
   },
 }))
-vi.mock('@/features/plugins/server/kernel/kernel', () => ({ activatePluginServer: holder.activate, deactivatePluginServer: holder.deactivate }))
+vi.mock('@/features/plugins/server/kernel/kernel', () => ({
+  activatePluginServer: holder.activate,
+  deactivatePluginServer: holder.deactivate,
+  kernelMode: async () => holder.mode,
+  loadedPluginFiber: async (pluginId: string, channel: string) => holder.loaded.get(`${pluginId}|${channel}`) ?? null,
+}))
 vi.mock('@/features/plugins/server/compiler/rolldown', () => ({ compilePluginSources: holder.compile }))
 
-import { consolidateVersion, createDraftVersion, createPluginRecord, getPlugin, listPlugins, publishPreviewVersion, rollbackPlugin, setPluginActive, setPluginArchived } from '@/features/plugins/server/service'
+import { consolidateVersion, createDraftVersion, createPluginRecord, getPlugin, listPlugins, publishPreviewVersion, reconcilePluginServers, rollbackPlugin, setPluginActive, setPluginArchived } from '@/features/plugins/server/service'
 
 const files = (id = 'relogio', scope = 'owner') => [
   { path: 'plugin.json', content: JSON.stringify({ id, name: 'Relógio', apiVersion: '1.0', scope, entries: { client: 'client/index.tsx' }, slots: [{ slot: scope === 'owner' ? 'dashboard.widgets' : 'portal.dashboard.widgets', export: 'Widget' }] }) },
@@ -49,6 +56,8 @@ beforeEach(() => {
   holder.plugins = createFakeCollection(() => ({ active: true, stableVersionId: null, previewVersionId: null, previewWorkbenchId: null, runtimeError: null, clientId: null, description: '' }))
   holder.versions = createFakeCollection(() => ({ promotedAt: null, baseVersionId: null }))
   holder.audit = []
+  holder.mode = 'full'
+  holder.loaded = new Map()
   holder.appEvents = []
   holder.clientEvents = []
   holder.activate.mockReset().mockResolvedValue({ ok: true })
@@ -247,5 +256,49 @@ describe('arquivar plugin (OPE-172)', () => {
     expect(holder.plugins.docs[0]!.archivedAt).toEqual(expect.any(Date))
     expect(holder.deactivate).not.toHaveBeenCalled()
     expect(holder.clientEvents).toEqual(expect.arrayContaining([expect.objectContaining({ clientId: 'cli1' })]))
+  })
+})
+
+describe('reconciliação do kernel com o banco (OPE-172)', () => {
+  async function consolidated() {
+    await createPluginRecord({ pluginId: 'relogio', name: 'Relógio', scope: 'owner', clientId: null, actorId: 'local' })
+    const first = await draft()
+    await publishPreviewVersion('relogio', first.versionId, { workbenchId: 'wb1', actorId: 'local' })
+    await consolidateVersion('relogio', first.versionId, 'local')
+    holder.activate.mockClear()
+    holder.deactivate.mockClear()
+    return first.versionId
+  }
+
+  it('rollback gravado por outra instância (a fiber viva é de outra versão) é aplicado aqui', async () => {
+    const stable = await consolidated()
+    holder.loaded.set('relogio|stable', { versionId: 'versao-antiga' })
+    expect(await reconcilePluginServers()).toEqual(['relogio'])
+    expect(holder.activate).toHaveBeenCalledWith(expect.objectContaining({ pluginId: 'relogio', channel: 'stable', versionId: stable }))
+  })
+
+  it('plugin desativado por outra instância tem o código de servidor desfeito', async () => {
+    const stable = await consolidated()
+    holder.loaded.set('relogio|stable', { versionId: stable })
+    await holder.plugins.updateOne({ pluginId: 'relogio' }, { $set: { active: false } })
+    expect(await reconcilePluginServers()).toEqual(['relogio'])
+    expect(holder.deactivate).toHaveBeenCalledWith('relogio', 'stable')
+    expect(holder.activate).not.toHaveBeenCalled()
+  })
+
+  it('em dia, ou numa instância de prévia, nada é feito', async () => {
+    const stable = await consolidated()
+    holder.loaded.set('relogio|stable', { versionId: stable })
+    expect(await reconcilePluginServers()).toEqual([])
+    holder.loaded.clear()
+    holder.mode = 'preview-instance'
+    expect(await reconcilePluginServers()).toEqual([])
+    expect(holder.activate).not.toHaveBeenCalled()
+  })
+
+  it('erro de ativação já registrado para a mesma versão não é retentado a cada tick', async () => {
+    const stable = await consolidated()
+    await holder.plugins.updateOne({ pluginId: 'relogio' }, { $set: { runtimeError: { channel: 'stable', versionId: stable, message: 'quebrou', at: new Date() } } })
+    expect(await reconcilePluginServers()).toEqual([])
   })
 })

@@ -337,6 +337,15 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
         logger.error({ err: error }, "[scheduler] Falha no tick dos agentes rotineiros")
     }
 
+    // Plugins do dono (OPE-172): o kernel desta instância acompanha o banco (mudanças feitas por outra
+    // instância, ex.: uma prévia do Opex, que grava no mesmo banco mas não ativa código de servidor).
+    try {
+        const { reconcilePluginServers } = await import("@/features/plugins/server/service")
+        await reconcilePluginServers()
+    } catch (error) {
+        logger.error({ err: error }, "[scheduler] Falha ao reconciliar os plugins com o banco")
+    }
+
     // Plugins do dono (OPE-172): crons registrados pela fiber stable de cada plugin. Ver aicontext/modules/plugins.md.
     try {
         const { runPluginCrons } = await import("@/features/plugins/server/crons")
