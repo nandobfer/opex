@@ -9,6 +9,8 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn() }))
 
 vi.mock("framer-motion", () => framerMotionMock())
+// Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
+vi.mock("@/features/plugins/hooks/usePlugins", async () => (await import("../../helpers/plugins")).pluginHooksMock())
 vi.mock("next/navigation", () => ({ usePathname: () => "/tarefas", useRouter: () => ({ push: vi.fn() }) }))
 vi.mock("next/link", () => ({
     default: React.forwardRef<HTMLAnchorElement, { children: React.ReactNode; href: string } & Record<string, unknown>>(function MockLink({ children, href, ...props }, ref) {

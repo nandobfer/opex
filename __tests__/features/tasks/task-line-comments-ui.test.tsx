@@ -6,6 +6,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TaskDetailDto } from '@/features/tasks/types'
 
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+// Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
+vi.mock('@/features/plugins/hooks/usePlugins', async () => (await import('../../helpers/plugins')).pluginHooksMock())
 const mocks = vi.hoisted(() => ({ mutate: vi.fn() }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useAddComment: () => ({ mutateAsync: vi.fn(), mutate: mocks.mutate, isPending: false }) }))
 vi.mock('@/features/tasks/attachments/hooks', () => ({

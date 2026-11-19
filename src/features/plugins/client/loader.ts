@@ -46,16 +46,16 @@ async function resolveShared(id: string, source: PluginSource): Promise<string> 
     const key = id === "@opex/api" ? `${id}|${source.kind}|${source.clientId ?? ""}` : id
     const cached = shimUrls.get(key)
     if (cached) return cached
-    let module: SharedModule
-    if (id === "@opex/api") module = apiModule(source.api)
+    let shared: SharedModule
+    if (id === "@opex/api") shared = apiModule(source.api)
     else {
         const loader = SHARED_MODULE_LOADERS[id]
         if (!loader) throw new Error(`Módulo compartilhado desconhecido: ${id}`)
-        module = await loader()
+        shared = await loader()
     }
     const tableId = key
-    sharedTable()[tableId] = module
-    const url = URL.createObjectURL(new Blob([shimSource(tableId, module)], { type: "text/javascript" }))
+    sharedTable()[tableId] = shared
+    const url = URL.createObjectURL(new Blob([shimSource(tableId, shared)], { type: "text/javascript" }))
     shimUrls.set(key, url)
     return url
 }

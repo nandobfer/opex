@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("framer-motion", () => framerMotionMock())
+// Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
+vi.mock("@/features/plugins/hooks/usePlugins", async () => (await import("../../helpers/plugins")).pluginHooksMock())
 vi.mock("sonner", () => ({ toast: mocks.toast, Toaster: () => null }))
 vi.mock("next/navigation", () => ({ usePathname: () => "/tarefas", useRouter: () => ({ push: mocks.push }) }))
 vi.mock("next/link", () => ({

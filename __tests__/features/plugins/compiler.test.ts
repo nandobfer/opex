@@ -1,54 +1,89 @@
-import { describe, expect, it } from "vitest"
-import { compilePluginSources } from "@/features/plugins/server/compiler/rolldown"
-import { extractClassCandidates } from "@/features/plugins/server/compiler/tailwind"
-import { parsePluginManifest } from "@/features/plugins/manifest"
-import { ownerPluginFiles } from "./fixtures"
+import { describe, expect, it } from 'vitest'
+import { compilePluginSources } from '@/features/plugins/server/compiler/rolldown'
+import { extractClassCandidates } from '@/features/plugins/server/compiler/tailwind'
+import { parsePluginManifest, type PluginSourceFile } from '@/features/plugins/manifest'
 
-/** Compilação real com Rolldown (binário local) e o compilador do Tailwind (OPE-172). */
+/**
+ * Compilação das versões (OPE-172) com Rolldown e o Tailwind reais: módulos do shell externos e
+ * reescritos para `opex-shared:`, dependência fora da lista recusada, CSS só das classes usadas.
+ */
 
-function manifestOf(files: ReturnType<typeof ownerPluginFiles>) {
-    const parsed = parsePluginManifest(files)
-    if (!parsed.ok) throw new Error(parsed.issues.join("\n"))
-    return parsed.manifest
+const manifest = { id: 'painel', name: 'Painel', apiVersion: '1.0', scope: 'client', entries: { client: 'client/index.tsx' }, slots: [{ slot: 'portal.dashboard.widgets', export: 'Widget' }] }
+
+async function compile(client: string, extra: PluginSourceFile[] = []) {
+  const files = [{ path: 'plugin.json', content: JSON.stringify(manifest) }, { path: 'client/index.tsx', content: client }, ...extra]
+  const parsed = parsePluginManifest(files)
+  if (!parsed.ok) throw new Error(parsed.issues.join('; '))
+  return compilePluginSources(files, parsed.manifest)
 }
 
-describe("compilação dos plugins (Rolldown)", () => {
-    it("compila servidor e cliente: compartilhados viram marcadores e o CSS traz as classes do plugin", async () => {
-        const files = ownerPluginFiles()
-        const result = await compilePluginSources(files, manifestOf(files))
-        expect(result.ok).toBe(true)
-        if (!result.ok) return
-        expect(result.client?.code).toContain('from "opex-shared:react"')
-        expect(result.client?.code).toContain('from "opex-shared:@opex/ui/card"')
-        expect(result.client?.code).toContain('"opex-shared:react/jsx-runtime"')
-        expect(result.client?.css).toContain(".bg-primary\\/20")
-        expect(result.server?.code).toContain("const definePlugin")
-        expect(result.server?.code).not.toContain("@opex/plugin-sdk/server")
-        expect(result.server?.hash).toMatch(/^[0-9a-f]{16}$/)
-    }, 30_000)
+describe('compilePluginSources (cliente)', () => {
+  it('troca React e os componentes do Opex por marcadores e gera o CSS das classes usadas', async () => {
+    const result = await compile(
+      `import { useState } from "react"
+import { Card } from "@opex/ui/card"
+import { rotulo } from "./rotulo"
+export function Widget() {
+  const [n] = useState(1)
+  return <Card className="bg-primary text-primary-foreground p-4">{rotulo(n)}</Card>
+}
+export default { slots: { Widget } }`,
+      [{ path: 'client/rotulo.ts', content: 'export const rotulo = (n: number) => `Total ${n}`\n' }],
+    )
+    expect(result.ok).toBe(true)
+    if (!result.ok) return
+    expect(result.server).toBeNull()
+    const code = result.client!.code
+    expect(code).toContain('"opex-shared:react"')
+    expect(code).toContain('"opex-shared:react/jsx-runtime"')
+    expect(code).toContain('"opex-shared:@opex/ui/card"')
+    expect(code).toContain('Total ')
+    expect(result.client!.hash).toMatch(/^[0-9a-f]{16}$/)
+    expect(result.client!.css).toContain('.bg-primary')
+    expect(result.client!.css).toContain('.p-4')
+  }, 60_000)
 
-    it("recusa dependência npm e módulo do Opex inexistente com mensagem pt-BR", async () => {
-        const files = ownerPluginFiles({ client: `import _ from "lodash"\nimport { X } from "@opex/ui/nao-existe"\nexport default { slots: { Widget: () => _(X) } }\n` })
-        const result = await compilePluginSources(files, manifestOf(files))
-        expect(result.ok).toBe(false)
-        if (result.ok) return
-        expect(result.errors).toContain('Dependência não permitida no plugin: "lodash" (use os módulos compartilhados do Opex)')
-        expect(result.errors).toContain('Módulo do Opex inexistente: "@opex/ui/nao-existe"')
-    }, 30_000)
+  it('recusa dependência npm fora da lista, módulo do Opex inexistente e arquivo ausente', async () => {
+    const result = await compile(`import lodash from "lodash"
+import { X } from "@opex/ui/nao-existe"
+import { y } from "./faltando"
+export default { slots: { W: () => lodash(X, y) } }`)
+    expect(result.ok).toBe(false)
+    if (result.ok) return
+    const text = result.errors.join('\n')
+    expect(text).toContain('Dependência não permitida no plugin: "lodash"')
+    expect(text).toContain('Módulo do Opex inexistente: "@opex/ui/nao-existe"')
+    expect(text).toContain('Arquivo não encontrado: ./faltando')
+  }, 60_000)
 
-    it("devolve o erro de sintaxe do Rolldown", async () => {
-        const files = ownerPluginFiles({ server: "export default {{{" })
-        const result = await compilePluginSources(files, manifestOf(files))
-        expect(result.ok).toBe(false)
-        if (!result.ok) expect(result.errors.join("\n")).toContain("Erro de compilação")
-    }, 30_000)
+  it('erro de sintaxe vira erro de compilação em pt-BR', async () => {
+    const result = await compile('export const = 1')
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors[0]).toMatch(/^Erro de compilação:/)
+  }, 60_000)
+})
 
-    it("candidatos a classe ignoram os testes do plugin", () => {
-        const candidates = extractClassCandidates([
-            { path: "client/a.tsx", content: '<div className="p-3 text-primary" />' },
-            { path: "client/a.test.tsx", content: '"bg-red-900"' },
-        ])
-        expect(candidates).toContain("p-3")
-        expect(candidates).not.toContain("bg-red-900")
-    })
+describe('compilePluginSources (servidor)', () => {
+  it('só node:* e o SDK podem ser importados no servidor do dono', async () => {
+    const files = [
+      { path: 'plugin.json', content: JSON.stringify({ id: 'srv', name: 'Srv', apiVersion: '1.0', scope: 'owner', entries: { server: 'server/index.ts' } }) },
+      { path: 'server/index.ts', content: 'import { definePlugin } from "@opex/plugin-sdk/server"\nimport { createHash } from "node:crypto"\nimport axios from "axios"\nexport default definePlugin({ apply() { createHash("sha1"); void axios } })' },
+    ]
+    const parsed = parsePluginManifest(files)
+    if (!parsed.ok) throw new Error(parsed.issues.join('; '))
+    const result = await compilePluginSources(files, parsed.manifest)
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.errors).toEqual(['Import não permitido no servidor do plugin: "axios" (use node:* ou os serviços do ctx)'])
+  }, 60_000)
+})
+
+describe('extractClassCandidates', () => {
+  it('ignora os testes do plugin', () => {
+    const candidates = extractClassCandidates([
+      { path: 'a.tsx', content: '<div className="text-sm bg-card" />' },
+      { path: 'a.test.tsx', content: '<div className="text-9xl" />' },
+    ])
+    expect(candidates).toEqual(expect.arrayContaining(['text-sm', 'bg-card']))
+    expect(candidates).not.toContain('text-9xl')
+  })
 })

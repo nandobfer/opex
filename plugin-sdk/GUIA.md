@@ -57,7 +57,7 @@ Um **plugin de cliente é só interface**: não tem `server`, rotas, crons, ferr
 - Qualquer outra dependência npm é recusada na compilação.
 - Use `usePluginHost()` para ler `pluginId`, `versionNumber`, `channel` (`stable` ou `preview`),
   `scope`, `clientId`, `api` e `routeBase`.
-  - No dono: `host.api.get(\`${host.routeBase}/status\`)` chama `/api/p/{id}/status`.
+  - No dono: `host.api.get(host.routeBase + "/status")` chama `/api/p/{id}/status`.
   - No portal: `host.api.get("/cliente/tasks")` traz só os dados do cliente da sessão.
 - Use `usePluginEvent(event, handler)` para receber em tempo real o que o servidor do plugin
   publicou com `ctx.realtime.publish(event, data)`.

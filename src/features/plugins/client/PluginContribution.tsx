@@ -17,7 +17,7 @@ import { usePluginModule } from "./usePluginModule"
  */
 export function PluginContribution({ entry, kind, exportName, props, skeletonClassName = "h-32" }: { entry: PluginRuntimeEntry; kind: "slots" | "pages"; exportName: string; props: object; skeletonClassName?: string }) {
     const source = usePluginSource()
-    const module = usePluginModule(entry)
+    const loaded = usePluginModule(entry)
     const host = useMemo<PluginHost>(
         () => ({
             pluginId: entry.id,
@@ -32,9 +32,9 @@ export function PluginContribution({ entry, kind, exportName, props, skeletonCla
         [entry.id, entry.versionNumber, entry.channel, source],
     )
 
-    if (module.isPending) return <Skeleton className={`w-full rounded-lg ${skeletonClassName}`} data-testid="plugin-loading" />
-    if (module.isError) return <PluginErrorCard pluginName={entry.name} message={module.error instanceof Error ? module.error.message : String(module.error)} onRetry={() => void module.refetch()} />
-    const Component = pluginExport(module.data, kind, exportName) as ComponentType<object> | null
+    if (loaded.isPending) return <Skeleton className={`w-full rounded-lg ${skeletonClassName}`} data-testid="plugin-loading" />
+    if (loaded.isError) return <PluginErrorCard pluginName={entry.name} message={loaded.error instanceof Error ? loaded.error.message : String(loaded.error)} onRetry={() => void loaded.refetch()} />
+    const Component = pluginExport(loaded.data, kind, exportName) as ComponentType<object> | null
     if (typeof Component !== "function" && !(Component && typeof Component === "object")) {
         return <PluginErrorCard pluginName={entry.name} message={`O plugin não exporta "${exportName}"`} />
     }

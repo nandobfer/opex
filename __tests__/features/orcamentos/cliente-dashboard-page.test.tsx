@@ -18,6 +18,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("framer-motion", async () => (await import("../../helpers/framer-motion")).framerMotionMock())
+// Slots de plugin (OPE-172): sem plugins vigentes, o slot não renderiza nada.
+vi.mock("@/features/plugins/hooks/usePlugins", async () => (await import("../../helpers/plugins")).pluginHooksMock())
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
 vi.mock("@/features/orcamentos/portal/ClientePortalContext", () => ({ useClientePortal: () => ({ isAdmin: mocks.isAdmin }) }))
 vi.mock("@/features/orcamentos/portal/useClientePeriod", () => ({

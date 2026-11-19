@@ -54,7 +54,7 @@ export const pluginTools = [
         input: z.object({ pluginId: z.string().min(1), toVersionId: versionId, fromVersionId: versionId.optional() }),
         execute: async ({ pluginId, toVersionId, fromVersionId }) => {
             const diff = await diffPluginVersions(pluginId, toVersionId, fromVersionId ?? null)
-            return { from: diff.from, to: diff.to, files: diff.files.map(({ patch: _patch, ...file }) => file), diff: diffAsText(diff.files).slice(0, 60_000) }
+            return { from: diff.from, to: diff.to, files: diff.files.map((file) => ({ path: file.path, status: file.status, additions: file.additions, deletions: file.deletions })), diff: diffAsText(diff.files).slice(0, 60_000) }
         },
     }),
     defineTool({
