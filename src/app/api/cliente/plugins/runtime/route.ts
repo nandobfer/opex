@@ -10,5 +10,6 @@ export const dynamic = "force-dynamic"
 /** GET /api/cliente/plugins/runtime — plugins (só interface) que o portal deste cliente monta. */
 export const GET = withRoute(async ({ req }) => {
     const actor = await requireClientActor(req)
-    return ok(await buildRuntimeManifest({ kind: "client", clientId: String(actor.client._id) }, previewListFromRequest(req)))
+    // Pré-visualização do dono (sessão admin): só os plugins cuja prévia ele ligou neste navegador.
+    return ok(await buildRuntimeManifest({ kind: "client", clientId: String(actor.client._id) }, previewListFromRequest(req), { ownerPreview: actor.preview }))
 })

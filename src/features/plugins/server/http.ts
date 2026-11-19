@@ -3,7 +3,7 @@ import { isHttpsRequest } from "@/features/auth/server/cookie"
 import { PLUGIN_PREVIEW_COOKIE } from "../constants"
 import { togglePreviewList } from "../logic"
 import { encodePreviewCookie, previewCookieOptions, previewListFromRequest } from "./preview-cookie"
-import { readBundle } from "./runtime-manifest"
+import { readBundle, type RuntimeManifestOptions } from "./runtime-manifest"
 import type { PluginAccess } from "./service"
 
 /** Respostas HTTP compartilhadas entre as rotas do dono e do portal (OPE-172). */
@@ -20,7 +20,7 @@ export function previewToggleResponse(req: NextRequest, pluginId: string, on: bo
 }
 
 /** Bundle imutável por revisão (o hash está no nome do arquivo). */
-export async function bundleResponse(access: PluginAccess, versionId: string, file: string): Promise<Response> {
-    const bundle = await readBundle(access, versionId, file)
+export async function bundleResponse(access: PluginAccess, versionId: string, file: string, mount?: { previewOn: readonly string[]; options?: RuntimeManifestOptions }): Promise<Response> {
+    const bundle = await readBundle(access, versionId, file, mount)
     return new Response(bundle.body, { headers: { "Content-Type": bundle.contentType, "Cache-Control": "private, max-age=31536000, immutable" } })
 }

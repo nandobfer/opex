@@ -59,6 +59,38 @@ describe('buildRuntimeManifest', () => {
   })
 })
 
+describe('prévia ligada para plugin de cliente e pré-visualização do portal pelo dono', () => {
+  it('a chave do dono reflete a prévia de um plugin de cliente (o dono gerencia os dois escopos)', async () => {
+    const result = await buildRuntimeManifest({ kind: 'owner' }, ['painel'])
+    expect(result.previewOn).toEqual(['painel'])
+    // O plugin de cliente não monta no app do dono.
+    expect(result.plugins.map((plugin) => plugin.id)).toEqual(['relogio'])
+    // Id de plugin inexistente no cookie não aparece ligado.
+    expect((await buildRuntimeManifest({ kind: 'owner' }, ['sumiu'])).previewOn).toEqual([])
+  })
+
+  it('o portal não vê como ligada a prévia de plugin de outro escopo', async () => {
+    expect((await buildRuntimeManifest({ kind: 'client', clientId: 'cli1' }, ['relogio', 'painel'])).previewOn).toEqual(['painel'])
+  })
+
+  it('com a sessão do dono no portal, plugin de cliente só monta (e só serve o bundle) com a prévia ligada por ele', async () => {
+    const off = await buildRuntimeManifest({ kind: 'client', clientId: 'cli1' }, [], { ownerPreview: true })
+    expect(off.plugins).toEqual([])
+    const portal = String(holder.plugins.docs[1]!.stableVersionId)
+    await expect(readBundle({ kind: 'client', clientId: 'cli1' }, portal, `${'3'.repeat(16)}.js`, { previewOn: [], options: { ownerPreview: true } })).rejects.toThrow('Bundle não encontrado')
+
+    const on = await buildRuntimeManifest({ kind: 'client', clientId: 'cli1' }, ['painel'], { ownerPreview: true })
+    expect(on.plugins.map((plugin) => plugin.id)).toEqual(['painel'])
+    expect((await readBundle({ kind: 'client', clientId: 'cli1' }, portal, `${'3'.repeat(16)}.js`, { previewOn: ['painel'], options: { ownerPreview: true } })).contentType).toBe('text/javascript; charset=utf-8')
+  })
+
+  it('o usuário do cliente continua vendo os plugins do próprio portal sem ligar nada', async () => {
+    const portal = String(holder.plugins.docs[1]!.stableVersionId)
+    expect((await buildRuntimeManifest({ kind: 'client', clientId: 'cli1' }, [], { ownerPreview: false })).plugins.map((plugin) => plugin.id)).toEqual(['painel'])
+    expect((await readBundle({ kind: 'client', clientId: 'cli1' }, portal, `${'3'.repeat(16)}.js`)).contentType).toBe('text/javascript; charset=utf-8')
+  })
+})
+
 describe('readBundle', () => {
   it('devolve o JS e o CSS pelo hash; hash errado ou plugin de outro escopo dá 404', async () => {
     expect(await readBundle({ kind: 'owner' }, stable, `${'1'.repeat(16)}.js`)).toEqual({ body: `/*${'1'.repeat(16)}*/`, contentType: 'text/javascript; charset=utf-8' })

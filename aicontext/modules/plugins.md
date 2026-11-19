@@ -236,6 +236,17 @@ nenhuma prévia), tem 7 dias e traz a lista de ids com a prévia ligada.
 - Liga e desliga em `POST /api/plugins/[id]/preview { on }` e no equivalente do portal (admin).
 - O botão "Ligar prévia" (`PluginPreviewToggle`) aparece na mesa, no detalhe do plugin e no portal.
 - Só aquele navegador vê a `preview`; o resto continua na `stable`.
+- A chave mostra a lista do cookie que o ator enxerga (`previewOn` do runtime): no app do dono, os
+  plugins de **qualquer** escopo (o dono também gerencia os de cliente); no portal, os do cliente. Ao
+  ligar, a resposta do POST já atualiza a chave e o link "Ver prévia".
+
+**Plugin de cliente na sessão do dono.** O código do plugin roda no mesmo origin, com a sessão de quem
+abriu a página. Por isso, na pré-visualização do portal pelo dono (sessão `admin` com `x-client-id`,
+`actor.preview`), o runtime e o bundle do portal **só entregam o plugin de cliente cuja prévia o dono
+ligou neste navegador** (`clientPluginMountable`, `buildRuntimeManifest(…, { ownerPreview })`). Os
+plugins do cliente, inclusive os consolidados pelo admin do cliente, nunca rodam por padrão com a sessão
+do dono: ele revisa as fontes e a diferença em `/plugins/[id]` e só então liga a prévia daquele
+plugin. Para o usuário do cliente nada muda.
 
 ## Telas
 
@@ -251,7 +262,10 @@ nenhuma prévia), tem 7 dias e traz a lista de ids com a prévia ligada.
 
 - mesma lista e detalhe, pelos mesmos componentes (`PluginPages.tsx`);
 - o detalhe tem o botão **"Aprovar prévia"** (`POST /api/cliente/plugins/[id]/approve`), que chama o
-  `approve` da mesa dona da prévia: segue para os testes do plugin e a consolidação;
+  `approve` da mesa dona da prévia: segue para os testes do plugin e a consolidação, sem novo passo
+  do dono (decisão do dono no planejamento da OPE-172: o admin do cliente aprova a versão em prévia e
+  isso consolida). O que protege o dono é a regra acima: plugin de cliente só roda na sessão dele com
+  a prévia ligada por ele;
 - o admin também liga a prévia, faz rollback e ativa ou desativa;
 - a origem da versão aparece só como código, sem link para o app do dono.
 

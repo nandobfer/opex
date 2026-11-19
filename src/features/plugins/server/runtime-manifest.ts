@@ -24,10 +24,26 @@ export function bundlePaths(access: PluginAccess, versionId: string, version: Pi
     }
 }
 
-export async function buildRuntimeManifest(access: PluginAccess, previewOn: string[]): Promise<PluginRuntimeManifestDto> {
+/**
+ * Opções do manifesto do portal. `ownerPreview`: o dono pré-visualiza o portal com a sessão de admin;
+ * aí só monta o plugin de cliente cuja prévia ELE ligou neste navegador (escolha explícita, depois de
+ * revisar as fontes), nunca os plugins do cliente por padrão — o código do plugin roda no mesmo
+ * origin, com a sessão do dono.
+ */
+export interface RuntimeManifestOptions {
+    ownerPreview?: boolean
+}
+
+/** Plugin de cliente que pode rodar no navegador deste ator (o dono, só com a prévia ligada por ele). */
+export function clientPluginMountable(pluginId: string, previewOn: readonly string[], options: RuntimeManifestOptions = {}): boolean {
+    return !options.ownerPreview || previewOn.includes(pluginId)
+}
+
+export async function buildRuntimeManifest(access: PluginAccess, previewOn: string[], options: RuntimeManifestOptions = {}): Promise<PluginRuntimeManifestDto> {
     await dbConnect()
     const query: Record<string, unknown> = access.kind === "client" ? { scope: "client", clientId: access.clientId, active: true } : { scope: "owner", active: true }
-    const plugins = (await Plugin.find(query).sort({ name: 1 }).lean()) as Lean<IPlugin>[]
+    const found = (await Plugin.find(query).sort({ name: 1 }).lean()) as Lean<IPlugin>[]
+    const plugins = access.kind === "client" ? found.filter((plugin) => clientPluginMountable(plugin.pluginId, previewOn, options)) : found
     const preview = new Set(previewOn)
     const chosen = plugins.map((plugin) => ({ plugin, resolved: resolvePluginVersion(plugin, preview.has(plugin.pluginId)) })).filter((item) => item.resolved)
     const ids = chosen.map((item) => item.resolved!.versionId)
@@ -55,11 +71,22 @@ export async function buildRuntimeManifest(access: PluginAccess, previewOn: stri
             nav: access.kind === "owner" ? manifest.nav : [],
         })
     }
-    return { plugins: entries, previewOn: plugins.filter((plugin) => preview.has(plugin.pluginId)).map((plugin) => plugin.pluginId) }
+    return { plugins: entries, previewOn: await visiblePreviewOn(access, previewOn) }
+}
+
+/**
+ * Plugins com a prévia ligada neste navegador que o ator enxerga (a chave "Ligar prévia"): o dono
+ * vê os de qualquer escopo (gerencia também os de cliente, ativos ou não); o portal, os do cliente.
+ */
+async function visiblePreviewOn(access: PluginAccess, previewOn: string[]): Promise<string[]> {
+    if (!previewOn.length) return []
+    const query: Record<string, unknown> = access.kind === "client" ? { scope: "client", clientId: access.clientId, pluginId: { $in: previewOn } } : { pluginId: { $in: previewOn } }
+    const visible = new Set(((await Plugin.find(query, { pluginId: 1 }).lean()) as Lean<IPlugin>[]).map((plugin) => plugin.pluginId))
+    return previewOn.filter((id) => visible.has(id))
 }
 
 /** Código ou CSS do bundle de uma versão (rota imutável). O portal só lê versões do próprio cliente. */
-export async function readBundle(access: PluginAccess, versionId: string, file: string): Promise<{ body: string; contentType: string }> {
+export async function readBundle(access: PluginAccess, versionId: string, file: string, mount: { previewOn: readonly string[]; options?: RuntimeManifestOptions } = { previewOn: [] }): Promise<{ body: string; contentType: string }> {
     const match = /^([0-9a-f]{16})\.(js|css)$/.exec(file)
     if (!match || !/^[a-f0-9]{24}$/.test(versionId)) throw new DomainError(404, "Bundle não encontrado", "PLUGIN_BUNDLE_NOT_FOUND")
     await dbConnect()
@@ -69,6 +96,7 @@ export async function readBundle(access: PluginAccess, versionId: string, file: 
     const plugin = await Plugin.findOne({ pluginId: version.pluginId }, { scope: 1, clientId: 1 }).lean()
     if (!plugin) throw new DomainError(404, "Bundle não encontrado", "PLUGIN_BUNDLE_NOT_FOUND")
     if (access.kind === "client" ? plugin.scope !== "client" || plugin.clientId !== access.clientId : plugin.scope !== "owner") throw new DomainError(404, "Bundle não encontrado", "PLUGIN_BUNDLE_NOT_FOUND")
+    if (access.kind === "client" && !clientPluginMountable(version.pluginId, mount.previewOn, mount.options)) throw new DomainError(404, "Bundle não encontrado", "PLUGIN_BUNDLE_NOT_FOUND")
     const [, hash, kind] = match
     if (kind === "js" && hash === client.hash) return { body: client.code, contentType: "text/javascript; charset=utf-8" }
     if (kind === "css" && client.css && hash === client.cssHash) return { body: client.css, contentType: "text/css; charset=utf-8" }

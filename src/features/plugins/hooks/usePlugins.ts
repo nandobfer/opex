@@ -118,8 +118,10 @@ export function useTogglePluginPreview(id: string) {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: async (on: boolean) => unwrapApi((await source.api.post<ApiResponse<{ previewOn: string[] }>>(`${source.base}/${id}/preview`, { on })).data),
-        onSuccess: (_data, on) => {
+        onSuccess: (data, on) => {
             toast.success(on ? "Prévia ligada neste navegador" : "Prévia desligada: você vê a versão estável")
+            // A chave reflete na hora a lista gravada no cookie (vale também para plugin de cliente no app do dono).
+            queryClient.setQueryData<PluginRuntimeManifestDto>(pluginKeys.runtime(sourceKey(source)), (current) => (current ? { ...current, previewOn: data.previewOn } : current))
             void queryClient.invalidateQueries({ queryKey: pluginKeys.runtime(sourceKey(source)) })
         },
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível alterar a prévia")),
