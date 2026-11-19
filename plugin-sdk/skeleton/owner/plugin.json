@@ -1,0 +1,15 @@
+{
+  "id": "__PLUGIN_ID__",
+  "name": "__PLUGIN_NAME__",
+  "description": "",
+  "apiVersion": "1.0",
+  "scope": "owner",
+  "entries": { "server": "server/index.ts", "client": "client/index.tsx" },
+  "slots": [{ "slot": "dashboard.widgets", "export": "Widget", "title": "__PLUGIN_NAME__" }],
+  "pages": [],
+  "nav": [],
+  "routes": [{ "method": "GET", "path": "/status" }],
+  "tools": ["status"],
+  "crons": [],
+  "services": ["tools", "routes", "log", "sdk"]
+}

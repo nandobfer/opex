@@ -80,7 +80,8 @@ export function skeletonFiles(sdk: PluginSourceFile[], target: { pluginId: strin
 /** Arquivos de ambiente na raiz da pasta (vêm do template do SDK; não voltam para a versão). */
 export function environmentFiles(sdk: PluginSourceFile[]): PluginSourceFile[] {
     const prefix = "template/"
-    return sdk.filter((file) => file.path.startsWith(prefix)).map((file) => ({ path: file.path.slice(prefix.length), content: file.content }))
+    // `gitignore` sem ponto no SDK: com o ponto, ele valeria dentro do próprio repositório do Opex.
+    return sdk.filter((file) => file.path.startsWith(prefix)).map((file) => ({ path: file.path.slice(prefix.length) === "gitignore" ? ".gitignore" : file.path.slice(prefix.length), content: file.content }))
 }
 
 /** Comandos da pasta de trabalho: `git init`, commit base e a ref `origin/opex-base` (base do diff). */
