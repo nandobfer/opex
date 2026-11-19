@@ -1032,8 +1032,8 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
   ação pode vir do portal, quando o admin do cliente aprova a prévia de um plugin de cliente
   (`approvePluginPreviewFromPortal`).
 - **Testes do plugin** (`fixing_ci`, sem turno do agente): o Opex roda `npx vitest run` na pasta pelo
-  shell do OpenCode (instala as dependências na primeira vez; teto de 15 min). "No test files found"
-  não bloqueia.
+  shell do OpenCode (instala as dependências na primeira vez; teto de 15 min). Plugin sem testes
+  falha como teste que não passou (o agente precisa escrevê-los).
   - Falhou: turno de correção (`pluginTestsFixPrompt`) com o mesmo limite de correções do CI da
     central (`ciFixLimit`, sem limite = até passar). Com a aprovação mantida, a versão corrigida é
     publicada na prévia e testada de novo, sem pedir nova aprovação.

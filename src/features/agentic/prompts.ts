@@ -190,7 +190,7 @@ export function pluginCompileFixPrompt(issues: readonly string[], workDir: strin
 /** Correção depois de falha nos testes do plugin (etapa "Testes do plugin"). */
 export function pluginTestsFixPrompt(output: string, workDir: string): string {
     return [
-        "Os testes do plugin (Vitest, rodados pelo Opex na pasta de trabalho) falharam antes da consolidação. Corrija o plugin (ou o teste, se ele estiver errado) e responda com um resumo.",
+        "Os testes do plugin (Vitest, rodados pelo Opex na pasta de trabalho) falharam antes da consolidação. Corrija o plugin (ou o teste, se ele estiver errado; sem testes, escreva-os) e responda com um resumo.",
         `- Pasta: ${workDir}. Rode \`npx vitest run\` até passar. Sem push nem PR.`,
         "",
         "## Saída dos testes (fim)",

@@ -45,7 +45,7 @@ import {
     type WorkbenchContext,
 } from "../prompts"
 import type { CiFailure } from "../ci"
-import { PLUGIN_BASE_BRANCH, PLUGIN_COMPILE_ATTEMPTS_MAX, PLUGIN_WORK_BRANCH, noPluginTests, pluginTestsDecision } from "../plugin-flow"
+import { PLUGIN_BASE_BRANCH, PLUGIN_COMPILE_ATTEMPTS_MAX, PLUGIN_WORK_BRANCH, pluginTestsDecision } from "../plugin-flow"
 import { buildResultSchema, ciFixResultSchema, conflictResultSchema, prResultSchema, type AgenticCi, type AgenticColumns, type CentralConfig, type FormReplyInput, type PermissionReplyInput, type SetWorkbenchStageInput, type StartWorkbenchModelsInput, type WorkbenchModelInput, type WorkbenchPreviewInput } from "../schemas"
 import type { RefineWorkbenchResultDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
 import { logger } from "@/lib/logger"
@@ -540,8 +540,7 @@ async function pluginTestsTurn(loaded: Loaded): Promise<TurnPlan | null> {
     if (!workDir) throw new Error("A mesa de plugin ficou sem a pasta de trabalho")
     notice("info", "Rodando os testes do plugin (Vitest) na pasta de trabalho.")
     const result = await flow.runPluginTests(workDir)
-    const exitCode = result.exitCode !== 0 && noPluginTests(result.output) ? 0 : result.exitCode
-    if (result.exitCode !== 0 && exitCode === 0) notice("warn", "O plugin não tem testes: seguindo para a consolidação.")
+    const exitCode = result.exitCode
     const attempts = fresh.plugin?.testAttempts ?? 0
     // Mesmo limite de correções do CI do PR (sem limite configurado, corrige até passar ou o usuário parar).
     const limit = loaded.ci.fixCi ? (loaded.ci.ciFixLimit ?? Number.POSITIVE_INFINITY) : 0

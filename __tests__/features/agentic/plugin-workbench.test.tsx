@@ -11,7 +11,7 @@ import { StageSteps } from '@/features/agentic/components/workbench/StageSteps'
 import { manualStageBlock, workbenchActions } from '@/features/agentic/logic'
 import { workbenchActionItems } from '@/features/agentic/workbench-action-items'
 import { workbenchStageLabel } from '@/features/agentic/constants'
-import { noPluginTests, pluginPreviewPath, pluginTestsDecision, pluginWorkDirFor } from '@/features/agentic/plugin-flow'
+import { pluginPreviewPath, pluginTestsDecision, pluginWorkDirFor } from '@/features/agentic/plugin-flow'
 import { pluginImplementPrompt, pluginPlanningNotes } from '@/features/agentic/prompts'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
 import { environmentFiles, skeletonFiles, workspaceInitCommand } from '@/features/agentic/server/plugin-workflow'
@@ -54,11 +54,10 @@ describe('regras puras do fluxo de plugin', () => {
     expect(pluginPreviewPath({ pluginId: 'relogio', scope: 'owner' }, { pages: [], slots: [{ slot: 'task.panel', export: 'T', order: 1 }] })).toBe('/tarefas')
   })
 
-  it('testes: passou consolida; falhou corrige até o limite; sem testes não bloqueia', () => {
+  it('testes: passou consolida; falhou (inclusive sem testes) corrige até o limite', () => {
     expect(pluginTestsDecision(0, 0, 3)).toBe('consolidate')
     expect(pluginTestsDecision(1, 2, 3)).toBe('fix')
     expect(pluginTestsDecision(1, 3, 3)).toBe('fail')
-    expect(noPluginTests('No test files found, exiting with code 1')).toBe(true)
   })
 
   it('o esqueleto troca id/nome; o ambiente traz o .gitignore com ponto; o git marca o commit base', () => {

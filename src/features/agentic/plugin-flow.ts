@@ -40,6 +40,3 @@ export function pluginTestsDecision(exitCode: number | null, attempts: number, m
     if (exitCode === 0) return "consolidate"
     return attempts < maxAttempts ? "fix" : "fail"
 }
-
-/** A saída dos testes indica que não há teste nenhum (Vitest sai com 1 e "No test files found"). */
-export const noPluginTests = (output: string) => /No test files found/i.test(output)
