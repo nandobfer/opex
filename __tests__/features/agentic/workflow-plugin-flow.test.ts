@@ -8,6 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const mocks = vi.hoisted(() => ({
+  controller: null as AbortController | null,
   prepareHub: vi.fn(),
   publish: vi.fn(),
   publishAgentic: vi.fn(async () => undefined),
@@ -82,7 +83,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
   prepareHub: mocks.prepareHub,
   publishWorkbenchEvent: mocks.publish,
   isWorkbenchActive: () => false,
-  markWorkbenchActive: vi.fn(),
+  markWorkbenchActive: (_id: string, controller: AbortController) => void (mocks.controller = controller),
   clearWorkbenchActive: vi.fn(),
   abortWorkbenchRun: vi.fn(),
   dropWorkbenchEvents: vi.fn(),
@@ -289,7 +290,7 @@ describe('aprovação, testes do plugin e consolidação', () => {
     const wb = await workbench({ stage: 'preview', previewUrl: '/dashboard', worktreePath: WORKDIR, plugin: pluginState({ pluginId: 'relogio', workDir: WORKDIR, draftVersionId: 'v1' }) })
     await approve(wb._id)
     await waitForStage('done')
-    expect(mocks.runTests).toHaveBeenCalledWith(WORKDIR)
+    expect(mocks.runTests).toHaveBeenCalledWith(WORKDIR, expect.any(AbortSignal))
     expect(mocks.consolidate).toHaveBeenCalledTimes(1)
     expect(model.docs[0]!.pr).toBeNull()
     expect(stages()).toEqual([])
@@ -320,6 +321,19 @@ describe('aprovação, testes do plugin e consolidação', () => {
     expect(mocks.consolidate).toHaveBeenCalledTimes(2)
     expect(mocks.runTests).toHaveBeenCalledTimes(2)
     // Nenhum turno de limpeza do agente: a mesa só conclui depois de consolidar.
+    expect(stages()).toEqual([])
+  })
+
+  it('Parar durante os testes: mesmo que passem, a versão não é consolidada e a mesa fica parada em Testes do plugin', async () => {
+    mocks.runTests.mockImplementationOnce(async (_dir: string, signal: AbortSignal) => {
+      mocks.controller?.abort('Interrompido pelo usuário')
+      expect(signal.aborted).toBe(true)
+      return { exitCode: 0, output: 'ok' }
+    })
+    const wb = await workbench({ stage: 'preview', previewUrl: '/dashboard', worktreePath: WORKDIR, plugin: pluginState({ pluginId: 'relogio', workDir: WORKDIR, draftVersionId: 'v1' }) })
+    await approve(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]).toMatchObject({ stage: 'fixing_ci', runState: 'interrupted' }))
+    expect(mocks.consolidate).not.toHaveBeenCalled()
     expect(stages()).toEqual([])
   })
 

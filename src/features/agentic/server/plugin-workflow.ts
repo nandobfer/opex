@@ -192,9 +192,10 @@ export async function publishPluginPreview(doc: IAgenticWorkbench): Promise<{ pr
 }
 
 /** Testes do plugin no host (comando determinístico, sem agente): código de saída e o fim da saída. */
-export async function runPluginTests(workDir: string): Promise<{ exitCode: number | null; output: string }> {
+export async function runPluginTests(workDir: string, signal?: AbortSignal): Promise<{ exitCode: number | null; output: string }> {
     const h = await host()
-    const result = await h.run(`cd ${shellQuote(workDir)} && (test -d node_modules || pnpm install --silent || npm install --silent) && npx vitest run --reporter=dot`, PLUGIN_TESTS_TIMEOUT_MS)
+    // Desacoplado do shell e com o sinal: o "Parar" da mesa encerra o comando no host.
+    const result = await h.run(`cd ${shellQuote(workDir)} && (test -d node_modules || pnpm install --silent || npm install --silent) && npx vitest run --reporter=dot`, PLUGIN_TESTS_TIMEOUT_MS, { detached: true, signal })
     return { exitCode: result.exitCode, output: result.output }
 }
 

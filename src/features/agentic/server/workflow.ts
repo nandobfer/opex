@@ -569,7 +569,7 @@ async function pluginCompileTurn(loaded: Loaded, implementerText: string): Promi
  * trabalho pelo shell do OpenCode (sem agente). Passou → consolida a versão como `stable` e conclui a
  * mesa; falhou → turno de correção do agente desenvolvedor, até o limite de tentativas do CI.
  */
-async function pluginTestsTurn(loaded: Loaded): Promise<TurnPlan | null> {
+async function pluginTestsTurn(loaded: Loaded, controller: AbortController): Promise<TurnPlan | null> {
     const { doc } = loaded
     const id = String(doc._id)
     const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
@@ -578,7 +578,12 @@ async function pluginTestsTurn(loaded: Loaded): Promise<TurnPlan | null> {
     const workDir = fresh.plugin?.workDir
     if (!workDir) throw new Error("A mesa de plugin ficou sem a pasta de trabalho")
     notice("info", "Rodando os testes do plugin (Vitest) na pasta de trabalho.")
-    const result = await flow.runPluginTests(workDir)
+    const result = await flow.runPluginTests(workDir, controller.signal)
+    // "Parar" durante os testes: nada de correção nem de consolidação; a mesa fica parada em "Testes do plugin".
+    if (controller.signal.aborted) {
+        await update(doc, { runState: "interrupted", error: errorText(controller.signal.reason ?? "Interrompido") })
+        return null
+    }
     const exitCode = result.exitCode
     const attempts = fresh.plugin?.testAttempts ?? 0
     // Mesmo limite de correções do CI do PR (sem limite configurado, corrige até passar ou o usuário parar).
@@ -852,7 +857,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             }
             if (turn.stage === "fixing_ci" && isPluginDoc(loaded.doc)) {
                 // Mesa Plugin (OPE-172): testes do plugin no host e consolidação (sem turno do agente).
-                next = await pluginTestsTurn(await loadAll(id))
+                next = await pluginTestsTurn(await loadAll(id), controller)
                 turn = controller.signal.aborted ? null : next
                 continue
             }
