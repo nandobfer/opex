@@ -69,6 +69,33 @@ beforeEach(() => {
 afterEach(cleanup)
 
 describe('seção MCPs do Agente Opex', () => {
+  it('OAuth: selo na lista, painel com Autorizar no MCP salvo e cabeçalho Authorization recusado', async () => {
+    const oauthServer: OpexMcpServerDto = {
+      ...SERVER,
+      headers: [],
+      auth: 'oauth',
+      oauth: { status: 'needs_auth', clientId: '', hasClientSecret: false, scope: '', dynamicClient: true, expiresAt: null, authorizedAt: null, lastError: null },
+    }
+    mocks.state.data = [oauthServer]
+    render(<OpexMcpSection />)
+    expect(screen.getByText('OAuth · Precisa autorizar')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Editar' }))
+    expect(screen.getByTestId('opex-mcp-oauth-panel')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Autorizar' }))
+    expect(mocks.startOauth).toHaveBeenCalledWith(oauthServer.id)
+    fireEvent.click(screen.getByRole('button', { name: 'Desconectar' }))
+    expect(screen.getByText('Desconectar o OAuth do MCP GitHub?')).toBeTruthy()
+  })
+
+  it('OAuth em MCP novo pede para salvar antes de autorizar', () => {
+    mocks.state.data = []
+    render(<OpexMcpSection />)
+    fireEvent.click(screen.getAllByRole('button', { name: /Cadastrar MCP/ })[0]!)
+    fireEvent.click(screen.getByRole('radio', { name: 'OAuth' }))
+    expect(screen.getByText(/Salve o MCP para autorizar/)).toBeTruthy()
+    expect(screen.queryByTestId('opex-mcp-oauth-panel')).toBeNull()
+  })
+
   it('lista os MCPs com transporte, endereço sem a query, clientes e falha da última conexão', () => {
     mocks.state.data = [{ ...SERVER, lastError: 'Sem resposta em 10 s' }]
     render(<OpexMcpSection />)
