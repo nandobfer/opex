@@ -165,6 +165,29 @@ describe("autorização pela API do OpenCode", () => {
         expect(holder.events).toContainEqual(["opencode-resources-updated", { kind: "mcp", scope: "global" }])
     })
 
+    it("regressão: consultas concorrentes durante a conclusão veem 'concluído' e a conclusão roda uma vez", async () => {
+        const { ctx, client, setConnections } = fakeCtx()
+        await startMcpOauth(ctx, "global", "linear", { id: "local", origin: "ui" })
+        setConnections([
+            { type: "credential", id: "old", label: "linear", method: "oauth" },
+            { type: "credential", id: "new", label: "linear", method: "oauth" },
+        ])
+        let release = () => {}
+        client.mcp.connect.mockImplementationOnce(() => new Promise<undefined>((resolve) => (release = () => resolve(undefined))))
+        const first = mcpOauthStatus(ctx, "global", "linear", "att-1")
+        const second = mcpOauthStatus(ctx, "global", "linear", "att-1")
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        release()
+        expect(await Promise.all([first, second])).toEqual([
+            { status: "complete", message: null },
+            { status: "complete", message: null },
+        ])
+        expect(client.credential.remove).toHaveBeenCalledTimes(1)
+        expect(holder.audit).toHaveLength(1)
+        // Depois de concluída, a tentativa ainda responde "concluído" (sem 404 no polling).
+        expect(await mcpOauthStatus(ctx, "global", "linear", "att-1")).toEqual({ status: "complete", message: null })
+    })
+
     it("URL de outra tentativa é recusada sem chamar o host", async () => {
         const { ctx, run } = fakeCtx()
         await startMcpOauth(ctx, "global", "linear", { id: "local", origin: "ui" })

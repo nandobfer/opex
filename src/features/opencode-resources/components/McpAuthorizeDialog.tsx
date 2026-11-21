@@ -60,7 +60,8 @@ function AuthorizeBody({ id, onClose }: { id: string; onClose: () => void }) {
 function AttemptStep({ id, attempt, onClose }: { id: string; attempt: McpOauthAttemptDto; onClose: (state: string | undefined) => void }) {
     const status = useMcpOauthStatus(id, attempt.attemptId)
     const complete = useCompleteMcpOauth()
-    const state = status.isError ? "failed" : (complete.data?.status ?? status.data?.status ?? "pending")
+    // A conclusão confirmada pelo "Concluir" vale mais que uma consulta que falhou no meio da gravação.
+    const state = complete.data?.status === "complete" ? "complete" : status.isError ? "failed" : (complete.data?.status ?? status.data?.status ?? "pending")
     const message = status.isError ? apiErrorMessage(status.error, "Não foi possível consultar o login no OpenCode.") : (complete.data?.message ?? status.data?.message)
     const pasteField = attempt.mode === "code" ? "code" : "callbackUrl"
     const form = useForm<McpOauthCompleteInput>({ resolver: zodResolver(mcpOauthCompleteSchema), mode: "onChange", defaultValues: {} })

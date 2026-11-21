@@ -35,6 +35,7 @@ import { opexMcpServerInputSchema, type OpexMcpServerInput } from '@/features/op
 import type { IOpexMcpOauth, IOpexMcpOauthPending } from '@/lib/db/models/Opex'
 import { POST as startRoute } from '@/app/api/opex/mcp-servers/[id]/oauth/route'
 import { GET as callbackRoute } from '@/app/api/opex/mcp-servers/oauth/callback/route'
+import { requireAdminSession } from '@/features/auth/server/context'
 
 const KEY = Buffer.alloc(32, 9).toString('base64')
 const MCP_URL = 'https://mcp.test/mcp'
@@ -261,6 +262,43 @@ describe('OAuth dos MCPs do Agente Opex', () => {
     expect(JSON.stringify(merged.clientSecret)).not.toContain('s3')
   })
 
+  it('regressão: editar o formulário não devolve ao banco um token renovado por um turno no meio do salvamento', async () => {
+    const server = await createMcpServer(baseInput(), 'local')
+    const url = await authorizeUrl(server.id)
+    await finishMcpOauth({ state: url.searchParams.get('state'), code: 'codigo-bom', error: null, errorDescription: null, iss: null }, 'local')
+    const collection = servers()
+    const original = collection.updateOne.bind(collection)
+    // Um turno renova o token entre a leitura do formulário e a gravação.
+    const renewDuringSave = async () => {
+      const headless = createMcpOauthProvider(server.id, { ...docOf(server.id).oauth }, { mode: 'headless' })
+      await auth(headless, { serverUrl: MCP_URL })
+    }
+    let renewed = false
+    collection.updateOne = (async (filter: Record<string, unknown>, update: Record<string, unknown>, ...rest: unknown[]) => {
+      if (!renewed && !Object.keys(filter).some((key) => key.startsWith('oauth'))) {
+        renewed = true
+        await renewDuringSave()
+      }
+      return (original as (...args: unknown[]) => Promise<unknown>)(filter, update, ...rest)
+    }) as typeof collection.updateOne
+    const renewedVersion = async () => docOf(server.id).oauth.tokenVersion
+    await updateMcpServer(server.id, baseInput({ description: 'editado', oauth: { clientId: '', clientSecret: '', scope: 'read' } }), 'local')
+    const doc = docOf(server.id)
+    expect(renewed).toBe(true)
+    expect(doc.oauth.status).toBe('authorized')
+    expect(doc.oauth.scope).toBe('read')
+    expect(doc.oauth.tokenVersion).toBe(await renewedVersion())
+    // O token gravado é o da renovação (rt-2), não o lido antes do salvamento (rt-1).
+    const provider = createMcpOauthProvider(server.id, { ...doc.oauth }, { mode: 'headless' })
+    expect((await provider.tokens())?.refresh_token).toBe('rt-2')
+
+    // Invalidação (URL nova) continua valendo mesmo com renovação concorrente.
+    renewed = false
+    await updateMcpServer(server.id, baseInput({ url: 'https://mcp.test/v3/mcp' }), 'local')
+    expect(renewed).toBe(true)
+    expect(docOf(server.id).oauth).toMatchObject({ tokens: null, status: 'not_authorized' })
+  })
+
   it('schema: OAuth proíbe o cabeçalho Authorization (vem do token) e é ignorado no stdio', () => {
     expect(opexMcpServerInputSchema.safeParse({ ...baseInput(), headers: [{ key: 'Authorization', value: 'x' }] }).success).toBe(false)
     expect(opexMcpServerInputSchema.safeParse({ ...baseInput(), headers: [{ key: 'X-Workspace', value: 'x' }] }).success).toBe(true)
@@ -288,6 +326,21 @@ describe('rotas do OAuth dos MCPs (origem pública)', () => {
     const location = new URL(res.headers.get('location')!)
     expect(location.origin).toBe('https://opex.publico.dev')
     expect(location.searchParams.get('oauth')).toBe('ok')
+  })
+
+  it('retorno sem a sessão do dono é recusado: não troca o código nem grava token', async () => {
+    const server = await createMcpServer(baseInput(), 'local')
+    const url = await authorizeUrl(server.id, 'https://opex.publico.dev')
+    const { DomainError } = await import('@/lib/api/route')
+    vi.mocked(requireAdminSession).mockRejectedValueOnce(new DomainError(401, 'Sessão ausente ou expirada.', 'UNAUTHENTICATED'))
+    const req = new NextRequest(`http://0.0.0.0:3100/api/opex/mcp-servers/oauth/callback?code=codigo-bom&state=${encodeURIComponent(url.searchParams.get('state')!)}`, { headers: { 'x-forwarded-host': 'opex.publico.dev', 'x-forwarded-proto': 'https' } })
+    const res = await callbackRoute(req)
+    const location = new URL(res.headers.get('location')!)
+    expect(location.searchParams.get('oauth')).toBe('erro')
+    expect(as.tokenRequests).toHaveLength(0)
+    expect(docOf(server.id).oauth.tokens).toBeNull()
+    // O pedido continua intacto (não foi consumido por quem não tem a sessão).
+    expect(docOf(server.id).oauth.pending).not.toBeNull()
   })
 
   it('retorno inválido volta com erro e mensagem, sem gravar token', async () => {

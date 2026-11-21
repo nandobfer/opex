@@ -30,6 +30,8 @@ interface PendingAttempt {
     expiresAt: number
     actorId: string
     origin: string
+    /** Conclusão em andamento/feita: consultas concorrentes esperam por ela e veem "concluído". */
+    settling?: Promise<void>
 }
 
 const globalForAttempts = globalThis as unknown as { opencodeMcpOauthAttempts?: Map<string, PendingAttempt> }
@@ -100,8 +102,16 @@ function attemptOf(attemptId: string, scope: string, name: string): PendingAttem
  * Depois de concluir: uma autorização nova substitui as anteriores do mesmo MCP (credenciais OAuth
  * antigas saem), reconecta o MCP, audita e avisa a tela.
  */
-async function settle(ctx: ScopeContext, attemptId: string, attempt: PendingAttempt) {
-    attempts.delete(attemptId)
+function settle(ctx: ScopeContext, attempt: PendingAttempt): Promise<void> {
+    // Uma conclusão por tentativa; a tentativa fica no mapa (até expirar) para quem consultar depois.
+    attempt.settling ??= settleOnce(ctx, attempt).catch((error: unknown) => {
+        attempt.settling = undefined
+        throw error
+    })
+    return attempt.settling
+}
+
+async function settleOnce(ctx: ScopeContext, attempt: PendingAttempt) {
     const connections = oauthConnections(await integrationOf(ctx, attempt.integrationId))
     const created = connections.filter((item) => !attempt.beforeIds.includes(item.id))
     if (created.length) {
@@ -114,8 +124,12 @@ async function settle(ctx: ScopeContext, attemptId: string, attempt: PendingAtte
 /** Situação da tentativa (a tela consulta até concluir); ao concluir, acerta credenciais e conexão. */
 export async function mcpOauthStatus(ctx: ScopeContext, scope: string, name: string, attemptId: string): Promise<McpOauthStatusDto> {
     const attempt = attemptOf(attemptId, scope, name)
+    if (attempt.settling) {
+        await attempt.settling
+        return { status: "complete", message: null }
+    }
     const data = (await ctx.host.client.integration.oauth.status({ integrationID: attempt.integrationId, attemptID: attemptId, location: ctx.location })).data
-    if (data.status === "complete") await settle(ctx, attemptId, attempt)
+    if (data.status === "complete") await settle(ctx, attempt)
     else if (data.status !== "pending") attempts.delete(attemptId)
     return { status: data.status, message: "message" in data && typeof data.message === "string" ? data.message : null }
 }

@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     startState: { data: undefined as unknown, isError: false, error: null as unknown },
     status: { data: { status: "pending", message: null } as unknown, isError: false, error: null },
     complete: vi.fn(),
+    completeData: undefined as unknown,
     cancel: vi.fn(),
 }))
 vi.mock("framer-motion", () => framerMotionMock())
@@ -19,7 +20,7 @@ vi.mock("sonner", () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
 vi.mock("@/features/opencode-resources/hooks/useMcpOauth", () => ({
     useStartMcpOauth: () => ({ mutate: mocks.start, isPending: false, ...mocks.startState }),
     useMcpOauthStatus: () => mocks.status,
-    useCompleteMcpOauth: () => ({ mutate: mocks.complete, isPending: false, data: undefined }),
+    useCompleteMcpOauth: () => ({ mutate: mocks.complete, isPending: false, data: mocks.completeData }),
     useCancelMcpOauth: () => ({ mutate: mocks.cancel }),
     useDisconnectMcpOauth: () => ({ mutate: vi.fn(), isPending: false }),
 }))
@@ -55,6 +56,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.startState = { data: ATTEMPT, isError: false, error: null }
     mocks.status = { data: { status: "pending", message: null }, isError: false, error: null }
+    mocks.completeData = undefined
 })
 afterEach(cleanup)
 
@@ -84,6 +86,15 @@ describe("diálogo Autorizar", () => {
         await waitFor(() => expect((screen.getByRole("button", { name: "Concluir" }) as HTMLButtonElement).disabled).toBe(false))
         fireEvent.click(screen.getByRole("button", { name: "Concluir" }))
         await waitFor(() => expect(mocks.complete).toHaveBeenCalledWith({ id: "mcp-1", attemptId: "att-1", input: { callbackUrl: "http://127.0.0.1:36113/callback?code=c&state=s" } }))
+    })
+
+    it("regressão: 'Concluir' confirmado fecha mesmo se a consulta de situação falhou no meio", () => {
+        const onClose = vi.fn()
+        mocks.status = { data: undefined, isError: true, error: new Error("404") } as never
+        mocks.completeData = { status: "complete", message: null }
+        render(<McpAuthorizeDialog target={MCP} onClose={onClose} />)
+        expect(onClose).toHaveBeenCalled()
+        expect(screen.queryByText("A autorização falhou.")).toBeNull()
     })
 
     it("cancelar com o login pendente cancela a tentativa no OpenCode", () => {

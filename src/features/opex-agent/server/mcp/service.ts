@@ -217,6 +217,36 @@ export function mergeMcpOauth(input: OpexMcpOauthInput, existing: IOpexMcpOauth 
     return { ...next, client: null, tokens: null, expiresAt: null, server: null, pending: null, status: "not_authorized", authorizedAt: null, lastError: null, tokenVersion: (base.tokenVersion ?? 0) + 1 }
 }
 
+/** A edição invalidou a autorização (endereço ou client id novos): `mergeMcpOauth` avança a geração. */
+const isOauthReset = (before: IOpexMcpOauth, next: IOpexMcpOauth) => (next.tokenVersion ?? 0) !== (before.tokenVersion ?? 0)
+
+/**
+ * Campos de `oauth` gravados junto com a edição. Sem invalidação, só os editáveis (`$set` pontual): o
+ * subdocumento inteiro lido antes devolveria ao banco um token que um turno acabou de renovar. A
+ * invalidação vai à parte (`resetMcpOauth`), condicionada à geração dos tokens.
+ */
+function oauthEditSet(before: IOpexMcpOauth | null, next: IOpexMcpOauth | null, reset: boolean): Record<string, unknown> {
+    if (!next || next === before) return {}
+    if (!before) return { oauth: next }
+    if (reset) return {}
+    return { "oauth.clientId": next.clientId, "oauth.clientSecret": next.clientSecret, "oauth.scope": next.scope }
+}
+
+/** Invalida a autorização sem perder uma renovação concorrente: grava só se a geração não mudou; senão relê. */
+async function resetMcpOauth(id: string, next: IOpexMcpOauth): Promise<void> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+        const current = (await OpexMcpServer.findById(id).select({ oauth: 1 }).lean<{ oauth?: IOpexMcpOauth | null }>())?.oauth
+        const version = current?.tokenVersion ?? 0
+        const result = await OpexMcpServer.updateOne(
+            { _id: id, "oauth.tokenVersion": version },
+            { $set: { "oauth.clientId": next.clientId, "oauth.clientSecret": next.clientSecret, "oauth.scope": next.scope, "oauth.client": null, "oauth.tokens": null, "oauth.expiresAt": null, "oauth.server": null, "oauth.pending": null, "oauth.status": "not_authorized", "oauth.authorizedAt": null, "oauth.lastError": null, "oauth.tokenVersion": version + 1 } },
+            { timestamps: false },
+        )
+        if ((result.matchedCount ?? 0) > 0) return
+    }
+    log.warn({ mcpId: id }, "[opex-mcp] não foi possível invalidar o OAuth (renovações concorrentes)")
+}
+
 function fieldsOf(input: OpexMcpServerInput, existing: Pick<IOpexMcpServer, "headers" | "env" | "url" | "transport"> & Partial<Pick<IOpexMcpServer, "oauth">> | null) {
     const stdio = input.transport === "stdio"
     const oauth = usesMcpOauth(input)
@@ -258,17 +288,21 @@ export async function updateMcpServer(id: string, input: OpexMcpServerInput, act
     await assertSlugFree(input.slug, id)
     const fields = fieldsOf(input, before)
     const connectionChanged = before.transport !== fields.transport || before.url !== fields.url || before.command !== fields.command
+    const { oauth, ...rest } = fields
+    const oauthReset = Boolean(oauth && before.oauth && isOauthReset(before.oauth, oauth))
     await OpexMcpServer.updateOne(
         { _id: before._id },
         {
             $set: {
-                ...fields,
+                ...rest,
+                ...oauthEditSet(before.oauth ?? null, oauth, oauthReset),
                 ...(input.tools ? { tools: input.tools, toolsSyncedAt: new Date() } : {}),
                 // Endereço ou comando novo: o erro antigo deixa de valer até a próxima conexão.
                 ...(connectionChanged ? { lastError: null, lastCheckedAt: null } : {}),
             },
         },
     )
+    if (oauth && oauthReset) await resetMcpOauth(id, oauth)
     await recordAudit({ userId: actorId, entidade: OPEX_MCP_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: auditSnapshot(before), depois: auditSnapshot(fields) })
     await afterChange(id)
     return getMcpServer(id)
