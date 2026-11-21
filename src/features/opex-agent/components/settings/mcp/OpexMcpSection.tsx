@@ -11,7 +11,7 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import type { OpexMcpServerDto } from "../../../mcp"
-import { useDeleteOpexMcpServer, useOpexMcpRealtime, useOpexMcpServers, useToggleOpexMcpServer } from "../../../hooks/useOpexMcpServers"
+import { useDeleteOpexMcpServer, useOpexMcpOauthReturn, useOpexMcpRealtime, useOpexMcpServers, useToggleOpexMcpServer } from "../../../hooks/useOpexMcpServers"
 import { OpexMcpDialog } from "./OpexMcpDialog"
 import { OpexMcpServerItem } from "./OpexMcpServerItem"
 
@@ -28,6 +28,7 @@ export function OpexMcpSection() {
     const [dialog, setDialog] = useState<DialogState>({ open: false })
     const [removing, setRemoving] = useState<OpexMcpServerDto | null>(null)
     useOpexMcpRealtime()
+    useOpexMcpOauthReturn()
 
     const servers = query.data ?? []
     const openNew = () => setDialog({ open: true, server: null })
@@ -39,7 +40,7 @@ export function OpexMcpSection() {
                     <CardTitle className="text-base">MCPs</CardTitle>
                     <CardDescription>
                         Servidores Model Context Protocol: as ferramentas dos MCPs habilitados entram para o agente em cada conversa, com o nome mcp_{"{identificador}"}_{"{ferramenta}"}. Um MCP que não conecta fica de fora do turno
-                        e o agente é avisado. Headers e variáveis são gravados cifrados e nunca voltam para a tela.
+                        e o agente é avisado. Headers, variáveis e tokens OAuth são gravados cifrados e nunca voltam para a tela.
                     </CardDescription>
                 </div>
                 <Button type="button" className="gap-1.5" onClick={openNew}>

@@ -1,7 +1,7 @@
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
-import { OpexMcpServer, type IOpexMcpSecret, type IOpexMcpServer } from "@/lib/db/models/Opex"
+import { OpexMcpServer, type IOpexMcpOauth, type IOpexMcpSecret, type IOpexMcpServer } from "@/lib/db/models/Opex"
 import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { decryptSecret, encryptSecret, isEncryptedSecret, isSecretBoxConfigured } from "@/lib/crypto/secretBox"
 import { loggerFor } from "@/lib/logger"
@@ -11,6 +11,9 @@ import {
     OPEX_MCP_EVENT,
     nextMcpConfirmations,
     safeMcpUrl,
+    usesMcpOauth,
+    type OpexMcpOauthInput,
+    type OpexMcpOauthStateDto,
     type OpexMcpSecretEntry,
     type OpexMcpServerDto,
     type OpexMcpServerInput,
@@ -18,7 +21,9 @@ import {
     type OpexMcpTestResultDto,
     type OpexMcpToolInfo,
 } from "../../mcp"
-import { closeMcp, connectMcp, describeMcpError, listMcpTools, toolInfosOf, type McpConnection } from "./connect"
+import { closeMcp, connectMcp, describeMcpError, isMcpAuthError, listMcpTools, toolInfosOf, type McpConnection } from "./connect"
+import { emptyMcpOauth, openJson, patchMcpOauth } from "./oauth-store"
+import type { StoredMcpClient } from "./oauth-provider"
 
 /**
  * Cadastro dos MCPs do Agente Opex (SOMENTE servidor). Headers e variáveis de ambiente ficam cifrados
@@ -54,7 +59,22 @@ async function clientCounts(): Promise<Map<string, number>> {
 
 const iso = (value: Date | null | undefined) => (value ? new Date(value).toISOString() : null)
 
+export function toMcpOauthDto(oauth: IOpexMcpOauth | null | undefined): OpexMcpOauthStateDto {
+    const state = oauth ?? emptyMcpOauth()
+    return {
+        status: state.status ?? "not_authorized",
+        clientId: state.clientId ?? "",
+        hasClientSecret: Boolean(state.clientId && isEncryptedSecret(state.clientSecret)),
+        scope: state.scope ?? "",
+        dynamicClient: !state.clientId && openJson<StoredMcpClient>(state.client)?.dynamic === true,
+        expiresAt: iso(state.expiresAt),
+        authorizedAt: iso(state.authorizedAt),
+        lastError: state.lastError ?? null,
+    }
+}
+
 export function toMcpServerDto(doc: ServerDoc, clientCount = 0): OpexMcpServerDto {
+    const oauth = usesMcpOauth(doc)
     return {
         id: String(doc._id),
         name: doc.name,
@@ -67,6 +87,8 @@ export function toMcpServerDto(doc: ServerDoc, clientCount = 0): OpexMcpServerDt
         args: doc.args ?? [],
         headers: (doc.headers ?? []).map((entry) => ({ key: entry.key, configured: isEncryptedSecret(entry.value) })),
         env: (doc.env ?? []).map((entry) => ({ key: entry.key, configured: isEncryptedSecret(entry.value) })),
+        auth: oauth ? "oauth" : "headers",
+        oauth: oauth ? toMcpOauthDto(doc.oauth) : null,
         confirmations: doc.confirmations ?? {},
         tools: doc.tools ?? [],
         toolsSyncedAt: iso(doc.toolsSyncedAt),
@@ -133,8 +155,10 @@ function plainSecrets(entries: readonly IOpexMcpSecret[]): Record<string, string
 }
 
 /** Conexão pronta (segredos decifrados) — nunca sai do servidor. */
-export function mcpConnectionOf(doc: Pick<IOpexMcpServer, "transport" | "url" | "command" | "args" | "headers" | "env">): McpConnection {
+export function mcpConnectionOf(doc: Pick<IOpexMcpServer, "transport" | "url" | "command" | "args" | "headers" | "env"> & Partial<Pick<IOpexMcpServer, "auth" | "oauth">> & { _id?: unknown }): McpConnection {
+    const oauth = usesMcpOauth({ transport: doc.transport, auth: doc.auth }) && doc._id ? { serverId: String(doc._id), state: doc.oauth ?? null } : undefined
     return {
+        ...(oauth ? { oauth } : {}),
         transport: doc.transport,
         url: doc.url ?? "",
         command: doc.command ?? "",
@@ -145,8 +169,11 @@ export function mcpConnectionOf(doc: Pick<IOpexMcpServer, "transport" | "url" | 
 }
 
 /** Resumo auditado: sem segredos, sem args (podem levar tokens) e sem query na URL. */
-function auditSnapshot(doc: Pick<IOpexMcpServer, "name" | "slug" | "enabled" | "transport" | "url" | "command" | "args" | "headers" | "env" | "confirmations">): Record<string, unknown> {
+function auditSnapshot(doc: Pick<IOpexMcpServer, "name" | "slug" | "enabled" | "transport" | "url" | "command" | "args" | "headers" | "env" | "confirmations"> & Partial<Pick<IOpexMcpServer, "auth" | "oauth">>): Record<string, unknown> {
+    const oauth = usesMcpOauth({ transport: doc.transport, auth: doc.auth })
     return {
+        autenticacao: doc.transport === "stdio" ? null : oauth ? "oauth" : "headers",
+        oauth: oauth ? { clientId: Boolean(doc.oauth?.clientId), clientSecret: Boolean(doc.oauth?.clientSecret), escopo: doc.oauth?.scope ?? "" } : null,
         nome: doc.name,
         identificador: doc.slug,
         habilitado: doc.enabled,
@@ -172,9 +199,35 @@ async function assertSlugFree(slug: string, exceptId?: string): Promise<void> {
 /** Argumentos sem as linhas vazias do formulário (um por linha). */
 const cleanArgs = (args: readonly string[]) => args.filter((arg) => arg.trim() !== "")
 
-function fieldsOf(input: OpexMcpServerInput, existing: Pick<IOpexMcpServer, "headers" | "env"> | null) {
+/**
+ * Subdocumento OAuth a partir do formulário. Endereço ou client id novos invalidam tokens, cliente
+ * registrado e pedido em andamento (as credenciais valem para aquele servidor e aquele cliente).
+ */
+export function mergeMcpOauth(input: OpexMcpOauthInput, existing: IOpexMcpOauth | null, connectionChanged: boolean): IOpexMcpOauth {
+    const base = existing ?? emptyMcpOauth()
+    const clientId = input.clientId.trim()
+    const reset = connectionChanged || clientId !== (base.clientId ?? "")
+    let clientSecret: IOpexMcpOauth["clientSecret"] = null
+    if (clientId && input.clientSecret) {
+        if (!isSecretBoxConfigured()) throw new DomainError(400, "Defina INTEGRATIONS_ENCRYPTION_KEY no servidor para gravar segredos de MCP.", "OPEX_MCP_ENCRYPTION_MISSING")
+        clientSecret = encryptSecret(input.clientSecret)
+    } else if (clientId && !reset) clientSecret = base.clientSecret ?? null
+    const next: IOpexMcpOauth = { ...base, clientId, clientSecret, scope: input.scope.trim() }
+    if (!reset) return next
+    return { ...next, client: null, tokens: null, expiresAt: null, server: null, pending: null, status: "not_authorized", authorizedAt: null, lastError: null, tokenVersion: (base.tokenVersion ?? 0) + 1 }
+}
+
+function fieldsOf(input: OpexMcpServerInput, existing: Pick<IOpexMcpServer, "headers" | "env" | "url" | "transport"> & Partial<Pick<IOpexMcpServer, "oauth">> | null) {
     const stdio = input.transport === "stdio"
+    const oauth = usesMcpOauth(input)
+    const urlChanged = !existing || existing.url !== input.url || existing.transport !== input.transport
     return {
+        auth: oauth ? ("oauth" as const) : ("headers" as const),
+        oauth: oauth
+            ? mergeMcpOauth(input.oauth, existing?.oauth ?? null, Boolean(existing) && urlChanged)
+            : existing?.oauth && urlChanged
+              ? mergeMcpOauth({ clientId: existing.oauth.clientId ?? "", clientSecret: "", scope: existing.oauth.scope ?? "" }, existing.oauth, true)
+              : (existing?.oauth ?? null),
         name: input.name,
         slug: input.slug,
         description: input.description,
@@ -258,13 +311,19 @@ export async function deleteMcpServer(id: string, actorId: string): Promise<{ de
  * Situação da última conexão (turno do agente ou teste). Só grava e avisa a tela quando algo mudou,
  * para não gerar um evento a cada turno.
  */
-export async function recordMcpStatus(id: string, status: { error: string | null; tools?: OpexMcpToolInfo[] }): Promise<void> {
+export async function recordMcpStatus(id: string, status: { error: string | null; tools?: OpexMcpToolInfo[]; authRequired?: boolean }): Promise<void> {
     try {
         await dbConnect()
-        const before = await OpexMcpServer.findById(id).select({ lastError: 1, tools: 1 }).lean<Pick<ServerDoc, "lastError" | "tools">>()
+        const before = await OpexMcpServer.findById(id).select({ lastError: 1, tools: 1, transport: 1, auth: 1, oauth: 1 }).lean<Pick<ServerDoc, "lastError" | "tools" | "transport" | "auth" | "oauth">>()
         if (!before) return
         const toolsChanged = status.tools !== undefined && JSON.stringify(status.tools) !== JSON.stringify(before.tools ?? [])
-        const changed = (before.lastError ?? null) !== status.error || toolsChanged
+        // OAuth: token recusado vira "precisa autorizar"; conexão boa depois disso volta a "autorizado".
+        let oauthChanged = false
+        if (usesMcpOauth(before) && before.oauth) {
+            const next = status.error === null ? "authorized" : status.authRequired ? "needs_auth" : null
+            if (next && before.oauth.status !== next) oauthChanged = await patchMcpOauth(id, { status: next, ...(next === "authorized" ? { lastError: null } : {}) })
+        }
+        const changed = (before.lastError ?? null) !== status.error || toolsChanged || oauthChanged
         await OpexMcpServer.updateOne(
             { _id: id },
             { $set: { lastError: status.error, lastCheckedAt: new Date(), ...(status.tools !== undefined ? { tools: status.tools, toolsSyncedAt: new Date() } : {}) } },
@@ -278,14 +337,22 @@ export async function recordMcpStatus(id: string, status: { error: string | null
 
 async function probe(connection: McpConnection): Promise<OpexMcpTestResultDto> {
     const startedAt = Date.now()
+    const failed = (error: unknown): OpexMcpTestResultDto => ({
+        ok: false,
+        tools: [],
+        error: describeMcpError(error),
+        durationMs: Date.now() - startedAt,
+        serverInfo: null,
+        ...(connection.oauth && isMcpAuthError(error) ? { authRequired: true } : {}),
+    })
     const client = await connectMcp(connection).catch((error: unknown) => error as Error)
-    if (client instanceof Error) return { ok: false, tools: [], error: describeMcpError(client), durationMs: Date.now() - startedAt, serverInfo: null }
+    if (client instanceof Error) return failed(client)
     try {
         const tools = toolInfosOf(await listMcpTools(client))
         const info = client.serverInfo
         return { ok: true, tools, error: null, durationMs: Date.now() - startedAt, serverInfo: info?.name ? `${info.name}${info.version ? ` ${info.version}` : ""}` : null }
     } catch (error) {
-        return { ok: false, tools: [], error: describeMcpError(error), durationMs: Date.now() - startedAt, serverInfo: null }
+        return failed(error)
     } finally {
         await closeMcp(client)
     }
@@ -295,7 +362,15 @@ async function probe(connection: McpConnection): Promise<OpexMcpTestResultDto> {
 export async function testMcpConnection(input: OpexMcpTestInput): Promise<OpexMcpTestResultDto> {
     const existing = input.id ? await loadDoc(input.id) : null
     const stdio = input.transport === "stdio"
+    if (usesMcpOauth(input)) {
+        // O token é do MCP salvo, emitido para o endereço salvo.
+        const blocked = !existing || !usesMcpOauth(existing) ? "Salve o MCP com OAuth e clique em Autorizar antes de testar." : existing.url !== input.url ? "Endereço alterado: salve e autorize de novo antes de testar." : null
+        if (blocked) return { ok: false, tools: [], error: blocked, durationMs: 0, serverInfo: null, authRequired: true }
+    }
     const connection = mcpConnectionOf({
+        _id: existing?._id,
+        auth: input.auth,
+        oauth: existing?.oauth ?? null,
         transport: input.transport,
         url: stdio ? "" : input.url,
         command: stdio ? input.command : "",
@@ -312,7 +387,7 @@ export async function testMcpConnection(input: OpexMcpTestInput): Promise<OpexMc
 export async function refreshMcpServer(id: string): Promise<OpexMcpTestResultDto> {
     const doc = await loadDoc(id)
     const result = await probe(mcpConnectionOf(doc))
-    await recordMcpStatus(id, result.ok ? { error: null, tools: result.tools } : { error: result.error })
+    await recordMcpStatus(id, result.ok ? { error: null, tools: result.tools } : { error: result.error, authRequired: result.authRequired === true })
     log.info({ mcp: doc.slug, ok: result.ok, tools: result.tools.length, durationMs: result.durationMs, err: result.error }, "[opex-mcp] conexão conferida")
     return result
 }

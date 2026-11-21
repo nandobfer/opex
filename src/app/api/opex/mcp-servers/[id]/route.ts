@@ -1,7 +1,7 @@
 import { ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
 import { getLocalUser } from "@/lib/local-user"
-import { opexMcpEnabledSchema, opexMcpServerInputSchema } from "@/features/opex-agent/mcp"
+import { opexMcpEnabledSchema, opexMcpServerRequestSchema } from "@/features/opex-agent/mcp"
 import { deleteMcpServer, getMcpServer, setMcpServerEnabled, updateMcpServer } from "@/features/opex-agent/server/mcp/service"
 
 export const runtime = "nodejs"
@@ -14,7 +14,7 @@ export const GET = withRoute<Params>(async ({ params }) => ok(await getMcpServer
 
 /** PUT …/[id] — edita o MCP (segredo vazio mantém o salvo). */
 export const PUT = withRoute<Params>(async ({ req, params }) => {
-    const body = await parseBody(req, opexMcpServerInputSchema)
+    const body = await parseBody(req, opexMcpServerRequestSchema)
     if (!body.ok) return body.response
     return ok(await updateMcpServer(params.id, body.data, getLocalUser().id))
 })

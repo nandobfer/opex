@@ -13,6 +13,8 @@ const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   test: vi.fn(),
   testData: undefined as unknown,
+  startOauth: vi.fn(),
+  disconnectOauth: vi.fn(),
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -23,6 +25,9 @@ vi.mock('@/features/opex-agent/hooks/useOpexMcpServers', () => ({
   useDeleteOpexMcpServer: () => ({ mutate: mocks.remove, isPending: false }),
   useSaveOpexMcpServer: () => ({ mutateAsync: mocks.save, isPending: false }),
   useTestOpexMcpServer: () => ({ mutateAsync: mocks.test, isPending: false, data: mocks.testData }),
+  useOpexMcpOauthReturn: () => {},
+  useStartOpexMcpOauth: () => ({ mutate: mocks.startOauth, isPending: false }),
+  useDisconnectOpexMcpOauth: () => ({ mutate: mocks.disconnectOauth, isPending: false }),
 }))
 
 import { OpexMcpSection } from '@/features/opex-agent/components/settings/mcp/OpexMcpSection'
@@ -40,6 +45,8 @@ const SERVER: OpexMcpServerDto = {
   args: [],
   headers: [{ key: 'Authorization', configured: true }],
   env: [],
+  auth: 'headers',
+  oauth: null,
   confirmations: {},
   tools: [
     { name: 'search', title: 'Buscar', description: 'Busca issues', annotations: { readOnlyHint: true } },

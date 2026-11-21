@@ -1,13 +1,14 @@
 "use client"
 
 import { useEffect } from "react"
+import { usePathname, useRouter, useSearchParams } from "next/navigation"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { OPEX_MCP_EVENT, type OpexMcpServerDto, type OpexMcpServerInput, type OpexMcpTestInput, type OpexMcpTestResultDto } from "../mcp"
+import { OPEX_MCP_EVENT, type OpexMcpOauthStartDto, type OpexMcpServerDto, type OpexMcpServerInput, type OpexMcpTestInput, type OpexMcpTestResultDto } from "../mcp"
 
 /** MCPs do Agente Opex (seção MCPs e aba do cliente). */
 
@@ -93,4 +94,50 @@ export function useTestOpexMcpServer() {
         mutationFn: async (input: OpexMcpTestInput) => unwrapApi((await api.post<ApiResponse<OpexMcpTestResultDto>>("/opex/mcp-servers/test", input)).data),
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível testar o MCP")),
     })
+}
+
+/** Leva o navegador à página de login do provedor OAuth (o retorno volta para a seção MCPs). */
+export function navigateTo(url: string): void {
+    window.location.assign(url)
+}
+
+/** Autorizar (OAuth): prepara o pedido no servidor e abre a página do provedor. */
+export function useStartOpexMcpOauth() {
+    return useMutation({
+        mutationFn: async (id: string) => unwrapApi((await api.post<ApiResponse<OpexMcpOauthStartDto>>(`/opex/mcp-servers/${id}/oauth`)).data),
+        onSuccess: (started) => navigateTo(started.url),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível iniciar a autorização")),
+    })
+}
+
+/** Desconectar o OAuth: revoga no provedor (quando ele permite) e apaga os tokens. */
+export function useDisconnectOpexMcpOauth() {
+    const queryClient = useQueryClient()
+    return useMutation({
+        mutationFn: async (id: string) => unwrapApi((await api.delete<ApiResponse<{ revoked: boolean }>>(`/opex/mcp-servers/${id}/oauth`)).data),
+        onSuccess: (result) => {
+            void queryClient.invalidateQueries({ queryKey: opexMcpServersKey })
+            toast.success(result.revoked ? "OAuth desconectado e revogado no provedor" : "OAuth desconectado")
+        },
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível desconectar o OAuth")),
+    })
+}
+
+/** Volta do provedor OAuth (`?oauth=ok|erro&mensagem=…`): avisa por toast e limpa a URL. */
+export function useOpexMcpOauthReturn(): void {
+    const params = useSearchParams()
+    const router = useRouter()
+    const pathname = usePathname()
+    const outcome = params.get("oauth")
+    const message = params.get("mensagem")
+    useEffect(() => {
+        if (outcome !== "ok" && outcome !== "erro") return
+        if (outcome === "ok") toast.success("MCP autorizado")
+        else toast.error(message || "Não foi possível autorizar o MCP")
+        const next = new URLSearchParams(params.toString())
+        for (const key of ["oauth", "mensagem", "mcp"]) next.delete(key)
+        const query = next.toString()
+        router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false })
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- reage só à chegada do retorno
+    }, [outcome])
 }

@@ -1,6 +1,6 @@
 import { Schema, model, models, type Model, type Types } from "mongoose"
 import type { OpexJobStatus, OpexJobUnit, OpexJobWhen } from "@/features/opex-agent/jobs"
-import type { OpexMcpToolInfo, OpexMcpTransport } from "@/features/opex-agent/mcp"
+import type { OpexMcpAuthMode, OpexMcpOauthStatus, OpexMcpToolInfo, OpexMcpTransport } from "@/features/opex-agent/mcp"
 import type { EncryptedSecret } from "@/lib/crypto/secretBox"
 import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "@/features/opex-agent/types"
 
@@ -272,6 +272,47 @@ export interface IOpexMcpSecret {
     value: EncryptedSecret
 }
 
+/** Pedido de autorização OAuth em andamento (state + verificador PKCE, cifrados; um por MCP). */
+export interface IOpexMcpOauthPending {
+    /** SHA-256 (hex) do `state`: localiza o pedido no retorno sem decifrar nada. */
+    stateHash: string
+    state: EncryptedSecret
+    codeVerifier: EncryptedSecret | null
+    redirectUri: string
+    expiresAt: Date
+    actorId: string
+}
+
+/** Servidor de autorização que emitiu as credenciais (sem segredos). */
+export interface IOpexMcpOauthServer {
+    issuer?: string
+    authorizationServerUrl: string
+    tokenEndpoint: string
+    revocationEndpoint?: string | null
+}
+
+/**
+ * OAuth de um MCP (OPE-176). Segredos (client secret, cliente registrado, tokens, state, verificador)
+ * cifrados com `secretBox`; nunca saem no DTO.
+ */
+export interface IOpexMcpOauth {
+    clientId: string
+    clientSecret: EncryptedSecret | null
+    scope: string
+    /** JSON cifrado: `{ info: OAuthClientInformation, redirectUri, dynamic }`. */
+    client: EncryptedSecret | null
+    /** JSON cifrado: `OAuthTokens`. */
+    tokens: EncryptedSecret | null
+    /** Geração dos tokens (gravação condicional entre renovações concorrentes). */
+    tokenVersion: number
+    expiresAt: Date | null
+    server: IOpexMcpOauthServer | null
+    pending: IOpexMcpOauthPending | null
+    status: OpexMcpOauthStatus
+    authorizedAt: Date | null
+    lastError: string | null
+}
+
 /** MCP (servidor Model Context Protocol) usado pelo Agente Opex. */
 export interface IOpexMcpServer {
     name: string
@@ -285,6 +326,9 @@ export interface IOpexMcpServer {
     args: string[]
     headers: IOpexMcpSecret[]
     env: IOpexMcpSecret[]
+    /** Autenticação do HTTP/SSE (ausente nos documentos antigos = `headers`). */
+    auth: OpexMcpAuthMode
+    oauth: IOpexMcpOauth | null
     /** "Pede confirmação" por ferramenta (nome original); ausente = padrão pela anotação. */
     confirmations: Record<string, boolean>
     tools: OpexMcpToolInfo[]
@@ -309,6 +353,8 @@ const OpexMcpServerSchema = new Schema<IOpexMcpServer>(
         args: { type: [String], default: [] },
         headers: { type: [OpexMcpSecretSchema], default: [] },
         env: { type: [OpexMcpSecretSchema], default: [] },
+        auth: { type: String, default: "headers" },
+        oauth: { type: Schema.Types.Mixed, default: null },
         confirmations: { type: Schema.Types.Mixed, default: {} },
         tools: { type: Schema.Types.Mixed, default: [] },
         toolsSyncedAt: { type: Date, default: null },
