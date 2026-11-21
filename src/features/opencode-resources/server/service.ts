@@ -7,12 +7,13 @@ import { toDomainError } from "@/features/opencode-accounts/server/service"
 import { OPENCODE_RESOURCE_AUDIT_ENTITY, OPENCODE_RESOURCES_UPDATED_EVENT, type OpencodeResourceKind } from "../constants"
 import { decodeResourceId, encodeResourceId, type ResourceKey } from "../ids"
 import type { McpSecretsInput, ResourceContentInput, ResourceCreateInput, ResourceInstallInput, ResourceUpdateManyInput } from "../schemas"
-import type { McpTestResultDto, OpencodeResourceDetailDto, OpencodeResourceDto, OpencodeScopeDto, ResourceMutationResultDto, ResourceUpdateManyResultDto } from "../types"
+import type { McpAuthorizationDto, McpOauthAttemptDto, McpOauthStatusDto, McpTestResultDto, OpencodeResourceDetailDto, OpencodeResourceDto, OpencodeScopeDto, ResourceMutationResultDto, ResourceUpdateManyResultDto } from "../types"
 import { rollbackTo } from "./backups"
 import { openScope, type ScopeContext } from "./context"
 import type { KindHandler, MutationEffect } from "./handler"
 import { agentHandler, commandHandler } from "./markdown-kinds"
 import { mcpHandler, setMcpSecrets, testMcp } from "./mcps"
+import { cancelMcpOauth, completeMcpOauth, disconnectMcpOauth, mcpAuthorization, mcpOauthStatus, startMcpOauth } from "./mcp-auth"
 import { pluginHandler } from "./plugins"
 import { listScopes } from "./scopes"
 import { skillHandler } from "./skills"
@@ -167,7 +168,50 @@ export async function testMcpById(id: string): Promise<McpTestResultDto> {
 /** Só os NOMES das variáveis/cabeçalhos alterados (auditoria sem valores). */
 function secretKeys(secrets: McpSecretsInput | undefined): Record<string, unknown> {
     if (!secrets) return {}
-    return { segredos: { environment: secrets.environment?.map((item) => item.key) ?? [], headers: secrets.headers?.map((item) => item.key) ?? [] } }
+    return {
+        segredos: {
+            environment: secrets.environment?.map((item) => item.key) ?? [],
+            headers: secrets.headers?.map((item) => item.key) ?? [],
+            ...(secrets.oauthClientSecret !== undefined ? { oauthClientSecret: secrets.oauthClientSecret === null ? "removido" : "alterado" } : {}),
+        },
+    }
+}
+
+function mcpKey(id: string): ResourceKey {
+    const key = parseResourceId(id)
+    if (key.kind !== "mcp") throw unsupported(key.kind, "autorizar")
+    return key
+}
+
+/** OAuth do MCP remoto (OPE-176): situação, início, acompanhamento, conclusão e desconexão. */
+export async function mcpAuthorizationById(id: string): Promise<McpAuthorizationDto> {
+    const key = mcpKey(id)
+    return guard(async () => mcpAuthorization(await openScope(key.scope), key.name))
+}
+
+export async function startMcpOauthById(id: string, actor: ResourceActor): Promise<McpOauthAttemptDto> {
+    const key = mcpKey(id)
+    return guard(async () => startMcpOauth(await openScope(key.scope), key.scope, key.name, actor))
+}
+
+export async function mcpOauthStatusById(id: string, attemptId: string): Promise<McpOauthStatusDto> {
+    const key = mcpKey(id)
+    return guard(async () => mcpOauthStatus(await openScope(key.scope), key.scope, key.name, attemptId))
+}
+
+export async function completeMcpOauthById(id: string, attemptId: string, input: { code?: string; callbackUrl?: string }): Promise<McpOauthStatusDto> {
+    const key = mcpKey(id)
+    return guard(async () => completeMcpOauth(await openScope(key.scope), key.scope, key.name, attemptId, input))
+}
+
+export async function cancelMcpOauthById(id: string, attemptId: string): Promise<void> {
+    const key = mcpKey(id)
+    await guard(async () => cancelMcpOauth(await openScope(key.scope), key.scope, key.name, attemptId))
+}
+
+export async function disconnectMcpOauthById(id: string, actor: ResourceActor): Promise<{ removed: number }> {
+    const key = mcpKey(id)
+    return guard(async () => disconnectMcpOauth(await openScope(key.scope), key.scope, key.name, actor))
 }
 
 /** Itens com versão instalada x disponível (consulta sem cache). */

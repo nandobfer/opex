@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { joinCommand, splitCommand } from "./logic"
 import type { McpDetailDto } from "./types"
-import { agentConfigSchema, agentFrontmatterSchema, commandConfigSchema, mcpConfigSchema, resourceNameSchema, secretKeySchema, skillFrontmatterSchema, installSourceSchema, type ResourceContentInput } from "./schemas"
+import { agentConfigSchema, agentFrontmatterSchema, commandConfigSchema, MCP_AUTH_MODES, mcpConfigSchema, mcpOauthConfigSchema, resourceNameSchema, secretKeySchema, skillFrontmatterSchema, installSourceSchema, type ResourceContentInput } from "./schemas"
 
 /**
  * Schemas dos formulários da tela — montados a partir dos MESMOS schemas da API (`schemas.ts`), para a
@@ -113,17 +113,58 @@ export const mcpFormSchema = z
         disabled: z.boolean(),
         environment: z.array(secretRow).max(64).refine(uniqueKeys, "Variáveis repetidas"),
         headers: z.array(secretRow).max(64).refine(uniqueKeys, "Cabeçalhos repetidos"),
+        /** MCP remoto (OPE-176): nenhuma, cabeçalhos ou OAuth. */
+        auth: z.enum(MCP_AUTH_MODES),
+        oauthClientId: text(500),
+        /** Vazio mantém o salvo (`oauthClientSecretSaved`). */
+        oauthClientSecret: z.string().max(4000),
+        oauthClientSecretSaved: z.boolean(),
+        oauthScope: text(1000),
+        oauthCallbackPort: z.string().trim().regex(/^\d{0,5}$/, "Porta inválida"),
+        oauthRedirectUri: text(2000),
+        oauthAuthServerMetadataUrl: text(2000),
+        disableAutoOauth: z.boolean(),
     })
     .superRefine((value, ctx) => {
         const config = value.type === "local" ? { type: "local" as const, command: splitCommand(value.command), cwd: value.cwd || undefined, disabled: value.disabled } : { type: "remote" as const, url: value.url, disabled: value.disabled }
         const result = mcpConfigSchema.safeParse(config)
         if (!result.success) for (const issue of result.error.issues) ctx.addIssue({ code: "custom", path: [value.type === "local" ? (issue.path[0] === "cwd" ? "cwd" : "command") : "url"], message: issue.message })
+        if (value.type === "remote" && value.auth === "oauth") {
+            const oauth = mcpOauthConfigSchema.safeParse(oauthConfigOf(value))
+            const fields = { clientId: "oauthClientId", scope: "oauthScope", callbackPort: "oauthCallbackPort", redirectUri: "oauthRedirectUri", authServerMetadataUrl: "oauthAuthServerMetadataUrl" } as const
+            if (!oauth.success) for (const issue of oauth.error.issues) ctx.addIssue({ code: "custom", path: [fields[issue.path[0] as keyof typeof fields] ?? "oauthClientId"], message: issue.message })
+        }
+        if (value.type === "remote" && value.auth !== "headers") return
         const rows = value.type === "local" ? value.environment : value.headers
         rows.forEach((row, index) => {
             if (!row.existing && !row.value) ctx.addIssue({ code: "custom", path: [value.type === "local" ? "environment" : "headers", index, "value"], message: "Informe o valor" })
         })
     })
 export type McpFormValues = z.infer<typeof mcpFormSchema>
+
+/** Campos OAuth do formulário → chave `oauth` da API (vazio = padrão do OpenCode). */
+function oauthConfigOf(values: Pick<McpFormValues, "oauthClientId" | "oauthScope" | "oauthCallbackPort" | "oauthRedirectUri" | "oauthAuthServerMetadataUrl">) {
+    const port = values.oauthCallbackPort.trim()
+    return {
+        ...(values.oauthClientId.trim() ? { clientId: values.oauthClientId.trim() } : {}),
+        ...(values.oauthScope.trim() ? { scope: values.oauthScope.trim() } : {}),
+        ...(port ? { callbackPort: Number(port) } : {}),
+        ...(values.oauthRedirectUri.trim() ? { redirectUri: values.oauthRedirectUri.trim() } : {}),
+        ...(values.oauthAuthServerMetadataUrl.trim() ? { authServerMetadataUrl: values.oauthAuthServerMetadataUrl.trim() } : {}),
+    }
+}
+
+const EMPTY_AUTH = {
+    auth: "none" as const,
+    oauthClientId: "",
+    oauthClientSecret: "",
+    oauthClientSecretSaved: false,
+    oauthScope: "",
+    oauthCallbackPort: "",
+    oauthRedirectUri: "",
+    oauthAuthServerMetadataUrl: "",
+    disableAutoOauth: false,
+}
 
 export const installFormSchema = z.object({
     source: installSourceSchema,
@@ -134,8 +175,18 @@ export type InstallFormValues = z.infer<typeof installFormSchema>
 
 /** Valores do formulário de MCP a partir do detalhe (segredos só pelo nome, valor vazio = manter). */
 export function mcpFormFromDetail(name: string, detail: McpDetailDto | null): McpFormValues {
-    if (!detail) return { name, type: "local", command: "", url: "", cwd: "", disabled: false, environment: [], headers: [] }
+    if (!detail) return { name, type: "local", command: "", url: "", cwd: "", disabled: false, environment: [], headers: [], ...EMPTY_AUTH }
+    const oauth = detail.oauth || null
     return {
+        auth: detail.auth ?? (detail.type === "remote" && detail.headerKeys.length ? "headers" : "none"),
+        oauthClientId: oauth?.clientId ?? "",
+        oauthClientSecret: "",
+        oauthClientSecretSaved: oauth?.hasClientSecret ?? false,
+        oauthScope: oauth?.scope ?? "",
+        oauthCallbackPort: oauth?.callbackPort ? String(oauth.callbackPort) : "",
+        oauthRedirectUri: oauth?.redirectUri ?? "",
+        oauthAuthServerMetadataUrl: oauth?.authServerMetadataUrl ?? "",
+        disableAutoOauth: detail.oauth === false,
         name,
         type: detail.type,
         command: joinCommand(detail.command ?? []),
@@ -152,5 +203,17 @@ export function mcpContentFromForm(values: McpFormValues): Pick<ResourceContentI
     const toPatch = (rows: readonly SecretRowValues[]) => rows.map((row) => (row.value ? { key: row.key, value: row.value } : { key: row.key }))
     if (values.type === "local")
         return { mcp: { type: "local", command: splitCommand(values.command), cwd: values.cwd || undefined, disabled: values.disabled }, secrets: { environment: toPatch(values.environment) } }
-    return { mcp: { type: "remote", url: values.url.trim(), disabled: values.disabled }, secrets: { headers: toPatch(values.headers) } }
+    const oauth = values.auth === "oauth"
+    const clientId = values.oauthClientId.trim()
+    const oauthClientSecret = !oauth ? undefined : !clientId ? null : values.oauthClientSecret ? values.oauthClientSecret : values.oauthClientSecretSaved ? undefined : null
+    return {
+        mcp: {
+            type: "remote",
+            url: values.url.trim(),
+            disabled: values.disabled,
+            auth: values.auth,
+            ...(oauth ? { oauth: oauthConfigOf(values) } : { disableAutoOauth: values.disableAutoOauth }),
+        },
+        secrets: { headers: values.auth === "headers" ? toPatch(values.headers) : [], ...(oauthClientSecret !== undefined ? { oauthClientSecret } : {}) },
+    }
 }
