@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { Button } from "@/components/ui/button"
@@ -9,11 +9,11 @@ import { Field } from "@/components/ui/field"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { useSaveEnvironment } from "../hooks/useEnvironments"
+import { useEnvironmentEnvValues, useSaveEnvironment } from "../hooks/useEnvironments"
 import { environmentInputSchema, type EnvironmentInput, type Machine } from "../schemas"
 import type { EnvironmentDto } from "../types"
 import { formValuesOf, machineOptions, slugify } from "../view"
-import { EnvVarsField } from "./EnvVarsField"
+import { EnvVarsField, type EnvValuesStatus } from "./EnvVarsField"
 import { listToText, SourceFields, textToList } from "./SourceFields"
 
 interface Props {
@@ -28,9 +28,20 @@ interface Props {
 export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, onClose }: Props) {
     const save = useSaveEnvironment(env?.id ?? null)
     const form = useForm<EnvironmentInput>({ resolver: zodResolver(environmentInputSchema), mode: "onChange", defaultValues: formValuesOf(null, { centralId: "", projectName: "" }) })
+    // Editar: os valores das variáveis são lidos à parte (a cada abertura) e entram na lista uma vez.
+    const envValues = useEnvironmentEnvValues(env?.id ?? null, open)
+    const appliedValues = useRef(false)
     useEffect(() => {
+        appliedValues.current = false
         if (open) form.reset(formValuesOf(env, { centralId: "", projectName: "" }))
     }, [open, env, form])
+    const freshValues = envValues.data && !envValues.isFetching ? envValues.data : null
+    useEffect(() => {
+        if (!open || !env || !freshValues || appliedValues.current) return
+        appliedValues.current = true
+        form.setValue("env", formValuesOf(env, { centralId: "", projectName: "" }, freshValues).env, { shouldValidate: true })
+    }, [open, env, freshValues, form])
+    const envStatus: EnvValuesStatus = !env ? "ready" : envValues.isError && !envValues.isFetching ? "error" : freshValues ? "ready" : "loading"
     const errors = form.formState.errors
     const name = useWatch({ control: form.control, name: "name" })
     const options = machineOptions(pcAvailable, pcReason)
@@ -60,7 +71,7 @@ export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, onClos
                         </Field>
                     </div>
                     <SourceFields form={form} editing={Boolean(env)} />
-                    <EnvVarsField form={form} editing={Boolean(env)} />
+                    <EnvVarsField form={form} status={envStatus} onRetry={() => void envValues.refetch()} />
                     <div className={FORM_GRID}>
                         <Field id="environment-ports" label="Portas (separadas por vírgula)" error={errors.ports?.message ?? errors.ports?.find?.((item) => item?.message)?.message}>
                             <Controller control={form.control} name="ports" render={({ field }) => <Input id="environment-ports" className="font-mono" value={listToText(field.value.map(String))} onChange={(event) => field.onChange(textToList(event.target.value).map(Number))} placeholder="4100, 4101" />} />
@@ -80,7 +91,7 @@ export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, onClos
                         <Button type="button" variant="outline" onClick={onClose}>
                             Cancelar
                         </Button>
-                        <Button type="submit" disabled={save.isPending}>
+                        <Button type="submit" disabled={save.isPending || envStatus !== "ready"}>
                             {env ? "Salvar" : "Criar ambiente"}
                         </Button>
                     </DialogFooter>

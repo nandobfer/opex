@@ -11,7 +11,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
-vi.mock('@/lib/crypto/secretBox', () => ({ encryptSecret: (plain: string) => ({ v: 1, c: plain }), decryptSecret: (box: { c: string }) => box.c }))
+vi.mock('@/lib/crypto/secretBox', () => ({ encryptSecret: (plain: string) => ({ v: 1, c: plain }), decryptSecret: (box: { c?: string }) => {
+  if (typeof box.c !== 'string') throw new Error('falha ao decifrar')
+  return box.c
+} }))
 vi.mock('@/features/environments/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { Environment: memoryModel(), EnvironmentDeploy: memoryModel(), EnvironmentsState: memoryModel(), environmentsDb: async () => {} }
@@ -35,7 +38,7 @@ vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.que
 
 import { Environment, EnvironmentDeploy } from '@/features/environments/server/models'
 import { runEnvironmentAction, startDeploy } from '@/features/environments/server/deploy'
-import { createEnvironment, updateEnvironment } from '@/features/environments/server/service'
+import { createEnvironment, readEnvValues, updateEnvironment } from '@/features/environments/server/service'
 import type { EnvironmentInput } from '@/features/environments/schemas'
 
 const envs = Environment as unknown as { docs: Record<string, unknown>[] }
@@ -44,12 +47,22 @@ const deploys = EnvironmentDeploy as unknown as { docs: Record<string, unknown>[
 const CONFIG = (bind: boolean) =>
   JSON.stringify({ services: { app: { build: { context: '.' }, environment: { CLERK_SECRET_KEY: 'sk_test_vazado' }, volumes: bind ? [{ type: 'bind', source: '/srv/app', target: '/app' }] : [] }, db: { image: 'mongo:7' } } })
 
-function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty' } = {}) {
+/** `envFiles`: arquivos de variáveis que o compose declara; `existing`: os que já existem na pasta. */
+function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string } = {}) {
   const calls: string[] = []
   const run = vi.fn(async (command: string, _timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
     calls.push(command)
     opts?.onOutput?.('ok\n')
     if (options.fail && command.includes(options.fail)) return { exitCode: 1, output: 'erro' }
+    if (command.includes('config --no-env-resolution --no-interpolate')) {
+      const files = options.envFiles ?? []
+      return { exitCode: 0, output: JSON.stringify({ services: { app: files.length ? { env_file: files.map((path) => ({ path, required: true })) } : {} } }) }
+    }
+    if (command.includes('@@opex-env-file-created')) {
+      const missing = (options.envFiles ?? []).filter((file) => !(options.existing ?? []).includes(file))
+      return { exitCode: 0, output: missing.map((file) => `@@opex-env-file-created ${file.replace('/home/burgos/opex-envs/loja/', '')}\n`).join('') }
+    }
+    if (options.configOutput && command.includes('config --format json')) return { exitCode: 1, output: options.configOutput }
     if (command.includes('rev-parse --short=12')) return { exitCode: 0, output: 'abc123def456' }
     if (command.includes('config --format json')) return { exitCode: 0, output: CONFIG(options.bind ?? false) }
     if (command.includes('docker image inspect')) return { exitCode: 0, output: options.images ?? 'missing' }
@@ -59,6 +72,8 @@ function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'mi
   })
   return { run, calls }
 }
+
+const downCall = (calls: string[]) => calls.find((command) => command.includes(' down --remove-orphans'))!
 
 const input = (overrides: Partial<EnvironmentInput> = {}): EnvironmentInput => ({
   name: 'Loja',
@@ -152,6 +167,74 @@ describe('deploy — saída do compose, executor desacoplado e build reaproveita
     const { run } = host({ images: 'missing' })
     await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
     expect(String(deploys.docs[0]!.log)).toContain('▸ Build no PC')
+  })
+})
+
+describe('arquivos de variáveis do compose (OPE-175)', () => {
+  const ENV = '/home/burgos/opex-envs/loja/.env'
+
+  it('1º deploy sem o .env declarado pelo compose: cria vazio, registra no log e segue', async () => {
+    const env = await createEnvironment(input(), 'local')
+    const { run, calls } = host({ envFiles: [ENV] })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    expect(String(deploys.docs[0]!.log)).toContain('Arquivo de variáveis do compose ausente: .env (criado vazio)')
+    const ensure = calls.findIndex((command) => command.includes('@@opex-env-file-created'))
+    expect(ensure).toBeGreaterThanOrEqual(0)
+    expect(ensure).toBeLessThan(calls.findIndex((command) => command.includes('config --format json')))
+    expect(calls[ensure]).toContain(`'${ENV}'`)
+    expect(calls[ensure]).toContain('[ ! -e "$f" ]')
+    // A leitura dos arquivos declarados não vai para o log (o compose pode ter valores escritos nele).
+    const read = run.mock.calls.find(([command]) => String(command).includes('--no-env-resolution'))!
+    expect(read[2]).toMatchObject({ redactedAs: expect.stringContaining('saída omitida') })
+  })
+
+  it('arquivo que já existe não é tocado nem citado no log', async () => {
+    const env = await createEnvironment(input(), 'local')
+    const { run } = host({ envFiles: [ENV], existing: [ENV] })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(String(deploys.docs[0]!.log)).not.toContain('Arquivo de variáveis do compose ausente')
+  })
+
+  it('compose sem env_file: nada é criado', async () => {
+    const env = await createEnvironment(input(), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(calls.some((command) => command.includes('@@opex-env-file-created'))).toBe(false)
+    expect(deploys.docs[0]!.status).toBe('success')
+  })
+
+  it('levantar, reiniciar e derrubar garantem os arquivos antes do compose; falha na leitura não bloqueia', async () => {
+    const env = await createEnvironment(input(), 'local')
+    envs.docs[0]!.deployedOn = { buildOn: 'server', runOn: 'server' }
+    for (const action of ['up', 'restart', 'down'] as const) {
+      const { run, calls } = host({ envFiles: [ENV] })
+      await runEnvironmentAction(String(env._id), { action }, 'local', run)
+      const ensure = calls.findIndex((command) => command.includes('@@opex-env-file-created'))
+      expect(ensure).toBeGreaterThanOrEqual(0)
+      expect(ensure).toBeLessThan(calls.length - 1)
+    }
+    const { run } = host({ fail: '--no-env-resolution' })
+    await expect(runEnvironmentAction(String(env._id), { action: 'up' }, 'local', run)).resolves.toMatchObject({ deployId: null })
+  })
+
+  it('pasta limpa considera os arquivos declarados (o criado vazio não suja a pasta do adotado)', async () => {
+    const adoptedEnv = '/home/u/loja/.env'
+    const env = await createEnvironment(input({ source: { kind: 'adopted', machine: 'server', workingDir: '/home/u/loja', configFiles: ['/home/u/loja/compose.yml'], projectName: 'loja', git: true, pullOnRedeploy: false }, ports: [], runOn: 'pc' }), 'local')
+    const { run, calls } = host({ images: 'present', tree: 'clean', envFiles: [adoptedEnv] })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const check = calls.find((command) => command.includes('status --porcelain'))!
+    expect(check).toContain(`'${adoptedEnv}'`)
+    expect(check).toContain('[ ! -s "$f" ]')
+    expect(String(deploys.docs[0]!.log)).toContain('Build reaproveitado')
+  })
+
+  it('variável obrigatória que faltou: a falha diz qual é e lembra das Variáveis extras', async () => {
+    const env = await createEnvironment(input(), 'local')
+    const { run } = host({ configOutput: 'error while interpolating services.app.ports.[]: required variable PORT is missing a value: defina PORT no .env' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('failed')
+    expect(String(deploys.docs[0]!.error)).toContain('A variável PORT não veio das Variáveis extras nem do arquivo de variáveis: cadastre-a em Variáveis extras.')
   })
 })
 
@@ -272,9 +355,25 @@ describe('edição e ações', () => {
     envs.docs[0]!.deployedOn = { buildOn: 'server', runOn: 'server' }
     const { run, calls } = host()
     await runEnvironmentAction(String(env._id), { action: 'down' }, 'local', run)
-    expect(calls[0]).toContain("cd '/home/u/scratch' && docker compose -p scratch")
-    expect(calls[0]).toContain('$( [ -f docker-compose.opex.yml ] && echo -f docker-compose.opex.yml )')
-    expect(calls[0]).not.toContain("-f 'docker-compose.opex.yml'")
+    const down = downCall(calls)
+    expect(down).toContain("cd '/home/u/scratch' && docker compose -p scratch")
+    expect(down).toContain('$( [ -f docker-compose.opex.yml ] && echo -f docker-compose.opex.yml )')
+    expect(down).not.toContain("-f 'docker-compose.opex.yml'")
+  })
+
+  it('pela tela (emptyKeepsSaved: false): valor apagado grava vazio; keep mantém o salvo; linha removida sai', async () => {
+    const env = await createEnvironment(input({ env: [{ key: 'TOKEN', value: 'segredo' }, { key: 'URL', value: 'http://a' }, { key: 'VELHA', value: 'v' }] }), 'local')
+    await updateEnvironment(String(env._id), input({ env: [{ key: 'TOKEN', value: '' }, { key: 'URL', value: '', keep: true }] }), 'local', { emptyKeepsSaved: false })
+    expect(envs.docs[0]!.env).toEqual([
+      { key: 'TOKEN', value: { v: 1, c: '' } },
+      { key: 'URL', value: { v: 1, c: 'http://a' } },
+    ])
+  })
+
+  it('valores para o formulário: decifra um a um; o que falha volta null sem derrubar os outros', async () => {
+    const env = await createEnvironment(input({ env: [{ key: 'TOKEN', value: 'segredo' }, { key: 'URL', value: 'http://a' }] }), 'local')
+    envs.docs[0]!.env = [{ key: 'TOKEN', value: { v: 1, c: 'segredo' } }, { key: 'URL', value: { broken: true } }]
+    expect(await readEnvValues(String(env._id))).toEqual({ items: [{ key: 'TOKEN', value: 'segredo' }, { key: 'URL', value: null }] })
   })
 
   it('variável com valor vazio mantém o valor salvo; nova é cifrada', async () => {
@@ -291,8 +390,9 @@ describe('edição e ações', () => {
     envs.docs[0]!.deployedOn = { buildOn: 'pc', runOn: 'pc' }
     const { run, calls } = host()
     await runEnvironmentAction(String(env._id), { action: 'down' }, 'local', run)
-    expect(calls[0]).toContain('DOCKER_CONTEXT=ctx docker compose')
-    expect(calls[0]).toContain('-O cancel -L')
+    const down = downCall(calls)
+    expect(down).toContain('DOCKER_CONTEXT=ctx docker compose')
+    expect(down).toContain('-O cancel -L')
     expect(mocks.publish).toHaveBeenCalledWith(String(env._id), 'status')
     expect((await runEnvironmentAction(String(env._id), { action: 'logs' }, 'local', run)).output).toBe('')
   })

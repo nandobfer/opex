@@ -9,7 +9,7 @@ import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { ENVIRONMENTS_EVENT, ENVIRONMENTS_QUERY_KEY } from "../constants"
 import type { AdoptInput, EnvironmentActionInput, EnvironmentInput, EnvironmentsSettings } from "../schemas"
-import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsListDto, EnvironmentsSettingsDto, RegistryStatusDto } from "../types"
+import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, EnvironmentsSettingsDto, RegistryStatusDto } from "../types"
 
 const base = "/environments"
 export const environmentsKey = [ENVIRONMENTS_QUERY_KEY, "list"] as const
@@ -28,6 +28,29 @@ export const useEnvironmentDeploys = (id: string | null) =>
         queryFn: async () => unwrapApi((await api.get<ApiResponse<EnvironmentDeploySummaryDto[]>>(`${base}/${id}/deploys`)).data),
         refetchInterval: 10_000,
     })
+
+/**
+ * Valores das variáveis extras para o formulário Editar: lidos a cada abertura e tirados do cache ao
+ * fechar (são segredos; a reabertura nunca mostra os da vez anterior), sem novas tentativas silenciosas
+ * (o erro bloqueia o Salvar e oferece tentar de novo).
+ */
+export function useEnvironmentEnvValues(id: string | null, open: boolean) {
+    const queryClient = useQueryClient()
+    // Fora do prefixo do módulo: o tempo real invalida `[ENVIRONMENTS_QUERY_KEY]` e não pode reler os valores no meio da edição.
+    const queryKey = ["environment-env-values", id] as const
+    useEffect(() => {
+        if (!open) queryClient.removeQueries({ queryKey: ["environment-env-values"] })
+    }, [open, queryClient])
+    return useQuery({
+        queryKey,
+        enabled: open && id !== null,
+        gcTime: 0,
+        staleTime: 0,
+        retry: false,
+        refetchOnWindowFocus: false,
+        queryFn: async () => unwrapApi((await api.get<ApiResponse<EnvironmentEnvValuesDto>>(`${base}/${id}/env`)).data),
+    })
+}
 
 export function useSaveEnvironment(id: string | null) {
     const queryClient = useQueryClient()

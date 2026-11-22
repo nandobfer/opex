@@ -1,5 +1,9 @@
+import { execSync } from 'node:child_process'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { centralCheckoutCommand, composeCommand, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, registryImage, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
+import { centralCheckoutCommand, cleanTreeCommand, composeCommand, ensureEnvFilesCommand, envFilesConfigCommand, parseCreatedEnvFiles, parseEnvFiles, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, registryImage, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
 import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices } from '@/features/environments/compose-config'
 import { deploySteps, executionSteps, moveOrder } from '@/features/environments/pipeline'
 import { DEFAULT_ENVIRONMENTS_SETTINGS, environmentInputSchema, placementProblem, type Machine } from '@/features/environments/schemas'
@@ -213,5 +217,59 @@ describe('regras', () => {
     // Com o registro exato dos deploys não há ambiguidade.
     expect(repositoryOwner('opex-env/crm-hml-web', ['crm', 'crm-hml'], new Map([['opex-env/crm-hml-web', 'crm-hml']]))).toBe('crm-hml')
     expect(pcPortsOf([{ deployedOn: { buildOn: 'pc', runOn: 'pc' }, ports: [4100, 4101] }, { deployedOn: { buildOn: 'pc', runOn: 'server' }, ports: [5000] }, { deployedOn: null, ports: [6000] }])).toEqual([4100, 4101])
+  })
+})
+
+describe('arquivos de variáveis do compose (OPE-175)', () => {
+  it('lê os env_file sem resolver nem interpolar, sem o override', () => {
+    const command = envFilesConfigCommand(plan, targets.server)
+    expect(command).toContain('config --no-env-resolution --no-interpolate --format json')
+    expect(command).not.toContain('docker-compose.opex.yml')
+  })
+
+  it('só os obrigatórios, sem repetir, sem caminho com $ e sem o .env.opex; aceita aviso antes do JSON', () => {
+    const output = 'WARN algo\n' + JSON.stringify({
+      services: {
+        app: { env_file: [{ path: '/srv/loja/.env', required: true }, { path: '/srv/loja/opt.env', required: false }, { path: '/srv/loja/${STAGE}.env', required: true }] },
+        web: { env_file: '/srv/loja/.env' },
+        worker: { env_file: ['/srv/loja/worker.env', { path: '/srv/loja/.env.opex' }] },
+        db: { image: 'mongo:7' },
+      },
+    })
+    expect(parseEnvFiles(output)).toEqual(['/srv/loja/.env', '/srv/loja/worker.env'])
+    expect(parseEnvFiles('erro sem JSON')).toEqual([])
+  })
+
+  it('cria só o que falta: nunca trunca nem sobrescreve; no PC vai pela conexão mestra', () => {
+    const command = ensureEnvFilesCommand(plan, ['/srv/loja/.env'])
+    expect(command).toContain('[ ! -e "$f" ]')
+    expect(command).toContain(': >> "$f"')
+    expect(command).not.toMatch(/[^>]> "\$f"/)
+    expect(ensureEnvFilesCommand(plan, [])).toBe('true')
+    expect(ensureEnvFilesCommand({ ...plan, dir: "'/home/u/loja'", filesOn: 'pc' }, ['/home/u/loja/.env'])).toContain('ssh -S')
+    expect(parseCreatedEnvFiles('@@opex-env-file-created .env\r\nlixo\n@@opex-env-file-created /etc/app.env\n')).toEqual(['.env', '/etc/app.env'])
+  })
+
+  it('no shell: cria a pasta e o arquivo vazios uma vez e mantém o conteúdo do que já existe', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'opex-envfiles-'))
+    try {
+      writeFileSync(join(dir, '.env'), 'A=1\n')
+      const command = ensureEnvFilesCommand({ dir: `'${dir}'`, filesOn: 'server' }, [join(dir, '.env'), join(dir, 'deploy/app.env')])
+      expect(parseCreatedEnvFiles(execSync(command, { shell: '/bin/sh' }).toString())).toEqual(['deploy/app.env'])
+      expect(readFileSync(join(dir, '.env'), 'utf8')).toBe('A=1\n')
+      expect(existsSync(join(dir, 'deploy/app.env'))).toBe(true)
+      expect(readFileSync(join(dir, 'deploy/app.env'), 'utf8')).toBe('')
+      expect(parseCreatedEnvFiles(execSync(command, { shell: '/bin/sh' }).toString())).toEqual([])
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('pasta limpa: sem arquivos declarados o comando é o de antes; com eles, ignora só os vazios não rastreados de dentro da pasta', () => {
+    expect(cleanTreeCommand(plan)).toBe(cleanTreeCommand(plan, []))
+    const command = cleanTreeCommand(plan, ['/srv/loja/.env'])
+    expect(command).toContain('[ ! -s "$f" ]')
+    expect(command).toContain('git ls-files --error-unmatch')
+    expect(command).toContain('"$PWD"/*)')
   })
 })

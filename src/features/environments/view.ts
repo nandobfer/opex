@@ -1,6 +1,6 @@
 import type { OptionTabsOption } from "@/components/ui/option-tabs"
 import { MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
-import type { DeployKind, EnvironmentDto } from "./types"
+import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto } from "./types"
 
 /** Regras de tela (puras) do módulo Ambientes. */
 
@@ -27,8 +27,11 @@ export function machineOptions(pcAvailable: boolean, pcReason: string | null): O
     return MACHINES.map((machine) => ({ value: machine, label: MACHINE_LABELS[machine], disabled: machine === "pc" && !pcAvailable, title: machine === "pc" && !pcAvailable ? (pcReason ?? "PC indisponível") : MACHINE_LABELS[machine] }))
 }
 
-/** Valores do formulário a partir de um ambiente salvo (variáveis com valor vazio = mantém). */
-export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: string; projectName: string }): EnvironmentInput {
+/**
+ * Valores do formulário a partir de um ambiente salvo, com os valores das variáveis lidos à parte
+ * (`envValues`). Variável cujo valor não pôde ser lido vai com `keep` (mantém o salvo).
+ */
+export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: string; projectName: string }, envValues?: EnvironmentEnvValuesDto): EnvironmentInput {
     if (!env)
         return {
             name: "",
@@ -40,7 +43,7 @@ export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: 
             buildOn: "server",
             runOn: "server",
         }
-    return { name: env.name, slug: env.slug, source: env.source, env: env.envKeys.map((key) => ({ key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn }
+    return { name: env.name, slug: env.slug, source: env.source, env: envValues ? envValues.items.map((item) => (item.value === null ? { key: item.key, value: "", keep: true } : { key: item.key, value: item.value })) : env.envKeys.map((key) => ({ key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn }
 }
 
 /** Slug sugerido a partir do nome. */
