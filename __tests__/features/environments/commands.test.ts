@@ -265,6 +265,30 @@ describe('arquivos de variáveis do compose (OPE-175)', () => {
     }
   })
 
+  it('pasta limpa no shell (repositório git real): vazio não rastreado = limpa; com conteúdo, rastreado alterado ou outro arquivo = suja', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'opex-cleantree-'))
+    const sh = (command: string) => execSync(command, { shell: '/bin/sh', cwd: dir }).toString().trim()
+    try {
+      sh('git init -q && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m i')
+      const files = [join(dir, '.env'), join(dir, 'deploy/app.env'), '/etc/opex-fora-da-pasta.env']
+      const check = () => sh(cleanTreeCommand({ dir: `'${dir}'`, filesOn: 'server' }, files))
+      writeFileSync(join(dir, '.env'), '')
+      expect(check()).toBe('clean')
+      writeFileSync(join(dir, '.env'), 'A=1\n')
+      expect(check()).toBe('dirty')
+      writeFileSync(join(dir, '.env'), '')
+      sh('git add .env && git -c user.email=t@t -c user.name=t commit -q -m env')
+      writeFileSync(join(dir, '.env'), 'B=2\n')
+      expect(check()).toBe('dirty')
+      sh('git checkout -q -- .env')
+      expect(check()).toBe('clean')
+      writeFileSync(join(dir, 'outro.txt'), 'x')
+      expect(check()).toBe('dirty')
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
   it('pasta limpa: sem arquivos declarados o comando é o de antes; com eles, ignora só os vazios não rastreados de dentro da pasta', () => {
     expect(cleanTreeCommand(plan)).toBe(cleanTreeCommand(plan, []))
     const command = cleanTreeCommand(plan, ['/srv/loja/.env'])

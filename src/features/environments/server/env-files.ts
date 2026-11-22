@@ -4,6 +4,9 @@ import { envLog } from "./settings"
 
 /** Linha do log do deploy para um arquivo de variáveis criado pelo app. */
 export const createdEnvFileMessage = (file: string) => `Arquivo de variáveis do compose ausente: ${file} (criado vazio)`
+/** Linhas do log do deploy quando a preparação falha (sem a saída do `config`, que pode ter valores). */
+export const ENV_FILES_READ_FAILED = "Não foi possível verificar os arquivos de variáveis do compose: um arquivo ausente não foi criado."
+export const ENV_FILES_CREATE_FAILED = "Não foi possível criar os arquivos de variáveis do compose ausentes."
 
 /**
  * Garante os arquivos de variáveis (`env_file`) que o compose do projeto declara: o que falta é
@@ -16,6 +19,7 @@ export async function ensureComposeEnvFiles(plan: ComposePlan, target: DockerTar
         const read = await run(envFilesConfigCommand(plan, target), 60_000, { retryOnLost: true, redactedAs: "docker compose config --no-env-resolution (saída omitida)" })
         if (read.exitCode !== 0) {
             envLog.warn({ project: plan.projectName, exitCode: read.exitCode }, "[environments] Não foi possível ler os arquivos de variáveis do compose")
+            options.write?.(`\n${ENV_FILES_READ_FAILED}\n`)
             return []
         }
         const files = parseEnvFiles(read.output)
@@ -23,6 +27,7 @@ export async function ensureComposeEnvFiles(plan: ComposePlan, target: DockerTar
         const made = await run(ensureEnvFilesCommand(plan, files), 30_000, { retryOnLost: true })
         if (made.exitCode !== 0) {
             envLog.warn({ project: plan.projectName, exitCode: made.exitCode }, "[environments] Não foi possível criar os arquivos de variáveis do compose")
+            options.write?.(`\n${ENV_FILES_CREATE_FAILED}\n`)
             return files
         }
         for (const file of parseCreatedEnvFiles(made.output)) {
@@ -32,6 +37,7 @@ export async function ensureComposeEnvFiles(plan: ComposePlan, target: DockerTar
         return files
     } catch (error) {
         envLog.warn({ err: error, project: plan.projectName }, "[environments] Falha ao garantir os arquivos de variáveis do compose")
+        options.write?.(`\n${ENV_FILES_READ_FAILED}\n`)
         return []
     }
 }

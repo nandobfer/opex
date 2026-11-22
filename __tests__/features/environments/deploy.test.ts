@@ -37,7 +37,7 @@ vi.mock('@/features/local-docker/server/models', () => ({ LocalDockerPreview: {}
 vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.queueFollowUp }))
 
 import { Environment, EnvironmentDeploy } from '@/features/environments/server/models'
-import { runEnvironmentAction, startDeploy } from '@/features/environments/server/deploy'
+import { deleteEnvironment, runEnvironmentAction, startDeploy } from '@/features/environments/server/deploy'
 import { createEnvironment, readEnvValues, updateEnvironment } from '@/features/environments/server/service'
 import type { EnvironmentInput } from '@/features/environments/schemas'
 
@@ -216,6 +216,31 @@ describe('arquivos de variáveis do compose (OPE-175)', () => {
     }
     const { run } = host({ fail: '--no-env-resolution' })
     await expect(runEnvironmentAction(String(env._id), { action: 'up' }, 'local', run)).resolves.toMatchObject({ deployId: null })
+  })
+
+  it('logs e o derrubar do Apagar também garantem os arquivos antes do compose', async () => {
+    const env = await createEnvironment(input(), 'local')
+    envs.docs[0]!.deployedOn = { buildOn: 'server', runOn: 'server' }
+    const logs = host({ envFiles: [ENV] })
+    await runEnvironmentAction(String(env._id), { action: 'logs' }, 'local', logs.run)
+    const ensureLogs = logs.calls.findIndex((command) => command.includes('@@opex-env-file-created'))
+    expect(ensureLogs).toBeGreaterThanOrEqual(0)
+    expect(ensureLogs).toBeLessThan(logs.calls.findIndex((command) => command.includes('logs --tail 200')))
+    const removal = host({ envFiles: [ENV] })
+    await deleteEnvironment(String(env._id), { volumes: false }, 'local', removal.run)
+    const ensureDown = removal.calls.findIndex((command) => command.includes('@@opex-env-file-created'))
+    expect(ensureDown).toBeGreaterThanOrEqual(0)
+    expect(ensureDown).toBeLessThan(removal.calls.findIndex((command) => command.includes(' down --remove-orphans')))
+    expect(envs.docs).toHaveLength(0)
+  })
+
+  it('falha ao verificar ou criar os arquivos aparece no log do deploy (sem a saída do config)', async () => {
+    const env = await createEnvironment(input(), 'local')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host({ envFiles: [ENV], fail: '--no-env-resolution' }).run, wait: true })
+    expect(String(deploys.docs[0]!.log)).toContain('Não foi possível verificar os arquivos de variáveis do compose: um arquivo ausente não foi criado.')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host({ envFiles: [ENV], fail: '@@opex-env-file-created' }).run, wait: true })
+    expect(String(deploys.docs[1]!.log)).toContain('Não foi possível criar os arquivos de variáveis do compose ausentes.')
+    expect(String(deploys.docs[1]!.log)).not.toContain('Arquivo de variáveis do compose ausente')
   })
 
   it('pasta limpa considera os arquivos declarados (o criado vazio não suja a pasta do adotado)', async () => {

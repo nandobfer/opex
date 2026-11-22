@@ -168,7 +168,9 @@ mesma validação, auditoria, Pusher e erros.
   Nunca toca um arquivo que existe (`[ -e ]` + `: >>`), nunca cria `required: false`, caminho ainda
   com `$` nem o `.env.opex`. No deploy, o log mostra "Arquivo de variáveis do compose ausente: .env
   (criado vazio)" (relativo à pasta do ambiente quando está dentro dela); nas outras ações, só no log
-  do servidor. Falha nessa preparação não bloqueia a ação (o compose mostra o erro real). O Apagar
+  do servidor. Falha nessa preparação não bloqueia a ação (o compose mostra o erro real); no deploy, o
+  log diz "Não foi possível verificar os arquivos de variáveis do compose: um arquivo ausente não foi
+  criado." (leitura) ou "Não foi possível criar os arquivos de variáveis do compose ausentes." (criação). O Apagar
   continua igual (o worktree da central sai inteiro; no adotado só o override e o `.env.opex`).
   Compose sem `env_file` continua como antes.
 - **Variável obrigatória faltando** (`${X:?…}`): a falha de "Lendo o compose" diz qual variável faltou e
@@ -207,9 +209,14 @@ mesma validação, auditoria, Pusher e erros.
 
 ### Limitações
 
-- Ambiente de central cujo commit novo passa a **rastrear** um arquivo que o app criou vazio: o
-  `checkout --detach` recusa sobrescrever o arquivo não rastreado (erro no passo "Código da ref"); apague
-  o arquivo vazio da pasta e implante de novo.
+- O arquivo de variáveis que o app cria vazio só é desconsiderado na checagem de pasta limpa do
+  próprio app: por decisão do dono, nada é gravado no repositório (nem `.git/info/exclude`, que nos
+  ambientes de central é compartilhado com o repositório da central). Num `git status` manual ele
+  aparece como `??` quando o projeto não o ignora no `.gitignore` — central ou **adotado**.
+- Commit novo que passa a **rastrear** um arquivo que o app criou vazio: na central, o `checkout --detach`
+  recusa sobrescrever o arquivo não rastreado (erro no passo "Código da ref"); no adotado, o mesmo vale
+  para o `git pull` ("git pull no redeploy") e para um `pull`/`checkout` manual. Apague o arquivo vazio
+  da pasta e implante (ou atualize) de novo.
 - O deploy só pode ser retomado a partir da fase de execução: reiniciar o app durante a preparação
   (código, variáveis, compose, build reaproveitado) encerra o deploy como falha, e é preciso
   implantar de novo.
