@@ -35,6 +35,24 @@ beforeEach(() => {
   mocks.setTaskClient.mockImplementation(async (_id: string, clientId: string | null) => ({ clientId, estimate }))
 })
 
+describe('proteção das ferramentas de cliente (decisão da OPE-177)', () => {
+  it('set_task_client é write do grupo tasks, sem confirmação por padrão, e descreve o recálculo da estimativa', () => {
+    const tool = findOpexTool('set_task_client')!
+    expect(tool.risk).toBe('write')
+    expect(tool.group).toBe('tasks')
+    expect(tool.confirmByDefault ?? false).toBe(false)
+    expect(tool.description).toContain('recalcula a estimativa preservando as horas reais')
+  })
+
+  it('update_task (que também aceita clientId) segue write do grupo tasks', () => {
+    const tool = findOpexTool('update_task')!
+    expect(tool.risk).toBe('write')
+    expect(tool.group).toBe('tasks')
+    expect(tool.confirmByDefault ?? false).toBe(false)
+    expect(tool.description).toContain('cliente de orçamento')
+  })
+})
+
 describe('update_task com cliente', () => {
   it('só clientId: valida contra o projeto da tarefa, chama setTaskClient e não chama updateTask', async () => {
     mocks.findTaskClientRefs.mockResolvedValue([ref(1)])
