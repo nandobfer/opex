@@ -64,6 +64,10 @@ import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWork
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { claimAgenticFiles, transferAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
 import { agenticDownloadDir, withAttachmentsSection } from "../files"
+import { withWorkbenchContext } from "../workbench-context"
+import { syncWorkbenchContext, type WorkbenchTurnContext } from "./workbench-context"
+import { registerWorkbenchMcpAt } from "./workbench-mcp/register"
+import { lookupOpencodeSession, OpencodeLookupAbortedError } from "@/lib/ai/opencode-sessions"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
@@ -837,11 +841,15 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
         const stage = turn.stage
         try {
             const client = await getOpencodeClient()
-            const sessionId = turn.attach ? loaded.doc.sessionId : await ensureSession(client, loaded)
+            const session = turn.attach ? { sessionId: loaded.doc.sessionId, created: false } : await ensureSession(client, loaded, controller.signal)
+            const sessionId = session.sessionId
             if (!sessionId) throw new Error("A mesa não tem uma sessão do OpenCode para reconectar")
             // Limpeza: a sessão volta ao diretório da central antes de qualquer outra chamada (GO-DEV-805).
             if (turn.stage === "finishing" && !turn.attach) await moveSessionHome(client, loaded, sessionId)
             // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão a cada turno.
+            // Contexto da mesa (OPE-178): cabeçalho com o MCP da mesa ou, sem ele, o pacote completo no prompt.
+            // Lido junto com as memórias (não atrasa o turno). A limpeza não precisa dele (e o worktree pode já ter saído).
+            const contextPromise = turn.attach || turn.stage === "finishing" ? Promise.resolve(null) : workbenchTurnContext(client, loaded, turn.stage, session.created)
             const memories = turn.attach
                 ? null
                 : await syncDeveloperMemories(client, sessionId, loaded.doc.centralId, {
@@ -861,9 +869,10 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
                 turn = controller.signal.aborted ? null : next
                 continue
             }
+            const context = await contextPromise
             if (turn.stage === "building") {
                 // O app roda o build (saída ao vivo na aba Build); o agente só prepara e corrige uma falha.
-                next = await buildTurn(client, loaded, turn, sessionId, controller, memories, failedAttempt)
+                next = await buildTurn(client, loaded, turn, sessionId, controller, memories, failedAttempt, context)
                 turn = controller.signal.aborted ? null : next
                 continue
             }
@@ -872,7 +881,7 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             const withNotes = notes ? await withUnsyncedForkNotes({ _id: loaded.doc._id, forkNotes: notes.forkNotes ?? [], forkNotesSynced: notes.forkNotesSynced }, turn.text) : turn.text
             // Anexos do usuário: só no turno que recebeu a mensagem (não na reconexão nem nos turnos encadeados).
             const attachments = turn === first && !turn.attach && turn.fileIds?.length ? await promptFilesFor(turn.fileIds, { downloadDir: agenticDownloadDir(loaded.doc.taskCode), signal: controller.signal }) : { files: [], section: "" }
-            const text = withAttachmentsSection(memories ? withDeveloperMemories(memories, withNotes) : withNotes, attachments.section)
+            const text = withAttachmentsSection(withWorkbenchContext(memories ? withDeveloperMemories(memories, withNotes) : withNotes, context), attachments.section)
             const result = await runStageAgent(client, loaded, { stage: turn.stage, text, attach: turn.attach, files: attachments.files }, sessionId, controller)
             if (result.outcome !== "succeeded") {
                 await update(loaded.doc, { runState: result.outcome === "interrupted" ? "interrupted" : "failed", error: result.message ?? "O agente não concluiu a etapa" })
@@ -883,6 +892,11 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             if (fresh.doc.deletionRequestedAt && turn.stage !== "finishing") return
             next = await afterTurn(client, fresh, turn.stage, result)
         } catch (error) {
+            // Interrompido durante as tentativas de ler a sessão (OPE-178): é interrupção, não falha do OpenCode.
+            if (error instanceof OpencodeLookupAbortedError) {
+                await update(loaded.doc, { runState: "interrupted", error: error.message, pendingPermissions: [], pendingForms: [] })
+                return
+            }
             if (stage === "building") {
                 await trackBuild(id, () => settleBuild(id, "failed", errorText(error)))
                 const current = await AgenticWorkbench.findById(id).lean()
@@ -968,7 +982,16 @@ type BuildAgentStep = { kind: "prepare" | "fix"; text: string; attach: boolean }
  * morto ou quando o usuário interrompe. Na reconexão retoma o comando que ainda roda no host
  * (`previewBuild.job`) ou acompanha o turno do agente em andamento.
  */
-async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan, sessionId: string, controller: AbortController, memories: DeveloperMemoriesSync | null = null, failedAttempt: { attempt: string | null } = { attempt: null }): Promise<TurnPlan | null> {
+async function buildTurn(
+    client: OpencodeClient,
+    loaded: Loaded,
+    turn: TurnPlan,
+    sessionId: string,
+    controller: AbortController,
+    memories: DeveloperMemoriesSync | null = null,
+    failedAttempt: { attempt: string | null } = { attempt: null },
+    context: WorkbenchTurnContext | null = null,
+): Promise<TurnPlan | null> {
     const { doc, config } = loaded
     const id = String(doc._id)
     const ctx = contextOf(loaded)
@@ -997,11 +1020,17 @@ async function buildTurn(client: OpencodeClient, loaded: Loaded, turn: TurnPlan,
     let round = 0
     // Memórias que a sessão recusou como instrução: vão à frente do primeiro prompt do agente neste turno (depois ficam no histórico).
     let pendingMemories = memories
+    // Contexto da mesa: o pacote de degradação vai só no primeiro prompt do agente; o cabeçalho, em todos.
+    let pendingFallback = context?.fallback ?? null
     for (;;) {
         if (step) {
             if (step.kind === "prepare" && !step.attach) appendBuildOutput(id, buildPrepareSeparator([backup ? "dump do MongoDB" : "", remote ? "commit" : ""].filter(Boolean).join(" e ")))
-            const text = !step.attach && pendingMemories ? withDeveloperMemories(pendingMemories, step.text) : step.text
-            if (!step.attach) pendingMemories = null
+            const base = !step.attach && pendingMemories ? withDeveloperMemories(pendingMemories, step.text) : step.text
+            const text = !step.attach && context ? withWorkbenchContext(base, { header: context.header, fallback: pendingFallback }) : base
+            if (!step.attach) {
+                pendingMemories = null
+                pendingFallback = null
+            }
             const result = await runStageAgent(client, loaded, { stage: "building", text, attach: step.attach }, sessionId, controller)
             if (result.outcome !== "succeeded") {
                 const status = result.outcome === "interrupted" ? "interrupted" : "failed"
@@ -1151,6 +1180,8 @@ function turnHooks(doc: IAgenticWorkbench) {
             await changed()
             // Aprendizado autônomo: as ferramentas de memória seguem a sessão para o worktree recém-criado.
             void registerDeveloperMemoryMcpAt(getOpencodeClient, directory)
+            // OPE-178: as ferramentas da mesa também seguem a sessão.
+            void registerWorkbenchMcpAt(getOpencodeClient, directory)
         },
         heartbeat: async () => {
             await AgenticWorkbench.updateOne(filter, { $set: { heartbeatAt: new Date() } })
@@ -1171,19 +1202,47 @@ async function moveSessionHome(client: OpencodeClient, { doc, config }: Loaded, 
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionDirectory: config.sessionDirectory } })
 }
 
-/** Sessão da mesa: a gravada (se ainda existir no OpenCode) ou uma nova no diretório da central. */
-async function ensureSession(client: OpencodeClient, { doc, config }: Loaded): Promise<string> {
+/**
+ * Sessão da mesa: a gravada (se ainda existir no OpenCode) ou uma nova no diretório da central. Só cria
+ * outra quando o OpenCode responde que a sessão não existe (OPE-178): erro de rede/transporte é repetido e,
+ * persistindo, a etapa falha mantendo a sessão gravada (ela pode estar viva, com o histórico).
+ */
+async function ensureSession(client: OpencodeClient, { doc, config }: Loaded, signal?: AbortSignal): Promise<{ sessionId: string; created: boolean }> {
     if (doc.sessionId) {
-        const info = await client.session.get({ sessionID: doc.sessionId }).catch(() => null)
-        if (info) return doc.sessionId
-        publishWorkbenchEvent(String(doc._id), { type: "notice", level: "warn", message: "A sessão anterior não existe mais no OpenCode: uma nova sessão foi criada (o histórico da conversa recomeça)" })
+        const found = await lookupOpencodeSession(client, doc.sessionId, { signal })
+        if (found.status === "found") return { sessionId: doc.sessionId, created: false }
+        publishWorkbenchEvent(String(doc._id), { type: "notice", level: "warn", message: "A sessão anterior não existe mais no OpenCode: uma nova sessão foi criada. O histórico da conversa recomeça, mas a tarefa, o plano, os forks e os anexos continuam disponíveis para o agente." })
     }
     const directory = doc.sessionId && doc.sessionDirectory ? doc.sessionDirectory : config.sessionDirectory
     const session = await client.session.create({ title: `${doc.taskCode} · ${doc.taskTitle}`.slice(0, 120), location: { directory }, metadata: { app: "opex", taskId: doc.taskId } })
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: { sessionId: session.id, sessionDirectory: session.location?.directory ?? directory } })
     // Sessão nova: os resumos de forks integrados ao contexto voltam a valer nela.
     if (doc.forkNotes?.length) await applyForkNotes(client, doc, session.id)
-    return session.id
+    return { sessionId: session.id, created: true }
+}
+
+/** Etapas em que o agente trabalha a partir do plano aprovado (a leitura do plano é obrigatória). */
+const PLAN_DEPENDENT_STAGES: ReadonlySet<WorkbenchStage> = new Set(["implementing"])
+
+/** Contexto da mesa do turno (OPE-178; import sob demanda e nunca derruba o turno). */
+async function workbenchTurnContext(client: OpencodeClient, loaded: Loaded, stage: WorkbenchStage, newSession: boolean): Promise<WorkbenchTurnContext | null> {
+    const id = String(loaded.doc._id)
+    const fresh = ((await AgenticWorkbench.findById(id).lean().catch(() => null)) as IAgenticWorkbench | null) ?? loaded.doc
+    try {
+        return await syncWorkbenchContext(client, {
+            workbench: fresh,
+            stage,
+            config: loaded.config,
+            directories: [loaded.config.sessionDirectory, fresh.sessionDirectory, fresh.worktreePath, fresh.plugin?.workDir],
+            downloadDir: agenticDownloadDir(fresh.taskCode),
+            newSession,
+            requirePlan: PLAN_DEPENDENT_STAGES.has(stage),
+            notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+        })
+    } catch (error) {
+        logger.warn({ workbenchId: id, err: errorText(error) }, "[agentic] contexto da mesa indisponível neste turno")
+        return null
+    }
 }
 
 /**

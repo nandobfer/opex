@@ -11,7 +11,11 @@ import {
   extractPrUrl,
   formatPrFeedback,
   implementPrompt,
+  PLAN_BASE_RULE,
   planPrompt,
+  prChangesPrompt,
+  previewCorrectionPrompt,
+  revisePlanPrompt,
   previewBuildCommands,
   previewPreparePrompt,
   prPrompt,
@@ -227,6 +231,16 @@ describe('mensagens das etapas', () => {
     expect(withInfo).toContain('Use o componente X; não altere o schema.')
     expect(implementPrompt(config, ctx, 2)).not.toContain('Informações adicionais')
     expect(implementPrompt(config, ctx, 2, '   ')).not.toContain('Informações adicionais')
+  })
+
+  it('OPE-178: implementação e revisões do plano não dependem do histórico da sessão', () => {
+    const text = implementPrompt(config, ctx, 2)
+    expect(text).not.toContain('a última que você escreveu nesta sessão')
+    expect(text).toContain('Implemente o plano aprovado (versão 2)')
+    expect(text).toContain('`opex_mesa_get_plan`')
+    for (const prompt of [revisePlanPrompt(config, 'ajuste'), previewCorrectionPrompt(config, 'bug'), prChangesPrompt(config, 'https://github.com/o/r/pull/1', 'mude')]) {
+      expect(prompt).toContain(PLAN_BASE_RULE)
+    }
   })
 })
 

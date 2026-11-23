@@ -12,6 +12,8 @@
  *   no servidor do dono, pelo token de sistema com o escopo `mcp:owner`;
  * - o **MCP "Memória própria" dos agentes** (`/api/agent-memory/mcp`, OPE-104), autenticado pelo
  *   segredo derivado da chave das integrações e com o agente resolvido pela sessão do OpenCode;
+ * - o **MCP "Mesa do Opex"** (`/api/agentic/mcp`, exato, OPE-178), somente leitura, autenticado pelo
+ *   segredo derivado da chave das integrações e com a mesa resolvida pela sessão do OpenCode;
  * - a **documentação OpenAPI da API interna** (`/api/openapi.json` e `/api/docs`): expõem só o
  *   contrato, nenhum dado;
  * - o **webhook do Engramind** (`/api/engramind/webhook`, exato), autenticado só pela assinatura
@@ -42,6 +44,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
     "/api/docs",
     // Webhook do Engramind: autenticado só pela assinatura (ver `src/features/engramind/server/webhook.ts`).
     "/api/engramind/webhook",
+    // MCP "Mesa do Opex" (OPE-178): segredo derivado + escopo pela sessão do OpenCode (ver `features/agentic/server/workbench-mcp`).
+    "/api/agentic/mcp",
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */

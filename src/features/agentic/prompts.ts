@@ -6,8 +6,10 @@ import { previewMarkerEnv } from "@/lib/preview-marker"
 import type { CentralConfig } from "./schemas"
 
 /**
- * Mensagens enviadas à sessão do OpenCode em cada etapa da mesa (módulo puro). A sessão é a mesma
- * do início ao fim: cada turno só precisa do que mudou — o agente já tem o plano e o histórico.
+ * Mensagens enviadas à sessão do OpenCode em cada etapa da mesa (módulo puro). Cada turno traz só o
+ * que mudou; os dados da mesa (tarefa, plano vigente, versões, forks e anexos) NÃO dependem do histórico
+ * da sessão: o turno leva o cabeçalho "Mesa do Opex" e o agente consulta o MCP `opex_mesa` (OPE-178,
+ * `workbench-context.ts`) — ou recebe o pacote completo no prompt quando o MCP não está disponível.
  */
 
 export interface WorkbenchContext {
@@ -63,6 +65,9 @@ function extra(config: CentralConfig, role: AgentRole): string {
     return text ? `\n\n## Instruções adicionais da central\n${text}` : ""
 }
 
+/** Base das revisões do plano (OPE-178): a versão vigente vem da mesa, não do histórico da conversa. */
+export const PLAN_BASE_RULE = "Parta da versão do plano indicada no cabeçalho \"Mesa do Opex\"; se ela não estiver no histórico desta conversa, leia-a com `opex_mesa_get_plan` (ou na seção \"Plano da mesa\" deste turno)."
+
 const JSON_RULE = "Termine a resposta com um bloco ```json``` contendo SOMENTE o objeto pedido (sem comentários)."
 
 export function planPrompt(config: CentralConfig, ctx: WorkbenchContext, taskMarkdown: string, additionalInfo: string | null = null): string {
@@ -85,6 +90,7 @@ export function planPrompt(config: CentralConfig, ctx: WorkbenchContext, taskMar
 export function revisePlanPrompt(config: CentralConfig, feedback: string): string {
     return [
         "O usuário pediu correções no plano. Revise o plano considerando o pedido abaixo e responda com o plano COMPLETO atualizado (não só as diferenças).",
+        PLAN_BASE_RULE,
         "Continue sem alterar arquivos.",
         "",
         "## Pedido do usuário",
@@ -95,6 +101,7 @@ export function revisePlanPrompt(config: CentralConfig, feedback: string): strin
 export function previewCorrectionPrompt(config: CentralConfig, feedback: string): string {
     return [
         "O usuário testou a prévia da implementação e pediu correções. Volte ao PLANEJAMENTO: analise o pedido, o código atual do worktree e responda com o plano COMPLETO atualizado para corrigir.",
+        PLAN_BASE_RULE,
         "Não altere arquivos nesta etapa — a implementação virá depois da aprovação do plano.",
         "",
         "## O que está errado / precisa mudar",
@@ -105,6 +112,7 @@ export function previewCorrectionPrompt(config: CentralConfig, feedback: string)
 export function prChangesPrompt(config: CentralConfig, prUrl: string, feedback: string): string {
     return [
         `Um comentário ou revisão do Pull Request (${prUrl}) pediu mudanças. Volte ao PLANEJAMENTO: analise os comentários abaixo e responda com o plano COMPLETO atualizado para atendê-los.`,
+        PLAN_BASE_RULE,
         "Não altere arquivos nesta etapa.",
         "",
         "## Comentários do PR",
@@ -156,7 +164,7 @@ export function pluginPlanningNotes(target: Omit<PluginPromptTarget, "workDir">)
 export function pluginImplementPrompt(config: CentralConfig, ctx: WorkbenchContext, planVersion: number, target: PluginPromptTarget & { pluginId: string }, additionalInfo: string | null = null): string {
     const info = (additionalInfo ?? "").trim()
     const base = [
-        `Você agora é o agente de IMPLEMENTAÇÃO de um PLUGIN do Opex. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
+        `Você agora é o agente de IMPLEMENTAÇÃO de um PLUGIN do Opex. Implemente o plano aprovado (versão ${planVersion}). Leia o texto dessa versão pelas ferramentas da mesa (\`opex_mesa_get_plan\`) ou na seção "Plano da mesa" deste turno antes de editar qualquer arquivo; não dependa do histórico da conversa.`,
         "",
         "## 1. Pasta de trabalho (obrigatório antes de editar)",
         `- O Opex já exportou as fontes do plugin \`${target.pluginId}\` (${target.scope === "client" ? "escopo cliente: só interface" : "escopo dono"}) e o SDK para ${target.workDir} (repositório git local; o commit base é \`origin/${PLUGIN_BASE_BRANCH}\`).`,
@@ -222,7 +230,7 @@ export function implementPrompt(config: CentralConfig, ctx: WorkbenchContext, pl
     const info = (additionalInfo ?? "").trim()
     const base =
         [
-            `Você agora é o agente de IMPLEMENTAÇÃO. Implemente o plano aprovado (versão ${planVersion}, a última que você escreveu nesta sessão).`,
+            `Você agora é o agente de IMPLEMENTAÇÃO. Implemente o plano aprovado (versão ${planVersion}). Leia o texto dessa versão pelas ferramentas da mesa (\`opex_mesa_get_plan\`) ou na seção "Plano da mesa" deste turno antes de editar qualquer arquivo; não dependa do histórico da conversa.`,
             "",
             "## 1. Worktree (obrigatório antes de editar qualquer arquivo)",
             `- Se o diretório ${ctx.worktreePath} já for um worktree deste repositório, reutilize-o (é uma nova rodada sobre o mesmo trabalho).`,
