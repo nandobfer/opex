@@ -100,7 +100,7 @@ semeado na primeira leitura (`ensureBoard`).
   `getTask` (detalhe com comentários, histórico e horas), `getTaskOptions` (projetos), `createTask`
   (gera o código, vai para o fim da coluna; aceita `clientId` do portal e `tags`), `updateTask` (campos; mudar
   de coluna leva ao fim dela), `moveTask` (coluna + ordem), `setTaskArchived`, `deleteTask` (apaga
-  comentários e apontamentos), `setTaskClient` (define/troca/remove o cliente da tarefa e recalcula a
+  comentários e apontamentos), `setTaskClient` (define/troca/remove o cliente da tarefa — a regra do cliente fica em `assertAssignableClient`/`findActiveClient` e a estimativa em `clientEstimateSnapshot`, reaproveitadas pelo `create_task`/`update_task`/`set_task_client` do Agente Opex, OPE-177 — e recalcula a
   estimativa), `addComment` (grava a origem e o nome do autor via
   `{ id, type, name }`), `runBulkTasks` (cada item com a própria ação, 4 em paralelo, um
   `tasks-updated`), `listTasksForClient(clientId, includeArchived)` (tarefas que um cliente do portal

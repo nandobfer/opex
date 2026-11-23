@@ -275,7 +275,7 @@ risco (os catálogos são distintos).
 | Contexto (sempre ligado) | `get_app_overview` |
 | Documentação do app | `list_app_docs`, `read_app_doc`, `search_app_docs` — os `.md` de `aicontext/` para explicar como usar o app, regras e funcionalidades. Só no agente do **dono** (detalhes abaixo) |
 | Arquivos do chat | `list_chat_files`, `read_chat_file`, `attach_files_to_task` (cópia server-side do S3 para `task_attachments`, opcionalmente no fim da descrição), `attach_files_to_preview` (anexos do rascunho de prévia); `create_task` e `create_preview` aceitam `chatFileIds` |
-| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue; ver "Criar tarefa"), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate` |
+| Tarefas (a tarefa também pode ser referida pela issue vinculada, `repo#N`/`dono/repo#N`) | `get_task_options`, `list_tasks`, `get_task`, `create_task` (com issue; ver "Criar tarefa"), `update_task`, `move_task`, `add_comment`, `set_task_archived`*, `delete_task`*, `sync_task_issue`, `generate_task_summary`, `generate_task_tags`, `estimate_task`, `set_task_estimate`, `set_task_client` (lote; ver "Cliente da tarefa") |
 | Prévias | `create_preview`, `get_preview`, `generate_preview` (com clareza e estimativa), `set_preview_correction`, `estimate_preview`, `approve_preview` (cria a tarefa local com issue) |
 | Horas (somente leitura) | `list_active_periods`, `list_time_logs` |
 | Mesas de trabalho | `list_workbenches`, `get_workbench`, `get_workbench_output`, `start_workbench`, `revise_plan`, `implement`, `request_correction`, `submit_pr_feedback`, `reopen_workbench`, `approve_workbench`, `retry_workbench`, `reconnect_workbench`, `cancel_workbench_wait`, `interrupt_workbench`*, `complete_workbench`* (concluir sem PR, com motivo) e `set_workbench_stage` (definir etapa de espera, confirmação por padrão; ambas pela mesma `setWorkbenchStage` da tela — `get_workbench` traz `settableStages`), `set_workbench_model` (papel `planning`/`implementation`/`build`/`pr`, vale no próximo turno), `reply_workbench_permission`, `reply_workbench_form`, `delete_workbench`* |
@@ -333,6 +333,29 @@ pedir uma prévia ou orçamento.
   agente avalia se dá para entender o que fazer, onde (tela, rota ou módulo) e quando estará pronto; se
   algo essencial faltar claramente, pergunta **uma vez**. Se o usuário responder ou mandar seguir,
   cria assim mesmo: a ferramenta nunca recusa por critério vago.
+- `clientId` opcional (OPE-177, de `list_clients`): a tarefa já nasce com o cliente de orçamento. O
+  cliente é conferido **antes** da issue no GitHub (`assertAssignableClient`: existe, ativo e com o
+  projeto em `projectIds`; `CLIENT_NOT_FOUND`/`CLIENT_INACTIVE`/`CLIENT_NOT_FOR_PROJECT`), então um
+  cliente recusado não cria issue nem tarefa. A estimativa inicial é a mesma que o card Cliente gravaria
+  (horas 0, fator e custo/hora do cliente, `clientEstimateSnapshot`), e o retorno traz `clientId`. Sem
+  `clientId`, a tarefa nasce sem cliente, como antes.
+
+### Cliente da tarefa (`update_task` e `set_task_client`, OPE-177)
+
+O agente atribui, troca ou remove o cliente de orçamento pela mesma regra do card Cliente
+(`setTaskClient`), sem validação própria:
+
+- `update_task` aceita `clientId` (`string | null`; `null` remove). O cliente é validado contra o
+  projeto **final** (o `projectId` da mesma chamada, se houver) antes de gravar qualquer campo; depois
+  `updateTask` grava os outros campos (se houver) e `setTaskClient` grava o cliente e recalcula a
+  estimativa preservando as horas reais (`null` zera a inflação). O retorno traz `clientId` e
+  `estimate`.
+- `set_task_client` (`risk: "write"`, grupo `tasks`) aplica o cliente (ou `null`) a várias tarefas:
+  `projectId` (todas as **não arquivadas** do projeto) e/ou `tasks` (códigos, ids ou `repo#N`), até
+  `SET_CLIENT_BATCH_MAX` (200) por chamada, já sem repetidas. Cliente inexistente ou inativo é erro do
+  lote, antes de qualquer gravação; tarefa que já está com o cliente vai para `skipped`
+  (idempotente); tarefa não encontrada ou recusada (ex.: `CLIENT_NOT_FOR_PROJECT`) entra em `failed`
+  `{ task, code, error }` sem interromper o lote. Retorno: `{ clientId, total, updated, skipped, failed }`.
 - `chatFileIds`: depois de criada a tarefa, os arquivos são copiados no servidor para os anexos dela
   (`chatFilesToAttachments`, como em `attach_files_to_task`); a resposta traz
   `attachments: { attached, failed }` e uma falha de arquivo não desfaz a tarefa.
