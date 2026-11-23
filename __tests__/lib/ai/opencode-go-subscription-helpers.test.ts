@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ load: vi.fn() }))
 vi.mock('@/lib/integrations/store', () => ({ loadStoredIntegration: mocks.load }))
 
 import { encryptSecret } from '@/lib/crypto/secretBox'
-import { getAiProviderKeyById } from '@/lib/ai/api-keys'
+import { getAiProviderKeyById, listAiProviderKeys } from '@/lib/ai/api-keys'
 import { opencodeGoMonthlyAllowances } from '@/lib/ai/opencode-go-models'
 
 /** Peças da assinatura OpenCode Go (OPE-167) fora da feature: cota por modelo do catálogo e chave do chaveiro por id. */
@@ -50,5 +50,25 @@ describe('getAiProviderKeyById', () => {
     expect(await getAiProviderKeyById('ai_opencode_go', 'key_x')).toBeNull()
     mocks.load.mockResolvedValue(null)
     expect(await getAiProviderKeyById('ai_opencode_go', 'key_a')).toBeNull()
+  })
+})
+
+describe('listAiProviderKeys', () => {
+  const now = new Date()
+  const key = (id: string, value: string) => ({ id, name: `Chave ${id}`, secret: encryptSecret(value), createdAt: now, updatedAt: now })
+
+  it('todas as chaves na ordem do chaveiro, com a em uso marcada e o segredo decifrado (OPE-180)', async () => {
+    mocks.load.mockResolvedValue({ integrationId: 'ai_opencode_go', apiKeys: [key('key_a', 'oc_sk_a'), key('key_b', 'oc_sk_b')], activeApiKeyId: 'key_b' })
+    expect(await listAiProviderKeys('ai_opencode_go')).toEqual([
+      { id: 'key_a', name: 'Chave key_a', active: false, apiKey: 'oc_sk_a' },
+      { id: 'key_b', name: 'Chave key_b', active: true, apiKey: 'oc_sk_b' },
+    ])
+  })
+
+  it('segredo ilegível ou vazio fica nulo (sem sumir da lista); sem chaveiro devolve vazio', async () => {
+    mocks.load.mockResolvedValue({ integrationId: 'ai_opencode_go', apiKeys: [key('key_a', '   '), { ...key('key_b', 'x'), secret: { iv: 'x', tag: 'y', data: 'z' } }], activeApiKeyId: 'key_a' })
+    expect((await listAiProviderKeys('ai_opencode_go')).map((item) => [item.id, item.apiKey])).toEqual([['key_a', null], ['key_b', null]])
+    mocks.load.mockResolvedValue(null)
+    expect(await listAiProviderKeys('ai_opencode_go')).toEqual([])
   })
 })

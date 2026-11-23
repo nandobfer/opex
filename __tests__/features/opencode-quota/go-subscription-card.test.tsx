@@ -27,6 +27,8 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
   message: null,
   checkedAt: new Date().toISOString(),
   keyName: 'Chave principal',
+  keys: [{ id: 'key_aaaaaaaaaaaaaaaaaa', name: 'Chave principal', error: null, cost: true }],
+  cycleKeyName: null,
   cycle: { startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z' },
   meters: [
     { id: 'fiveHour', label: '5h', percent: 3.1, resetsAt: inHours(2) },
@@ -51,6 +53,7 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
     yMax: 150,
     missingDays: 2,
     partialDays: 0,
+    missingKeyDays: 0,
     historyFrom: '2026-10-05',
   },
   chartMessage: null,
@@ -100,6 +103,43 @@ describe('OpencodeGoSubscriptionCard', () => {
     expect(table.textContent).toContain('116,2%')
     expect(document.querySelector('[data-go-note="missing"]')!.textContent).toContain('2 dias do ciclo sem dados')
     expect(screen.getByText(/Chave: Chave principal/)).toBeTruthy()
+    expect(document.body.textContent).not.toContain('consolidado')
+    expect(document.querySelector('[data-go-note="partial-keys"]')).toBeNull()
+    expect(document.querySelector('[data-go-note="cycle"]')).toBeNull()
+  })
+
+  it('"Todas as chaves": rótulo do consolidado, chave que falhou, ciclo de referência, gasto parcial e dias com chave faltando', async () => {
+    const data = usage()
+    renderCard({
+      ...data,
+      keyName: null,
+      keys: [
+        { id: 'key_aaaaaaaaaaaaaaaaaa', name: 'Chave principal', error: null, cost: true },
+        { id: 'key_bbbbbbbbbbbbbbbbbb', name: 'Reserva', error: null, cost: false },
+        { id: 'key_cccccccccccccccccc', name: 'Antiga', error: 'O OpenCode Go recusou a chave (HTTP 401).', cost: false },
+      ],
+      cycleKeyName: 'Reserva',
+      chart: { ...data.chart!, missingKeyDays: 2 },
+    })
+    expect(await screen.findByText(/3 chaves \(consolidado\)/)).toBeTruthy()
+    expect(screen.getByText(/Uso somado das 3 chaves do chaveiro/)).toBeTruthy()
+    expect(screen.queryByText(/Chave: /)).toBeNull()
+    expect(document.querySelector('[data-go-note="partial-keys"]')!.textContent).toBe(
+      'Consolidado parcial: 1 de 3 chaves não responderam (Antiga). Os medidores e o gasto somam só as que responderam.',
+    )
+    expect(document.querySelector('[data-go-note="cycle"]')!.textContent).toContain('pela chave Reserva, a de maior cota mensal')
+    expect(document.querySelector('[data-go-note="cost"]')!.textContent).toBe('Gasto real parcial: Reserva sem leitura de custo no ciclo.')
+    const cost = document.querySelector('[data-go-cost]')!
+    expect(cost.getAttribute('data-go-cost')).toBe('partial')
+    expect(cost.textContent!.replace(/\s/g, ' ')).toBe('Gasto real no ciclo: US$ 42,85 (parcial)')
+    expect(document.querySelector('[data-go-note="missing-key"]')!.textContent).toContain('2 dias com uma chave sem dados')
+  })
+
+  it('"Todas as chaves" com uma só chave: "1 chave (consolidado)" e nenhum aviso', async () => {
+    renderCard(usage({ keyName: null }))
+    expect(await screen.findByText(/1 chave \(consolidado\)/)).toBeTruthy()
+    expect(document.querySelector('[role="note"] [data-go-note="partial-keys"]')).toBeNull()
+    expect(document.querySelector('[data-go-cost]')!.getAttribute('data-go-cost')).toBe('full')
   })
 
   it('filtro num ciclo passado mostra o título do ciclo e o gráfico sem previsão', async () => {

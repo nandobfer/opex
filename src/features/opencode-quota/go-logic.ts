@@ -1,4 +1,4 @@
-import { GO_DISPLAY_TIME_ZONE } from "./go-constants"
+import { GO_DISPLAY_TIME_ZONE, GO_METER_IDS, type GoMeterId } from "./go-constants"
 import type { GoChartDto, GoChartPointDto } from "./go-types"
 
 /**
@@ -74,6 +74,94 @@ export function dayPercentFromModels(items: readonly GoModelCost[], allowances: 
     return { percent, partial }
 }
 
+/** Custo do mesmo modelo somado entre as chaves (consolidado, OPE-180); custo zero fica fora. */
+export function mergeGoModelCosts(lists: readonly (readonly GoModelCost[])[]): GoModelCost[] {
+    const totals = new Map<string, number>()
+    for (const list of lists) {
+        for (const item of list) {
+            if (item.costMicroCents <= 0) continue
+            totals.set(item.model, (totals.get(item.model) ?? 0) + item.costMicroCents)
+        }
+    }
+    return [...totals].map(([model, costMicroCents]) => ({ model, costMicroCents }))
+}
+
+/** Cota mensal do mesmo modelo somada entre as chaves (cada assinatura tem a sua); modelo sem cota em nenhuma fica `null`. */
+export function sumGoAllowances(maps: readonly ReadonlyMap<string, number | null>[]): Map<string, number | null> {
+    const totals = new Map<string, number | null>()
+    for (const map of maps) {
+        for (const [model, allowance] of map) {
+            const current = totals.get(model) ?? null
+            totals.set(model, allowance && allowance > 0 ? (current ?? 0) + allowance : current)
+        }
+    }
+    return totals
+}
+
+export interface GoDayPart {
+    costs: readonly GoModelCost[]
+    allowances: ReadonlyMap<string, number | null>
+}
+
+/**
+ * Pontos percentuais do dia no consolidado: `Σ custo(modelo) / Σ cota(modelo)` só das chaves que responderam
+ * naquele dia (numerador e denominador coerentes); as que faltaram contam em `missingKeys`. Sem nenhuma, sem dados.
+ */
+export function composeGoDay(parts: readonly GoDayPart[], expectedKeys: number): GoDayValue {
+    if (parts.length === 0) return { percent: null, partial: false }
+    const day = dayPercentFromModels(
+        mergeGoModelCosts(parts.map((part) => part.costs)),
+        sumGoAllowances(parts.map((part) => part.allowances)),
+    )
+    const missingKeys = Math.max(0, expectedKeys - parts.length)
+    return missingKeys > 0 ? { ...day, missingKeys } : day
+}
+
+export interface GoMeterReading {
+    usedMicroCents: number
+    limitMicroCents: number
+    resetsAt?: string | null
+}
+export type GoMeterSet = Record<GoMeterId, GoMeterReading>
+
+/** Medidores somados entre as chaves (uso e limite por janela) com o reset mais próximo de cada janela. */
+export function sumGoMeters(sets: readonly GoMeterSet[]): GoMeterSet {
+    const sum = (id: GoMeterId): GoMeterReading => {
+        let usedMicroCents = 0
+        let limitMicroCents = 0
+        let resetsAt: string | null = null
+        for (const set of sets) {
+            const meter = set[id]
+            usedMicroCents += meter.usedMicroCents
+            limitMicroCents += meter.limitMicroCents
+            if (meter.resetsAt && (resetsAt === null || Date.parse(meter.resetsAt) < Date.parse(resetsAt))) resetsAt = meter.resetsAt
+        }
+        return { usedMicroCents, limitMicroCents, resetsAt }
+    }
+    return Object.fromEntries(GO_METER_IDS.map((id) => [id, sum(id)])) as GoMeterSet
+}
+
+export interface GoCycleCandidate {
+    name: string
+    startsAt: string
+    endsAt: string
+    /** Cota mensal da chave (`month.limitMicroCents`). */
+    monthLimit: number
+}
+
+/**
+ * Ciclo do consolidado: o comum quando todas as chaves renovam no mesmo instante (`keyName` nulo); senão o da chave
+ * de maior cota mensal (desempate: renovação mais próxima, depois o nome), que também rege a previsão.
+ */
+export function goReferenceCycle(candidates: readonly GoCycleCandidate[]): { startsAt: string; endsAt: string; keyName: string | null } {
+    const first = candidates[0]
+    if (!first) throw new Error("goReferenceCycle exige ao menos uma chave")
+    const same = candidates.every((item) => Date.parse(item.startsAt) === Date.parse(first.startsAt) && Date.parse(item.endsAt) === Date.parse(first.endsAt))
+    if (same) return { startsAt: first.startsAt, endsAt: first.endsAt, keyName: null }
+    const [best] = [...candidates].sort((a, b) => b.monthLimit - a.monthLimit || Date.parse(a.endsAt) - Date.parse(b.endsAt) || a.name.localeCompare(b.name, "pt-BR"))
+    return { startsAt: best!.startsAt, endsAt: best!.endsAt, keyName: best!.name }
+}
+
 export interface GoForecast {
     dailyAverage: number | null
     projectedPercent: number | null
@@ -136,6 +224,8 @@ export interface GoDayValue {
     /** Pontos percentuais do dia; `null` sem dados. */
     percent: number | null
     partial: boolean
+    /** Consolidado: chaves sem dados neste dia (custo e cota delas fora da soma). */
+    missingKeys?: number
 }
 
 export interface GoChartInput {
@@ -198,6 +288,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
     let cumulative = 0
     let missingDays = 0
     let partialDays = 0
+    let missingKeyDays = 0
 
     for (const key of cycleDayKeys(cycle, untilMs - 1)) {
         const dayStart = dayStartMs(key)
@@ -209,6 +300,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         const percent = day?.percent ?? null
         if (percent === null && !isToday) missingDays++
         else if (day?.partial) partialDays++
+        if (percent !== null && day?.missingKeys) missingKeyDays++
         if (isToday) break
         // Primeiro e último dia do ciclo entram pró-rateados — no acumulado e no "uso do dia" da dica.
         const share = percent === null ? null : percent * ((to - from) / DAY_MS)
@@ -252,6 +344,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         yMax: goYMax(values),
         missingDays,
         partialDays,
+        missingKeyDays,
         historyFrom,
     }
 }

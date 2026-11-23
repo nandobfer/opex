@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-const mocks = vi.hoisted(() => ({ active: vi.fn(), byId: vi.fn(), allowances: vi.fn(), publish: vi.fn(), fetch: vi.fn() }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), byId: vi.fn(), allowances: vi.fn(), publish: vi.fn(), fetch: vi.fn() }))
 
-vi.mock('@/lib/ai/api-keys', () => ({ getActiveAiProviderKey: mocks.active, getAiProviderKeyById: mocks.byId }))
+vi.mock('@/lib/ai/api-keys', () => ({ listAiProviderKeys: mocks.list, getAiProviderKeyById: mocks.byId }))
 vi.mock('@/lib/ai/opencode-go', () => ({ opencodeGoAllowances: mocks.allowances }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
 vi.mock('@/lib/integrations/debug', () => ({
@@ -15,9 +15,11 @@ import { resetGoSeriesCacheForTests } from '@/features/opencode-quota/server/go-
 
 const NOW = Date.parse('2026-11-16T19:57:00.000Z')
 const KEY = { id: 'key_aaaaaaaaaaaaaaaaaa', name: 'Chave principal', apiKey: 'oc_sk_secret' }
+/** Segunda assinatura do chaveiro (reserva, fora de uso): "Todas as chaves" soma as duas (OPE-180). */
+const TWO = { id: 'key_bbbbbbbbbbbbbbbbbb', name: 'Reserva', apiKey: 'oc_sk_two' }
 
 /** Resposta real do `go/status` (16/11/2026), com os campos de pagamento que precisam ser descartados. */
-const status = (monthUsed = '2634252498') => ({
+const status = (monthUsed = '2634252498', cycle: { startsAt?: string; endsAt?: string; monthLimit?: string } = {}) => ({
   product: 'go',
   renewalCurrency: 'usd',
   cancelAtPeriodEnd: false,
@@ -30,12 +32,12 @@ const status = (monthUsed = '2634252498') => ({
   nextPeriodPaid: true,
   useBalance: false,
   access: {
-    startsAt: '2026-11-05T12:15:35.000Z',
-    endsAt: '2026-12-05T12:15:35.000Z',
+    startsAt: cycle.startsAt ?? '2026-11-05T12:15:35.000Z',
+    endsAt: cycle.endsAt ?? '2026-12-05T12:15:35.000Z',
     meters: {
       fiveHour: { startsAt: '2026-11-16T17:00:00.000Z', resetsAt: '2026-11-16T22:00:00.000Z', limitMicroCents: '1200000000', usedMicroCents: '37061887' },
       week: { startsAt: '2026-11-16T00:00:00.000Z', resetsAt: '2026-11-23T00:00:00.000Z', limitMicroCents: '3000000000', usedMicroCents: '168599483' },
-      month: { resetsAt: '2026-12-05T12:15:35.000Z', limitMicroCents: '6000000000', usedMicroCents: monthUsed },
+      month: { resetsAt: cycle.endsAt ?? '2026-12-05T12:15:35.000Z', limitMicroCents: cycle.monthLimit ?? '6000000000', usedMicroCents: monthUsed },
     },
   },
 })
@@ -45,20 +47,30 @@ const text = (body: string, status: number) => ({ ok: false, status, json: async
 
 let statusBody: unknown = status()
 let statusResponse: ((url: string) => unknown) | null = null
+/** Por segredo: status próprio, status recusado, gasto real que falha; dias que falham por `dia` ou `segredo:dia`. */
+const statusByKey = new Map<string, unknown>()
+const refusedKeys = new Set<string>()
+const failingCost = new Set<string>()
 const failingDays = new Set<string>()
 
-function route(url: string) {
-  if (url.endsWith('/go/status')) return statusResponse ? statusResponse(url) : json(statusBody)
+const secretOf = (init?: RequestInit) => ((init?.headers ?? {}) as Record<string, string>).Authorization?.replace('Bearer ', '') ?? ''
+
+function route(url: string, init?: RequestInit) {
+  const secret = secretOf(init)
+  if (url.endsWith('/go/status')) {
+    if (refusedKeys.has(secret)) return text('{}', 401)
+    return statusResponse ? statusResponse(url) : json(statusByKey.get(secret) ?? statusBody)
+  }
   const parsed = new URL(url)
   if (parsed.pathname.endsWith('/usage/models')) {
     const day = parsed.searchParams.get('from')!
-    if (failingDays.has(day)) return text('{"_tag":"Boom"}', 500)
+    if (failingDays.has(day) || failingDays.has(`${secret}:${day}`)) return text('{"_tag":"Boom"}', 500)
     const page = Number(parsed.searchParams.get('page'))
     // Dois modelos em páginas diferentes: o cliente segue `pageInfo.pageCount`.
     if (page === 1) return json({ items: [{ model: 'deepseek-v4.1-flash', totalCostMicroCents: '200000000' }], pageInfo: { page: 1, pageSize: 10, total: 2, pageCount: 2 } })
     return json({ items: [{ model: 'glm-5.3', totalCostMicroCents: '15000000' }], pageInfo: { page: 2, pageSize: 10, total: 2, pageCount: 2 } })
   }
-  if (parsed.pathname.endsWith('/usage/cost-by-day')) return json([{ date: '2026-11-05', totalCostMicroCents: '400000000' }, { date: '2026-11-16', totalCostMicroCents: '100000000' }])
+  if (parsed.pathname.endsWith('/usage/cost-by-day')) return failingCost.has(secret) ? text('{"_tag":"Boom"}', 500) : json([{ date: '2026-11-05', totalCostMicroCents: '400000000' }, { date: '2026-11-16', totalCostMicroCents: '100000000' }])
   throw new Error(`URL inesperada ${url}`)
 }
 
@@ -70,12 +82,15 @@ beforeEach(() => {
   resetGoSeriesCacheForTests()
   statusBody = status()
   statusResponse = null
+  statusByKey.clear()
+  refusedKeys.clear()
+  failingCost.clear()
   failingDays.clear()
-  mocks.active.mockResolvedValue(KEY)
+  mocks.list.mockResolvedValue([{ ...KEY, active: true }])
   mocks.byId.mockResolvedValue(null)
   mocks.allowances.mockResolvedValue(new Map([['deepseek-v4.1-flash', 100], ['glm-5.3', 15]]))
   mocks.publish.mockResolvedValue(undefined)
-  mocks.fetch.mockImplementation(async (url: string) => route(url))
+  mocks.fetch.mockImplementation(async (url: string, init?: RequestInit) => route(url, init))
 })
 
 afterEach(() => vi.useRealTimers())
@@ -83,10 +98,12 @@ afterEach(() => vi.useRealTimers())
 const query = { from: '2026-11-06T03:00:00.000Z', to: '2026-11-17T02:59:59.999Z' }
 
 describe('getOpencodeGoUsage', () => {
-  it('lê a assinatura com a chave em uso, User-Agent do Opex e sem dados de pagamento no DTO', async () => {
+  it('lê a assinatura com a chave do chaveiro, User-Agent do Opex e sem dados de pagamento no DTO', async () => {
     const dto = await getOpencodeGoUsage(query)
     expect(dto.state).toBe('ok')
-    expect(dto.keyName).toBe('Chave principal')
+    // "Todas as chaves" é o consolidado (OPE-180): sem nome de chave, com a cobertura de cada uma.
+    expect(dto.keyName).toBeNull()
+    expect(dto.keys).toEqual([{ id: KEY.id, name: 'Chave principal', error: null, cost: true }])
     expect(dto.monthPercent).toBe(43.9)
     expect(dto.meters.map((meter) => [meter.id, meter.percent])).toEqual([['fiveHour', 3], ['week', 5.6], ['month', 43.9]])
     expect(dto.cycle).toEqual({ startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z' })
@@ -250,7 +267,10 @@ describe('getOpencodeGoUsage', () => {
     expect((await getOpencodeGoUsage({ ...query, apiKey: 'none' })).state).toBe('no-key')
     expect((await getOpencodeGoUsage({ ...query, apiKey: 'removed' })).state).toBe('no-key')
 
-    mocks.active.mockResolvedValue(null)
+    mocks.list.mockResolvedValue([])
+    expect((await getOpencodeGoUsage(query)).state).toBe('unconfigured')
+    // Chaveiro só com reservas (nenhuma em uso) também não está configurado.
+    mocks.list.mockResolvedValue([{ ...TWO, active: false }])
     expect((await getOpencodeGoUsage(query)).state).toBe('unconfigured')
   })
 
@@ -292,8 +312,145 @@ describe('rotina opencode-go-usage-refresh', () => {
   })
 
   it('sem chave em uso não chama a API', async () => {
-    mocks.active.mockResolvedValue(null)
+    mocks.list.mockResolvedValue([])
     expect(await runOpencodeGoUsageRefresh()).toMatch(/Sem chave/)
     expect(mocks.fetch).not.toHaveBeenCalled()
+  })
+})
+
+describe('"Todas as chaves" soma as assinaturas do chaveiro (OPE-180)', () => {
+  const statusCalls = () => mocks.fetch.mock.calls.filter(([url]) => String(url).endsWith('/go/status'))
+  const fraction = (Date.parse('2026-11-05T12:15:35Z') - Date.parse('2026-11-05T00:00:00Z')) / 86_400_000
+  const singleCost = Math.round((4 * (1 - fraction) + 1) * 100) / 100
+
+  beforeEach(() => {
+    mocks.list.mockResolvedValue([{ ...KEY, active: true }, { ...TWO, active: false }])
+    statusByKey.set(TWO.apiKey, status('1000000000'))
+  })
+
+  it('regressão: medidores, gasto e gráfico somam as duas chaves com um único teto de 100%', async () => {
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.state).toBe('ok')
+    expect(dto.keyName).toBeNull()
+    expect(dto.keys).toEqual([
+      { id: KEY.id, name: KEY.name, error: null, cost: true },
+      { id: TWO.id, name: TWO.name, error: null, cost: true },
+    ])
+    expect(dto.cycleKeyName).toBeNull()
+    // (2634252498 + 1000000000) / (6e9 + 6e9) = 30,28…% → 30,2%; com só a chave em uso seria 43,9%.
+    expect(dto.monthPercent).toBe(30.2)
+    expect(dto.meters.find((meter) => meter.id === 'month')!.percent).toBe(30.2)
+    expect(dto.chart!.today!.percent).toBe(30.29)
+    expect(dto.realCostUsd).toBeCloseTo(singleCost * 2, 2)
+    // Σ custo / Σ cota: as duas chaves gastaram o mesmo sobre o dobro da cota → os mesmos 3 pp (somar % daria 6).
+    expect(dto.chart!.points.find((point) => point.date === '2026-11-10')!.dayPercent).toBe(3)
+    expect(dto.chart!.missingKeyDays).toBe(0)
+    expect(statusCalls().map(([, init]) => secretOf(init as RequestInit)).sort()).toEqual(['oc_sk_secret', 'oc_sk_two'])
+    expect(JSON.stringify(dto)).not.toContain('oc_sk_')
+  })
+
+  it('ciclos diferentes: ciclo, previsão e gasto pela chave de maior cota mensal', async () => {
+    statusByKey.set(TWO.apiKey, status('1000000000', { startsAt: '2026-11-10T00:00:00.000Z', endsAt: '2026-12-10T00:00:00.000Z', monthLimit: '12000000000' }))
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.cycleKeyName).toBe('Reserva')
+    expect(dto.cycle).toEqual({ startsAt: '2026-11-10T00:00:00.000Z', endsAt: '2026-12-10T00:00:00.000Z' })
+    expect(dto.chart!.cycle.startsAt).toBe('2026-11-10T00:00:00.000Z')
+    expect(dto.meters.find((meter) => meter.id === 'month')!.resetsAt).toBe('2026-12-10T00:00:00.000Z')
+    const costFrom = mocks.fetch.mock.calls.map(([url]) => String(url)).filter((url) => url.includes('/usage/cost-by-day')).map((url) => new URL(url).searchParams.get('from'))
+    expect(costFrom).toEqual(['2026-11-10', '2026-11-10'])
+  })
+
+  it('uma chave recusada: consolidado parcial com as demais, sem cair para erro', async () => {
+    refusedKeys.add(TWO.apiKey)
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.state).toBe('ok')
+    expect(dto.monthPercent).toBe(43.9)
+    expect(dto.keys[1]).toMatchObject({ name: 'Reserva', cost: false })
+    expect(dto.keys[1]!.error).toMatch(/recusou a chave/)
+    expect(dto.realCostUsd).toBeCloseTo(singleCost, 2)
+  })
+
+  it('todas as chaves falham: erro com o motivo de cada uma', async () => {
+    refusedKeys.add(KEY.apiKey)
+    refusedKeys.add(TWO.apiKey)
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.state).toBe('error')
+    expect(dto.message).toMatch(/Nenhuma chave do OpenCode Go respondeu/)
+    expect(dto.message).toContain('Reserva')
+    expect(dto.keys).toHaveLength(2)
+  })
+
+  it('segredo que não decifra entra na cobertura como falha, nunca omitido', async () => {
+    mocks.list.mockResolvedValue([{ ...KEY, active: true }, { ...TWO, active: false, apiKey: null }])
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.state).toBe('ok')
+    expect(dto.keys[1]!.error).toMatch(/decifrar/)
+    expect(statusCalls()).toHaveLength(1)
+  })
+
+  it('gasto real de uma chave falha: soma as demais e marca a chave sem custo', async () => {
+    failingCost.add(TWO.apiKey)
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.realCostUsd).toBeCloseTo(singleCost, 2)
+    expect(dto.keys.map((key) => key.cost)).toEqual([true, false])
+    expect(dto.monthPercent).toBe(30.2)
+  })
+
+  it('catálogo de uma chave falha: gráfico consolidado indisponível citando a chave, medidores somados', async () => {
+    mocks.allowances.mockImplementation(async (_product: string, options: { apiKey?: string }) => {
+      if (options.apiKey === TWO.apiKey) throw new Error('offline')
+      return new Map([['deepseek-v4.1-flash', 100], ['glm-5.3', 15]])
+    })
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.chart).toBeNull()
+    expect(dto.chartMessage).toMatch(/catálogo/)
+    expect(dto.chartMessage).toContain('Reserva')
+    expect(dto.monthPercent).toBe(30.2)
+  })
+
+  it('dia que falha numa chave usa só a outra (custo e cota) e conta como dia com chave faltando', async () => {
+    failingDays.add(`${TWO.apiKey}:2026-11-10`)
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.chart!.points.find((point) => point.date === '2026-11-10')!.dayPercent).toBe(3)
+    expect(dto.chart!.missingKeyDays).toBe(1)
+    expect(dto.chart!.missingDays).toBe(0)
+  })
+
+  it('cache e Atualizar por chave: segunda leitura não repete; o Atualizar relê cada chave fora do intervalo mínimo', async () => {
+    await getOpencodeGoUsage(query)
+    const dayCalls = () => mocks.fetch.mock.calls.filter(([url]) => String(url).includes('/usage/models')).length
+    const days = dayCalls()
+    await getOpencodeGoUsage(query)
+    expect(statusCalls()).toHaveLength(2)
+    expect(dayCalls()).toBe(days)
+    await refreshOpencodeGoUsage(query)
+    expect(statusCalls()).toHaveLength(2)
+    vi.setSystemTime(NOW + 31_000)
+    await refreshOpencodeGoUsage(query)
+    expect(statusCalls()).toHaveLength(4)
+    // Só hoje é relido, nas duas chaves (duas páginas cada).
+    expect(dayCalls()).toBe(days + 4)
+  })
+
+  it('filtro por uma chave continua lendo só aquela assinatura', async () => {
+    mocks.byId.mockResolvedValue(TWO)
+    const dto = await getOpencodeGoUsage({ ...query, apiKey: TWO.id })
+    expect(dto.keyName).toBe('Reserva')
+    expect(dto.keys).toEqual([{ id: TWO.id, name: 'Reserva', error: null, cost: true }])
+    expect(dto.monthPercent).toBe(16.6)
+    expect(statusCalls().map(([, init]) => secretOf(init as RequestInit))).toEqual(['oc_sk_two'])
+  })
+
+  it('rotina lê todas as chaves e resume o consolidado; publica pela chave que mudou', async () => {
+    expect(await runOpencodeGoUsageRefresh()).toContain('Mensal 30,2%')
+    expect(statusCalls()).toHaveLength(2)
+    expect(mocks.publish).toHaveBeenCalledTimes(2)
+    statusByKey.set(TWO.apiKey, status('1200000000'))
+    vi.setSystemTime(NOW + 5 * 60_000)
+    await runOpencodeGoUsageRefresh()
+    expect(mocks.publish).toHaveBeenCalledTimes(3)
+    refusedKeys.add(TWO.apiKey)
+    vi.setSystemTime(NOW + 10 * 60_000)
+    expect(await runOpencodeGoUsageRefresh()).toMatch(/1 de 2 chaves sem leitura/)
   })
 })

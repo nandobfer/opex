@@ -61,6 +61,7 @@ const chart = (overrides: Partial<GoChartDto> = {}): GoChartDto => ({
   yMax: 120,
   missingDays: 0,
   partialDays: 0,
+  missingKeyDays: 0,
   historyFrom: '2026-10-06',
   ...overrides,
 })

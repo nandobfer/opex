@@ -20,6 +20,13 @@ export const GO_CLOSED_DAY_CACHE_MS = 6 * 60 * 60_000
 /** Chamadas simultâneas ao Console ao montar a série diária. */
 export const GO_SERIES_CONCURRENCY = 5
 /**
+ * Teto de dias (chave × dia) na memória da série: ~43 dias por chave cabem com folga para dezenas de chaves; acima
+ * disso o mais antigo sai (processo de longa duração, OPE-180).
+ */
+export const GO_SERIES_CACHE_MAX = 2_000
+/** Teto do gasto real do ciclo em memória (uma entrada por chave e início de ciclo). */
+export const GO_CYCLE_COST_CACHE_MAX = 200
+/**
  * Histórico que o Console devolve (dias UTC antes de hoje). A API anuncia ~40 dias; em 16/11/2026 a janela
  * observada ia de 05/10 a 16/11 (hoje − 42). Dia mais antigo volta vazio, sem erro: não é consultado e
  * conta como "sem dados".

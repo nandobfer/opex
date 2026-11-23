@@ -17,6 +17,7 @@ import type { UsageQuery } from "@/features/ai/provider-usage"
 import { GO_STALE_AFTER_MS } from "../../go-constants"
 import { isGoUsageStale } from "../../go-logic"
 import { useOpencodeGoUsage, useOpencodeGoUsageRealtime, useRefreshOpencodeGoUsage } from "../../hooks/useOpencodeGoUsage"
+import { GoConsolidationNotes, goKeysLabel } from "./GoConsolidationNotes"
 import { GoCoverageNotes } from "./GoCoverageNotes"
 import { GoUsageChart } from "./GoUsageChart"
 import { GoUsageHeader } from "./GoUsageHeader"
@@ -38,6 +39,7 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
     const view = query === null ? "invalid" : usage.isLoading ? "loading" : usage.isError ? "request-error" : (data?.state ?? "loading")
     const stale = data?.state === "ok" && isGoUsageStale(data.checkedAt, now, GO_STALE_AFTER_MS)
     const retry = () => refresh.mutate()
+    const consolidated = !!data && !data.keyName && data.keys.length > 0
 
     return (
         <Card>
@@ -53,8 +55,11 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
                     </div>
                 </div>
                 <p className="text-sm text-muted-foreground">
-                    Uso da assinatura inteira, lido do Console do OpenCode Go: inclui outros clientes (OpenCode no host ou no desktop), não só o Opex.
+                    {consolidated
+                        ? `${data.keys.length === 1 ? "Uso da única chave" : `Uso somado das ${data.keys.length} chaves`} do chaveiro, lido do Console do OpenCode Go: inclui outros clientes (OpenCode no host ou no desktop), não só o Opex.`
+                        : "Uso da assinatura inteira, lido do Console do OpenCode Go: inclui outros clientes (OpenCode no host ou no desktop), não só o Opex."}
                     {data?.keyName && <> Chave: {data.keyName}.</>}
+                    {consolidated && <> {goKeysLabel(data.keys.length)}.</>}
                 </p>
             </CardHeader>
             <CardContent>
@@ -74,7 +79,10 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
                         {view === "no-key" && <EmptyState icon={KeyRound} title="Sem assinatura para este filtro" description={data?.message ?? undefined} />}
                         {view === "ok" && data && (
                             <div className="space-y-5">
-                                <GoUsageHeader data={data} />
+                                <div className="space-y-2">
+                                    <GoUsageHeader data={data} />
+                                    <GoConsolidationNotes data={data} />
+                                </div>
                                 <GoUsageWindows meters={data.meters} now={now} />
                                 {data.chart ? (
                                     <div className="space-y-2">

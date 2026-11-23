@@ -371,8 +371,12 @@ do `opencode serve`, não uma chave de API.
   abaixo (os filtros vivem na URL): **Assinatura OpenCode Go** (`OpencodeGoSubscriptionCard`, lido do Console
   — ver `modules/opencode-quota.md`, "Assinatura OpenCode Go") e **Consumo do OpenCode Go pelo Opex** (o
   `ProviderUsageCard` com `hideFilters`). Os demais provedores continuam com o filtro dentro do próprio card.
+  Em "Todas as chaves" a assinatura é a **soma de todas as chaves do chaveiro** do Go, num card e num gráfico
+  únicos com um só teto de 100% (OPE-180); uma chave no filtro mostra só a assinatura dela.
 - **Chave por id** (`getAiProviderKeyById`, `src/lib/ai/api-keys.ts`): lê e decifra no servidor uma chave
   do chaveiro em uso ou não (filtro de chave da assinatura do Go); `null` se não existe ou não decifra.
+  **Todas as chaves** (`listAiProviderKeys`, OPE-180): o chaveiro inteiro na ordem gravada, com `active` e o segredo
+  decifrado só no servidor (`null` quando não decifra), para o consolidado da assinatura do Go.
 - **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek,
   OpenCode Go (OPE-156) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
   recebe o parâmetro `apiKey`. Opções:

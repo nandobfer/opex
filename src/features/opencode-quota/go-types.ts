@@ -53,16 +53,33 @@ export interface GoChartDto {
     missingDays: number
     /** Dias com custo de modelo sem cota conhecida no catálogo (custo fora da soma). */
     partialDays: number
+    /** Consolidado ("Todas as chaves"): dias com dados em que alguma chave não respondeu (custo e cota dela fora da soma). */
+    missingKeyDays: number
     /** Primeiro dia que a API ainda devolve. */
     historyFrom: string
+}
+
+/** Uma chave considerada na leitura (OPE-180): o nome e o que entrou na soma. Nunca o segredo. */
+export interface GoKeyReadDto {
+    id: string
+    name: string
+    /** Falha da leitura do status desta chave; `null` quando lida (os medidores dela entraram na soma). */
+    error: string | null
+    /** O gasto real do ciclo desta chave entrou na soma. */
+    cost: boolean
 }
 
 export interface OpencodeGoUsageDto {
     state: OpencodeGoUsageState
     message: string | null
-    /** Leitura do status (medidores). */
+    /** Leitura do status (medidores); no consolidado, a mais recente entre as chaves lidas. */
     checkedAt: string
+    /** Nome da chave no filtro por uma chave; `null` em "Todas as chaves" (consolidado). */
     keyName: string | null
+    /** Chaves consideradas: todas do chaveiro em "Todas as chaves", uma no filtro por chave. */
+    keys: GoKeyReadDto[]
+    /** Consolidado com ciclos diferentes: chave (a de maior cota mensal) que define o ciclo e a previsão. */
+    cycleKeyName: string | null
     cycle: { startsAt: string; endsAt: string } | null
     meters: GoMeterDto[]
     monthPercent: number | null

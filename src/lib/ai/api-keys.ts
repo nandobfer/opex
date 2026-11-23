@@ -40,6 +40,31 @@ export async function getAiProviderKeyById(integrationId: IntegrationId, keyId: 
     return apiKey.trim() ? { id: item.id, name: item.name, apiKey } : null
 }
 
+/** Uma chave do chaveiro com o segredo decifrado (`null` quando a caixa não decifra ou está vazia) e se está em uso. */
+export interface AiProviderKeyRingEntry {
+    id: string
+    name: string
+    active: boolean
+    apiKey: string | null
+}
+
+function decryptKey(secret: unknown): string | null {
+    if (!isEncryptedSecret(secret)) return null
+    try {
+        const value = decryptSecret(secret)
+        return value.trim() ? value : null
+    } catch {
+        return null
+    }
+}
+
+/** Todas as chaves do chaveiro, na ordem gravada (SOMENTE servidor): o chamador decide o que fazer com a que não decifra. */
+export async function listAiProviderKeys(integrationId: IntegrationId): Promise<AiProviderKeyRingEntry[]> {
+    const stored = await loadStoredIntegration(integrationId)
+    const activeId = stored?.activeApiKeyId ?? null
+    return (stored?.apiKeys ?? []).map((item) => ({ id: item.id, name: item.name, active: item.id === activeId, apiKey: decryptKey(item.secret) }))
+}
+
 /** Chave ativa ou erro acionável em pt-BR (provedor sem chave = não configurado). */
 export async function requireActiveAiProviderKey(integrationId: IntegrationId, providerName: string): Promise<ActiveAiProviderKey> {
     const key = await getActiveAiProviderKey(integrationId)

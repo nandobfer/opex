@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   axisDateLabel,
   buildGoChart,
+  composeGoDay,
   dateKeysBetween,
   dayPercentFromModels,
   formatGoDate,
@@ -11,10 +12,14 @@ import {
   goConsoleStatusMessage,
   goCycleFor,
   goForecast,
+  goReferenceCycle,
   goYMax,
   goYTicks,
   meterPercent,
+  mergeGoModelCosts,
   subUtcMonths,
+  sumGoAllowances,
+  sumGoMeters,
   type GoDayValue,
 } from '@/features/opencode-quota/go-logic'
 
@@ -242,6 +247,64 @@ describe('gráfico do consumo (um ciclo, desenho do Console)', () => {
     const near = goAxisTicks(START, END, Date.parse('2026-11-26T12:00:00Z'))
     expect(near.map((tick) => [axisDateLabel(tick.t), tick.highlight])).toEqual([['5 NOV', false], ['15 NOV', false], ['26 NOV', true], ['5 DEZ', false]])
     expect(goAxisTicks(START, END, null)).toHaveLength(4)
+  })
+})
+
+describe('consolidado de várias chaves (OPE-180)', () => {
+  const meters = (five: [number, number, string], week: [number, number, string], month: [number, number, string]) => ({
+    fiveHour: { usedMicroCents: five[0], limitMicroCents: five[1], resetsAt: five[2] },
+    week: { usedMicroCents: week[0], limitMicroCents: week[1], resetsAt: week[2] },
+    month: { usedMicroCents: month[0], limitMicroCents: month[1], resetsAt: month[2] },
+  })
+
+  it('soma uso e limite de cada janela e calcula o % truncado sobre os totais, com o reset mais próximo', () => {
+    const total = sumGoMeters([
+      meters([100, 1200, '2026-11-16T22:00:00.000Z'], [300, 3000, '2026-11-23T00:00:00.000Z'], [2634252498, 6000000000, '2026-12-05T12:15:35.000Z']),
+      meters([500, 1200, '2026-11-16T20:00:00.000Z'], [0, 3000, '2026-11-25T00:00:00.000Z'], [1000000000, 6000000000, '2026-12-10T00:00:00.000Z']),
+    ])
+    expect(total.month).toEqual({ usedMicroCents: 3634252498, limitMicroCents: 12000000000, resetsAt: '2026-12-05T12:15:35.000Z' })
+    // 3634252498 / 12000000000 = 30,285…% → 30,2% (truncado), um teto único de 100% para as duas assinaturas.
+    expect(meterPercent(total.month.usedMicroCents, total.month.limitMicroCents)).toBe(30.2)
+    expect(total.fiveHour).toEqual({ usedMicroCents: 600, limitMicroCents: 2400, resetsAt: '2026-11-16T20:00:00.000Z' })
+    expect(total.week.resetsAt).toBe('2026-11-23T00:00:00.000Z')
+  })
+
+  it('soma custo e cota do mesmo modelo entre as chaves; modelo sem cota em nenhuma continua nulo', () => {
+    expect(mergeGoModelCosts([[{ model: 'a', costMicroCents: 100 }, { model: 'b', costMicroCents: 0 }], [{ model: 'a', costMicroCents: 50 }]])).toEqual([{ model: 'a', costMicroCents: 150 }])
+    const allowances = sumGoAllowances([new Map([['a', 100], ['free', null]]), new Map<string, number | null>([['a', 200], ['so-b', 15], ['free', null]])])
+    expect([...allowances]).toEqual([['a', 300], ['free', null], ['so-b', 15]])
+  })
+
+  it('dia consolidado: Σ custo / Σ cota das chaves que responderam; as que faltaram contam em missingKeys', () => {
+    const allowances = new Map<string, number | null>([['a', 100]])
+    // 2 US$ + 1 US$ sobre 100 + 100 US$ de cota = 1,5 pp (e não 3 pp de uma assinatura só).
+    const both = composeGoDay([{ costs: [{ model: 'a', costMicroCents: 200_000_000 }], allowances }, { costs: [{ model: 'a', costMicroCents: 100_000_000 }], allowances }], 2)
+    expect(both).toEqual({ percent: 1.5, partial: false })
+    const one = composeGoDay([{ costs: [{ model: 'a', costMicroCents: 200_000_000 }], allowances }], 2)
+    expect(one).toEqual({ percent: 2, partial: false, missingKeys: 1 })
+    expect(composeGoDay([], 2)).toEqual({ percent: null, partial: false })
+  })
+
+  it('ciclo: o comum quando todas renovam juntas; senão o da maior cota mensal, com desempate determinístico', () => {
+    const a = { name: 'A', startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z', monthLimit: 6e9 }
+    expect(goReferenceCycle([a, { ...a, name: 'B' }])).toEqual({ startsAt: a.startsAt, endsAt: a.endsAt, keyName: null })
+    const b = { name: 'B', startsAt: '2026-11-10T00:00:00.000Z', endsAt: '2026-12-10T00:00:00.000Z', monthLimit: 12e9 }
+    expect(goReferenceCycle([a, b])).toEqual({ startsAt: b.startsAt, endsAt: b.endsAt, keyName: 'B' })
+    // Mesma cota: renovação mais próxima.
+    expect(goReferenceCycle([{ ...b, monthLimit: 6e9 }, a]).keyName).toBe('A')
+    expect(goReferenceCycle([a]).keyName).toBeNull()
+  })
+
+  it('gráfico conta os dias com chave faltando sem repetir os dias sem dados', () => {
+    const series = new Map<string, GoDayValue>([
+      ['2026-11-06', { percent: 2, partial: false, missingKeys: 1 }],
+      ['2026-11-07', { percent: null, partial: false }],
+      ['2026-11-08', { percent: 1, partial: false }],
+    ])
+    const forecast = goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 30 })
+    const chart = buildGoChart({ cycle: { startMs: START, endMs: END, current: true }, nowMs: NOW, days: series, monthRatio: 30, forecast, historyFrom: '2026-10-05' })
+    expect(chart.missingKeyDays).toBe(1)
+    expect(chart.points.find((point) => point.date === '2026-11-06')!.dayPercent).toBe(2)
   })
 })
 

@@ -24,6 +24,7 @@ const TONE_CLASSES = { warning: "text-warning font-medium", destructive: "text-d
 export function GoUsageHeader({ data }: { data: OpencodeGoUsageDto }) {
     const reduceMotion = useReducedMotion()
     const status = goStatusLine(data)
+    const partialCost = data.keys.some((key) => !key.error && !key.cost)
 
     return (
         <div className={GO_HEADER_ROW}>
@@ -57,8 +58,13 @@ export function GoUsageHeader({ data }: { data: OpencodeGoUsageDto }) {
                 </p>
             </div>
             {data.realCostUsd !== null && (
-                <p className="pt-1 text-[11px] text-muted-foreground" title="Soma do custo real por dia (usage/cost-by-day) desde o início do ciclo. Não é o medidor da assinatura, que normaliza o custo pela cota de cada modelo.">
+                <p
+                    className="pt-1 text-[11px] text-muted-foreground"
+                    title={`Soma do custo real por dia (usage/cost-by-day) desde o início do ciclo. Não é o medidor da assinatura, que normaliza o custo pela cota de cada modelo.${partialCost ? " Parcial: só as chaves com o custo lido entraram na soma." : ""}`}
+                    data-go-cost={partialCost ? "partial" : "full"}
+                >
                     Gasto real no ciclo: {formatGoUsd(data.realCostUsd)}
+                    {partialCost && " (parcial)"}
                 </p>
             )}
         </div>
