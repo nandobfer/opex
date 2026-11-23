@@ -27,6 +27,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 // Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
+// OPE-178: o contexto da mesa (cabeçalho/MCP `opex_mesa`) é coberto em workflow-workbench-context.test.ts; aqui o prompt fica como o da etapa.
+vi.mock('@/features/agentic/server/workbench-context', () => ({ syncWorkbenchContext: vi.fn(async () => ({ header: '', fallback: null, mcp: false })) }))
 vi.mock('@/features/agent-metrics/server/record', () => ({ recordWorkbenchEvent: vi.fn(async () => undefined), recordPrReviewReplanned: vi.fn(async () => undefined), recordAgentEvent: vi.fn(), recordAgentRun: vi.fn() }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 // Builder Machine desativada: o build e a limpeza seguem no servidor.

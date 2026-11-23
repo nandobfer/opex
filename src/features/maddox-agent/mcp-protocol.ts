@@ -19,8 +19,15 @@ export interface McpToolDescriptor {
     annotations?: { readOnlyHint?: boolean; destructiveHint?: boolean }
 }
 
+/** Conteúdo de imagem do MCP (base64), usado pelo MCP da mesa para entregar um anexo (OPE-178). */
+export interface McpImageContent {
+    type: "image"
+    data: string
+    mimeType: string
+}
+
 export interface McpCallResult {
-    content: { type: "text"; text: string }[]
+    content: ({ type: "text"; text: string } | McpImageContent)[]
     isError?: boolean
 }
 

@@ -60,6 +60,8 @@ import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWork
 import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { claimAgenticFiles, deleteForkFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
 import { agenticDownloadDir, withAttachmentsSection } from "../files"
+import { governingPlan, withWorkbenchContext } from "../workbench-context"
+import { syncWorkbenchContext } from "./workbench-context"
 import { describeModel, forkBaseAgent, forkModel, toModelChoice, validatedModelOverride } from "./models"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { deleteWorkbenchSession } from "./session-cleanup"
@@ -329,6 +331,32 @@ function turnHooks(doc: IAgenticFork) {
     }
 }
 
+/** Plano que rege a etapa da mesa (aprovado nas etapas de execução), para o fork aberto sem a conversa principal. */
+function forkPlanOf(workbench: IAgenticWorkbench): { version: number; approved: boolean; text: string } | null {
+    const governing = governingPlan(workbench.plans ?? [], workbench.approvedPlanVersion, asStage(workbench.stage))
+    return governing ? { version: governing.plan.version, approved: governing.approved, text: governing.plan.text } : null
+}
+
+/** Contexto da mesa no turno do fork (OPE-178; nunca derruba o turno). */
+async function forkTurnContext(client: OpencodeClient, fork: IAgenticFork, id: string, config: CentralConfig): Promise<{ header: string; fallback: string | null } | null> {
+    try {
+        const workbench = (await AgenticWorkbench.findById(fork.workbenchId).lean()) as IAgenticWorkbench | null
+        if (!workbench) return null
+        return await syncWorkbenchContext(client, {
+            workbench,
+            stage: asStage(workbench.stage),
+            config,
+            directories: [fork.sessionDirectory],
+            downloadDir: agenticDownloadDir(fork.taskCode, fork.number),
+            fork: { number: fork.number },
+            notify: (level, message) => publishWorkbenchEvent(id, { type: "notice", level, message }),
+        })
+    } catch (error) {
+        log.warn({ forkId: id, err: errorText(error) }, "[agentic-fork] contexto da mesa indisponível neste turno")
+        return null
+    }
+}
+
 /** Executa o turno do fork em segundo plano; no turno de consolidação, extrai o resumo. */
 async function executeForkTurn(id: string, text: string, controller: AbortController, fileIds?: string[]): Promise<void> {
     const fork = (await AgenticFork.findById(id).lean()) as unknown as IAgenticFork | null
@@ -352,6 +380,8 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         text = `${forkNotesInstructions(fork.childNotes, "fork")}\n\n---\n${text}`
         await AgenticFork.updateOne({ _id: fork._id }, { $set: { childNotesSynced: true } })
     }
+    // Contexto da mesa (OPE-178): cabeçalho + MCP da mesa no diretório do fork (ou o pacote completo sem o MCP), lido junto com as memórias.
+    const contextPromise = forkTurnContext(client, fork, id, config)
     // Memórias do agente desenvolvedor (globais + da central): relidas e regravadas na sessão do fork a cada turno.
     text = withDeveloperMemories(
         await syncDeveloperMemories(client, fork.sessionId, fork.centralId, {
@@ -361,6 +391,7 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         }),
         text,
     )
+    text = withWorkbenchContext(text, await contextPromise)
     // Anexos da mensagem do usuário: conteúdo no prompt e links para baixar (fora do worktree).
     const attachments = fileIds?.length ? await promptFilesFor(fileIds, { downloadDir: agenticDownloadDir(fork.taskCode, fork.number), signal: controller.signal }) : { files: [], section: "" }
     text = withAttachmentsSection(text, attachments.section)
@@ -546,7 +577,7 @@ export async function openFork(workbenchId: string, text: string, options: { par
 
     const freshContext =
         session.origin === "fresh"
-            ? forkFreshContextPrompt(workbenchContext(workbench, config, central.projectName, (await repoForProject(central.projectId))?.repo ?? null), { stage: asStage(workbench.stage), plan: workbench.plans?.at(-1)?.text ?? null, prUrl: workbench.pr?.url ?? null })
+            ? forkFreshContextPrompt(workbenchContext(workbench, config, central.projectName, (await repoForProject(central.projectId))?.repo ?? null), { stage: asStage(workbench.stage), plan: forkPlanOf(workbench), prUrl: workbench.pr?.url ?? null })
             : null
     const prompt = forkFirstPrompt(text, freshContext)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_FORK, entidadeId: id, acao: AcaoAuditoria.CRIAR, depois: { tarefa: workbench.taskCode, fork: number, origem: session.origin, modo: mode, somenteLeitura: locked, etapa: workbench.stage, ...(parent ? { forkPai: parent.number } : {}) } })

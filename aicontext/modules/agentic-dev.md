@@ -1075,11 +1075,66 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
 - os rótulos das etapas vêm de `workbenchStageLabel(stage, kind)`;
 - "Definir etapa" não oferece as etapas do PR ("Mesa de plugin não tem Pull Request").
 
+## Contexto da mesa para o agente (OPE-178)
+
+O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconexão ou sessão recriada)
+**não depende do histórico da sessão do OpenCode** para saber a tarefa, o plano e os anexos.
+
+- **Sessão do OpenCode** (`ensureSession`, `lookupOpencodeSession` em `src/lib/ai/opencode-sessions.ts`):
+  só cria outra sessão quando o OpenCode responde **"sessão não encontrada"** (`SessionNotFoundError`).
+  Erro de rede/DNS/transporte é repetido (3 tentativas, espera de 1 s e 3 s) e, persistindo, a etapa
+  **falha** com "OpenCode inacessível… A sessão foi mantida" (Tentar novamente), sem trocar a sessão
+  gravada — ela pode estar viva, com o histórico. Caso real: na ZC-17 (22/11/2026) uma falha de DNS do
+  host fez a mesa trocar a sessão viva (com o plano v2) por uma vazia. Com sessão nova de verdade, o aviso
+  na Saída da IA diz que o histórico recomeça, mas que tarefa, plano, forks e anexos continuam disponíveis.
+- **Cabeçalho "Mesa do Opex" em todo turno** (`workbenchContextHeader`, módulo puro
+  `src/features/agentic/workbench-context.ts`), anexado **ao final** do prompt da etapa (antes da seção
+  dos anexos da mensagem; o pedido continua sendo a primeira coisa que o agente lê): tarefa, etapa,
+  branch/worktree, **versão do plano que rege a etapa** (`governingPlan`: a mais recente no
+  refinamento/planejamento/Plano pronto; a **aprovada** nas demais, ou a mais recente sem aprovação
+  gravada), forks integrados, contagem dos anexos (mesa e tarefa), PR e prévia, e a lista das ferramentas
+  do MCP com "quando usar". Na implementação e em sessão nova, manda **ler o plano com
+  `opex_mesa_get_plan` antes de agir**; nas demais, se o plano não estiver no histórico. Vale para os
+  turnos da mesa (inclusive build/preparo e correção, retentativa e turnos encadeados) e para todo turno
+  de fork; fica fora da limpeza (`finishing`) e da reconexão (não há prompt novo). O turno de fork recebe
+  `· Fork N` no cabeçalho.
+- **MCP "Mesa do Opex"** (`opex_mesa`, `POST /api/agentic/mcp`, rota pública exata em `PUBLIC_ROUTES`):
+  somente leitura, autenticado pelo segredo derivado `deriveSubkey("agentic-workbench-mcp:v1")` e com o
+  escopo pela sessão do OpenCode que chamou (`_meta["ai.opencode/sessionID"]`, subindo até 3 sessões-mãe
+  para subagentes). Atende **só a sessão atual de uma mesa ou de um fork** e serve a mesa dona; outra
+  sessão (inclusive uma antiga já desvinculada da mesa) é recusada. As ferramentas não recebem id de mesa.
+  Ferramentas (`server/workbench-mcp/tools.ts`): `get_workbench`, `get_task` (descrição, especificação e
+  comentários, como o planejador recebe), `get_plan` (`version`: número, `approved` ou `latest`; padrão: a
+  que rege a etapa), `list_plan_versions` (com o pedido de cada versão), `list_forks` (com os resumos
+  integrados), `list_attachments` e `get_attachment`. Sem escrita, sem segredos e sem ferramentas do
+  catálogo do Maddox. Não é endpoint por token de sistema (fora da OpenAPI e de `PUBLIC_TOKEN_ROUTES`).
+- **Registro** (`server/workbench-mcp/register.ts` sobre `ensureRemoteMcp` de
+  `src/features/ai/server/opencode-mcp.ts`, compartilhado com o MCP de memórias): por diretório, no
+  início de cada turno (central, diretório da sessão, worktree e pasta do plugin; no fork, o diretório
+  do fork) e no `onMoved` (worktree recém-criado). Usa a mesma URL pública do Opex do MCP de memórias.
+  Lido em paralelo com as memórias do turno e com prazo de 8 s por consulta (nunca prende o turno).
+- **Degradação segura**: sem o MCP (sem URL pública, sem chave, banco desconectado ou falha), o turno
+  **segue** com o pacote completo no prompt (`workbenchContextFallback`: plano que rege a etapa, histórico
+  das versões com os pedidos, resumos dos forks, a tarefa e os anexos com link gerado na hora) e um aviso
+  `warn` na Saída da IA. Falha inesperada ao montar o contexto também não derruba a etapa.
+- **Anexos durante toda a vida da mesa**: `list_attachments` junta os enviados na mesa e nos forks
+  (origem "Mesa"/"Fork N") e os **anexos da página da tarefa** (`task_attachments` prontos, origem
+  "Tarefa"). `get_attachment` gera um **link assinado novo (24 h) a cada consulta** — vale em turnos sem
+  mensagem (build, retentativa, reconexão), depois de 24 h e para anexos de turnos antigos — e entrega o
+  conteúdo direto na resposta quando dá: texto até 200 KB e imagem até 5 MB (conteúdo `image` do MCP).
+  Sem Storage acessível (ou para o fork somente leitura, sem `curl`), a resposta diz que o arquivo existe
+  (nome, tipo, tamanho) e por que não foi entregue. **Pendente de conferência no host:** se o OpenCode
+  2.2.1 repassa o conteúdo `image` do MCP ao modelo; se não repassar, a imagem chega só pelo link.
+
 ## Forks da conversa
 
 - Agente **Fork** configurável globalmente e por central, com instruções próprias. Conversas
   paralelas não ocupam vaga nem alteram a tarefa/descrição. Sessão copiada da mesa;
-  sem sessão principal, nova sessão com o contexto preservado. Consumo separado (`agentic-fork`).
+  sem sessão principal, nova sessão com o contexto preservado (o plano que rege a etapa da mesa — o
+  **aprovado** nas etapas de execução —, o PR e o repositório no primeiro prompt). Todo turno de fork
+  recebe o cabeçalho "Mesa do Opex" e o MCP `opex_mesa` no diretório do fork, inclusive o fork copiado de
+  uma sessão que já não tinha o plano no histórico (ver "Contexto da mesa para o agente"). Consumo
+  separado (`agentic-fork`).
 - **Fork de fork** copia a sessão do pai, sem limite de profundidade; seletor em árvore e atalho para
   o pai. Pai descartado é identificado sem perder os filhos. Filhos também integram no pai, além
   dos demais destinos disponíveis na mesa.
@@ -1433,7 +1488,8 @@ preview ─┬─ Solicitar correção → planning (desfaz a aprovação)
   usuário" ao fim do prompt com link assinado do S3 (24 h, gerado a cada turno) e a instrução de
   baixar com `curl` **fora do worktree** (`/tmp/opex-anexos/<tarefa>[/fork-N]`) e nunca commitar.
   Melhor esforço: o que não baixa fica só com o link. O link exige o S3 acessível pela máquina do
-  OpenCode.
+  OpenCode. Depois do turno da mensagem, o agente relê qualquer anexo (inclusive os da página da tarefa)
+  pelo MCP da mesa, com link novo ou conteúdo direto (OPE-178, "Contexto da mesa para o agente").
 - **Saída**: o evento `user` leva `files` (metadados + rota `/api/agentic/files/[id]`, nunca a URL
   assinada); a mensagem mostra as miniaturas (ampliam) e os demais para baixar. A auditoria do chat
   ao vivo registra `anexos` (nomes).
@@ -1477,6 +1533,14 @@ switch), `refinement-stage-logic.test.ts` (etapas, vagas, ações, bloqueios da 
 Refinamento, trilha), `RefinementActionBar.test.tsx`, `StartWorkbench.test.tsx` ("Refinar tarefa"),
 `refine-workbench-route.test.ts`, `environment-section.test.tsx` (padrão da central) e
 `refinement-workbench-controls.test.ts` (sem controles nativos).
+
+Contexto da mesa para o agente (OPE-178): `workbench-context.test.ts` (versão que rege a etapa, cabeçalho,
+pacote de degradação), `workbench-mcp.test.ts` (segredo, escopo pela sessão — mesa, fork, subagente e recusa de
+outra mesa/sessão antiga —, plano/versões/tarefa/forks, anexos da mesa e da tarefa com link novo a cada consulta,
+conteúdo direto, Storage fora do ar e catálogo só de leitura), `workflow-workbench-context.test.ts` (regressão da
+ZC-17: erro de rede não cria sessão; sessão inexistente → turno com a leitura obrigatória do plano; MCP fora →
+plano no prompt; sessão viva sem plano inline; Tentar novamente; `onMoved`), os casos OPE-178 de `forks.test.ts`
+(fork sem sessão principal com o plano aprovado, fork copiado e fork de fork com o contexto) e `prompts.test.ts`.
 
 Mesa no celular (OPE-166): `workbench-mobile-logic.test.ts` (descritor dos botões, `dockLayout`, avisos,
 `keyboardInset`, `scrollEdges`), `workbench-mobile-bar.test.tsx` (dock, motivo do bloqueio, folhas,

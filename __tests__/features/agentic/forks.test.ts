@@ -40,6 +40,9 @@ const mocks = vi.hoisted(() => ({
 }))
 
 const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
+// OPE-178: o contexto da mesa (cabeçalho/MCP `opex_mesa`) é coberto em workflow-workbench-context.test.ts; aqui o prompt fica como o da etapa.
+const syncContext = vi.hoisted(() => vi.fn<(...args: unknown[]) => Promise<{ header: string; fallback: string | null; mcp: boolean }>>(async () => ({ header: '', fallback: null, mcp: false })))
+vi.mock('@/features/agentic/server/workbench-context', () => ({ syncWorkbenchContext: syncContext }))
 vi.mock('@/features/agentic/server/developer-memories', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/agentic/server/developer-memories')>()), syncDeveloperMemories: memories.sync }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@opencode/client', () => ({ isSessionNotFoundError: (value: unknown) => (value as { notFound?: boolean } | null)?.notFound === true }))
@@ -307,6 +310,43 @@ describe('abrir fork', () => {
     expect(text).toContain('Plano v1')
     expect(text).toContain('pull/7')
     expect(text).toContain('O que foi feito?')
+  })
+
+  it('OPE-178: fork sem a conversa principal recebe o plano APROVADO (não o último escrito)', async () => {
+    const plans = [
+      { version: 1, text: 'Plano v1', feedback: null, createdAt: new Date() },
+      { version: 2, text: 'Plano v2 aprovado', feedback: 'ajuste', createdAt: new Date() },
+      { version: 3, text: 'Rascunho v3', feedback: 'outro ajuste', createdAt: new Date() },
+    ]
+    const id = await workbench({ stage: 'implementing', sessionId: null, plans, approvedPlanVersion: 2 })
+    await openFork(id, 'Leia o plano')
+    await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
+    const text = mocks.runTurn.mock.calls[0]![1].text as string
+    expect(text).toContain('Plano da mesa: versão 2 (aprovada)')
+    expect(text).toContain('Plano v2 aprovado')
+    expect(text).not.toContain('Rascunho v3')
+  })
+
+  it('OPE-178: fork copiado (inclusive de sessão sem o plano no histórico) recebe o contexto da mesa no diretório do fork', async () => {
+    syncContext.mockResolvedValueOnce({ header: '## Mesa do Opex\n- Plano que rege esta etapa: versão 1', fallback: null, mcp: true })
+    const id = await workbench()
+    const dto = await openFork(id, 'Consegue ler o plano?')
+    await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
+    expect(syncContext).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ directories: ['/home/u/app/worktrees/ope-1'], fork: { number: 1 }, workbench: expect.objectContaining({ taskCode: 'OPE-1' }) }))
+    const text = mocks.runTurn.mock.calls[0]![1].text as string
+    expect(text.startsWith('Consegue ler o plano?')).toBe(true)
+    expect(text).toContain('## Mesa do Opex')
+    await settle(dto.id)
+  })
+
+  it('OPE-178: fork de fork também recebe o contexto da mesa', async () => {
+    const id = await workbench()
+    const parent = await openFork(id, 'primeiro')
+    await settle(parent.id)
+    syncContext.mockClear()
+    const child = await openFork(id, 'filho', { parentForkId: parent.id })
+    await settle(child.id)
+    expect(syncContext).toHaveBeenCalledWith(mocks.client, expect.objectContaining({ fork: { number: 2 } }))
   })
 })
 
