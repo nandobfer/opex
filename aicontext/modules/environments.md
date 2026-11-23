@@ -36,9 +36,32 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   (confirmação, opção de apagar os volumes; otimista).
 - **Novo/Editar** (react-hook-form + `environmentInputSchema`): nome e slug (sugerido pelo nome);
   origem **central** (central, ref, arquivo compose, serviços, nome do projeto) ou adotado (só
-  leitura + "git pull no redeploy" quando há git); variáveis extras **cifradas** (na edição o valor
-  vazio mantém o salvo); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
+  leitura + "git pull no redeploy" quando há git); variáveis extras **cifradas**, com os valores à
+  vista (ver "Variáveis extras no formulário"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
   desabilitado com o motivo quando o túnel está fechado).
+- **Variáveis extras no formulário** (OPE-175):
+  - Em **Editar**, os valores salvos são lidos à parte (`GET /api/environments/[id]/env`, só o dono,
+    `readEnvValues`: decifra um a um; o que falhar volta `null`) e aparecem legíveis no campo **Valor**
+    (`useEnvironmentEnvValues`: lidos a cada abertura e tirados do cache ao fechar, fora do prefixo
+    que o tempo real invalida). Enquanto carrega, skeleton no lugar das linhas; com erro, aviso com
+    "Tentar novamente" e **Salvar** bloqueado (nunca grava vazio por cima do salvo). Variável cujo valor
+    não pôde ser lido vai com `keep: true` (mantém o salvo) até o dono digitar outro valor.
+  - Pela tela (`PUT`, `emptyKeepsSaved: false`), apagar o valor e salvar grava **vazio**; remover a
+    linha remove a variável. Em **Novo ambiente** os campos começam vazios.
+  - **Importar** (ao lado de **+ Variável**): menu com **Importar .env** (seletor de arquivos, sem filtro
+    de extensão, até 1 MB, lido como texto; o campo é zerado para o mesmo arquivo poder ser importado de
+    novo) e **Importar texto** (diálogo com campo grande, sem `<form>` próprio). Mesma leitura nos dois
+    (`parseEnvText`, `env-import.ts`): um `CHAVE=VALOR` por linha; linhas em branco e as que começam
+    com `#` (com ou sem espaços antes) são ignoradas sem contar; `#` no meio do valor é conteúdo; o
+    valor é tudo depois do primeiro `=`, sem os espaços das pontas, e um par de aspas (`"` ou `'`) que
+    envolve o valor inteiro sai (o miolo fica literal, sem escapes nem `${}`); linha sem `=` ou com
+    nome fora do formato do campo **Nome** conta como ignorada.
+  - O resultado é *upsert* na lista do formulário (`upsertEnvVars`): a que existe é atualizada (chave
+    repetida no conteúdo: vale a última, conta como atualizada), a nova entra no fim, nenhuma sai; toast
+    "N variável(is) adicionada(s), M atualizada(s), K linha(s) ignorada(s)". Sem linha aproveitável:
+    aviso "Nenhuma variável encontrada" e a lista intacta. Nada é gravado antes de **Salvar**; **Cancelar**
+    descarta o importado.
+  - Portal do cliente e ferramentas do Agente Opex não mudam: sem valores (ver "Agente Opex").
 - **Log do deploy ao vivo** num drawer com o xterm (NDJSON, pedaços da saída via
   `HostRunOptions.onOutput`), guardado em `environment_deploys`. Os passos, levantar/derrubar/
   reiniciar, o derrubar de Apagar e o `garbage-collect` rodam pelo **executor desacoplado** do
@@ -76,8 +99,10 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   build é pulado (`skipBuild` em `deploySteps`) — uma nova tentativa depois de falha não refaz o
   build. Pastas sem git (tag de horário) sempre fazem o build; projeto **adotado** só reaproveita com
   a árvore limpa (`cleanTreeCommand`: `git status --porcelain`, inclusive arquivos não rastreados,
-  fora o `.env.opex` e o override) — com alterações não commitadas o HEAD não descreve o código e
-  o build é refeito ("Há alterações não commitadas na pasta").
+  fora o `.env.opex`, o override e os arquivos de variáveis do compose **vazios e não rastreados** de
+  dentro da pasta, que são os que o app cria) — com alterações não commitadas o HEAD não descreve o
+  código e o build é refeito ("Há alterações não commitadas na pasta"). Um arquivo de variáveis com
+  conteúdo, ou rastreado e alterado, continua contando como alteração.
 - **Sem variáveis extras** o deploy apaga o `.env.opex` (`removeEnvFileCommand`): o compose usa o
   arquivo sempre que ele existe, e o de um deploy anterior não pode continuar valendo.
 - **Configurações** (engrenagem): pasta base no servidor (`opex-envs`), porta do registry
@@ -108,7 +133,8 @@ mesma validação, auditoria, Pusher e erros.
 - Escrita sem confirmação: `create_environment` (origem central; slug sugerido pelo nome, projeto =
   slug, ref `main`), `start_environment`.
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; `env`
-  é a lista completa, valor vazio mantém o salvo), `restart_environment`, `adopt_project`,
+  é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
+  tela, vazio grava vazio), `restart_environment`, `adopt_project`,
   `update_environments_settings`, `clean_environments_registry`.
 - Destrutivas (confirmação): `deploy_environment` (sem `ref` = a ref salva; outra ref só na origem
   central), `move_environment` (a descrição manda avisar dos volumes e do tempo fora do ar; a saída
@@ -133,6 +159,22 @@ mesma validação, auditoria, Pusher e erros.
   ocultos"), com `$` escapado como `$$` (o valor chega literal), passado por `--env-file` e
   `env_file` no override — caminho relativo à pasta do primeiro arquivo do compose (ex.:
   `deploy/docker-compose.yml` → `../.env.opex`).
+- **Arquivos de variáveis do compose** (OPE-175, `server/env-files.ts` → `ensureComposeEnvFiles`): antes
+  de toda ação que roda o compose (deploy/redeploy/mover, levantar, reiniciar, derrubar, logs e o
+  derrubar de Apagar), em central ou adotado, no servidor ou no PC, o app lê os `env_file`
+  declarados com `docker compose config --no-env-resolution --no-interpolate` (não falha com arquivo
+  ou variável faltando; a saída nunca vai para o log) e cria **vazio** (com a pasta, `umask 077`) cada
+  obrigatório que não existe — em qualquer caminho que o compose declare, na máquina dos arquivos.
+  Nunca toca um arquivo que existe (`[ -e ]` + `: >>`), nunca cria `required: false`, caminho ainda
+  com `$` nem o `.env.opex`. No deploy, o log mostra "Arquivo de variáveis do compose ausente: .env
+  (criado vazio)" (relativo à pasta do ambiente quando está dentro dela); nas outras ações, só no log
+  do servidor. Falha nessa preparação não bloqueia a ação (o compose mostra o erro real); no deploy, o
+  log diz "Não foi possível verificar os arquivos de variáveis do compose: um arquivo ausente não foi
+  criado." (leitura) ou "Não foi possível criar os arquivos de variáveis do compose ausentes." (criação). O Apagar
+  continua igual (o worktree da central sai inteiro; no adotado só o override e o `.env.opex`).
+  Compose sem `env_file` continua como antes.
+- **Variável obrigatória faltando** (`${X:?…}`): a falha de "Lendo o compose" diz qual variável faltou e
+  lembra de cadastrá-la em **Variáveis extras**.
 - **Override** `docker-compose.opex.yml` (regravado a cada deploy; os comandos do compose só o
   incluem quando existe — um adotado ainda não implantado pelo app derruba/reinicia/apaga sem ele): `env_file` e, com build e
   execução em máquinas diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`.
@@ -167,6 +209,14 @@ mesma validação, auditoria, Pusher e erros.
 
 ### Limitações
 
+- O arquivo de variáveis que o app cria vazio só é desconsiderado na checagem de pasta limpa do
+  próprio app: por decisão do dono, nada é gravado no repositório (nem `.git/info/exclude`, que nos
+  ambientes de central é compartilhado com o repositório da central). Num `git status` manual ele
+  aparece como `??` quando o projeto não o ignora no `.gitignore` — central ou **adotado**.
+- Commit novo que passa a **rastrear** um arquivo que o app criou vazio: na central, o `checkout --detach`
+  recusa sobrescrever o arquivo não rastreado (erro no passo "Código da ref"); no adotado, o mesmo vale
+  para o `git pull` ("git pull no redeploy") e para um `pull`/`checkout` manual. Apague o arquivo vazio
+  da pasta e implante (ou atualize) de novo.
 - O deploy só pode ser retomado a partir da fase de execução: reiniciar o app durante a preparação
   (código, variáveis, compose, build reaproveitado) encerra o deploy como falha, e é preciso
   implantar de novo.

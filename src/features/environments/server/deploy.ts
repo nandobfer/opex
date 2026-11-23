@@ -36,6 +36,7 @@ import type { EnvironmentActionInput, EnvironmentsSettings, Machine } from "../s
 import type { DeployKind } from "../types"
 import { emitDeploy, openDeployChannel } from "./hub"
 import { Environment, EnvironmentDeploy, type DeployCheckpoint, type IEnvironment, type IEnvironmentDeploy } from "./models"
+import { ensureComposeEnvFiles } from "./env-files"
 import { composePlanOf, envVarsOf, loadEnvironment } from "./service"
 import { envLog, loadEnvironmentsSettings, machineAccess, publishEnvironment, runEnvHost, type MachineAccess } from "./settings"
 
@@ -177,8 +178,11 @@ async function prepareSource(ctx: DeployContext, env: IEnvironment, settings: En
     return parseCommit(output)
 }
 
-/** `.env.opex`, `config` do compose, bloqueio de executar no PC e o override com as imagens. */
-async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<ComposeService[]> {
+/**
+ * `.env.opex`, arquivos de variáveis do compose, `config`, bloqueio de executar no PC e o override com
+ * as imagens. Devolve os serviços e os arquivos de variáveis que o compose declara.
+ */
+async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<{ services: ComposeService[]; envFiles: string[] }> {
     const vars = envVarsOf(env)
     if (vars.length) {
         await runStep(ctx, { label: "Variáveis extras", command: writeFileCommand(plan, ENV_FILE, envFileContent(vars)), timeoutMs: 30_000 }, { redactedAs: `gravar ${ENV_FILE} (${vars.length} variável(is), valores ocultos)` })
@@ -188,6 +192,8 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     }
     // O override entra em todo comando do compose: grava um vazio antes do `config`.
     await runStep(ctx, { label: "Override (inicial)", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services: [], images: {}, withEnvFile: false })), timeoutMs: 30_000 })
+    // Arquivo de variáveis declarado pelo compose e ausente na pasta (ex.: o 1º deploy) é criado vazio.
+    const envFiles = await ensureComposeEnvFiles(plan, access.targets.server, ctx.run, { write: ctx.write })
     // A saída do `config` traz as variáveis já resolvidas (segredos): nunca vai para o log.
     ctx.write(`\n\u001b[36m▸ Lendo o compose\u001b[0m\n`)
     const read = await ctx.run(configCommand(plan, access.targets.server), 60_000, { detached: true, redactedAs: "docker compose config (saída omitida: contém as variáveis)" })
@@ -204,26 +210,28 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     const cross = target.buildOn !== target.runOn
     const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
     await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan) })), timeoutMs: 30_000 })
-    return services
+    return { services, envFiles }
 }
 
 /** Fim da saída de erro do `config` (sem JSON: nunca as variáveis resolvidas). */
-function configError(output: string): string {
+export function configError(output: string): string {
     if (output.trimStart().startsWith("{")) return ""
     const line = lastLine(output)
-    return line ? `: ${line.slice(0, 300)}` : ""
+    const missing = /required variable ([A-Za-z_][A-Za-z0-9_]*) is missing a value/.exec(output)?.[1]
+    const hint = missing ? `. A variável ${missing} não veio das Variáveis extras nem do arquivo de variáveis: cadastre-a em Variáveis extras.` : ""
+    return line ? `: ${line.slice(0, 300)}${hint}` : hint
 }
 
 /**
  * Build e execução em máquinas diferentes com tag de commit: se todas as imagens do commit já existem
  * na máquina do build (deploy anterior falhou depois do build), o build é reaproveitado.
  */
-async function canReuseBuild(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, commit: string | null, buildServices: string[]): Promise<boolean> {
+async function canReuseBuild(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, commit: string | null, buildServices: string[], envFiles: string[]): Promise<boolean> {
     if (!commit || target.buildOn === target.runOn || !buildServices.length) return false
     // Projeto adotado é a árvore de trabalho do usuário: com alterações não commitadas o HEAD não
     // descreve o código, então o build é refeito (a central usa um worktree limpo na ref).
     if (env.source.kind === "adopted") {
-        const tree = await ctx.run(cleanTreeCommand(plan), 60_000, { retryOnLost: true }).catch(() => null)
+        const tree = await ctx.run(cleanTreeCommand(plan, envFiles), 60_000, { retryOnLost: true }).catch(() => null)
         if (tree?.exitCode !== 0 || tree.output.trim() !== "clean") {
             ctx.write("\nHá alterações não commitadas na pasta: o build é refeito.\n")
             return false
@@ -291,12 +299,12 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         commit = await prepareSource(ctx, env, settings, plan, ref, kind)
         tag = commit ?? `t${Date.now()}`
         const version = await readVersion(ctx, plan)
-        const services = await prepareCompose(ctx, env, settings, plan, access, target, tag)
+        const { services, envFiles } = await prepareCompose(ctx, env, settings, plan, access, target, tag)
         const buildServices = services.filter((service) => service.hasBuild).map((service) => service.name)
         if (target.buildOn !== target.runOn && buildServices.length) {
             await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { repositories: buildServices.map((service) => registryRepository(env.slug, service)) } })
         }
-        const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices)
+        const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices, envFiles)
         if (skipBuild) ctx.write(`\nBuild reaproveitado: as imagens do commit ${commit} já existem no ${machineName(target.buildOn)}.\n`)
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
         const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null }
@@ -407,6 +415,8 @@ export async function runEnvironmentAction(id: string, input: EnvironmentActionI
     if (on === "pc" && !access.pcAvailable) throw new DomainError(409, access.pcReason ?? "O PC não está disponível", "ENVIRONMENT_PC_UNAVAILABLE")
     const plan = composePlanOf(env, await loadEnvironmentsSettings())
     const target = access.targets[on]
+    // Logs também rodam o compose: sem o arquivo de variáveis declarado, ele falharia.
+    await ensureComposeEnvFiles(plan, target, run)
     const commands: Record<Exclude<EnvironmentActionInput["action"], "deploy" | "move">, string> = {
         up: on === "pc" && env.ports.length ? `${startCommand(plan, target)} && ${forwardPorts(env.ports)}` : startCommand(plan, target),
         down: on === "pc" && env.ports.length ? `${downCommand(plan, target)}; ${cancelPorts(env.ports)}` : downCommand(plan, target),
@@ -432,6 +442,7 @@ export async function deleteEnvironment(id: string, options: { volumes: boolean 
         const access = await machineAccess(run)
         const on = env.deployedOn.runOn
         if (on === "pc" && !access.pcAvailable) throw new DomainError(409, `${access.pcReason ?? "O PC não está disponível"} (o ambiente está no PC)`, "ENVIRONMENT_PC_UNAVAILABLE")
+        await ensureComposeEnvFiles(plan, access.targets[on], run)
         const down = await run(`${downCommand(plan, access.targets[on], options.volumes)}${on === "pc" && env.ports.length ? `; ${cancelPorts(env.ports)}` : ""}`, 300_000, { detached: true })
         if (down.exitCode !== 0) throw new DomainError(502, `Não foi possível derrubar o ambiente: ${down.output.split("\n").pop() ?? ""}`, "ENVIRONMENT_ACTION_FAILED")
     }

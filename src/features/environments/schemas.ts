@@ -20,7 +20,8 @@ export const serviceSchema = z.string().trim().regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]
 export const refSchema = z.string().trim().min(1, "Informe a ref").max(200).regex(/^(?!-)(?!.*\.\.)[A-Za-z0-9_./@+-]+$/, "Ref inválida")
 export const relativeFileSchema = z.string().trim().min(1).max(300).regex(SAFE_RELATIVE, "Use um caminho relativo à pasta, sem \"..\"")
 export const absoluteDirSchema = z.string().trim().min(2).max(400).regex(SAFE_ABSOLUTE, "Caminho absoluto inválido")
-const envKeySchema = z.string().trim().regex(/^[A-Za-z_][A-Za-z0-9_]{0,99}$/, "Nome de variável inválido")
+export const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,99}$/
+export const envKeySchema = z.string().trim().regex(ENV_KEY_PATTERN, "Nome de variável inválido")
 
 export const centralSourceSchema = z.object({
     kind: z.literal("central"),
@@ -46,8 +47,11 @@ export const adoptedSourceSchema = z.object({
 export const environmentSourceSchema = z.discriminatedUnion("kind", [centralSourceSchema, adoptedSourceSchema])
 export type EnvironmentSource = z.infer<typeof environmentSourceSchema>
 
-/** Variável extra: valor vazio na edição mantém o valor salvo (nunca volta para a tela). */
-export const envVarInputSchema = z.object({ key: envKeySchema, value: z.string().max(10_000) })
+/**
+ * Variável extra. `keep` mantém o valor salvo (a tela usa quando não conseguiu ler o valor daquela
+ * variável). Pelas ferramentas do Agente Opex, valor vazio também mantém o salvo; pela tela, grava vazio.
+ */
+export const envVarInputSchema = z.object({ key: envKeySchema, value: z.string().max(10_000), keep: z.boolean().optional() })
 
 export const environmentInputSchema = z
     .object({
