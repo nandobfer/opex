@@ -27,7 +27,7 @@ vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: { find: () => ({ 
 vi.mock('@/features/auth/server/context', () => ({ requireAdminSession: vi.fn(async () => ({ kind: 'admin' })) }))
 
 import { auth } from '@ai-sdk/mcp'
-import { createMcpServer, getMcpServer, mergeMcpOauth, testMcpConnection, updateMcpServer } from '@/features/opex-agent/server/mcp/service'
+import { createMcpServer, deleteMcpServer, getMcpServer, mergeMcpOauth, testMcpConnection, updateMcpServer } from '@/features/opex-agent/server/mcp/service'
 import { disconnectMcpOauth, finishMcpOauth, startMcpOauth } from '@/features/opex-agent/server/mcp/oauth'
 import { createMcpOauthProvider, missingScopes, OpexMcpAuthRequiredError } from '@/features/opex-agent/server/mcp/oauth-provider'
 import { connectMcp, isMcpAuthError } from '@/features/opex-agent/server/mcp/connect'
@@ -49,6 +49,8 @@ interface FakeAuthServer {
   grantedScope: string | undefined
   refreshOk: boolean
   counter: number
+  revocationEndpoint: string
+  calls: string[]
 }
 let as: FakeAuthServer
 
@@ -57,6 +59,7 @@ const json = (body: unknown, status = 200) => new Response(JSON.stringify(body),
 function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<Response> {
   const url = new URL(typeof input === 'string' ? input : input instanceof URL ? input.href : input.url)
   const method = (init?.method ?? 'GET').toUpperCase()
+  as.calls.push(`${method} ${url.href}`)
   const body = init?.body instanceof URLSearchParams ? init.body : typeof init?.body === 'string' ? (init.body.startsWith('{') ? null : new URLSearchParams(init.body)) : null
   if (url.origin === 'https://mcp.test' && url.pathname.startsWith('/.well-known/oauth-protected-resource'))
     return Promise.resolve(json({ resource: MCP_URL, authorization_servers: ['https://auth.test'] }))
@@ -67,7 +70,7 @@ function fakeFetch(input: string | URL | Request, init?: RequestInit): Promise<R
         authorization_endpoint: 'https://auth.test/authorize',
         token_endpoint: 'https://auth.test/token',
         registration_endpoint: 'https://auth.test/register',
-        revocation_endpoint: 'https://auth.test/revoke',
+        revocation_endpoint: as.revocationEndpoint,
         response_types_supported: ['code'],
         grant_types_supported: ['authorization_code', 'refresh_token'],
         code_challenge_methods_supported: ['S256'],
@@ -133,7 +136,7 @@ beforeEach(() => {
   holder.servers = createFakeCollection(() => ({ tools: [], toolsSyncedAt: null, lastError: null, lastCheckedAt: null, confirmations: {} }))
   holder.audit = []
   holder.events = []
-  as = { registered: [], tokenRequests: [], revoked: [], challenge: null, grantedScope: undefined, refreshOk: true, counter: 0 }
+  as = { registered: [], tokenRequests: [], revoked: [], challenge: null, grantedScope: undefined, refreshOk: true, counter: 0, revocationEndpoint: 'https://auth.test/revoke', calls: [] }
   vi.stubGlobal('fetch', vi.fn(fakeFetch))
   // A `@ai-sdk/mcp` usa no Node um fetch próprio com DNS validado (anti-SSRF); fora do Node ela usa o
   // `fetch` global — o simulado aqui. Só no teste: a produção mantém a proteção.
@@ -247,6 +250,37 @@ describe('OAuth dos MCPs do Agente Opex', () => {
     expect(as.revoked).toEqual(expect.arrayContaining(['rt-1', 'at-1']))
     const doc = docOf(server.id).oauth
     expect(doc).toMatchObject({ tokens: null, client: null, status: 'not_authorized' })
+  })
+
+  it('desconectar não envia tokens a endpoint de revogação interno ou sem https (anti-SSRF)', async () => {
+    for (const endpoint of ['http://10.0.0.5:8080/admin', 'https://10.0.0.5/revoke', 'https://localhost/revoke', 'file:///etc/passwd']) {
+      as.revocationEndpoint = endpoint
+      const server = await createMcpServer(baseInput({ slug: `linear_${as.revocationEndpoint.length}` }), 'local')
+      const url = await authorizeUrl(server.id)
+      await finishMcpOauth({ state: url.searchParams.get('state'), code: 'codigo-bom', error: null, errorDescription: null, iss: null }, 'local')
+      as.calls = []
+      expect(await disconnectMcpOauth(server.id, 'local')).toEqual({ revoked: false })
+      expect(as.calls.filter((call) => call.startsWith('POST'))).toEqual([])
+      expect(as.revoked).toEqual([])
+      expect(docOf(server.id).oauth).toMatchObject({ tokens: null, status: 'not_authorized' })
+    }
+  })
+
+  it('trocar para cabeçalhos revoga e apaga os tokens; excluir também revoga', async () => {
+    const server = await createMcpServer(baseInput(), 'local')
+    const url = await authorizeUrl(server.id)
+    await finishMcpOauth({ state: url.searchParams.get('state'), code: 'codigo-bom', error: null, errorDescription: null, iss: null }, 'local')
+    const dto = await updateMcpServer(server.id, baseInput({ auth: 'headers', headers: [{ key: 'Authorization', value: 'Bearer fixo' }] }), 'local')
+    expect(dto.auth).toBe('headers')
+    expect(as.revoked).toEqual(expect.arrayContaining(['rt-1', 'at-1']))
+    expect(docOf(server.id).oauth).toMatchObject({ tokens: null, status: 'not_authorized' })
+
+    const other = await createMcpServer(baseInput({ slug: 'linear_2' }), 'local')
+    const url2 = await authorizeUrl(other.id)
+    await finishMcpOauth({ state: url2.searchParams.get('state'), code: 'codigo-bom', error: null, errorDescription: null, iss: null }, 'local')
+    as.revoked = []
+    await deleteMcpServer(other.id, 'local')
+    expect(as.revoked.length).toBeGreaterThan(0)
   })
 
   it('trocar a URL ou o client id invalida a autorização; editar sem mudar mantém', async () => {

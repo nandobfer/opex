@@ -79,7 +79,8 @@ export function buildMcpEntry(input: McpConfigInput, existing: Json | undefined,
     }
     base.url = input.url
     const auth = input.auth
-    if (auth === undefined || auth === "headers") {
+    // OAuth também leva cabeçalhos extras (o OpenCode aceita os dois juntos): só "Nenhuma" os tira.
+    if (auth !== "none") {
         const headers = applySecretPatches(stringRecord(previous.headers), secrets?.headers, mode)
         if (Object.keys(headers).length) base.headers = headers
     }

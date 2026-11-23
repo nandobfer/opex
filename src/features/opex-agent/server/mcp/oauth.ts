@@ -1,5 +1,6 @@
 import { Types } from "mongoose"
 import type { OAuthTokens } from "@ai-sdk/mcp"
+import { fetchWithValidatedEndpoint } from "@ai-sdk/provider-utils"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { OpexMcpServer, type IOpexMcpOauth, type IOpexMcpServer } from "@/lib/db/models/Opex"
@@ -151,19 +152,43 @@ export async function finishMcpOauth(input: McpOauthCallbackInput, actorId: stri
     return { ok: true, mcpId: id, message: "MCP autorizado.", redirectTo: backTo(pending.redirectUri, { oauth: "ok", mcp: id }) }
 }
 
+/**
+ * Fetch das chamadas de revogação com a mesma proteção anti-SSRF do OAuth da `@ai-sdk/mcp`: URL e IPs
+ * resolvidos validados (sem rede interna, `localhost` nem esquema diferente de http/https) e sem seguir
+ * redirecionamento. Falha vira `null` (revogação é só melhor esforço).
+ */
+async function guardedFetch(url: string, init: RequestInit): Promise<Response | null> {
+    try {
+        return await fetchWithValidatedEndpoint({ url, init: { ...init, signal: AbortSignal.timeout(5_000) }, redirect: "error" })
+    } catch (error) {
+        log.warn({ err: error instanceof Error ? error.message : String(error) }, "[opex-mcp] chamada de revogação recusada ou sem resposta")
+        return null
+    }
+}
+
+/** Só `https` (o corpo leva tokens e o client secret); o resto da validação fica com `guardedFetch`. */
+function safeRevocationEndpoint(value: unknown): string | null {
+    if (typeof value !== "string") return null
+    try {
+        return new URL(value).protocol === "https:" ? value : null
+    } catch {
+        return null
+    }
+}
+
 /** Endpoint de revogação (RFC 7009) pelos metadados do servidor de autorização. */
 async function revocationEndpoint(oauth: IOpexMcpOauth): Promise<string | null> {
-    if (oauth.server?.revocationEndpoint) return oauth.server.revocationEndpoint
+    if (oauth.server?.revocationEndpoint) return safeRevocationEndpoint(oauth.server.revocationEndpoint)
     const base = oauth.server?.authorizationServerUrl
     if (!base) return null
     const url = new URL(base)
     const path = url.pathname.replace(/\/+$/, "")
     const candidates = [`${url.origin}/.well-known/oauth-authorization-server${path}`, `${url.origin}/.well-known/openid-configuration${path}`, `${url.origin}${path}/.well-known/openid-configuration`]
     for (const candidate of candidates) {
-        const response = await fetch(candidate, { signal: AbortSignal.timeout(5_000), headers: { accept: "application/json" } }).catch(() => null)
+        const response = await guardedFetch(candidate, { headers: { accept: "application/json" } })
         if (!response?.ok) continue
         const metadata = (await response.json().catch(() => null)) as { revocation_endpoint?: unknown } | null
-        if (typeof metadata?.revocation_endpoint === "string") return metadata.revocation_endpoint
+        if (metadata && "revocation_endpoint" in metadata) return safeRevocationEndpoint(metadata.revocation_endpoint)
     }
     return null
 }
@@ -181,7 +206,7 @@ async function revokeTokens(oauth: IOpexMcpOauth, provider: OpexMcpOauthProvider
         const body = new URLSearchParams({ token, token_type_hint: hint })
         if (client?.client_id) body.set("client_id", client.client_id)
         if (client?.client_secret) body.set("client_secret", client.client_secret)
-        const response = await fetch(endpoint, { method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded" }, signal: AbortSignal.timeout(5_000) }).catch(() => null)
+        const response = await guardedFetch(endpoint, { method: "POST", body, headers: { "content-type": "application/x-www-form-urlencoded" } })
         revoked ||= Boolean(response?.ok)
     }
     return revoked

@@ -22,6 +22,7 @@ import {
     type OpexMcpToolInfo,
 } from "../../mcp"
 import { closeMcp, connectMcp, describeMcpError, isMcpAuthError, listMcpTools, toolInfosOf, type McpConnection } from "./connect"
+import { disconnectMcpOauth, hasMcpOauthTokens } from "./oauth"
 import { emptyMcpOauth, openJson, patchMcpOauth } from "./oauth-store"
 import type { StoredMcpClient } from "./oauth-provider"
 
@@ -284,8 +285,12 @@ export async function createMcpServer(input: OpexMcpServerInput, actorId: string
 }
 
 export async function updateMcpServer(id: string, input: OpexMcpServerInput, actorId: string): Promise<OpexMcpServerDto> {
-    const before = await loadDoc(id)
+    const loaded = await loadDoc(id)
     await assertSlugFree(input.slug, id)
+    // Saindo do OAuth: revoga no provedor e apaga os tokens (sem o painel, não haveria como desconectar).
+    const leavingOauth = usesMcpOauth(loaded) && !usesMcpOauth(input) && hasMcpOauthTokens(loaded.oauth)
+    if (leavingOauth) await disconnectMcpOauth(id, actorId)
+    const before = leavingOauth ? await loadDoc(id) : loaded
     const fields = fieldsOf(input, before)
     const connectionChanged = before.transport !== fields.transport || before.url !== fields.url || before.command !== fields.command
     const { oauth, ...rest } = fields
@@ -334,6 +339,8 @@ export async function setMcpToolConfirmation(id: string, toolName: string, confi
 /** Exclui o MCP e o retira dos clientes que o tinham liberado. */
 export async function deleteMcpServer(id: string, actorId: string): Promise<{ deleted: true }> {
     const before = await loadDoc(id)
+    // Excluir também revoga os tokens OAuth no provedor (melhor esforço; a exclusão não depende disso).
+    if (hasMcpOauthTokens(before.oauth)) await disconnectMcpOauth(id, actorId).catch((error: unknown) => log.warn({ err: error instanceof Error ? error.message : String(error) }, "[opex-mcp] revogação na exclusão falhou"))
     await OpexMcpServer.deleteOne({ _id: before._id })
     await OrcamentoClient.updateMany({ "opexAgent.enabledMcpServers": id }, { $pull: { "opexAgent.enabledMcpServers": id } })
     await recordAudit({ userId: actorId, entidade: OPEX_MCP_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: auditSnapshot(before) })

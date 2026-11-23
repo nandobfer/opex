@@ -116,12 +116,13 @@ execução bloqueia as não selecionadas pela permissão `skill` da sessão (`ai
 - **OAuth dos MCPs remotos (OPE-176)**: o editor do MCP remoto escolhe a **Autenticação** (`OptionTabs`):
   - **Nenhuma** / **Cabeçalhos**: sem a chave `oauth` (padrão do OpenCode, que tenta OAuth sozinho quando
     o servidor responde 401); a caixa **"Não tentar OAuth automaticamente"** grava `oauth: false` (um
-    `oauth: false` já existente é mantido). Nos dois modos a lista de cabeçalhos só vale em Cabeçalhos.
+    `oauth: false` já existente é mantido). A lista de cabeçalhos vale em Cabeçalhos e em OAuth; "Nenhuma" grava a entrada sem cabeçalhos.
   - **OAuth**: grava a chave `oauth` do OpenCode 2.x (`client_id`, `client_secret`, `scope`,
     `callback_port`, `redirect_uri`, `auth_server_metadata_url`); campo vazio fica fora (padrão do
     OpenCode: descoberta, registro do cliente por CIMD/registro dinâmico e PKCE). O `client_secret` é
     segredo (`secrets.oauthClientSecret`: ausente mantém, `null` remove; o DTO só traz
-    `hasClientSecret`). Cabeçalhos não são gravados nesse modo. Chamadas sem `auth` (agente, clientes
+    `hasClientSecret`). Cabeçalhos extras continuam valendo junto com o OAuth (o OpenCode aceita os dois; a
+    lista aparece como "Cabeçalhos HTTP extras") — só "Nenhuma" tira os cabeçalhos. Chamadas sem `auth` (agente, clientes
     antigos) mantêm cabeçalhos e a chave `oauth` do arquivo como estavam.
   - Credenciais **ficam no OpenCode do host** (credencial da integração do MCP), nunca no arquivo nem no
     Opex: salvar a configuração não apaga uma autorização já feita.

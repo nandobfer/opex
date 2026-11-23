@@ -134,7 +134,7 @@ export const mcpFormSchema = z
             const fields = { clientId: "oauthClientId", scope: "oauthScope", callbackPort: "oauthCallbackPort", redirectUri: "oauthRedirectUri", authServerMetadataUrl: "oauthAuthServerMetadataUrl" } as const
             if (!oauth.success) for (const issue of oauth.error.issues) ctx.addIssue({ code: "custom", path: [fields[issue.path[0] as keyof typeof fields] ?? "oauthClientId"], message: issue.message })
         }
-        if (value.type === "remote" && value.auth !== "headers") return
+        if (value.type === "remote" && value.auth === "none") return
         const rows = value.type === "local" ? value.environment : value.headers
         rows.forEach((row, index) => {
             if (!row.existing && !row.value) ctx.addIssue({ code: "custom", path: [value.type === "local" ? "environment" : "headers", index, "value"], message: "Informe o valor" })
@@ -214,6 +214,6 @@ export function mcpContentFromForm(values: McpFormValues): Pick<ResourceContentI
             auth: values.auth,
             ...(oauth ? { oauth: oauthConfigOf(values) } : { disableAutoOauth: values.disableAutoOauth }),
         },
-        secrets: { headers: values.auth === "headers" ? toPatch(values.headers) : [], ...(oauthClientSecret !== undefined ? { oauthClientSecret } : {}) },
+        secrets: { headers: values.auth === "none" ? [] : toPatch(values.headers), ...(oauthClientSecret !== undefined ? { oauthClientSecret } : {}) },
     }
 }

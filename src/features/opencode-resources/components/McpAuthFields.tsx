@@ -37,7 +37,7 @@ export function McpAuthFields({ form }: { form: UseFormReturn<McpFormValues> }) 
             </div>
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={auth} {...swap} className="space-y-4">
-                    {auth === "headers" && <SecretRowsField name="headers" label="Cabeçalhos HTTP" control={form.control} register={form.register} errors={errors} />}
+                    {auth !== "none" && <SecretRowsField name="headers" label={auth === "oauth" ? "Cabeçalhos HTTP extras (opcional)" : "Cabeçalhos HTTP"} control={form.control} register={form.register} errors={errors} />}
                     {auth === "oauth" && (
                         <>
                             <p className="text-xs text-muted-foreground">

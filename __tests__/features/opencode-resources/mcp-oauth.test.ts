@@ -23,14 +23,14 @@ const LOGIN_URL =
     "https://mcp.linear.app/authorize?response_type=code&client_id=https%3A%2F%2Fopencode.ai%2Foauth%2Fopencode%2Fclient.json&code_challenge=abc&code_challenge_method=S256&redirect_uri=http%3A%2F%2F127.0.0.1%3A36113%2Fcallback&state=st-1&scope=read+write"
 
 describe("chave oauth do MCP remoto", () => {
-    it("OAuth grava os campos preenchidos em snake_case, sem cabeçalhos, preservando chaves extras", () => {
+    it("OAuth grava os campos preenchidos em snake_case, mantendo cabeçalhos e chaves extras", () => {
         const entry = buildMcpEntry(
             { type: "remote", url: "https://mcp", auth: "oauth", oauth: { clientId: "cid", scope: "read", callbackPort: 19876, redirectUri: "", authServerMetadataUrl: "" } },
             { type: "remote", url: "https://mcp", headers: { Authorization: "Bearer x" }, codemode: true },
             { oauthClientSecret: "sec" },
             "replace",
         )
-        expect(entry).toEqual({ type: "remote", url: "https://mcp", disabled: false, codemode: true, oauth: { client_id: "cid", client_secret: "sec", scope: "read", callback_port: 19876 } })
+        expect(entry).toEqual({ type: "remote", url: "https://mcp", disabled: false, codemode: true, headers: { Authorization: "Bearer x" }, oauth: { client_id: "cid", client_secret: "sec", scope: "read", callback_port: 19876 } })
         expect(buildMcpEntry({ type: "remote", url: "https://mcp", auth: "oauth" }, undefined, undefined, "replace").oauth).toEqual({})
     })
 
@@ -50,6 +50,22 @@ describe("chave oauth do MCP remoto", () => {
         expect(buildMcpEntry({ type: "remote", url: "https://mcp", auth: "none", disableAutoOauth: true }, undefined, undefined, "replace").oauth).toBe(false)
         expect(buildMcpEntry({ type: "remote", url: "https://mcp", auth: "none" }, { type: "remote", url: "https://mcp", oauth: false }, undefined, "replace").oauth).toBe(false)
         expect(buildMcpEntry({ type: "remote", url: "https://mcp", auth: "none", disableAutoOauth: false }, { type: "remote", url: "https://mcp", oauth: false }, undefined, "replace").oauth).toBeUndefined()
+    })
+
+    it("regressão: editar pelo formulário uma entrada com cabeçalhos + oauth mantém os cabeçalhos e o segredo", () => {
+        const previous = { type: "remote", url: "https://mcp", headers: { "X-Api-Key": "segredo" }, oauth: { client_id: "cid" } }
+        const form = mcpFormFromDetail("linear", mcpDetailOf(previous))
+        expect(form.auth).toBe("oauth")
+        expect(form.headers).toEqual([{ key: "X-Api-Key", value: "", existing: true }])
+        const content = mcpContentFromForm({ ...form, url: "https://mcp/v2", oauthScope: "read" })
+        if (content.mcp?.type !== "remote") throw new Error("esperado remoto")
+        const entry = buildMcpEntry(content.mcp, previous, content.secrets, "replace")
+        expect(entry.headers).toEqual({ "X-Api-Key": "segredo" })
+        expect(entry.oauth).toEqual({ client_id: "cid", scope: "read" })
+        // "Nenhuma" continua tirando os cabeçalhos.
+        const none = mcpContentFromForm({ ...form, auth: "none" })
+        if (none.mcp?.type !== "remote") throw new Error("esperado remoto")
+        expect(buildMcpEntry(none.mcp, previous, none.secrets, "replace").headers).toBeUndefined()
     })
 
     it("regressão: chamada sem a escolha (agente/antigas) mantém cabeçalhos e a chave oauth do arquivo", () => {
