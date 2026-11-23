@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { PrReview, type IPrReview } from "@/lib/db/models/PrReview"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
+import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
@@ -12,6 +12,7 @@ import { getLocalUser } from "@/lib/local-user"
 import { githubPaginate, githubRequest } from "@/features/github/client"
 import { toGithubDomainError } from "@/features/github/server/errors"
 import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
+import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { availabilityOfPrReview, loadPrReviewSettings } from "@/features/ai/server/settings"
 import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_PAGE_LIMIT, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
@@ -146,40 +147,59 @@ async function executeReview(id: string, controller: AbortController): Promise<v
     const publish = (event: WorkbenchEventPayload) => publishWorkbenchEvent(id, event)
     const filter = { _id: id }
     let text = ""
-    const result = await runAgentTurn(
-        client,
+    // Corrente de fallback (OPE-181): o modelo que falha no provedor (cota, limite, indisponível) dá lugar ao próximo na mesma sessão.
+    const agent = { agent: settings.agent, model: settings.model, variant: settings.variant, fallbacks: settings.fallbacks ?? [] }
+    const result = await runWithFallback(
+        agent,
+        applied || !instructions ? prompt : `${instructions}\n\n---\n${prompt}`,
+        (turnAgent, body) =>
+            runAgentTurn(
+                client,
+                {
+                    id,
+                    sessionId: session.id,
+                    stage: PR_REVIEW_STAGE_LABEL,
+                    title: `${PR_REVIEW_STAGE_LABEL} · #${doc.number}`,
+                    agent: turnAgent,
+                    text: body,
+                    timeoutMs: settings.timeoutMinutes * 60_000,
+                    signal: controller.signal,
+                    consumption: { origin: "pr-review", subject: `${doc.repo}#${doc.number}` },
+                    providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
+                },
+                {
+                    publish,
+                    // Sem ninguém para responder: permissões são aprovadas na hora e perguntas, canceladas.
+                    onPermission: async (permission: OpencodePermissionDto) => {
+                        await client.permission.reply({ sessionID: session.id, requestID: permission.id, decision: "once" }).catch((error) => log.warn({ err: errorText(error), reviewId: id }, "[pr-review] falha ao aprovar a permissão"))
+                        publish({ type: "permission-replied", id: permission.id, decision: "once" })
+                        publish({ type: "notice", level: "info", message: `Permissão aprovada automaticamente: ${permission.action}${permission.resources.length ? ` (${permission.resources.join(", ")})` : ""}` })
+                    },
+                    onForm: async (form: OpencodeFormDto) => {
+                        await client.session.form.cancel({ sessionID: session.id, formID: form.id }).catch(() => undefined)
+                        publish({ type: "form-closed", id: form.id })
+                        publish({ type: "notice", level: "warn", message: "O agente fez uma pergunta, mas a revisão roda sem ninguém para responder: pergunta dispensada" })
+                    },
+                    onText: (delta: string) => {
+                        text += delta
+                    },
+                    onStep: async ({ costUsd, tokens }) => {
+                        await PrReview.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
+                    },
+                    heartbeat: async () => {
+                        await PrReview.updateOne(filter, { $set: { heartbeatAt: new Date() } })
+                    },
+                },
+            ),
         {
-            id,
-            sessionId: session.id,
-            stage: PR_REVIEW_STAGE_LABEL,
-            title: `${PR_REVIEW_STAGE_LABEL} · #${doc.number}`,
-            agent: { agent: settings.agent, model: settings.model, variant: settings.variant },
-            text: applied || !instructions ? prompt : `${instructions}\n\n---\n${prompt}`,
-            timeoutMs: settings.timeoutMinutes * 60_000,
             signal: controller.signal,
-            consumption: { origin: "pr-review", subject: `${doc.repo}#${doc.number}` },
-        },
-        {
-            publish,
-            // Sem ninguém para responder: permissões são aprovadas na hora e perguntas, canceladas.
-            onPermission: async (permission: OpencodePermissionDto) => {
-                await client.permission.reply({ sessionID: session.id, requestID: permission.id, decision: "once" }).catch((error) => log.warn({ err: errorText(error), reviewId: id }, "[pr-review] falha ao aprovar a permissão"))
-                publish({ type: "permission-replied", id: permission.id, decision: "once" })
-                publish({ type: "notice", level: "info", message: `Permissão aprovada automaticamente: ${permission.action}${permission.resources.length ? ` (${permission.resources.join(", ")})` : ""}` })
-            },
-            onForm: async (form: OpencodeFormDto) => {
-                await client.session.form.cancel({ sessionID: session.id, formID: form.id }).catch(() => undefined)
-                publish({ type: "form-closed", id: form.id })
-                publish({ type: "notice", level: "warn", message: "O agente fez uma pergunta, mas a revisão roda sem ninguém para responder: pergunta dispensada" })
-            },
-            onText: (delta: string) => {
-                text += delta
-            },
-            onStep: async ({ costUsd, tokens }) => {
-                await PrReview.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
-            },
-            heartbeat: async () => {
-                await PrReview.updateOne(filter, { $set: { heartbeatAt: new Date() } })
+            resumeText: (reason, body) => `A revisão anterior não terminou (${reason}). Retome de onde parou e conclua a revisão conforme as instruções abaixo.\n\n${body}`,
+            onSwitch: (change) => {
+                // O relatório vale só o da tentativa que concluir.
+                text = ""
+                const notice = fallbackNotice(change)
+                log.warn({ reviewId: id, from: change.from.model, to: change.to.model, index: change.index, total: change.total, reason: change.reason }, `[pr-review] ${notice}`)
+                publish({ type: "notice", level: "warn", message: `Agente Revisor: ${notice}` })
             },
         },
     )

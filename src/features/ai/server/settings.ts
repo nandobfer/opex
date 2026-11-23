@@ -11,6 +11,7 @@ import { normalizeTaxonomy } from "@/features/tasks/tags"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { AI_AUDIT_ENTITY, AI_FEATURE_UPDATED_EVENT } from "../constants"
 import { resolveRefinementSkill } from "../refinement-skill"
+import { normalizeFallbacks, type ModelChoice } from "../model-fallbacks"
 import {
     DEFAULT_BUDGET_PREVIEW_SETTINGS,
     DEFAULT_ESTIMATE_HOURS_SETTINGS,
@@ -75,8 +76,8 @@ export async function availability(settings: Pick<ProviderSettings, "enabled" | 
     return { available: true, reason: null }
 }
 
-/** Confere no provedor o modelo, a variante e o agente escolhidos. */
-export async function assertCatalog(settings: ProviderSettings): Promise<void> {
+/** Confere no provedor o modelo, a variante e o agente escolhidos e, no OpenCode, os modelos de fallback (OPE-181). */
+export async function assertCatalog(settings: ProviderSettings, fallbacks: readonly ModelChoice[] = []): Promise<void> {
     if (!settings.provider || !settings.model) return
     const provider = getAiProvider(settings.provider)
     const status = await confirmAiProviderConnection(settings.provider)
@@ -89,6 +90,13 @@ export async function assertCatalog(settings: ProviderSettings): Promise<void> {
         const model = models.find((item) => item.id === settings.model)
         if (!model) throw new DomainError(400, `Modelo ${settings.model} não está disponível no ${provider.name}`, "AI_MODEL_NOT_FOUND")
         if (settings.variant && !model.variants.includes(settings.variant)) throw new DomainError(400, `${provider.variantLabel} "${settings.variant}" não existe no modelo ${model.name}`, "AI_VARIANT_NOT_FOUND")
+        if (settings.provider === "opencode") {
+            for (const [index, choice] of fallbacks.entries()) {
+                const found = models.find((item) => item.id === choice.model)
+                if (!found) throw new DomainError(400, `Fallback ${index + 1}: modelo ${choice.model} não está disponível no ${provider.name}`, "AI_MODEL_NOT_FOUND")
+                if (choice.variant && !found.variants.includes(choice.variant)) throw new DomainError(400, `Fallback ${index + 1}: ${provider.variantLabel} "${choice.variant}" não existe no modelo ${found.name}`, "AI_VARIANT_NOT_FOUND")
+            }
+        }
         if (provider.supportsAgent && settings.agent) {
             const agents = await listAiAgents()
             if (!agents.some((agent) => agent.id === settings.agent)) throw new DomainError(400, `Agente ${settings.agent} não existe no OpenCode`, "AI_AGENT_NOT_FOUND")
@@ -279,7 +287,7 @@ export async function getTaskRefinementSettings(): Promise<TaskRefinementSetting
 }
 
 export function normalizeTaskRefinementSettings(input: TaskRefinementSettings): TaskRefinementSettings {
-    return { ...input, agent: input.agent || null, variant: input.variant || null, skill: input.skill || null }
+    return { ...input, agent: input.agent || null, variant: input.variant || null, fallbacks: normalizeFallbacks(input.fallbacks), skill: input.skill || null }
 }
 
 /**
@@ -307,7 +315,7 @@ export async function assertRefinementSkill(settings: TaskRefinementSettings): P
 
 export async function saveTaskRefinementSettings(input: TaskRefinementSettings, actorId: string): Promise<TaskRefinementSettingsDto> {
     const next = normalizeTaskRefinementSettings(input)
-    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null }, next.fallbacks)
     await assertRefinementSkill(next)
     const before = await loadTaskRefinementSettings()
     await persistFeature(TASK_REFINEMENT_FEATURE, next, actorId, before)
@@ -331,12 +339,12 @@ export async function getPrReviewSettings(): Promise<PrReviewSettingsDto> {
 }
 
 export function normalizePrReviewSettings(input: PrReviewSettings): PrReviewSettings {
-    return { ...input, agent: input.agent || null, variant: input.variant || null }
+    return { ...input, agent: input.agent || null, variant: input.variant || null, fallbacks: normalizeFallbacks(input.fallbacks) }
 }
 
 export async function savePrReviewSettings(input: PrReviewSettings, actorId: string): Promise<PrReviewSettingsDto> {
     const next = normalizePrReviewSettings(input)
-    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null })
+    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.model, agent: next.agent, variant: next.variant, temperature: null, maxOutputTokens: null }, next.fallbacks)
     const before = await loadPrReviewSettings()
     await persistFeature(PR_REVIEW_FEATURE, next, actorId, before)
     return getPrReviewSettings()

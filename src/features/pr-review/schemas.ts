@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { csvList, isoDate, pageQuery } from "@/lib/list/query"
+import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
 import {
     PR_REVIEW_CONCURRENCY_MAX,
     PR_REVIEW_PAGE_LIMIT,
@@ -24,6 +25,8 @@ export const prReviewSettingsSchema = z
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
+        /** Modelos de fallback (OPE-181): tentados em ordem, na mesma revisão, quando o modelo falha no provedor. */
+        fallbacks: fallbackListSchema,
         skill: z
             .string()
             .trim()
@@ -45,6 +48,7 @@ export const prReviewSettingsSchema = z
         instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),
     })
     .superRefine((value, ctx) => {
+        addFallbackIssues(ctx, value.fallbacks, value, ["fallbacks"])
         if (!value.enabled) return
         if (!value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Selecione o modelo" })
     })
@@ -56,6 +60,7 @@ export const DEFAULT_PR_REVIEW_SETTINGS: PrReviewSettings = {
     model: null,
     agent: null,
     variant: null,
+    fallbacks: [],
     skill: "code-review",
     scope: "all",
     includeDrafts: false,

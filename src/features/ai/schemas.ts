@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { AI_PROVIDER_IDS, AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
+import { addFallbackIssues, fallbackListSchema } from "./model-fallbacks"
 import { DEFAULT_TASK_TAXONOMY, MAX_TASK_TAGS, MAX_TAXONOMY_TAGS, TASK_TAG_ID_MAX, TASK_TAG_LABEL_MAX } from "@/features/tasks/tags"
 import {
     DEFAULT_TASK_SUMMARY_INSTRUCTIONS,
@@ -182,12 +183,15 @@ export const taskRefinementSettingsSchema = z
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
+        /** Modelos de fallback (OPE-181): tentados em ordem, no mesmo turno, quando o modelo falha no provedor. */
+        fallbacks: fallbackListSchema,
         instructionsSource: z.enum(REFINEMENT_INSTRUCTIONS_SOURCES),
         instructions: z.string().trim().min(1, "Informe as instruções").max(8000, "Até 8.000 caracteres"),
         skill: z.string().trim().max(200).nullable(),
         include: z.object({ comments: z.boolean(), history: z.boolean() }),
     })
     .superRefine((value, ctx) => {
+        addFallbackIssues(ctx, value.fallbacks, value, ["fallbacks"])
         if (value.instructionsSource === "skill" && !value.skill) ctx.addIssue({ code: "custom", path: ["skill"], message: "Selecione a skill" })
         if (!value.enabled) return
         if (!value.model) ctx.addIssue({ code: "custom", path: ["model"], message: "Selecione o modelo" })
@@ -200,6 +204,7 @@ export const DEFAULT_TASK_REFINEMENT_SETTINGS: TaskRefinementSettings = {
     model: null,
     agent: "plan",
     variant: null,
+    fallbacks: [],
     instructionsSource: "text",
     instructions: DEFAULT_TASK_REFINEMENT_INSTRUCTIONS,
     skill: null,

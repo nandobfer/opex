@@ -2,6 +2,7 @@ import { z } from "zod"
 import { MIN_MASKABLE_SECRET_LENGTH } from "@/features/http-request/secrets"
 import { OPEX_PROVIDER_IDS } from "@/features/opex-agent/constants"
 import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
+import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
 import { MAX_RUN_REQUEST_CHARS } from "./constants"
 import { CHANNEL_SLUG } from "./provision-plan"
 
@@ -71,6 +72,8 @@ export const routineOpencodeEngineSchema = z.object({
     model: z.string().trim().max(200),
     variant: z.string().trim().max(80).nullable(),
     agent: z.string().trim().max(120).nullable(),
+    /** Modelos de fallback (OPE-181): tentados em ordem, no mesmo turno, quando o modelo falha no provedor. */
+    fallbacks: fallbackListSchema.optional(),
     enabledMcps: z.array(z.string().trim().min(1).max(120)).max(100),
     /** Skills do OpenCode no host (globais e nativas, por id) liberadas na sessão; as demais ficam bloqueadas (OPE-153). */
     enabledSkills: z.array(z.string().trim().min(1).max(120)).max(200),
@@ -91,7 +94,7 @@ export function withRoutineEngineDefaults<T extends { opex?: Partial<RoutineOpex
     return {
         ...doc,
         opex: { provider: null, model: "", variant: null, ...opex, enabledTools: opex.enabledTools ?? [], enabledMcpServers: opex.enabledMcpServers ?? [], enabledSkills: opex.enabledSkills ?? [] },
-        opencode: { model: "", variant: null, agent: null, ...opencode, enabledMcps: opencode.enabledMcps ?? [], enabledSkills: opencode.enabledSkills ?? [] },
+        opencode: { model: "", variant: null, agent: null, ...opencode, fallbacks: opencode.fallbacks ?? [], enabledMcps: opencode.enabledMcps ?? [], enabledSkills: opencode.enabledSkills ?? [] },
     }
 }
 
@@ -119,7 +122,10 @@ export const routineAgentInputSchema = z
         if (value.engine === "opex") {
             if (!value.opex.provider) ctx.addIssue({ code: "custom", path: ["opex", "provider"], message: "Escolha o provedor" })
             if (!value.opex.model) ctx.addIssue({ code: "custom", path: ["opex", "model"], message: "Escolha o modelo" })
-        } else if (!value.opencode.model) ctx.addIssue({ code: "custom", path: ["opencode", "model"], message: "Escolha o modelo" })
+        } else {
+            if (!value.opencode.model) ctx.addIssue({ code: "custom", path: ["opencode", "model"], message: "Escolha o modelo" })
+            addFallbackIssues(ctx, value.opencode.fallbacks, value.opencode, ["opencode", "fallbacks"])
+        }
         const ids = new Set<string>()
         value.triggers.forEach((trigger, index) => {
             if (ids.has(trigger.id)) ctx.addIssue({ code: "custom", path: ["triggers", index, "id"], message: "Gatilho repetido" })
@@ -135,7 +141,7 @@ export const DEFAULT_ROUTINE_AGENT_INPUT: RoutineAgentInput = {
     instructions: "",
     engine: "opex",
     opex: { provider: null, model: "", variant: null, enabledTools: [], enabledMcpServers: [], enabledSkills: [] },
-    opencode: { model: "", variant: null, agent: null, enabledMcps: [], enabledSkills: [], httpRequests: false },
+    opencode: { model: "", variant: null, agent: null, fallbacks: [], enabledMcps: [], enabledSkills: [], httpRequests: false },
     confirmIrreversible: true,
     limits: EMPTY_ROUTINE_LIMITS,
     triggers: [],

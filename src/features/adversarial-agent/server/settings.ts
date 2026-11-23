@@ -48,7 +48,7 @@ export function normalizeAdversarialSettings(input: AdversarialSettings): Advers
 /** Salva conferindo no catálogo o modelo do adversário (OpenCode). */
 export async function saveAdversarialSettings(input: AdversarialSettings, actorId: string): Promise<AdversarialSettingsDto> {
     const next = normalizeAdversarialSettings(input)
-    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.agent.model, agent: next.agent.agent, variant: next.agent.variant, temperature: null, maxOutputTokens: null })
+    await assertCatalog({ enabled: next.enabled, provider: "opencode", model: next.agent.model, agent: next.agent.agent, variant: next.agent.variant, temperature: null, maxOutputTokens: null }, next.agent.fallbacks ?? [])
     const before = await loadAdversarialSettings()
     await persistFeature(ADVERSARIAL_FEATURE, next, actorId, before)
     return getAdversarialSettings()

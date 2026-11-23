@@ -4,7 +4,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { TaskRefinement, type ITaskRefinement } from "@/lib/db/models/Refinement"
 import { AgenticCentral } from "@/lib/db/models/Agentic"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
+import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
 import { listOpencodeSkillsAt, type SkillListAt } from "@/lib/ai/opencode-skill-list"
 import type { TaskRefinementSettings } from "@/features/ai/schemas"
@@ -15,6 +15,7 @@ import { parseCentralConfig } from "@/features/agentic/logic"
 import { asReconnectOutcome } from "@/features/agentic/reconnect"
 import { probeReconnect } from "@/features/agentic/server/reconnect"
 import { deliverLiveMessage, liveChatEnabled } from "@/features/agentic/server/live-chat"
+import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
 import type { FormReplyInput, PermissionReplyInput } from "@/features/agentic/schemas"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import {
@@ -402,7 +403,8 @@ async function executeTurn(id: string, text: string, controller: AbortController
     // "Modelo do Refinamento" trocado na mesa (OPE-137): vale para os turnos enquanto a mesa refina.
     const link = await linkedWorkbench(doc.taskId)
     const override = inRefinementStage(link) ? link.refinementModel : null
-    const agent = { agent: settings.agent, model: override?.model ?? settings.model, variant: override ? override.variant : settings.variant }
+    // Fallbacks do Agente Refinador (OPE-181): com a troca da mesa, o modelo trocado vira o principal e a lista continua atrás dele.
+    const agent = { agent: settings.agent, model: override?.model ?? settings.model, variant: override ? override.variant : settings.variant, fallbacks: settings.fallbacks ?? [] }
     // Reconectar acompanha a sessão existente; um turno normal (re)usa a gravada ou cria uma nova.
     const directory = doc.sessionDirectory ?? central.directory
     const sessionId = attach ? (doc.sessionId as string) : await ensureSession(client, doc, directory)
@@ -430,23 +432,43 @@ async function executeTurn(id: string, text: string, controller: AbortController
         // O attach vale só para o primeiro turno: as consolidações são turnos novos normais.
         const attachThisTurn = attach && attempt === 0
         log.info({ refinementId: id, agent: agent.agent, model: agent.model, attempt, attach: attachThisTurn }, `${REFINEMENT_STAGE_LABEL} ${doc.taskCode}: turno iniciado`)
-        result = await runAgentTurn(
-            client,
+        let tries = 0
+        result = await runWithFallback(
+            agent,
+            attachThisTurn ? "" : prompt,
+            (turnAgent, body) =>
+                runAgentTurn(
+                    client,
+                    {
+                        id,
+                        sessionId,
+                        stage: REFINEMENT_STAGE_LABEL,
+                        title: REFINEMENT_STAGE_LABEL,
+                        agent: turnAgent,
+                        text: body,
+                        // Os anexos vão só na primeira mensagem (a retomada com o fallback já os tem na sessão).
+                        ...(attempt === 0 && tries++ === 0 && attachments.files.length ? { files: attachments.files } : {}),
+                        timeoutMs: TURN_TIMEOUT_MS,
+                        signal: controller.signal,
+                        attach: attachThisTurn,
+                        ...(attachThisTurn ? { startedAt } : {}),
+                        consumption: { origin: "refinement", subject: doc.taskId },
+                        providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
+                    },
+                    { ...hooks, publish },
+                ),
             {
-                id,
-                sessionId,
-                stage: REFINEMENT_STAGE_LABEL,
-                title: REFINEMENT_STAGE_LABEL,
-                agent,
-                text: attachThisTurn ? "" : prompt,
-                ...(attempt === 0 && attachments.files.length ? { files: attachments.files } : {}),
-                timeoutMs: TURN_TIMEOUT_MS,
                 signal: controller.signal,
+                // Reconectar acompanha a execução existente: nunca troca de modelo.
                 attach: attachThisTurn,
-                ...(attachThisTurn ? { startedAt } : {}),
-                consumption: { origin: "refinement", subject: doc.taskId },
+                onSwitch: (change) => {
+                    // A especificação sai só do texto da tentativa que concluir.
+                    accumulated.text = ""
+                    const notice = fallbackNotice(change)
+                    log.warn({ refinementId: id, from: change.from.model, to: change.to.model, index: change.index, total: change.total, reason: change.reason }, `[refinement] ${notice}`)
+                    publish({ type: "notice", level: "warn", message: `Agente Refinador: ${notice}` })
+                },
             },
-            { ...hooks, publish },
         )
         textOut = result.text || accumulated.text
         await flushWorkbenchEvents(id)

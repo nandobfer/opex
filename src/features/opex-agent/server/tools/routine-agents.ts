@@ -27,7 +27,7 @@ const agentFields = {
     instructions: z.string().optional().describe("Instruções em markdown"),
     engine: z.enum(["opex", "opencode"]).optional().describe("Motor: opex (provedores do app) ou opencode (OpenCode no host)"),
     opex: routineOpexEngineSchema.partial().optional().describe("Motor Opex: provider, model, variant, enabledTools (nomes das ferramentas do Agente Opex), enabledMcpServers (ids), enabledSkills (nomes das skills do Agente Opex; padrão nenhuma)"),
-    opencode: routineOpencodeEngineSchema.partial().optional().describe("Motor OpenCode: model (provedor/modelo), variant, agent, enabledMcps (nomes do opencode.jsonc), enabledSkills (ids das skills globais/nativas do OpenCode no host; as demais ficam bloqueadas)"),
+    opencode: routineOpencodeEngineSchema.partial().optional().describe("Motor OpenCode: model (provedor/modelo), variant, agent, fallbacks (até 5 { model, variant }, tentados em ordem quando o modelo falha no provedor), enabledMcps (nomes do opencode.jsonc), enabledSkills (ids das skills globais/nativas do OpenCode no host; as demais ficam bloqueadas)"),
     confirmIrreversible: z.boolean().optional().describe("Pedir confirmação antes de ações irreversíveis (padrão: sim)"),
     limits: routineLimitsSchema.partial().optional().describe("concurrency, maxActiveMinutes, maxWaitingMinutes, maxTokens, maxLiveWaitMinutes (null = sem limite)"),
     triggers: z.array(routineTriggerSchema).optional().describe("Gatilhos: interval, daily, weekly, once (YYYY-MM-DDTHH:mm, Brasília) e webhook"),

@@ -3,6 +3,7 @@ import { recordAiConsumption } from "@/lib/ai/consumption"
 import { appendTextDelta, joinTextBlocks } from "@/lib/ai/opencode-text"
 import {
     describeToolInput,
+    DEFAULT_PROVIDER_LIMIT_POLICY,
     isProviderLimitError,
     normalizeOpencodeEvent,
     retryNotice,
@@ -67,10 +68,10 @@ export interface TurnRequest {
     /** Arquivos anexados à mensagem (`uri` pode ser `data:<mime>;base64,…`), enviados junto do texto. */
     files?: readonly { uri: string; name: string }[]
     /**
-     * Limite/cota do provedor: com a política, o turno desiste das novas tentativas do OpenCode (que
-     * respeitam o `retry-after`, às vezes de horas), interrompe a execução e termina como falha do
-     * modelo (`limited`) — para quem tem modelos de fallback (mesa e fork). Sem ela, o OpenCode segue
-     * tentando como antes.
+     * Limite/cota do provedor: o turno desiste das novas tentativas do OpenCode (que respeitam o
+     * `retry-after`, às vezes de horas), interrompe a execução e termina como falha do modelo
+     * (`limited`), que o `runWithFallback` usa para seguir ao próximo modelo. Ausente, vale
+     * `DEFAULT_PROVIDER_LIMIT_POLICY` (OPE-181): nenhum turno do app fica preso no `retry-after`.
      */
     providerLimit?: ProviderLimitPolicy
 }
@@ -243,6 +244,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     const attach = request.attach === true
     const startedAt = request.startedAt ?? Date.now()
     const beginAt = Date.now()
+    const providerLimit = request.providerLimit ?? DEFAULT_PROVIDER_LIMIT_POLICY
     const publish = (event: TurnEvent) => hooks.publish?.(event)
     // Na reconexão não há cabeçalho de turno novo (a execução é a mesma); só as alterações de estado.
     if (!attach) publish({ type: "turn", stage: request.stage, title: request.title, agent: request.agent.agent, model: request.agent.model })
@@ -426,7 +428,7 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 break
             case "retry":
                 publish({ type: "notice", level: "warn", message: retryNotice(event) })
-                if (request.providerLimit && !attach && !limitEnd && shouldAbandonRetry(event, Date.now(), request.providerLimit)) await abandonForLimit(event)
+                if (!attach && !limitEnd && shouldAbandonRetry(event, Date.now(), providerLimit)) await abandonForLimit(event)
                 break
             case "permission":
                 await emitPermission(event.permission)
