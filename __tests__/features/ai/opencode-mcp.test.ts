@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { ensureRemoteMcp } from '@/features/ai/server/opencode-mcp'
+import { ensureRemoteMcp, REMOTE_MCP_STATUS_POLLS } from '@/features/ai/server/opencode-mcp'
 import type { OpencodeClient } from '@/lib/ai/opencode-client'
 
 type Status = { status: string; error?: string }
@@ -53,6 +53,28 @@ describe('ensureRemoteMcp com requireConnected', () => {
     expect(raw.mcp.remove).toHaveBeenCalledTimes(1)
     expect(raw.mcp.add).toHaveBeenCalledTimes(2)
     expect(result.ok).toBe(false)
+  })
+
+  it('pending nas primeiras leituras e connected depois: espera a conexão e o registro fica ok', async () => {
+    const { client, raw, servers } = fakeClient({ status: 'pending' })
+    const t = target(true)
+    let reads = 0
+    raw.mcp.list.mockImplementation(async () => {
+      // Depois do registro, as duas primeiras leituras do status ainda estão pending.
+      if (servers.has(t.server) && ++reads > 2) servers.set(t.server, { status: 'connected' })
+      return { data: [...servers].map(([name, status]) => ({ name, status })) }
+    })
+    expect(await ensureRemoteMcp(client, t, ['/w'])).toEqual({ ok: true, error: null, skipped: [] })
+    expect(reads).toBe(3)
+  })
+
+  it('pending em todas as leituras: esgota as tentativas e falha com o status pending', async () => {
+    const { client, raw } = fakeClient({ status: 'pending' })
+    const result = await ensureRemoteMcp(client, target(true), ['/w'])
+    expect(result.ok).toBe(false)
+    expect(result.error).toContain('status: pending')
+    // Uma leitura antes do registro + todas as leituras do status depois dele.
+    expect(raw.mcp.list).toHaveBeenCalledTimes(1 + REMOTE_MCP_STATUS_POLLS)
   })
 
   it('sem requireConnected (MCP de memórias) o comportamento continua o de antes', async () => {
