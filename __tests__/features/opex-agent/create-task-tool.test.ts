@@ -2,14 +2,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /** Ferramenta create_task do Agente Opex: coluna padrão, especificação técnica e anexos do chat (OPE-90). */
 
-const mocks = vi.hoisted(() => ({ createTaskWithIssue: vi.fn(), firstBoardColumnKey: vi.fn(), chatFilesToAttachments: vi.fn() }))
+const mocks = vi.hoisted(() => ({ createTaskWithIssue: vi.fn(), firstBoardColumnKey: vi.fn(), chatFilesToAttachments: vi.fn(), assertAssignableClient: vi.fn() }))
 
 vi.mock('ai', () => ({ dynamicTool: (def: unknown) => def }))
 vi.mock('@/features/github/server/task-issue', async (original) => ({ ...(await original<object>()), createTaskWithIssue: mocks.createTaskWithIssue }))
 vi.mock('@/features/tasks/server/columns', async (original) => ({ ...(await original<object>()), firstBoardColumnKey: mocks.firstBoardColumnKey }))
+vi.mock('@/features/tasks/server/service', async (original) => ({ ...(await original<object>()), assertAssignableClient: mocks.assertAssignableClient }))
 vi.mock('@/features/opex-agent/server/tools/files', async (original) => ({ ...(await original<object>()), chatFilesToAttachments: mocks.chatFilesToAttachments }))
 
 import { findOpexTool } from '@/features/opex-agent/server/tools/registry'
+import { DomainError } from '@/lib/api/route'
 import { DEFAULT_OPEX_INSTRUCTIONS, OPEX_CREATE_TASK_INSTRUCTION, OPEX_DOCS_INSTRUCTION, OPEX_FILES_INSTRUCTION, LEGACY_OPEX_INSTRUCTION_LINES } from '@/features/opex-agent/constants'
 
 const context = { sessionId: 's1', actorId: 'local' }
@@ -82,5 +84,45 @@ describe('instruções do dono', () => {
     const migrated = migrateOpexInstructions(saved)
     expect(migrated).toBe(`Linha A\n${OPEX_CREATE_TASK_INSTRUCTION}\n${OPEX_DOCS_INSTRUCTION}\n${OPEX_FILES_INSTRUCTION}\nLinha B`)
     expect(migrateOpexInstructions(migrated)).toBe(migrated)
+  })
+})
+
+describe('create_task com cliente (OPE-177)', () => {
+  const CLIENT_ID = '6b01fc1735054864cf2f9382'
+
+  it('valida o cliente e cria a tarefa já com ele e a estimativa do fator do cliente (horas 0)', async () => {
+    mocks.assertAssignableClient.mockResolvedValue({ id: CLIENT_ID, name: 'Zaturno', profitFactor: 2, hourlyRate: 150 })
+    const tool = findOpexTool('create_task')!
+    const input = tool.input.parse({ projectId: PROJECT_ID, title: 'Corrigir login', clientId: CLIENT_ID })
+    expect(tool.summarize?.(input)).toContain('com cliente')
+    const result = (await tool.execute(input, context)) as { clientId: string | null }
+    expect(mocks.assertAssignableClient).toHaveBeenCalledWith(CLIENT_ID, PROJECT_ID)
+    const [, actor, options] = mocks.createTaskWithIssue.mock.calls[0]!
+    expect(actor).toBe('local')
+    expect(options).toEqual({ clientId: CLIENT_ID, estimate: { hours: 0, clientHours: 0, billingBrl: 0, factor: 2, hourlyRate: 150, model: null } })
+    expect(result.clientId).toBe(CLIENT_ID)
+  })
+
+  it('sem clientId segue sem cliente (não valida e devolve clientId null)', async () => {
+    const tool = findOpexTool('create_task')!
+    const result = (await tool.execute(tool.input.parse({ projectId: PROJECT_ID, title: 'Corrigir login' }), context)) as { clientId: string | null }
+    expect(mocks.assertAssignableClient).not.toHaveBeenCalled()
+    expect(mocks.createTaskWithIssue.mock.calls[0]).toHaveLength(2)
+    expect(result.clientId).toBeNull()
+  })
+
+  it.each([
+    ['CLIENT_INACTIVE', 'O cliente está inativo'],
+    ['CLIENT_NOT_FOR_PROJECT', 'O cliente não inclui o repositório da tarefa'],
+  ])('cliente recusado (%s) falha sem criar a issue nem a tarefa', async (code, message) => {
+    mocks.assertAssignableClient.mockRejectedValue(new DomainError(400, message, code))
+    const tool = findOpexTool('create_task')!
+    await expect(tool.execute(tool.input.parse({ projectId: PROJECT_ID, title: 'Corrigir login', clientId: CLIENT_ID }), context)).rejects.toMatchObject({ code, message })
+    expect(mocks.createTaskWithIssue).not.toHaveBeenCalled()
+  })
+
+  it('recusa clientId que não é ObjectId já no schema', () => {
+    const tool = findOpexTool('create_task')!
+    expect(() => tool.input.parse({ projectId: PROJECT_ID, title: 'x', clientId: 'zaturno' })).toThrow()
   })
 })
