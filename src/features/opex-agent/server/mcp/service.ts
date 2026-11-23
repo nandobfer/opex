@@ -289,7 +289,11 @@ export async function updateMcpServer(id: string, input: OpexMcpServerInput, act
     await assertSlugFree(input.slug, id)
     // Saindo do OAuth: revoga no provedor e apaga os tokens (sem o painel, não haveria como desconectar).
     const leavingOauth = usesMcpOauth(loaded) && !usesMcpOauth(input) && hasMcpOauthTokens(loaded.oauth)
-    if (leavingOauth) await disconnectMcpOauth(id, actorId)
+    if (leavingOauth) {
+        // Valida antes de qualquer efeito colateral: uma edição recusada não pode deixar o MCP sem token.
+        fieldsOf(input, loaded)
+        await disconnectMcpOauth(id, actorId)
+    }
     const before = leavingOauth ? await loadDoc(id) : loaded
     const fields = fieldsOf(input, before)
     const connectionChanged = before.transport !== fields.transport || before.url !== fields.url || before.command !== fields.command

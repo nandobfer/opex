@@ -283,6 +283,18 @@ describe('OAuth dos MCPs do Agente Opex', () => {
     expect(as.revoked.length).toBeGreaterThan(0)
   })
 
+  it('regressão: sair do OAuth com cabeçalho inválido recusa a edição e mantém a autorização', async () => {
+    const server = await createMcpServer(baseInput(), 'local')
+    const url = await authorizeUrl(server.id)
+    await finishMcpOauth({ state: url.searchParams.get('state'), code: 'codigo-bom', error: null, errorDescription: null, iss: null }, 'local')
+    await expect(updateMcpServer(server.id, baseInput({ auth: 'headers', headers: [{ key: 'X-Api-Key', value: '' }] }), 'local')).rejects.toMatchObject({ code: 'OPEX_MCP_SECRET_REQUIRED' })
+    expect(as.revoked).toEqual([])
+    const doc = docOf(server.id)
+    expect(doc.oauth.status).toBe('authorized')
+    expect(doc.oauth.tokens).not.toBeNull()
+    expect((await getMcpServer(server.id)).auth).toBe('oauth')
+  })
+
   it('trocar a URL ou o client id invalida a autorização; editar sem mudar mantém', async () => {
     const server = await createMcpServer(baseInput(), 'local')
     const url = await authorizeUrl(server.id)
