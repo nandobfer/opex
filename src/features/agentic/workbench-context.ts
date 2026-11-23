@@ -127,13 +127,23 @@ export function workbenchContextHeader(source: WorkbenchContextSource, options: 
             ...WORKBENCH_MCP_TOOLS.map((name) => `- \`${workbenchMcpToolName(name)}\`: ${WORKBENCH_MCP_TOOL_USAGE[name]}`),
         )
         if (governing && (options.newSession || options.requirePlan)) {
-            lines.push("", `ANTES de agir, leia o plano com \`${planTool}\` (versão ${governing.plan.version}) e siga-o. Não reescreva o plano de memória.`)
+            lines.push("", `ANTES de agir, leia o plano com \`${planTool}\` (versão ${governing.plan.version}) — o texto dessa versão também vai na seção "Plano da mesa" abaixo — e siga-o. Não reescreva o plano de memória.`)
         } else if (governing) {
             lines.push("", `Se o plano v${governing.plan.version} não estiver no histórico desta conversa, leia-o com \`${planTool}\` antes de agir. Para um anexo de mensagem anterior, use \`${workbenchMcpToolName("list_attachments")}\` e \`${workbenchMcpToolName("get_attachment")}\`.`)
         }
     }
     if (options.newSession) lines.push("", "Esta é uma sessão NOVA do OpenCode: o histórico da conversa anterior da mesa não está nela. Os dados da mesa (tarefa, plano, forks e anexos) continuam disponíveis como descrito acima.")
     return lines.join("\n")
+}
+
+/**
+ * Texto do plano que rege a etapa, sempre no prompt dos turnos que dependem dele (implementação e
+ * sessão nova), mesmo com o MCP conectado: o agente nunca começa sem o plano (OPE-178).
+ */
+export function workbenchPlanSection(source: WorkbenchContextSource): string {
+    const governing = governingPlan(source.plans, source.approvedPlanVersion, source.stage)
+    if (!governing) return ""
+    return [`## Plano da mesa: versão ${governing.plan.version} (${governing.approved ? "aprovada" : "mais recente"})`, governing.plan.text.trim()].join("\n")
 }
 
 export interface FallbackAttachment {

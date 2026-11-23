@@ -1084,7 +1084,7 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   só cria outra sessão quando o OpenCode responde **"sessão não encontrada"** (`SessionNotFoundError`).
   Erro de rede/DNS/transporte é repetido (3 tentativas, espera de 1 s e 3 s) e, persistindo, a etapa
   **falha** com "OpenCode inacessível… A sessão foi mantida" (Tentar novamente), sem trocar a sessão
-  gravada — ela pode estar viva, com o histórico. Caso real: na ZC-17 (22/11/2026) uma falha de DNS do
+  gravada (Interromper durante as tentativas deixa a mesa **interrompida**, não com essa falha) — ela pode estar viva, com o histórico. Caso real: na ZC-17 (22/11/2026) uma falha de DNS do
   host fez a mesa trocar a sessão viva (com o plano v2) por uma vazia. Com sessão nova de verdade, o aviso
   na Saída da IA diz que o histórico recomeça, mas que tarefa, plano, forks e anexos continuam disponíveis.
 - **Cabeçalho "Mesa do Opex" em todo turno** (`workbenchContextHeader`, módulo puro
@@ -1094,7 +1094,9 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   refinamento/planejamento/Plano pronto; a **aprovada** nas demais, ou a mais recente sem aprovação
   gravada), forks integrados, contagem dos anexos (mesa e tarefa), PR e prévia, e a lista das ferramentas
   do MCP com "quando usar". Na implementação e em sessão nova, manda **ler o plano com
-  `opex_mesa_get_plan` antes de agir**; nas demais, se o plano não estiver no histórico. Vale para os
+  `opex_mesa_get_plan` antes de agir** e o **texto da versão que rege a etapa vai sempre no prompt**
+  (seção "Plano da mesa", `workbenchPlanSection`), mesmo com o MCP conectado; nas demais, a leitura pelo
+  MCP vale se o plano não estiver no histórico. Vale para os
   turnos da mesa (inclusive build/preparo e correção, retentativa e turnos encadeados) e para todo turno
   de fork; fica fora da limpeza (`finishing`) e da reconexão (não há prompt novo). O turno de fork recebe
   `· Fork N` no cabeçalho.
@@ -1112,6 +1114,9 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   `src/features/ai/server/opencode-mcp.ts`, compartilhado com o MCP de memórias): por diretório, no
   início de cada turno (central, diretório da sessão, worktree e pasta do plugin; no fork, o diretório
   do fork) e no `onMoved` (worktree recém-criado). Usa a mesma URL pública do Opex do MCP de memórias.
+  Só conta como registrado o diretório em que o OpenCode informa o servidor **`connected`**
+  (`requireConnected`, até 5 leituras do status a cada 200 ms): URL pública inalcançável a partir do host
+  ou segredo divergente deixam o servidor `failed`, e o turno cai na degradação abaixo.
   Lido em paralelo com as memórias do turno e com prazo de 8 s por consulta (nunca prende o turno).
 - **Degradação segura**: sem o MCP (sem URL pública, sem chave, banco desconectado ou falha), o turno
   **segue** com o pacote completo no prompt (`workbenchContextFallback`: plano que rege a etapa, histórico

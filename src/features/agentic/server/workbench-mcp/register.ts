@@ -29,7 +29,7 @@ export async function ensureWorkbenchMcp(client: OpencodeClient, directories: re
         const secret = workbenchMcpSecret()
         if (!secret) return { ok: false, error: "defina INTEGRATIONS_ENCRYPTION_KEY", skipped: [] }
         const { ensureRemoteMcp } = await import("@/features/ai/server/opencode-mcp")
-        return await ensureRemoteMcp(client, { server: WORKBENCH_MCP_SERVER, url: `${base}${WORKBENCH_MCP_PATH}`, secret, label: "MCP da mesa" }, directories)
+        return await ensureRemoteMcp(client, { server: WORKBENCH_MCP_SERVER, url: `${base}${WORKBENCH_MCP_PATH}`, secret, label: "MCP da mesa", requireConnected: true }, directories)
     } catch (error) {
         const message = error instanceof Error ? error.message : String(error)
         logger.warn({ err: message }, "[agentic] não foi possível registrar o MCP da mesa no OpenCode")

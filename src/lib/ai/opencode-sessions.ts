@@ -37,6 +37,14 @@ export class OpencodeUnavailableError extends Error {
     }
 }
 
+/** A leitura foi cancelada (o usuário interrompeu a etapa durante as tentativas): não é falha do OpenCode. */
+export class OpencodeLookupAbortedError extends Error {
+    constructor() {
+        super("Interrompido antes de confirmar a sessão do OpenCode")
+        this.name = "OpencodeLookupAbortedError"
+    }
+}
+
 export type OpencodeSessionLookup<T> = { status: "found"; info: T } | { status: "missing" }
 
 function wait(ms: number, signal?: AbortSignal): Promise<void> {
@@ -67,7 +75,7 @@ export async function lookupOpencodeSession<T>(
     let lastError: unknown = null
     for (let attempt = 0; attempt <= delays.length; attempt++) {
         if (attempt > 0) await wait(delays[attempt - 1] ?? 0, options.signal)
-        if (options.signal?.aborted) break
+        if (options.signal?.aborted) throw new OpencodeLookupAbortedError()
         try {
             const info = await client.session.get({ sessionID: sessionId })
             return info ? { status: "found", info } : { status: "missing" }
@@ -76,5 +84,5 @@ export async function lookupOpencodeSession<T>(
             lastError = error
         }
     }
-    throw new OpencodeUnavailableError(lastError ?? new Error("operação cancelada"))
+    throw new OpencodeUnavailableError(lastError)
 }

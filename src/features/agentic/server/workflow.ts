@@ -67,7 +67,7 @@ import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { withWorkbenchContext } from "../workbench-context"
 import { syncWorkbenchContext, type WorkbenchTurnContext } from "./workbench-context"
 import { registerWorkbenchMcpAt } from "./workbench-mcp/register"
-import { lookupOpencodeSession } from "@/lib/ai/opencode-sessions"
+import { lookupOpencodeSession, OpencodeLookupAbortedError } from "@/lib/ai/opencode-sessions"
 import { centralLogger } from "./log"
 import { allocatePreviewPort, releasePreviewPort, waitForPreview } from "./ports"
 import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "./preview-backup"
@@ -892,6 +892,11 @@ async function executeTurns(id: string, first: TurnPlan, controller: AbortContro
             if (fresh.doc.deletionRequestedAt && turn.stage !== "finishing") return
             next = await afterTurn(client, fresh, turn.stage, result)
         } catch (error) {
+            // Interrompido durante as tentativas de ler a sessão (OPE-178): é interrupção, não falha do OpenCode.
+            if (error instanceof OpencodeLookupAbortedError) {
+                await update(loaded.doc, { runState: "interrupted", error: error.message, pendingPermissions: [], pendingForms: [] })
+                return
+            }
             if (stage === "building") {
                 await trackBuild(id, () => settleBuild(id, "failed", errorText(error)))
                 const current = await AgenticWorkbench.findById(id).lean()

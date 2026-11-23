@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { governingPlan, withWorkbenchContext, workbenchContextFallback, workbenchContextHeader, WORKBENCH_MCP_TOOLS, type WorkbenchContextSource } from '@/features/agentic/workbench-context'
+import { governingPlan, withWorkbenchContext, workbenchContextFallback, workbenchContextHeader, workbenchPlanSection, WORKBENCH_MCP_TOOLS, type WorkbenchContextSource } from '@/features/agentic/workbench-context'
 
 /**
  * Contexto da mesa para o agente (OPE-178): a versão do plano que rege cada etapa, o cabeçalho de todo
@@ -98,6 +98,15 @@ describe('workbenchContextFallback', () => {
     expect(text).toContain('link (válido por 24 h): https://s3/print.png?sig')
     expect(text).toContain('o arquivo existe, mas não foi possível gerar o link: o Storage S3 não respondeu')
     expect(text).toContain('/tmp/opex-anexos/ZC-17')
+  })
+})
+
+describe('workbenchPlanSection', () => {
+  it('texto completo da versão que rege a etapa (vai no prompt da implementação mesmo com o MCP)', () => {
+    const section = workbenchPlanSection(source())
+    expect(section.startsWith('## Plano da mesa: versão 2 (aprovada)')).toBe(true)
+    expect(section).toContain('Formulário completo')
+    expect(workbenchPlanSection(source({ plans: [] }))).toBe('')
   })
 })
 

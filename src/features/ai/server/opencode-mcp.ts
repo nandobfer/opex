@@ -21,6 +21,41 @@ export interface RemoteMcpTarget {
     secret: string
     /** Nome legível nos logs (ex.: "MCP de memórias"). */
     label: string
+    /**
+     * Só conta como registrado o diretório em que o OpenCode informa o servidor `connected` (OPE-178):
+     * URL pública inalcançável a partir do host ou segredo divergente deixam o servidor `failed`.
+     */
+    requireConnected?: boolean
+}
+
+/** Leituras do status depois de registrar (o OpenCode pode levar um instante para conectar). */
+export const REMOTE_MCP_STATUS_POLLS = 5
+export const REMOTE_MCP_STATUS_POLL_MS = 200
+
+type McpListing = Map<string, { status: string | null; error: string | null }>
+
+async function listServers(client: OpencodeClient, location: { location: { directory: string } }): Promise<McpListing> {
+    const result = await client.mcp.list(location).catch(() => null)
+    const listing: McpListing = new Map()
+    for (const server of result?.data ?? []) {
+        const status = (server as { status?: { status?: unknown; error?: unknown; message?: unknown } }).status
+        listing.set(server.name, { status: typeof status?.status === "string" ? status.status : null, error: typeof status?.error === "string" ? status.error : typeof status?.message === "string" ? status.message : null })
+    }
+    return listing
+}
+
+const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
+
+/** Status final do servidor no diretório depois do registro (`connected` ou o motivo da falha). */
+async function awaitConnected(client: OpencodeClient, server: string, location: { location: { directory: string } }): Promise<string | null> {
+    let last: { status: string | null; error: string | null } | undefined
+    for (let poll = 0; poll < REMOTE_MCP_STATUS_POLLS; poll++) {
+        if (poll > 0) await pause(REMOTE_MCP_STATUS_POLL_MS)
+        last = (await listServers(client, location)).get(server)
+        if (last?.status === "connected") return null
+        if (last?.status && last.status !== "pending" && last.status !== "connecting") break
+    }
+    return `o OpenCode não conectou ao servidor ${server} (status: ${last?.status ?? "desconhecido"}${last?.error ? ` — ${last.error}` : ""})`
 }
 
 const globalRegistry = globalThis as unknown as { __opexRemoteMcpRegistered?: Set<string> }
@@ -42,18 +77,24 @@ export async function ensureRemoteMcp(client: OpencodeClient, target: RemoteMcpT
         try {
             const key = `${target.server}|${directory}|${target.url}`
             const location = { location: { directory } }
-            const present = new Set(
-                await client.mcp
-                    .list(location)
-                    .then((result) => result.data.map((server) => server.name))
-                    .catch(() => [] as string[]),
-            )
-            if (registered.has(key) && present.has(target.server)) {
+            const listing = await listServers(client, location)
+            const current = listing.get(target.server)
+            const healthy = current !== undefined && (!target.requireConnected || current.status === "connected")
+            if (registered.has(key) && healthy) {
                 succeeded++
                 continue
             }
-            if (present.has(target.server)) await client.mcp.remove({ server: target.server, ...location }).catch(() => undefined)
+            if (current) await client.mcp.remove({ server: target.server, ...location }).catch(() => undefined)
             await client.mcp.add({ server: target.server, ...location, config: { type: "remote", url: target.url, headers: { Authorization: `Bearer ${target.secret}` }, oauth: false, timeout: { execution: 120_000 } } })
+            if (target.requireConnected) {
+                const problem = await awaitConnected(client, target.server, location)
+                if (problem) {
+                    registered.delete(key)
+                    failure = problem
+                    logger.warn({ err: problem, directory, server: target.server }, `[ai] o ${target.label} foi registrado, mas não conectou neste diretório`)
+                    continue
+                }
+            }
             registered.add(key)
             succeeded++
         } catch (error) {

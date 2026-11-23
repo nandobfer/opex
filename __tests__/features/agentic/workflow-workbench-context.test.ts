@@ -27,6 +27,7 @@ const mocks = vi.hoisted(() => ({
   sessionCreate: vi.fn(),
   ensureMcp: vi.fn(),
   registerAt: vi.fn(async () => undefined),
+  markActive: vi.fn(),
 }))
 
 // Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
@@ -60,7 +61,7 @@ vi.mock('@/features/agentic/server/hub', () => ({
   prepareHub: mocks.prepareHub,
   publishWorkbenchEvent: mocks.publish,
   isWorkbenchActive: () => false,
-  markWorkbenchActive: vi.fn(),
+  markWorkbenchActive: mocks.markActive,
   clearWorkbenchActive: vi.fn(),
   abortWorkbenchRun: vi.fn(),
   dropWorkbenchEvents: vi.fn(),
@@ -90,7 +91,7 @@ vi.mock('@/features/ai/server/self-memory/mcp', async () => (await import('../..
 
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
-import { implement, retry } from '@/features/agentic/server/workflow'
+import { implement, retry, revisePlan } from '@/features/agentic/server/workflow'
 
 const model = AgenticWorkbench as unknown as {
   docs: Record<string, unknown>[]
@@ -172,7 +173,7 @@ describe('sessão do OpenCode inacessível (regressão da ZC-17)', () => {
 })
 
 describe('contexto da mesa em todo turno', () => {
-  it('sessão viva com o MCP: o pedido da etapa vem primeiro, o cabeçalho depois, sem o plano inline', async () => {
+  it('sessão viva com o MCP conectado: o pedido da etapa vem primeiro, depois o cabeçalho e, na implementação, o texto do plano aprovado', async () => {
     const wb = await workbench()
     await implement(wb._id)
     await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
@@ -183,7 +184,10 @@ describe('contexto da mesa em todo turno', () => {
     expect(text).toContain('## Mesa do Opex')
     expect(text).toContain('opex_mesa_list_attachments')
     expect(text).not.toContain('sessão NOVA')
-    expect(text).not.toContain('Abas completas da empresa')
+    // F1 (rodada 1): a implementação nunca começa sem o plano, mesmo com o MCP conectado.
+    expect(text).toContain('## Plano da mesa: versão 1 (aprovada)')
+    expect(text).toContain('Abas completas da empresa')
+    expect(text).not.toContain('Dados da mesa (as ferramentas da mesa não estão disponíveis')
     expect(mocks.ensureMcp).toHaveBeenCalledWith(expect.anything(), expect.arrayContaining(['/home/u/app', '/home/u/app/worktrees/zc-17']))
   })
 
@@ -225,5 +229,30 @@ describe('contexto da mesa em todo turno', () => {
     const wb = await workbench()
     await implement(wb._id)
     await vi.waitFor(() => expect(mocks.registerAt).toHaveBeenCalledWith(expect.any(Function), '/home/u/app/worktrees/zc-17'))
+  })
+
+  it('etapa que não depende do plano (revisão no planejamento) com o MCP conectado: só o cabeçalho, sem o texto do plano', async () => {
+    const wb = await workbench()
+    await revisePlan(wb._id, 'Inclua o Y')
+    await vi.waitFor(() => expect(mocks.runTurn).toHaveBeenCalled())
+    const { text } = firstPrompt()
+    expect(text).toContain('## Mesa do Opex')
+    expect(text).toContain('opex_mesa_get_plan')
+    expect(text).not.toContain('Abas completas da empresa')
+  })
+
+  it('F2 (rodada 1): interromper durante as tentativas de ler a sessão deixa a mesa interrompida, não com falha do OpenCode', async () => {
+    mocks.sessionGet.mockImplementation(async () => {
+      const controller = mocks.markActive.mock.calls.at(-1)?.[1] as AbortController
+      controller.abort()
+      throw transportError()
+    })
+    const wb = await workbench()
+    await implement(wb._id)
+    await vi.waitFor(() => expect(model.docs[0]!.runState).toBe('interrupted'))
+    expect(model.docs[0]!.error).not.toContain('OpenCode inacessível')
+    expect(mocks.sessionGet).toHaveBeenCalledTimes(1)
+    expect(mocks.sessionCreate).not.toHaveBeenCalled()
+    expect(mocks.runTurn).not.toHaveBeenCalled()
   })
 })

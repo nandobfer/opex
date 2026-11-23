@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger"
 import type { WorkbenchStage } from "../constants"
 import type { CentralConfig } from "../schemas"
 import { ensureWorkbenchMcp } from "./workbench-mcp/register"
-import { workbenchContextFallback, workbenchContextHeader, type FallbackAttachment, type WorkbenchContextSource } from "../workbench-context"
+import { workbenchContextFallback, workbenchContextHeader, workbenchPlanSection, type FallbackAttachment, type WorkbenchContextSource } from "../workbench-context"
 
 /**
  * Contexto da mesa no turno (OPE-178): registra o MCP `opex_mesa` nos diretórios da sessão e devolve o
@@ -83,7 +83,8 @@ export async function syncWorkbenchContext(client: OpencodeClient, input: Workbe
         const [registration, counts] = await Promise.all([withDeadline(ensureWorkbenchMcp(client, input.directories), { ok: false, error: "o OpenCode não confirmou o registro a tempo", skipped: [] }), withDeadline(countAttachments().catch(() => null), null)])
         const source = sourceOf(input, counts)
         const header = workbenchContextHeader(source, { mcp: registration.ok, ...options })
-        if (registration.ok) return { header, fallback: null, mcp: true }
+        // Turnos que dependem do plano levam o texto dele mesmo com o MCP conectado.
+        if (registration.ok) return { header, fallback: input.requirePlan || input.newSession ? workbenchPlanSection(source) || null : null, mcp: true }
         logger.warn({ workbenchId, err: registration.error }, "[agentic] MCP da mesa indisponível neste turno: os dados da mesa vão no prompt")
         input.notify?.("warn", `Ferramentas da mesa indisponíveis neste turno (${registration.error ?? "motivo desconhecido"}): o plano e os dados da mesa vão no prompt.`)
         const extras = await withDeadline(fallbackExtras(input).catch(() => ({ taskMarkdown: null, attachments: [] })), { taskMarkdown: null, attachments: [] })
