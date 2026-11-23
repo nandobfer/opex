@@ -65,7 +65,14 @@ adversarial_blocked ─┬─ Corrigir (texto opcional, achados desmarcáveis) �
   commitado e os arquivos novos, mais o **contexto configurado**. A partir da 2ª rodada: conferir os
   achados anteriores (`previous`), aceitar contestações com evidência e não trocar de objetivo.
 - Agente, modelo, variante e **modelos de fallback** da configuração (`runWithFallback` da mesa);
-  tempo máximo configurável. Saída na **Saída da IA** da mesa (turno "Agente adversário · rodada N")
+  tempo máximo configurável. **Cota/limite do provedor (OPE-181)**: o turno leva
+  `providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY`; com 429/cota e o `retry-after` acima de 60 s (ou na 3ª
+  tentativa), desiste em segundos e o próximo modelo assume na mesma sessão, com o aviso na saída
+  ("Agente adversário: X falhou (motivo): continuando com Y — fallback 1 de N.") e no log (`from`, `to`,
+  posição, motivo); a rodada termina com o veredito. Sem fallback (ou com a corrente esgotada), a rodada
+  falha com o motivo real + "Nenhum modelo de fallback configurado…"/"Todos os modelos de fallback
+  também falharam." (segue a política "Se falhar"), nunca "Interrompido" pelo tempo limite. Os fallbacks
+  são conferidos no catálogo do OpenCode ao salvar. Saída na **Saída da IA** da mesa (turno "Agente adversário · rodada N")
   e consumo em `ai_consumption_logs` com origem `adversarial-agent` ("Agente Adversário" no painel;
   custo e tokens também somam no uso da mesa).
 

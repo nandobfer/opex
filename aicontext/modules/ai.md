@@ -270,6 +270,16 @@ do `opencode serve`, não uma chave de API.
   **Global** em Settings › Privacy; o Go monitora abuso e espera tráfego de agente de código — uso em
   lote (resumos, tags) fica a critério do dono. Cota esgotada (429) só é classificada e informada; o
   fallback entre modelos continua com as features que já o têm.
+- **Corrente de fallback por feature (OPE-181)**: todo turno do OpenCode por sessão (mesa, fork, Agente
+  Adversário, Arquiteto com OpenCode, Revisor de PR, Refinador, rotineiros no motor OpenCode e Maddox)
+  desiste do `retry-after` longo por cota (`DEFAULT_PROVIDER_LIMIT_POLICY`, padrão do `runAgentTurn`) e
+  segue a lista de **modelos de fallback** da própria configuração (`src/features/ai/model-fallbacks.ts`,
+  `FallbackModelsField`; ver `modules/agentic-dev.md`, "Modelos de fallback"). **Ficam fora**, por
+  decisão registrada: as features one-shot pelo `streamAi` (Resumos de tarefas, Tags de tarefas, Prévia de
+  orçamento, Estimar horas e Descritivo de versão de plugin) — chamada única, sem sessão nem novas
+  tentativas agendadas pelo OpenCode; a cota volta como erro imediato do SDK, com a mensagem do provedor
+  (`describeAiError`) —; o Arquiteto com provedor direto; o subagente de título do Maddox; e o
+  provisionamento dos rotineiros (configuração própria, chamada única).
 - **Fora do Engramind**: o Go não é fonte do Redator nem do Curador do Engramind — o Engramind chamaria
   a API sem o `x-opencode-session` e o Go recusaria.
 

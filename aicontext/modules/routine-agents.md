@@ -63,7 +63,9 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     com a dica "Para usar o OpenCode, escolha o motor OpenCode no host") ou **OpenCode no host** (modelos e
     agente do serviço OpenCode). O `ProviderModelCard` compartilhado aceita caminhos aninhados
     (`names`). Trocar o motor ou o modelo vale só para as próximas execuções (cada execução guarda um
-    `snapshot` da configuração).
+    `snapshot` da configuração). No motor OpenCode, o card traz os **Modelos de fallback**
+    (`opencode.fallbacks`, OPE-181; `fallbacksName`): até 5 modelo + variante, mesma validação das mesas;
+    agentes gravados antes carregam sem fallback (`withRoutineEngineDefaults`). O motor Opex não tem corrente.
   - **Ferramentas**: Opex = a mesma árvore do Agente Opex (`ClienteOpexToolsCard` com a árvore do
     dono, **sem o grupo Agentes rotineiros** — `ROUTINE_FORBIDDEN_TOOL_GROUPS`: um rotineiro não
     confirma ações de outras execuções nem afrouxa a própria política) + os MCPs cadastrados no Opex
@@ -325,6 +327,13 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   Serviço desligado → **Erro** com o motivo. As permissões falham fechadas: sem conseguir listar os
   MCPs do host → **Erro** acionável; sessão reaproveitada cujas permissões não puderam ser atualizadas
   → sessão nova, com aviso. As chamadas ao MCP da execução (memória, Chamada HTTP) viram passos.
+  **Fallback (OPE-181):** o turno roda pela corrente `runWithFallback` com `providerLimit` (agente,
+  modelo, variante e `fallbacks` do snapshot): o modelo que falha no provedor (cota/limite com `retry-after`
+  longo, indisponível) dá lugar ao próximo na mesma sessão, com um passo "Modelo de fallback" ("X falhou
+  (motivo): continuando com Y — fallback N de M.") e o log; o uso de cada passo vai para o modelo da
+  tentativa e o relato é só o da tentativa que concluiu. Se o agente já concluiu/hibernou/pediu
+  confirmação, não há troca. Corrente esgotada ou sem fallback: **Erro** com o motivo real. Execuções
+  disparadas antes da mudança seguem o snapshot antigo, sem fallback.
   **Skills do host (OPE-153):** as mesmas permissões da sessão levam `{ action: "skill", resource: "*",
   effect: "deny" }` e depois `allow` para cada skill selecionada que existe no host
   (`routineSkillPermissions`; a última regra que casa vence no OpenCode). O curinga bloqueia também as

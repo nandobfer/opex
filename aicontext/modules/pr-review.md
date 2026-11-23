@@ -15,6 +15,9 @@ formulário. Desativada por padrão. Ativar exige modelo OpenCode válido; agent
 Critério Todos / Exceto os meus / Revisor solicitado, rascunhos e PRs das mesas configuráveis.
 Login do token GitHub via `/user` (cache 10 min); sem login, critérios pessoais não incluem PRs.
 Skill, instruções, timeout (5–240 min), simultâneas (1–5), replanejamento e limite opcional por PR.
+**Modelos de fallback** (`fallbacks`, OPE-181): até 5 modelo + variante no card de provedor/modelo
+(`FallbackModelsField`, mesma validação das mesas: sem repetir o principal nem repetidos, ordem por
+arrastar), conferidos no catálogo do OpenCode ao salvar; configurações antigas carregam sem fallback.
 Credenciais permanecem nas integrações existentes, sem nova variável de ambiente.
 
 ## Fluxo
@@ -26,6 +29,11 @@ Credenciais permanecem nas integrações existentes, sem nova variável de ambie
 - Sessão nova no OpenCode; prompt exige worktree temporário destacado no SHA, skill, revisão sem
   modificar arquivos, commits, push ou merge. Não roda testes/build/lint/typecheck nem instala
   dependências; usa leitura e checks do CI como evidência.
+- O turno roda pela corrente de fallback (`runWithFallback`) com `providerLimit`: se o modelo falhar no
+  provedor (cota/limite com `retry-after` longo, indisponível), a revisão continua na mesma sessão com o
+  próximo modelo ("A revisão anterior não terminou (motivo). Retome…"), com o aviso "Agente Revisor: X
+  falhou (motivo): continuando com Y — fallback N de M." na saída e no log; o relatório vale só o da
+  tentativa que concluiu. Corrente esgotada ou sem fallback: `failed` com o motivo real do limite.
 - Publica revisão no GitHub com marcador `<!-- opex:pr-review sha=… -->`. Em PR próprio publica
   comentário (GitHub não permite aprovar/pedir mudanças no próprio PR). Com bloqueios num PR de
   mesa, menciona `@opex`; resposta JSON contém verdict/blocking/summary e relatório em Markdown.
@@ -46,7 +54,8 @@ no GitHub também mantêm o bloqueio até revisão bem-sucedida. Revisões não 
 Só configuração. Cards: ativação (com o link **Ver revisões** para a página), provedor/modelo
 (OpenCode fixo), **Quais PRs revisar automaticamente** (critério, rascunhos, PRs das mesas; o login do
 GitHub vem de `GET /api/pr-reviews?limit=1`), **Mesas de trabalho** (replanejar + limite opcional) e
-**Execução** (skill, simultâneas, tempo máximo, instruções).
+**Execução** (skill, simultâneas, tempo máximo, instruções). O card de provedor/modelo traz a lista
+**Modelos de fallback** abaixo do modelo.
 
 ### Página "Agente Revisor" (`/agente-revisor`, `PrReviewsPage`)
 

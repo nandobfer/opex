@@ -174,7 +174,12 @@ pelo schema com a lista dos válidos.
   "refazendo o diagrama…"); o rascunho recomeça do ponto de partida (operação `reset`). Falhou de novo →
   `failed` com o motivo.
 - Agente, modelo, variante e modelos de fallback da configuração (`runWithFallback`); tempo máximo
-  configurável (3–60 min, padrão 15). Consumo em `ai_consumption_logs` com origem `architect-agent`
+  configurável (3–60 min, padrão 15). **Cota/limite do provedor (OPE-181)**: cada turno (o primeiro e as
+  correções) leva `providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY` e, no limite com espera longa, segue para o
+  próximo modelo na mesma sessão: a versão passa a gravar o `model` que continuou, o aviso "X falhou
+  (motivo): continuando com Y — fallback N de M." entra nos **avisos** da versão e no log. Sem fallback (ou
+  com a corrente esgotada), a versão falha com o motivo real. Os fallbacks são conferidos no catálogo ao
+  salvar (só com o OpenCode; o provedor direto não tem corrente). Consumo em `ai_consumption_logs` com origem `architect-agent`
   ("Agente Arquiteto" no painel). O custo **não** soma no uso nem no apontamento da mesa (não é etapa).
 - Progresso (fase, leituras, nós e ligações) vai pelo stream ao vivo; a mudança de fase também fica na
   versão e vai pelo Pusher (para quem não está com o stream aberto).
