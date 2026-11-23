@@ -41,7 +41,6 @@ vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segr
 vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish, flushWorkbenchEvents: vi.fn(async () => undefined) }))
-vi.mock('@/features/agentic/server/model-fallback', () => ({ runWithFallback: (agent: unknown, text: string, run: (agent: unknown, text: string) => unknown) => run(agent, text), fallbackNotice: () => '' }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask }))
 vi.mock('@/features/adversarial-agent/server/settings', () => ({ loadAdversarialSettings: async () => ({ settings: mocks.settings }) }))
 vi.mock('@/features/ai/server/agent-memory-context', () => ({ adversarialMemoryContext: mocks.memories }))
@@ -102,6 +101,33 @@ describe('runAdversaryRound', () => {
     expect(mocks.sessionRemove).toHaveBeenCalledWith({ sessionID: 'adv-1' }, expect.anything())
     expect(reviews.docs[0]).toMatchObject({ cycle: 1, round: 1, state: 'done', decision: 'approved', sessionId: null })
     expect(mocks.publish).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'adversarial-verdict', round: 1, outcome: 'Aprovado' }))
+  })
+
+  it('OPE-181: limite do provedor no principal: troca para o fallback no mesmo turno, avisa e conclui com o veredito', async () => {
+    use({ agent: { agent: 'plan', model: 'anthropic/sonnet', variant: null, fallbacks: [{ model: 'deepseek/flash', variant: null }] } })
+    mocks.runTurn
+      .mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/sonnet (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+      .mockResolvedValueOnce(succeeded(output([finding({ severity: 'low' })])))
+    const outcome = await runAdversaryRound(input())
+    expect(outcome).toMatchObject({ kind: 'proceed', level: 'success' })
+    expect(mocks.runTurn).toHaveBeenCalledTimes(2)
+    const [first, second] = mocks.runTurn.mock.calls.map((call) => call[1])
+    // A desistência do retry-after vai explícita no pedido do turno.
+    expect(first).toMatchObject({ agent: { model: 'anthropic/sonnet' }, providerLimit: { maxWaitMs: 60_000, maxAttempts: 3 } })
+    expect(second).toMatchObject({ agent: { agent: 'plan', model: 'deepseek/flash' } })
+    expect(second.text).toContain('Limite de uso do provedor')
+    expect(mocks.publish).toHaveBeenCalledWith('w1', expect.objectContaining({ type: 'notice', level: 'warn', message: expect.stringContaining('continuando com deepseek/flash — fallback 1 de 1') }))
+    expect(reviews.docs[0]).toMatchObject({ state: 'done', decision: 'approved' })
+  })
+
+  it('OPE-181: limite sem fallback: a rodada falha com o motivo real, não como interrompida', async () => {
+    mocks.runTurn.mockResolvedValue({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/opus (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+    const outcome = await runAdversaryRound(input())
+    expect(mocks.runTurn).toHaveBeenCalledTimes(1)
+    expect(outcome.kind).toBe('failed')
+    expect(outcome.message).toContain('Limite de uso do provedor em anthropic/opus')
+    expect(outcome.message).toContain('Nenhum modelo de fallback configurado')
+    expect(reviews.docs[0]).toMatchObject({ state: 'failed' })
   })
 
   it('OPE-115: worktree inexistente no host: o MCP de memórias não é registrado e a instrução de memória própria não é anunciada', async () => {

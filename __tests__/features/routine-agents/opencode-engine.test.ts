@@ -14,6 +14,8 @@ const holder = vi.hoisted(() => ({
   calls: { add: [] as unknown[], remove: [] as unknown[], create: [] as unknown[], update: [] as unknown[], turns: [] as unknown[] },
   runUpdates: [] as unknown[],
   turnOutcome: { outcome: 'done' as string, message: null as string | null },
+  // Desfechos por tentativa (corrente de fallback, OPE-181); vazio = `turnOutcome`.
+  turnQueue: [] as unknown[],
   listError: false,
   skillListError: false,
   // Diretório "frio" (OPE-158): quantas leituras da lista de skills voltam vazias antes da lista completa.
@@ -85,7 +87,7 @@ vi.mock('@/lib/ai/opencode-run', () => ({
     holder.calls.turns.push(args)
     hooks.onText('Pronto')
     hooks.onStep({ tokens: { input: 10, output: 5, reasoning: 1 }, costUsd: 0.01, stepId: 's1' })
-    return holder.turnOutcome
+    return holder.turnQueue.shift() ?? holder.turnOutcome
   },
 }))
 
@@ -120,6 +122,7 @@ beforeEach(() => {
   holder.calls = { add: [], remove: [], create: [], update: [], turns: [] }
   holder.runUpdates = []
   holder.turnOutcome = { outcome: 'done', message: null }
+  holder.turnQueue = []
   holder.listError = false
   holder.skillListError = false
   holder.coldSkillReads = 0
@@ -297,6 +300,33 @@ describe('runOpencodeEngine', () => {
     expect(result.error).toContain('Não foi possível listar as skills do host')
     expect(holder.calls.add).toEqual([])
     expect(holder.calls.create).toEqual([])
+  })
+
+  it('OPE-181: limite do provedor no principal: troca para o fallback na mesma sessão, avisa na execução e atribui o uso ao modelo da tentativa', async () => {
+    const { input, usage } = engineInput()
+    const snapshot = (input.run as unknown as { snapshot: { opencode: Record<string, unknown> } }).snapshot
+    snapshot.opencode = { ...snapshot.opencode, fallbacks: [{ model: 'deepseek/flash', variant: null }] }
+    const steps: { kind: string; detail?: string | null }[] = []
+    input.onStep = (step) => void steps.push(step)
+    holder.turnQueue = [{ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/claude', costUsd: 0, durationMs: 1, failure: 'model', limited: true }, { outcome: 'succeeded', text: '', message: null, costUsd: 0, durationMs: 1 }]
+    const result = await runOpencodeEngine(input)
+    expect(result.error).toBeNull()
+    expect(holder.calls.turns).toHaveLength(2)
+    const [first, second] = holder.calls.turns as { sessionId: string; agent: { model: string }; providerLimit?: unknown; text: string }[]
+    expect(first).toMatchObject({ agent: { model: 'anthropic/claude' }, providerLimit: { maxWaitMs: 60_000, maxAttempts: 3 } })
+    expect(second).toMatchObject({ sessionId: 'ses_nova', agent: { agent: 'build', model: 'deepseek/flash' } })
+    expect(second.text).toContain('A execução anterior não terminou')
+    expect(steps.some((step) => step.kind === 'notice' && step.detail?.includes('continuando com deepseek/flash'))).toBe(true)
+    expect((usage as { model: string }[]).map((item) => item.model)).toEqual(['anthropic/claude', 'deepseek/flash'])
+    // O relato é só o da tentativa que concluiu.
+    expect(result.text).toBe('Pronto')
+  })
+
+  it('OPE-181: limite sem fallback: a execução vira Erro com o motivo real', async () => {
+    holder.turnQueue = [{ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/claude', costUsd: 0, durationMs: 1, failure: 'model', limited: true }]
+    const result = await runOpencodeEngine(engineInput().input)
+    expect(holder.calls.turns).toHaveLength(1)
+    expect(result.error).toContain('Nenhum modelo de fallback configurado')
   })
 
   it('turno que falha no OpenCode vira Erro com a mensagem', async () => {

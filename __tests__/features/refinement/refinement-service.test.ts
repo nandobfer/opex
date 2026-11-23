@@ -89,7 +89,8 @@ vi.mock('@/features/agentic/server/hub', () => ({
     flushWorkbenchEvents: vi.fn(),
     publishWorkbenchEvent: mocks.publishWorkbenchEvent,
 }))
-vi.mock('@/features/agentic/logic', () => ({ parseCentralConfig: () => ({ enabled: mocks.centralEnabled, sessionDirectory: '/repo/opex' }) }))
+// A corrente de fallback (OPE-181) usa o `modelChain` real.
+vi.mock('@/features/agentic/logic', async (importOriginal) => ({ ...(await importOriginal<object>()), parseCentralConfig: () => ({ enabled: mocks.centralEnabled, sessionDirectory: '/repo/opex' }) }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: vi.fn(async () => task), updateTask: mocks.updateTask }))
 vi.mock('@/features/ai/server/settings', () => ({
     loadTaskRefinementSettings: vi.fn(async () => ({ settings: { enabled: true, model: 'anthropic/claude', agent: null, variant: null, instructionsSource: 'text', instructions: 'Regras.', skill: null, include: { comments: true, history: true }, ...mocks.settings } })),
@@ -292,6 +293,29 @@ describe('turno e conclusão', () => {
         expect(mocks.log.info.mock.calls.some((call) => String(call[1]).includes('título fora do padrão'))).toBe(false)
     })
 
+    it('OPE-181: limite do provedor no principal: o fallback do Agente Refinador conclui e grava a especificação', async () => {
+        mocks.settings = { fallbacks: [{ model: 'deepseek/flash', variant: null }] }
+        mocks.run
+            .mockImplementationOnce(async (_client: unknown, _request: unknown, hooks: { onText?: (d: string) => void }) => {
+                hooks.onText?.('## Especificação técnica\n\n- parcial do modelo que caiu')
+                return { outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/claude (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 1, failure: 'model', limited: true }
+            })
+            .mockResolvedValueOnce({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateTask).toHaveBeenCalledWith('t1', { technicalSpec: '- critério de aceite\n- localização: /tarefas\n- edge case: vazio' }, 'local'))
+        expect(mocks.run).toHaveBeenCalledTimes(2)
+        expect(mocks.run.mock.calls[0]![1]).toMatchObject({ agent: { model: 'anthropic/claude' }, providerLimit: { maxWaitMs: 60_000, maxAttempts: 3 } })
+        expect(mocks.run.mock.calls[1]![1]).toMatchObject({ sessionId: 'sess-1', agent: { model: 'deepseek/flash' } })
+        expect(mocks.publishWorkbenchEvent).toHaveBeenCalledWith('c'.repeat(24), expect.objectContaining({ type: 'notice', message: expect.stringContaining('continuando com deepseek/flash') }))
+    })
+
+    it('OPE-181: limite sem fallback: o refinamento falha com o motivo real', async () => {
+        mocks.run.mockResolvedValue({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/claude (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 1, failure: 'model', limited: true })
+        await startRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'failed', error: expect.stringContaining('Nenhum modelo de fallback configurado') }) })))
+        expect(mocks.run).toHaveBeenCalledTimes(1)
+    })
+
     it('aplica as instruções e o protocolo como entrada durável da sessão', async () => {
         mocks.run.mockResolvedValue({ outcome: 'succeeded', text: SPEC, message: null, costUsd: 0, durationMs: 1 })
         await startRefinement('t1')
@@ -490,6 +514,16 @@ describe('reconectar', () => {
         expect(mocks.fakeClient.session.create).not.toHaveBeenCalled()
         const recorded = mocks.updateOne.mock.calls.some((call) => (call[1] as { $set?: { reconnect?: { outcome?: string } } }).$set?.reconnect?.outcome === 'attached')
         expect(recorded).toBe(true)
+    })
+
+    it('OPE-181: reconexão com falha do modelo não troca para o fallback', async () => {
+        mocks.settings = { fallbacks: [{ model: 'deepseek/flash', variant: null }] }
+        mocks.doc = docBase()
+        mocks.probe.mockResolvedValue({ outcome: 'attached', follow: true, message: null })
+        mocks.run.mockResolvedValue({ outcome: 'failed', text: '', message: 'Limite de uso do provedor', costUsd: 0, durationMs: 1, failure: 'model', limited: true })
+        await reconnectRefinement('t1')
+        await vi.waitFor(() => expect(mocks.updateOne).toHaveBeenCalledWith({ _id: 'c'.repeat(24) }, expect.objectContaining({ $set: expect.objectContaining({ runState: 'failed' }) })))
+        expect(mocks.run).toHaveBeenCalledTimes(1)
     })
 
     it('turno que terminou durante a queda recupera o resultado e conclui gravando a especificação', async () => {

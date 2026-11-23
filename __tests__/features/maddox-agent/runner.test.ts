@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { memoryModel, type Doc } from '../../helpers/memory-model'
 import type { TurnEvent, TurnHooks, TurnRequest } from '@/lib/ai/opencode-run'
 
-type Scenario = (hooks: TurnHooks, request: TurnRequest) => Promise<{ outcome: 'succeeded' | 'failed' | 'interrupted'; message?: string | null }>
+type Scenario = (hooks: TurnHooks, request: TurnRequest) => Promise<{ outcome: 'succeeded' | 'failed' | 'interrupted'; message?: string | null; failure?: 'model' | 'other'; limited?: boolean }>
 
 const mocks = vi.hoisted(() => ({
   scenario: null as unknown,
@@ -21,7 +21,7 @@ vi.mock('@/lib/ai/opencode-run', () => ({
   runAgentTurn: async (_client: unknown, request: TurnRequest, hooks: TurnHooks) => {
     mocks.requests.push(request)
     const result = await (mocks.scenario as Scenario)(hooks, request)
-    return { outcome: result.outcome, text: '', message: result.message ?? null, costUsd: 0, durationMs: 5 }
+    return { outcome: result.outcome, text: '', message: result.message ?? null, costUsd: 0, durationMs: 5, ...(result.failure ? { failure: result.failure } : {}), ...(result.limited ? { limited: true } : {}) }
   },
 }))
 vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ permission: { reply: mocks.permissionReply }, mcp: { list: async () => ({ data: [] }), add: mocks.mcpAdd, remove: async () => {} } }) }))
@@ -181,6 +181,43 @@ describe('runner do Agente Maddox (OpenCode)', () => {
     expect(saved).toMatchObject({ status: 'complete', text: 'Achei 2 tarefas.', model: 'anthropic/claude (high)', usage: { inputTokens: 40, outputTokens: 10, totalTokens: 55 } })
     expect(sessions().docs[0]).toMatchObject({ status: 'idle', opencodeSessionId: 'ses_oc' })
     expect(mocks.refreshTitle).toHaveBeenCalledWith(sessionId, expect.objectContaining({ provider: 'opencode', model: 'anthropic/claude', origin: 'maddox-title' }), expect.objectContaining({ userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.' }))
+  })
+
+  it('OPE-181: limite do provedor no modelo do turno: o fallback do modelo padrão responde, avisa no chat e a resposta grava o modelo que concluiu', async () => {
+    const original = settings.main
+    settings.main = { ...original, fallbacks: [{ model: 'openai/gpt', variant: null }] } as typeof original
+    try {
+      const sessionId = await newSession()
+      let call = 0
+      mocks.scenario = (async (hooks) => {
+        if (call++ === 0) return { outcome: 'failed', message: 'Limite de uso do provedor em anthropic/claude', failure: 'model', limited: true }
+        emit(hooks, { type: 'text', text: 'Resposta do fallback.' })
+        return { outcome: 'succeeded' }
+      }) satisfies Scenario
+      const { lines, ended } = collect(sessionId)
+      await sendMaddoxMessage(sessionId, { text: 'Oi' }, 'local', MADDOX_OWNER_SCOPE)
+      await ended
+      expect(mocks.requests).toHaveLength(2)
+      expect(mocks.requests[0]).toMatchObject({ agent: { model: 'anthropic/claude', variant: 'high' }, providerLimit: { maxWaitMs: 60_000, maxAttempts: 3 } })
+      expect(mocks.requests[1]).toMatchObject({ sessionId: 'ses_oc', agent: { agent: null, model: 'openai/gpt', variant: null } })
+      expect(lines.some((line) => line.type === 'text-delta' && line.text.includes('continuando com openai/gpt — fallback 1 de 1'))).toBe(true)
+      const saved = messages().docs.find((doc) => doc.role === 'assistant')!
+      expect(saved).toMatchObject({ status: 'complete', model: 'openai/gpt' })
+    } finally {
+      settings.main = original
+    }
+  })
+
+  it('OPE-181: limite sem fallback: a resposta termina com erro e o motivo real', async () => {
+    const sessionId = await newSession()
+    mocks.scenario = (async () => ({ outcome: 'failed', message: 'Limite de uso do provedor em anthropic/claude', failure: 'model', limited: true })) satisfies Scenario
+    const { ended } = collect(sessionId)
+    await sendMaddoxMessage(sessionId, { text: 'Oi' }, 'local', MADDOX_OWNER_SCOPE)
+    await ended
+    expect(mocks.requests).toHaveLength(1)
+    const saved = messages().docs.find((doc) => doc.role === 'assistant')!
+    expect(saved.status).toBe('error')
+    expect(String(saved.error)).toContain('Nenhum modelo de fallback configurado')
   })
 
   it('OPE-115: diretório do Maddox inexistente no host: avisa e não anuncia as ferramentas de memória própria', async () => {

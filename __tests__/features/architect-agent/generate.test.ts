@@ -43,7 +43,6 @@ vi.mock('@/lib/ai/opencode-client', () => ({
   runOpencodeShell: mocks.shell,
 }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn }))
-vi.mock('@/features/agentic/server/model-fallback', () => ({ runWithFallback: (agent: unknown, text: string, run: (agent: unknown, text: string) => unknown) => run(agent, text), fallbackNotice: () => '' }))
 vi.mock('@/features/agentic/server/centrals', () => ({ loadCentral: async () => ({ config: { sessionDirectory: '/repo', worktreeRoot: '/repo/worktrees' } }) }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask }))
 vi.mock('@/features/architect-agent/server/settings', () => ({ loadArchitectSettings: async () => ({ settings: mocks.settings }) }))
@@ -105,6 +104,31 @@ describe('runDiagram', () => {
     expect(mocks.workbenchUpdate).not.toHaveBeenCalled()
     expect(mocks.sessionRemove).toHaveBeenCalledWith({ sessionID: 'arch-1' }, expect.anything())
     expect(isDiagramLive(id)).toBe(false)
+  })
+
+  it('OPE-181: limite do provedor no principal: o fallback conclui o diagrama e a versão registra a troca', async () => {
+    mocks.settings = { ...DEFAULT_ARCHITECT_SETTINGS, enabled: true, agent: { agent: 'plan', model: 'anthropic/opus', variant: null, fallbacks: [{ model: 'deepseek/flash', variant: null }] } }
+    mocks.runTurn
+      .mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/opus (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+      .mockResolvedValueOnce(succeeded(graphJson()))
+    const { id, controller } = await seed()
+    await runDiagram(id, controller)
+    expect(mocks.runTurn).toHaveBeenCalledTimes(2)
+    expect(mocks.runTurn.mock.calls[0]![1]).toMatchObject({ providerLimit: { maxWaitMs: 60_000, maxAttempts: 3 } })
+    expect(mocks.runTurn.mock.calls[1]![1]).toMatchObject({ agent: { model: 'deepseek/flash' } })
+    const saved = doc(id)
+    expect(saved.state).toBe('done')
+    expect(saved.model).toBe('deepseek/flash')
+    expect((saved.warnings as string[])[0]).toContain('anthropic/opus falhou (Limite de uso do provedor')
+    expect(mocks.logWarn).toHaveBeenCalledWith(expect.objectContaining({ from: 'anthropic/opus', to: 'deepseek/flash' }), expect.stringContaining('fallback 1 de 1'))
+  })
+
+  it('OPE-181: limite sem fallback: a versão falha com o motivo real', async () => {
+    mocks.runTurn.mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/opus (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+    const { id, controller } = await seed()
+    await runDiagram(id, controller)
+    expect(doc(id)).toMatchObject({ state: 'failed' })
+    expect(doc(id).error).toContain('Nenhum modelo de fallback configurado')
   })
 
   it('sem o worktree no host, lê a base do repositório', async () => {
