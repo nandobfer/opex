@@ -546,6 +546,9 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
     ("autorização OAuth necessária…"; no portal, a mensagem genérica). Conexão boa volta a `authorized`.
     "Testar conexão" com OAuth exige o MCP salvo e o mesmo endereço.
   - Trocar a URL/transporte ou o client id invalida tokens, cliente registrado e pedido.
+  - **Na imagem Docker**, as chamadas de OAuth da `@ai-sdk/mcp` usam o fetch protegido do
+    `@ai-sdk/provider-utils`, que depende do `undici` no standalone; o build garante isso com
+    `scripts/standalone-runtime-deps.mjs` (ver `modules/deployment.md`).
   - **Desconectar** (`DELETE …/[id]/oauth`, com confirmação): revogação RFC 7009 em melhor esforço
     (`revocation_endpoint` dos metadados) e limpeza de tokens, pedido e cliente dinâmico.
   - Auditoria `McpServidor` com `{ oauth: "autorizado" | "falhou" | "desconectado…" }` e

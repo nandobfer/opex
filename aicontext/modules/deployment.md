@@ -53,6 +53,15 @@ na `main` sem repeti-la, com dois jobs encadeados.
   e o pacote `tailwindcss` inteiro, e roda `node scripts/plugin-runtime-check.mjs .next/standalone`.
   Sem isso a imagem subia, mas toda mesa Plugin falhava ao compilar (OPE-173); agora o build da imagem
   falha com "Compilador de plugins indisponível na imagem: …". Detalhes em `modules/plugins.md`.
+- **`undici` no standalone (OPE-176):** o `@ai-sdk/provider-utils` monta o fetch protegido (DNS validado
+  contra SSRF) das chamadas de OAuth da `@ai-sdk/mcp` com `createRequire(...)("undici")` dinâmico, que o
+  rastreamento do Next não enxerga. Depois do `next build`, o `Dockerfile` roda
+  `node scripts/standalone-runtime-deps.mjs .next/standalone`: copia o mesmo `undici` que o
+  `provider-utils` resolve no repositório para `.next/standalone/node_modules/undici` e confere que ele
+  carrega a partir de `.next/server/chunks/`. Sem isso o "Autorizar" (e a troca/renovação do token) dos
+  MCPs do Agente Opex falhava com "Cannot find module 'undici'"; agora o build da imagem falha com
+  "Dependência de execução ausente na imagem: …". `pnpm dev` e os testes não mostram o problema (usam o
+  `node_modules` completo).
 - Versões recém-publicadas do `next` entram em `minimumReleaseAgeExclude` no
   `pnpm-workspace.yaml`: a política de idade mínima de release do pnpm bloquearia a atualização.
 
