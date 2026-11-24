@@ -142,15 +142,13 @@ export interface GoDayValue {
 }
 
 /**
- * Identidade de uma assinatura pelo status (OPE-180): duas chaves do mesmo workspace leem o mesmo `go/status`
- * (ciclo e as três janelas iguais até o micro-cent) e contam como uma assinatura só na soma.
+ * Identidade estável de uma assinatura (OPE-180): ciclo (`startsAt`/`endsAt`, ao milissegundo) e os limites das
+ * três janelas. Uso e resets ficam de fora: cada chave tem a própria leitura em memória, e duas chaves do mesmo
+ * workspace lidas em instantes diferentes, com consumo no meio, continuam sendo a mesma assinatura.
  */
 export function goSubscriptionSignature(status: GoStatus): string {
-    const meters = GO_METER_IDS.map((id) => {
-        const meter = status.access.meters[id]
-        return `${meter.usedMicroCents}:${meter.limitMicroCents}:${meter.resetsAt ?? ""}`
-    })
-    return [status.access.startsAt, status.access.endsAt, ...meters].join("|")
+    const limits = GO_METER_IDS.map((id) => status.access.meters[id].limitMicroCents)
+    return [status.access.startsAt, status.access.endsAt, ...limits].join("|")
 }
 
 /** Agrupa as leituras por assinatura, na ordem da primeira chave de cada uma. */
@@ -163,6 +161,28 @@ export function groupGoSubscriptions<T extends { status: GoStatus }>(reads: read
         else groups.set(signature, [read])
     }
     return [...groups.values()]
+}
+
+/**
+ * Uso de uma assinatura antes do início do próprio ciclo e dentro do ciclo de referência (OPE-180): soma dos % dos
+ * dias da série entre `fromMs` (início da referência) e `toMs` (início do ciclo dela), pró-rateando as pontas. Dia
+ * sem dados conta 0. Com `toMs <= fromMs` (mesmo ciclo), 0.
+ */
+export function goPreCycleRatio(days: ReadonlyMap<string, GoDayValue> | null, fromMs: number, toMs: number): number {
+    if (!days || toMs <= fromMs) return 0
+    let ratio = 0
+    for (const key of goPreCycleDayKeys(fromMs, toMs)) {
+        const percent = days.get(key)?.percent ?? null
+        if (percent === null) continue
+        const start = dayStartMs(key)
+        ratio += percent * ((Math.min(start + DAY_MS, toMs) - Math.max(start, fromMs)) / DAY_MS)
+    }
+    return ratio
+}
+
+/** Dias UTC de `[fromMs, toMs)` (vazio quando `toMs <= fromMs`); o intervalo é a distância entre dois inícios de ciclo. */
+export function goPreCycleDayKeys(fromMs: number, toMs: number): string[] {
+    return toMs <= fromMs ? [] : dateKeysBetween(utcDateKey(fromMs), utcDateKey(toMs - 1))
 }
 
 export interface GoMeterSum {

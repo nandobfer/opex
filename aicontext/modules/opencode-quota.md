@@ -188,14 +188,22 @@ Com várias chaves em uso (OPE-179), "Todas as chaves" mostra **um card consolid
 teto de 100%** (antes mostrava só a chave principal). Regras (puras em `go-logic.ts`):
 
 - **Chaves consideradas**: as em uso (`getAiProviderKeyPool`, com a principal). Grupo vazio → `unconfigured`.
-- **Uma assinatura por status** (decisão do dono no planejamento): chaves cujo `go/status` é idêntico (ciclo e as
-  três janelas iguais até o micro-cent, `goSubscriptionSignature`/`groupGoSubscriptions`) leem a mesma assinatura
-  e contam **uma vez** (série, gasto e medidores lidos com a primeira delas).
+- **Uma assinatura por identidade estável** (decisão do dono no planejamento, ajustada na revisão): chaves com o
+  mesmo ciclo (`startsAt`/`endsAt`, ao milissegundo) e os mesmos limites das três janelas
+  (`goSubscriptionSignature`/`groupGoSubscriptions`) leem a mesma assinatura e contam **uma vez**. Uso e resets
+  ficam fora da identidade: cada chave tem a própria leitura em memória e, lidas em instantes diferentes com
+  consumo no meio, o uso difere sem ser outra assinatura. Vale o status da leitura mais recente do grupo; série e
+  gasto são lidos com a primeira chave.
 - **Medidores** (`sumGoMeters`): `used` e `limit` somados por janela; o % (uma casa, truncado) é sobre a soma;
   o reset de cada janela é o mais próximo.
 - **Ciclo de referência** (`goReferenceIndex`, decisão do dono: "renovação mais próxima"): o da assinatura que
   renova primeiro (empate: maior cota mensal, depois a principal, depois o nome). Rege o gráfico, a previsão
-  (`goForecast` sobre o % somado) e o "Renova em".
+  e o "Renova em".
+- **% do mês no ciclo de referência** (cabeçalho, ponta "agora" do gráfico e previsão): o medidor mensal de cada
+  assinatura **mais o uso dela antes do próprio ciclo**, dentro da referência (`goPreCycleRatio`, pela série
+  diária, pontas pró-rateadas; os dias desse trecho também são lidos), ponderados pela cota mensal. Assim a ponta
+  continua o acumulado diário sem salto e a taxa da previsão é a do mesmo ciclo. Com o mesmo ciclo em todas, é
+  `Σ usado / Σ limite`. A barra "Mensal" das janelas continua a soma dos medidores (cada um na própria janela).
 - **Série diária** (`combineGoDays`): `Σ(% do dia × limite mensal) / Σ limites mensais` (= `Σ custo / Σ cota`).
   Assinatura sem dados no dia (falha ou catálogo indisponível) conta 0 e o dia fica **incompleto**
   (`incompleteDays`); sem dados de nenhuma, o dia fica sem dados como antes. As séries são lidas uma assinatura

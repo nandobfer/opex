@@ -13,6 +13,8 @@ import {
   goCycleFor,
   goForecast,
   goKeyLabel,
+  goPreCycleDayKeys,
+  goPreCycleRatio,
   goReferenceIndex,
   goSharedKeyGroups,
   groupGoSubscriptions,
@@ -62,13 +64,23 @@ describe('soma das assinaturas em "Todas as chaves" (OPE-180)', () => {
     expect(goReferenceIndex([sub('A', goStatus())])).toBe(0)
   })
 
-  it('status idênticos viram um grupo; uma diferença no uso separa', () => {
+  it('agrupa pela identidade estável (ciclo e limites): uso e resets diferentes são a mesma assinatura lida em outro instante', () => {
     const groups = groupGoSubscriptions([
       { id: 1, status: goStatus() },
-      { id: 2, status: goStatus({ used: 1 }) },
-      { id: 3, status: goStatus() },
+      { id: 2, status: goStatus({ startsAt: '2026-11-05T12:15:36.000Z' }) },
+      { id: 3, status: goStatus({ used: 2_700_000_000, fiveHourReset: '2026-11-16T23:00:00.000Z' }) },
+      { id: 4, status: goStatus({ limit: 9_000_000_000 }) },
     ])
-    expect(groups.map((group) => group.map((item) => item.id))).toEqual([[1, 3], [2]])
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([[1, 3], [2], [4]])
+  })
+
+  it('uso antes do próprio ciclo dentro da referência: pró-rateia as pontas e conta 0 sem dados', () => {
+    const series = days({ '2026-10-28': 3, '2026-10-29': 3, '2026-10-30': null, '2026-10-31': 3 })
+    // De 28/10 12:00 a 31/10 06:00: meio dia + 1 dia + (sem dados) + um quarto de dia.
+    expect(goPreCycleRatio(series, Date.parse('2026-10-28T12:00:00.000Z'), Date.parse('2026-10-31T06:00:00.000Z'))).toBeCloseTo(1.5 + 3 + 0.75, 10)
+    expect(goPreCycleRatio(series, START, START)).toBe(0)
+    expect(goPreCycleRatio(null, 0, START)).toBe(0)
+    expect(goPreCycleDayKeys(Date.parse('2026-10-28T12:00:00.000Z'), Date.parse('2026-10-31T00:00:00.000Z'))).toEqual(['2026-10-28', '2026-10-29', '2026-10-30'])
   })
 
   it('combina os dias pela cota mensal: nulo sem dados de nenhuma, incompleto sem dados de alguma, parcial propagado', () => {

@@ -292,10 +292,13 @@ describe('getOpencodeGoUsage', () => {
   })
 })
 
-/** Status de outra assinatura: uso do mês e ciclo próprios. */
-const otherSubscription = (monthUsed: string, cycle?: { startsAt: string; endsAt: string }) => {
+/**
+ * Status de outra assinatura: uso do mês e ciclo próprios. Assinaturas distintas nunca começam no mesmo instante:
+ * por padrão, a outra começa 1 s depois (mesmo plano e mesmos limites).
+ */
+const otherSubscription = (monthUsed: string, cycle = { startsAt: '2026-11-05T12:15:36.000Z', endsAt: '2026-12-05T12:15:36.000Z' }) => {
   const base = status(monthUsed)
-  return cycle ? { ...base, access: { ...base.access, ...cycle, meters: { ...base.access.meters, month: { ...base.access.meters.month, resetsAt: cycle.endsAt } } } } : base
+  return { ...base, access: { ...base.access, ...cycle, meters: { ...base.access.meters, month: { ...base.access.meters.month, resetsAt: cycle.endsAt } } } }
 }
 
 describe('"Todas as chaves" soma as assinaturas das chaves em uso (OPE-180)', () => {
@@ -324,7 +327,7 @@ describe('"Todas as chaves" soma as assinaturas das chaves em uso (OPE-180)', ()
       subscriptions: 2,
       failed: [],
       cycleKeyName: 'Chave principal',
-      cyclesDiffer: false,
+      cyclesDiffer: true,
     })
     const fraction = (Date.parse('2026-11-05T12:15:35Z') - Date.parse('2026-11-05T00:00:00Z')) / 86_400_000
     expect(dto.realCostUsd).toBeCloseTo(2 * (Math.round((4 * (1 - fraction) + 1) * 100) / 100), 2)
@@ -341,6 +344,40 @@ describe('"Todas as chaves" soma as assinaturas das chaves em uso (OPE-180)', ()
     expect(modelCalls.every(([, init]) => (init.headers as Record<string, string>).Authorization === `Bearer ${KEY.apiKey}`)).toBe(true)
     const fraction = (Date.parse('2026-11-05T12:15:35Z') - Date.parse('2026-11-05T00:00:00Z')) / 86_400_000
     expect(dto.realCostUsd).toBeCloseTo(Math.round((4 * (1 - fraction) + 1) * 100) / 100, 2)
+  })
+
+  it('chaves do mesmo workspace lidas em instantes diferentes (uso mudou no meio) continuam uma assinatura só', async () => {
+    mocks.pool.mockResolvedValue([KEY])
+    await getOpencodeGoUsage(query)
+    // 40 s depois: a principal ainda vem da memória (< 1 min); a segunda chave lê o uso já maior.
+    vi.setSystemTime(NOW + 40_000)
+    mocks.pool.mockResolvedValue([KEY, KEY2])
+    otherStatus = status('2700000000')
+    const dto = await getOpencodeGoUsage(query)
+    expect(dto.scope).toMatchObject({ subscriptions: 1, keys: [{ name: 'Chave principal', subscription: 0 }, { name: 'Trabalho', subscription: 0 }] })
+    // Limite não dobra e vale a leitura mais recente (2,7 de 6 bilhões = 45%).
+    expect(dto.monthPercent).toBe(45)
+    const fraction = (Date.parse('2026-11-05T12:15:35Z') - Date.parse('2026-11-05T00:00:00Z')) / 86_400_000
+    expect(dto.realCostUsd).toBeCloseTo(Math.round((4 * (1 - fraction) + 1) * 100) / 100, 2)
+  })
+
+  it('ciclos diferentes: a ponta "agora" continua o acumulado diário do ciclo de referência (sem salto)', async () => {
+    // Medidores coerentes com a série do mock (3 pp por dia em cada assinatura).
+    const refStart = Date.parse('2026-10-28T08:00:00.000Z')
+    const keyStart = Date.parse('2026-11-05T12:15:35.000Z')
+    const used = (from: number) => String(Math.round((3 * (NOW - from)) / 86_400_000 / 100 * 6_000_000_000))
+    statusBody = status(used(keyStart))
+    otherStatus = otherSubscription(used(refStart), { startsAt: '2026-10-28T08:00:00.000Z', endsAt: '2026-11-28T08:00:00.000Z' })
+    const dto = await getOpencodeGoUsage(query)
+    const chart = dto.chart!
+    const lastDay = chart.points.filter((point) => point.date < '2026-11-16' && point.usage !== null).at(-1)!
+    const todayShare = (3 * (NOW - Date.parse('2026-11-16T00:00:00.000Z'))) / 86_400_000
+    // Ponta = acumulado até ontem + a fração de hoje, nos dois ciclos (o de referência vem desde 28/10).
+    expect(lastDay.usage).toBeCloseTo((3 * (Date.parse('2026-11-16T00:00:00.000Z') - refStart)) / 86_400_000, 1)
+    expect(chart.today!.percent - lastDay.usage!).toBeCloseTo(todayShare, 1)
+    expect(dto.monthPercent).toBe(Math.floor(chart.today!.percent * 10 + 1e-9) / 10)
+    // Previsão com a mesma taxa do acumulado: 3 pp por dia.
+    expect(dto.forecast!.dailyAverage).toBeCloseTo(3, 1)
   })
 
   it('ciclos diferentes: gráfico, previsão e "Renova em" seguem a renovação mais próxima', async () => {

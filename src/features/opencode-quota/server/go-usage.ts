@@ -12,6 +12,8 @@ import {
     cycleDayKeys,
     goCycleFor,
     goForecast,
+    goPreCycleDayKeys,
+    goPreCycleRatio,
     goReferenceIndex,
     groupGoSubscriptions,
     meterPercent,
@@ -178,7 +180,8 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
 
     const subscriptions: Subscription[] = groupGoSubscriptions(ok).map((group) => ({
         keys: group.map((item) => item.key),
-        status: group[0]!.status,
+        // Chaves do mesmo workspace lidas em instantes diferentes: vale a leitura mais recente.
+        status: group.reduce((latest, item) => (item.read.at > latest.read.at ? item : latest)).status,
         at: Math.min(...group.map((item) => item.read.at)),
         reread: force && group.some((item) => item.read.fetched),
         primary: group.some((item) => item.key.id === primaryId),
@@ -188,12 +191,13 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
     const startMs = Date.parse(reference.status.access.startsAt)
     const endMs = Date.parse(reference.status.access.endsAt)
     const meters = sumGoMeters(subscriptions.map((item) => item.status))
-    const monthRatio = meterRatio(meters.month.usedMicroCents, meters.month.limitMicroCents)
-    const forecast = goForecast({ startMs, endMs, nowMs, percent: monthRatio })
 
     const cycle = goCycleFor({ startMs, endMs }, filterEndMs(query, nowMs))
     const historyFrom = addDaysKey(utcDateKey(nowMs), -GO_HISTORY_DAYS)
     const dates = cycleDayKeys(cycle, nowMs).filter((date) => date >= historyFrom)
+    // Assinatura que renovou depois da referência: os dias entre o início da referência e o início dela também são
+    // lidos, para a ponta "agora" e a previsão medirem o mesmo ciclo que o gráfico.
+    const preDatesOf = (sub: Subscription) => goPreCycleDayKeys(startMs, Date.parse(sub.status.access.startsAt)).filter((date) => date >= historyFrom)
 
     // Catálogo de cotas uma vez por produto, lido com a primeira chave daquele produto.
     const allowancesByProduct = new Map<string, Promise<Map<string, number | null> | null>>()
@@ -219,12 +223,24 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
             for (const sub of subscriptions) {
                 const allowances = await allowancesFor(sub)
                 const key = sub.keys[0]!
-                result.push(allowances ? await loadGoDays({ apiKey: key.apiKey, keyId: key.id, dates, allowances, nowMs, forceToday: sub.reread }) : null)
+                const subDates = [...new Set([...preDatesOf(sub), ...dates])]
+                result.push(allowances ? await loadGoDays({ apiKey: key.apiKey, keyId: key.id, dates: subDates, allowances, nowMs, forceToday: sub.reread }) : null)
             }
             return result
         })(),
         Promise.all(subscriptions.map((sub) => loadGoCycleCost({ apiKey: sub.keys[0]!.apiKey, keyId: sub.keys[0]!.id, startMs: Date.parse(sub.status.access.startsAt), nowMs, force: sub.reread }))),
     ])
+
+    // % do mês no ciclo de referência: o medidor de cada assinatura mais o uso dela antes do próprio ciclo (série
+    // diária), ponderados pela cota mensal. Com o mesmo ciclo em todas, é `Σ usado / Σ limite`.
+    const totalLimit = subscriptions.reduce((total, sub) => total + sub.status.access.meters.month.limitMicroCents, 0)
+    const monthRatio =
+        subscriptions.reduce((total, sub, index) => {
+            const month = sub.status.access.meters.month
+            const pre = goPreCycleRatio(series[index] ?? null, startMs, Date.parse(sub.status.access.startsAt))
+            return total + (meterRatio(month.usedMicroCents, month.limitMicroCents) + pre) * month.limitMicroCents
+        }, 0) / totalLimit
+    const forecast = goForecast({ startMs, endMs, nowMs, percent: monthRatio })
 
     let chart: OpencodeGoUsageDto["chart"] = null
     let chartMessage: string | null = null
@@ -257,7 +273,7 @@ async function buildUsage(query: UsageQuery, { force }: BuildOptions): Promise<O
         scope,
         cycle: { startsAt: reference.status.access.startsAt, endsAt: reference.status.access.endsAt },
         meters: metersOf(meters),
-        monthPercent: meterPercent(meters.month.usedMicroCents, meters.month.limitMicroCents),
+        monthPercent: meterPercent(monthRatio, 100),
         limitReached: forecast.limitReached,
         forecast: {
             dailyAverage: round1(forecast.dailyAverage),
