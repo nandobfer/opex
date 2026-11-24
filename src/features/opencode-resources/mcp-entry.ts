@@ -1,4 +1,4 @@
-import type { McpConfigInput, SecretPatch } from "./schemas"
+import type { McpConfigInput, McpOauthConfigInput, SecretPatch } from "./schemas"
 import type { McpDetailDto } from "./types"
 
 /**
@@ -36,10 +36,34 @@ export function applySecretPatches(existing: Record<string, string>, patches: re
     return next
 }
 
-const OWN_KEYS = new Set(["type", "command", "url", "cwd", "environment", "headers", "timeout", "disabled", "enabled"])
+const OWN_KEYS = new Set(["type", "command", "url", "cwd", "environment", "headers", "timeout", "disabled", "enabled", "oauth"])
 
-/** Monta a entrada do MCP preservando chaves extras do OpenCode (`codemode`, `protocol`, `oauth`...). */
-export function buildMcpEntry(input: McpConfigInput, existing: Json | undefined, secrets: { environment?: readonly SecretPatch[]; headers?: readonly SecretPatch[] } | undefined, mode: "replace" | "merge"): Json {
+type Secrets = { environment?: readonly SecretPatch[]; headers?: readonly SecretPatch[]; oauthClientSecret?: string | null }
+
+/** `client_secret`: ausente mantém o atual, `null` remove, texto grava. */
+function nextClientSecret(previous: unknown, patch: string | null | undefined): string | undefined {
+    if (patch === null) return undefined
+    if (typeof patch === "string" && patch) return patch
+    return typeof previous === "string" && previous ? previous : undefined
+}
+
+/** Chave `oauth` do OpenCode (snake_case; campos vazios ficam de fora = padrão do OpenCode). */
+export function oauthEntryOf(input: McpOauthConfigInput | undefined, previous: unknown, secretPatch: string | null | undefined): Json {
+    const before = previous && typeof previous === "object" && !Array.isArray(previous) ? (previous as Json) : {}
+    const out: Json = {}
+    const clientId = input?.clientId?.trim()
+    if (clientId) out.client_id = clientId
+    const secret = clientId ? nextClientSecret(before.client_secret, secretPatch) : undefined
+    if (secret) out.client_secret = secret
+    if (input?.scope?.trim()) out.scope = input.scope.trim()
+    if (input?.callbackPort) out.callback_port = input.callbackPort
+    if (input?.redirectUri?.trim()) out.redirect_uri = input.redirectUri.trim()
+    if (input?.authServerMetadataUrl?.trim()) out.auth_server_metadata_url = input.authServerMetadataUrl.trim()
+    return out
+}
+
+/** Monta a entrada do MCP preservando chaves extras do OpenCode (`codemode`, `protocol`...). */
+export function buildMcpEntry(input: McpConfigInput, existing: Json | undefined, secrets: Secrets | undefined, mode: "replace" | "merge"): Json {
     const previous = existing && existing.type === input.type ? existing : {}
     const extra = Object.fromEntries(Object.entries(previous).filter(([key]) => !OWN_KEYS.has(key)))
     const base: Json = { ...extra, type: input.type, disabled: input.disabled === true }
@@ -51,16 +75,28 @@ export function buildMcpEntry(input: McpConfigInput, existing: Json | undefined,
         if (input.cwd) base.cwd = input.cwd
         const environment = applySecretPatches(stringRecord(previous.environment), secrets?.environment, mode)
         if (Object.keys(environment).length) base.environment = environment
-    } else {
-        base.url = input.url
+        return base
+    }
+    base.url = input.url
+    const auth = input.auth
+    // OAuth também leva cabeçalhos extras (o OpenCode aceita os dois juntos): só "Nenhuma" os tira.
+    if (auth !== "none") {
         const headers = applySecretPatches(stringRecord(previous.headers), secrets?.headers, mode)
         if (Object.keys(headers).length) base.headers = headers
+    }
+    if (auth === undefined) {
+        // Sem a escolha (chamadas antigas): a chave `oauth` do arquivo continua como estava.
+        if (previous.oauth !== undefined) base.oauth = previous.oauth
+    } else if (auth === "oauth") {
+        base.oauth = oauthEntryOf(input.oauth, previous.oauth, secrets?.oauthClientSecret)
+    } else if (input.disableAutoOauth ?? previous.oauth === false) {
+        base.oauth = false
     }
     return base
 }
 
 /** Só segredos alterados (mantém o resto). */
-export function withSecrets(existing: Json, secrets: { environment?: readonly SecretPatch[]; headers?: readonly SecretPatch[] }): Json {
+export function withSecrets(existing: Json, secrets: Secrets): Json {
     const next: Json = { ...existing }
     if (secrets.environment) {
         const environment = applySecretPatches(stringRecord(existing.environment), secrets.environment, "merge")
@@ -72,7 +108,29 @@ export function withSecrets(existing: Json, secrets: { environment?: readonly Se
         if (Object.keys(headers).length) next.headers = headers
         else delete next.headers
     }
+    if (secrets.oauthClientSecret !== undefined && existing.oauth && typeof existing.oauth === "object") {
+        const oauth = { ...(existing.oauth as Json) }
+        if (secrets.oauthClientSecret && oauth.client_id) oauth.client_secret = secrets.oauthClientSecret
+        else delete oauth.client_secret
+        next.oauth = oauth
+    }
     return next
+}
+
+const textOrNull = (value: unknown) => (typeof value === "string" && value ? value : null)
+
+function oauthDetailOf(value: unknown): McpDetailDto["oauth"] {
+    if (value === false) return false
+    if (!value || typeof value !== "object" || Array.isArray(value)) return null
+    const oauth = value as Json
+    return {
+        clientId: textOrNull(oauth.client_id),
+        scope: textOrNull(oauth.scope),
+        callbackPort: typeof oauth.callback_port === "number" ? oauth.callback_port : null,
+        redirectUri: textOrNull(oauth.redirect_uri),
+        authServerMetadataUrl: textOrNull(oauth.auth_server_metadata_url),
+        hasClientSecret: typeof oauth.client_secret === "string" && oauth.client_secret.length > 0,
+    }
 }
 
 export function mcpDetailOf(entry: Json): McpDetailDto {
@@ -87,8 +145,19 @@ export function mcpDetailOf(entry: Json): McpDetailDto {
         timeout,
         environmentKeys: Object.keys(stringRecord(entry.environment)),
         headerKeys: Object.keys(stringRecord(entry.headers)),
+        ...mcpAuthOf(type, entry),
     }
 }
+
+function mcpAuthOf(type: "local" | "remote", entry: Json): Pick<McpDetailDto, "auth" | "oauth"> {
+    const oauth = type === "remote" ? oauthDetailOf(entry.oauth) : null
+    if (type === "local") return { auth: "none", oauth: null }
+    if (oauth) return { auth: "oauth", oauth }
+    return { auth: Object.keys(stringRecord(entry.headers)).length ? "headers" : "none", oauth }
+}
+
+/** MCP remoto que usa OAuth (o inspector não tem o token: o teste usa a situação do OpenCode). */
+export const usesOauth = (entry: Json) => entry.type === "remote" && Boolean(entry.oauth) && typeof entry.oauth === "object"
 
 /** Configuração no formato do inspector (`mcpServers`) para listar as ferramentas. */
 export function inspectorConfig(name: string, entry: Json): Json {

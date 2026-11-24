@@ -4,7 +4,7 @@ Agente de chat do Opex que funciona como o **Agente Opex** (mesmo popover, sess�
 estados), mas roda numa **sessão do OpenCode** (`runAgentTurn` de `src/lib/ai/opencode-run.ts`), no
 **diretório padrão do serviço OpenCode** da integração (sem campo de diretório). Ele usa as
 ferramentas nativas do OpenCode no host do dono (terminal, arquivos, skills e os MCPs configurados no
-OpenCode) e recebe as ferramentas do Opex por um **servidor MCP do Opex**. Por padrão só o dono tem
+OpenCode — inclusive os remotos autorizados por OAuth na aba MCPs do OpenCode, OPE-176) e recebe as ferramentas do Opex por um **servidor MCP do Opex**. Por padrão só o dono tem
 acesso; o dono liga o Maddox por cliente no portal de orçamentos (OPE-101).
 
 

@@ -5,8 +5,10 @@ import { ptBR } from "date-fns/locale"
 import { AlertTriangle, CheckCircle2, CircleDashed, Pencil, Trash2, Users } from "lucide-react"
 import { IconAction } from "@/components/ui/icon-action"
 import { Switch } from "@/components/ui/switch"
+import { OauthStatusBadge } from "@/components/ui/oauth-status-badge"
 import { cn } from "@/lib/utils"
 import { OPEX_MCP_TRANSPORT_LABELS, safeMcpUrl, type OpexMcpServerDto } from "../../../mcp"
+import { oauthBadgeOf } from "./mcp-oauth-ui"
 
 interface OpexMcpServerItemProps {
     server: OpexMcpServerDto
@@ -54,6 +56,7 @@ export function OpexMcpServerItem({ server, onToggle, onEdit, onDelete }: OpexMc
                     <span className="font-medium">{server.name}</span>
                     <code className="text-[11px] text-muted-foreground">mcp_{server.slug}_*</code>
                     <span className="rounded-full bg-primary/10 px-1.5 py-0.5 text-[10px] font-semibold text-primary">{OPEX_MCP_TRANSPORT_LABELS[server.transport]}</span>
+                    {server.oauth && <OauthStatusBadge {...oauthBadgeOf(server.oauth.status)} title={server.oauth.lastError} />}
                     {server.clientCount > 0 && (
                         <span className="inline-flex items-center gap-1 rounded-full bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground">
                             <Users className="h-3 w-3" aria-hidden /> {server.clientCount} {server.clientCount === 1 ? "cliente" : "clientes"}

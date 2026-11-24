@@ -84,6 +84,28 @@ const timeoutSchema = z
     .strict()
     .optional()
 
+export const MCP_AUTH_MODES = ["none", "headers", "oauth"] as const
+export type McpAuthMode = (typeof MCP_AUTH_MODES)[number]
+
+const optionalUrl = (example: string) =>
+    z
+        .string()
+        .trim()
+        .max(2000, "Máximo de 2000 caracteres")
+        .refine((value) => !value || /^https?:\/\/[^\s]+$/i.test(value), "URL http(s) inválida")
+        .optional()
+        .meta({ examples: [example] })
+
+/** Chave `oauth` do MCP remoto do OpenCode 2.x (sem o `client_secret`, que é segredo). */
+export const mcpOauthConfigSchema = z.object({
+    clientId: z.string().trim().max(500, "Máximo de 500 caracteres").optional(),
+    scope: z.string().trim().max(1000, "Máximo de 1000 caracteres").optional(),
+    callbackPort: z.number().int("Porta inválida").min(1, "Porta entre 1 e 65535").max(65535, "Porta entre 1 e 65535").optional(),
+    redirectUri: optionalUrl("http://127.0.0.1:19876/callback"),
+    authServerMetadataUrl: optionalUrl("https://auth.exemplo.com/.well-known/oauth-authorization-server"),
+})
+export type McpOauthConfigInput = z.infer<typeof mcpOauthConfigSchema>
+
 /** Configuração de um MCP SEM os valores de ambiente/cabeçalhos (que vão por `mcpSecretsSchema`). */
 export const mcpConfigSchema = z.discriminatedUnion("type", [
     z.object({
@@ -98,6 +120,15 @@ export const mcpConfigSchema = z.discriminatedUnion("type", [
         url: z.string().trim().url("URL inválida"),
         disabled: z.boolean().optional(),
         timeout: timeoutSchema,
+        /**
+         * Autenticação (OPE-176): `none`, `headers` ou `oauth`. Ausente = como antes (cabeçalhos pela
+         * lista de segredos e a chave `oauth` do arquivo preservada).
+         */
+        auth: z.enum(MCP_AUTH_MODES).optional(),
+        /** Campos da chave `oauth` do OpenCode (vazio = padrão do OpenCode); o client secret vai pelos segredos. */
+        oauth: mcpOauthConfigSchema.optional(),
+        /** Sem OAuth: grava `oauth: false` (o OpenCode não tenta OAuth sozinho quando o servidor responde 401). */
+        disableAutoOauth: z.boolean().optional(),
     }),
 ])
 export type McpConfigInput = z.infer<typeof mcpConfigSchema>
@@ -114,6 +145,8 @@ export type SecretPatch = z.infer<typeof secretPatchSchema>
 export const mcpSecretsSchema = z.object({
     environment: z.array(secretPatchSchema).max(64).optional(),
     headers: z.array(secretPatchSchema).max(64).optional(),
+    /** `client_secret` do OAuth do MCP remoto: ausente mantém, `null` remove, texto grava. */
+    oauthClientSecret: z.string().max(4000).nullable().optional(),
 })
 export type McpSecretsInput = z.infer<typeof mcpSecretsSchema>
 
@@ -170,3 +203,12 @@ export const resourceUpdateManySchema = z
 export type ResourceUpdateManyInput = z.infer<typeof resourceUpdateManySchema>
 
 export const scopeQuerySchema = z.object({ scope: scopeIdSchema.default(GLOBAL_SCOPE) })
+
+/** Conclusão do OAuth de um MCP: código (modo `code`) ou a URL de retorno colada (modo `auto`). */
+export const mcpOauthCompleteSchema = z
+    .object({
+        code: z.string().trim().max(4000).optional(),
+        callbackUrl: z.string().trim().max(8000).optional(),
+    })
+    .refine((value) => Boolean(value.code || value.callbackUrl), { message: "Cole a URL da barra de endereço ou o código", path: ["callbackUrl"] })
+export type McpOauthCompleteInput = z.infer<typeof mcpOauthCompleteSchema>

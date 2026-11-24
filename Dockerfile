@@ -65,6 +65,11 @@ RUN set -e; \
     cp -RL node_modules/tailwindcss .next/standalone/node_modules/tailwindcss; \
     node scripts/plugin-runtime-check.mjs .next/standalone
 
+# OAuth dos MCPs do Agente Opex (OPE-176): o @ai-sdk/provider-utils carrega o `undici` (fetch com DNS
+# validado contra SSRF) por `createRequire` dinâmico, que o rastreamento do Next não leva ao standalone.
+# Copia o mesmo `undici` do repositório e confere que ele carrega a partir dos chunks do servidor.
+RUN node scripts/standalone-runtime-deps.mjs .next/standalone
+
 # Stage 4: Runner
 FROM base AS runner
 WORKDIR /app

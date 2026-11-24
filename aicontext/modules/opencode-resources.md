@@ -113,6 +113,35 @@ execução bloqueia as não selecionadas pela permissão `skill` da sessão (`ai
 - **Segredos dos MCPs**: valores de `environment`/`headers` nunca saem do servidor (DTO só com os
   nomes; tela mostra "••••"). No formulário, valor vazio numa variável existente mantém o atual;
   remover a linha apaga. Auditoria, logs e eventos sem valores.
+- **OAuth dos MCPs remotos (OPE-176)**: o editor do MCP remoto escolhe a **Autenticação** (`OptionTabs`):
+  - **Nenhuma** / **Cabeçalhos**: sem a chave `oauth` (padrão do OpenCode, que tenta OAuth sozinho quando
+    o servidor responde 401); a caixa **"Não tentar OAuth automaticamente"** grava `oauth: false` (um
+    `oauth: false` já existente é mantido). A lista de cabeçalhos vale em Cabeçalhos e em OAuth; "Nenhuma" grava a entrada sem cabeçalhos.
+  - **OAuth**: grava a chave `oauth` do OpenCode 2.x (`client_id`, `client_secret`, `scope`,
+    `callback_port`, `redirect_uri`, `auth_server_metadata_url`); campo vazio fica fora (padrão do
+    OpenCode: descoberta, registro do cliente por CIMD/registro dinâmico e PKCE). O `client_secret` é
+    segredo (`secrets.oauthClientSecret`: ausente mantém, `null` remove; o DTO só traz
+    `hasClientSecret`). Cabeçalhos extras continuam valendo junto com o OAuth (o OpenCode aceita os dois; a
+    lista aparece como "Cabeçalhos HTTP extras") — só "Nenhuma" tira os cabeçalhos. Chamadas sem `auth` (agente, clientes
+    antigos) mantêm cabeçalhos e a chave `oauth` do arquivo como estavam.
+  - Credenciais **ficam no OpenCode do host** (credencial da integração do MCP), nunca no arquivo nem no
+    Opex: salvar a configuração não apaga uma autorização já feita.
+  - **Situação** na linha (selo `OAuth · Precisa autorizar | Autorizado | Erro`, `OauthStatusBadge`
+    compartilhado com o Agente Opex), calculada por `mcp.list` (`needs_auth`/`failed` + erro) e pelas
+    credenciais OAuth da integração do MCP (`integrationID` do `mcp.list`, `integration.get`).
+  - **Autorizar** (menu do MCP; `McpAuthorizeDialog`): `integration.oauth.connect({ integrationID,
+    methodID: integrationID })` devolve a URL do provedor; a tela abre a página e consulta a tentativa a
+    cada 2 s. No 2.2.1 a tentativa é `mode: "auto"` e o retorno vai para um servidor temporário do
+    OpenCode em `http://127.0.0.1:<porta>/callback` **no host**: de outra máquina essa página não abre, e
+    o dono cola a URL da barra de endereço — o Opex confere host de loopback, porta, caminho e `state` da
+    tentativa (`forwardableCallback`, `mcp-oauth.ts`) e repassa só `code`/`state`/`iss`/`error` ao
+    loopback pelo shell do host (`curl`, `forwardOauthCallbackCommand`; a URL não vai para log). Modo
+    `code` usa `integration.oauth.complete({ code })`. Ao concluir, credenciais OAuth antigas do mesmo
+    MCP são removidas, o MCP reconecta, há auditoria (`acao: "autorizar"`, sem código nem token) e o
+    evento `opencode-resources-updated`.
+  - **Desconectar** (com confirmação): `credential.remove` das credenciais OAuth do MCP + reconexão.
+  - Teste de conexão de MCP com OAuth não usa o inspector (ele não tem o token): mostra a situação do
+    OpenCode.
 - **Teste de MCP**: `mcp.disconnect` + `mcp.connect` + `mcp.list` (situação e erro) e a lista de
   ferramentas pelo inspector (`npx -y @modelcontextprotocol/inspector --cli … --method tools/list`,
   `MCP_INSPECTOR_SECRET_STORE=memory`) com um arquivo de configuração temporário (0600) apagado no fim
@@ -154,12 +183,16 @@ em `src/features/opex-agent/server/tools/opencode.ts`, só no agente do dono; ch
 | `POST .../resources/[kind]/install` | `{ kind, scope, source, skills?, name?, secrets? }` |
 | `POST .../resources/[kind]/update?scope=` | `{ ids }` ou `{ all: true }` |
 | `POST .../resources/mcp/[id]/test` | Situação + ferramentas |
+| `GET/POST/DELETE .../resources/mcp/[id]/oauth` | Situação da autorização / Autorizar (tentativa: URL, modo, `localCallback`) / Desconectar |
+| `GET/DELETE .../resources/mcp/[id]/oauth/[attemptId]` | Situação da tentativa / cancelar |
+| `POST .../resources/mcp/[id]/oauth/[attemptId]/complete` | `{ code }` ou `{ callbackUrl }` (URL de retorno colada, repassada ao loopback do host) |
 | `PUT .../resources/mcp/[id]/secrets` | `{ environment?, headers? }` (`value: null` remove) |
 | `GET /api/ai/providers/opencode/backups`, `POST .../backups/[id]/restore` | Backups e restauração |
 
 ## Testes
 
-`__tests__/features/opencode-resources/` (módulos puros, formulários, fachada com host simulado num
+`__tests__/features/opencode-resources/` (módulos puros, formulários, OAuth dos MCPs em `mcp-oauth.test.ts` e
+`mcp-oauth-ui.test.tsx`, fachada com host simulado num
 `$HOME` temporário, rotas e telas) e `__tests__/features/opencode-service/` (trava da 2.x, comandos,
 ações por SSH, confiança na chave, aba Controles). Ferramentas do agente em
 `__tests__/features/opex-agent/opencode-tools.test.ts`.

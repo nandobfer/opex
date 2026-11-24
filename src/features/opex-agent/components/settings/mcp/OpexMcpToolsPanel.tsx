@@ -30,10 +30,10 @@ export function OpexMcpToolsPanel({ form, serverId, disabled }: OpexMcpToolsPane
     const result = test.data
 
     const runTest = async () => {
-        if (!(await form.trigger(["transport", "url", "command", "args", "headers", "env"]))) return
+        if (!(await form.trigger(["transport", "auth", "oauth", "url", "command", "args", "headers", "env"]))) return
         const values = form.getValues()
         const outcome = await test
-            .mutateAsync({ ...(serverId ? { id: serverId } : {}), transport: values.transport, url: values.url, command: values.command, args: values.args, headers: values.headers, env: values.env })
+            .mutateAsync({ ...(serverId ? { id: serverId } : {}), transport: values.transport, auth: values.auth, oauth: values.oauth, url: values.url, command: values.command, args: values.args, headers: values.headers, env: values.env })
             .catch(() => null)
         if (outcome?.ok) form.setValue("tools", outcome.tools, { shouldDirty: true })
     }

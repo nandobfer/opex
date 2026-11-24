@@ -14,6 +14,7 @@ import type { OpencodeResourceDto } from "../types"
 import { InstallResourceDialog } from "./InstallResourceDialog"
 import { KIND_UI } from "./kind-ui"
 import { McpFormDialog } from "./McpFormDialog"
+import { McpOauthDialogs } from "./McpOauthDialogs"
 import { McpTestDialog } from "./McpTestDialog"
 import { OpencodeResourceCard } from "./OpencodeResourceCard"
 import { ResourceEditorDialog } from "./ResourceEditorDialog"
@@ -30,6 +31,8 @@ export function OpencodeResourceTab({ kind, dirty }: { kind: OpencodeResourceKin
     const [editing, setEditing] = useState<OpencodeResourceDto | "new" | null>(null)
     const [installing, setInstalling] = useState(false)
     const [testing, setTesting] = useState<OpencodeResourceDto | null>(null)
+    const [authorizing, setAuthorizing] = useState<OpencodeResourceDto | null>(null)
+    const [disconnecting, setDisconnecting] = useState<OpencodeResourceDto | null>(null)
     const [confirm, setConfirm] = useState<Confirm | null>(null)
     const list = useOpencodeResources(kind, scope, !dirty)
     const toggle = useToggleOpencodeResource(kind, scope)
@@ -91,12 +94,15 @@ export function OpencodeResourceTab({ kind, dirty }: { kind: OpencodeResourceKin
                     onRemove: (item) => setConfirm({ type: "remove", item }),
                     onUpdate: (item) => setConfirm({ type: "update", item }),
                     onTest: setTesting,
+                    onAuthorize: setAuthorizing,
+                    onDisconnectOauth: setDisconnecting,
                 }}
             />
             {kind === "mcp" ? <McpFormDialog scope={scope} target={editing} onClose={() => setEditing(null)} /> : null}
             {kind === "skill" || kind === "agent" || kind === "command" ? <ResourceEditorDialog kind={kind} scope={scope} target={editing} onClose={() => setEditing(null)} /> : null}
             {kind === "skill" || kind === "plugin" || kind === "mcp" ? <InstallResourceDialog kind={kind} scope={scope} open={installing} onClose={() => setInstalling(false)} /> : null}
             {kind === "mcp" ? <McpTestDialog target={testing} onClose={() => setTesting(null)} /> : null}
+            {kind === "mcp" ? <McpOauthDialogs authorizing={authorizing} disconnecting={disconnecting} onCloseAuthorize={() => setAuthorizing(null)} onCloseDisconnect={() => setDisconnecting(null)} /> : null}
             <ConfirmDialog
                 open={confirm !== null}
                 onOpenChange={(open) => !open && setConfirm(null)}

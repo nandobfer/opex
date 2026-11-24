@@ -2,7 +2,8 @@ import { randomBytes } from "node:crypto"
 import { mcpToolsCommand, parseMcpToolsOutput, removeCommand } from "../commands"
 import { MCP_TEST_TIMEOUT_MS } from "../constants"
 import { ConfigFormatError, listMcpEntries, setMcpDisabled, setMcpEntry, type McpEntry } from "../jsonc-edit"
-import { buildMcpEntry, inspectorConfig, mcpDetailOf, withSecrets } from "../mcp-entry"
+import { buildMcpEntry, inspectorConfig, mcpDetailOf, usesOauth, withSecrets } from "../mcp-entry"
+import { authorizationStateOf } from "../mcp-oauth"
 import { mcpConfigSchema, type McpSecretsInput, type ResourceContentInput } from "../schemas"
 import type { McpRuntimeStatus, McpTestResultDto, OpencodeResourceDetailDto, OpencodeResourceDto } from "../types"
 import { isExactVersion, isNewer, mcpCommandForSource, mcpNameFromSource, mcpPackageOf, parseNpmSpec, pinMcpPackage } from "../versions"
@@ -22,16 +23,33 @@ async function entries(ctx: ScopeContext): Promise<McpEntry[]> {
     return listMcpEntries(await ctx.readConfig())
 }
 
-async function entryOf(ctx: ScopeContext, name: string): Promise<McpEntry> {
+export async function entryOf(ctx: ScopeContext, name: string): Promise<McpEntry> {
     const entry = (await entries(ctx)).find((item) => item.name === name)
     if (!entry) throw notFound("mcp", name)
     return entry
 }
 
-async function runtimeStatus(ctx: ScopeContext): Promise<Map<string, { state: McpRuntimeStatus; error: string | null }>> {
+type RuntimeStatus = { state: McpRuntimeStatus; error: string | null; integrationId?: string; raw?: { status: string; error?: string } }
+
+async function runtimeStatus(ctx: ScopeContext): Promise<Map<string, RuntimeStatus>> {
     const servers = await ctx.host.client.mcp.list({ location: ctx.location }).then((result) => result.data).catch(() => [])
-    return new Map(servers.map((server) => [server.name, { state: server.status.status as McpRuntimeStatus, error: "error" in server.status ? server.status.error : null }]))
+    return new Map(
+        servers.map((server) => [
+            server.name,
+            { state: server.status.status as McpRuntimeStatus, error: "error" in server.status ? server.status.error : null, integrationId: server.integrationID, raw: server.status },
+        ]),
+    )
 }
+
+/** Situação OAuth (credenciais da integração do MCP) dos remotos que o OpenCode já conhece. */
+async function authorizationOf(ctx: ScopeContext, status: RuntimeStatus | undefined): Promise<OpencodeResourceDto["authorization"]> {
+    if (!status?.integrationId) return status ? authorizationStateOf(status.raw, []) : undefined
+    const integration = await ctx.host.client.integration.get({ integrationID: status.integrationId, location: ctx.location }).then((result) => result.data).catch(() => null)
+    const connections = (integration?.connections ?? []).flatMap((item) => (item.type === "credential" && item.method === "oauth" ? [{ id: item.id, label: item.label, status: item.status?.status ?? null }] : []))
+    return authorizationStateOf(status.raw, connections)
+}
+
+const statusOf = (status: RuntimeStatus | undefined) => (status ? { state: status.state, error: status.error } : { state: "unknown" as const, error: null })
 
 async function versionOf(entry: Json, refresh?: boolean): Promise<OpencodeResourceDto["version"]> {
     const command = Array.isArray(entry.command) ? entry.command.map(String) : []
@@ -47,7 +65,7 @@ async function list(ctx: ScopeContext, options: { refresh?: boolean }): Promise<
     return Promise.all(
         items.map(async (item) => {
             const detail = mcpDetailOf(item.config)
-            const version = await versionOf(item.config, options.refresh)
+            const [version, authorization] = await Promise.all([versionOf(item.config, options.refresh), detail.type === "remote" && !item.disabled ? authorizationOf(ctx, status.get(item.name)) : Promise.resolve(undefined)])
             const pkg = detail.command ? mcpPackageOf(detail.command) : null
             return baseDto(ctx, "mcp", item.name, {
                 description: detail.type === "remote" ? detail.url : (detail.command ?? []).join(" "),
@@ -59,7 +77,8 @@ async function list(ctx: ScopeContext, options: { refresh?: boolean }): Promise<
                 editable: true,
                 removable: true,
                 version,
-                status: item.disabled ? { state: "disabled", error: null } : (status.get(item.name) ?? { state: "unknown", error: null }),
+                status: item.disabled ? { state: "disabled", error: null } : statusOf(status.get(item.name)),
+                ...(authorization ? { authorization } : {}),
                 tags: [detail.type === "remote" ? "remoto" : "local", ...(version && !version.installed ? ["acompanha a última versão"] : [])],
             })
         }),
@@ -175,9 +194,11 @@ export async function testMcp(ctx: ScopeContext, name: string): Promise<McpTestR
         await client.mcp.disconnect({ server: name, location: ctx.location }).catch(() => undefined)
         await client.mcp.connect({ server: name, location: ctx.location }).catch(() => undefined)
     }
-    const status = entry.disabled ? { state: "disabled" as const, error: null } : ((await runtimeStatus(ctx)).get(name) ?? { state: "unknown" as const, error: null })
+    const status = entry.disabled ? { state: "disabled" as const, error: null } : statusOf((await runtimeStatus(ctx)).get(name))
     let tools: McpTestResultDto["tools"] = []
     let toolsError: string | null = null
+    // OAuth: o token fica no OpenCode (o inspector não o tem); a situação acima já diz se conectou.
+    if (usesOauth(entry.config)) return { status: status.state, error: status.error, tools, toolsError: "Com OAuth, as ferramentas são listadas pelo OpenCode depois de autorizar (o teste do inspector não tem o token).", durationMs: Date.now() - started }
     const file = `${ctx.host.home}/.cache/opex/mcp-test-${randomBytes(6).toString("hex")}.json`
     try {
         await ctx.host.writeText(file, JSON.stringify(inspectorConfig(name, entry.config)))

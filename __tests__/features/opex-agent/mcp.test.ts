@@ -60,6 +60,8 @@ const input = (over: Partial<OpexMcpServerInput> = {}): OpexMcpServerInput =>
     description: '',
     enabled: true,
     transport: 'http',
+    auth: 'headers',
+    oauth: { clientId: '', clientSecret: '', scope: '' },
     url: 'https://mcp.example.com/mcp?token=abc',
     command: '',
     args: [],

@@ -1,5 +1,8 @@
 import type { ListToolsResult, MCPClient } from "@ai-sdk/mcp"
+import type { IOpexMcpOauth } from "@/lib/db/models/Opex"
 import { OPEX_MCP_CONNECT_TIMEOUT_MS, type OpexMcpToolInfo, type OpexMcpTransport } from "../../mcp"
+import { createMcpOauthProvider, OpexMcpAuthRequiredError } from "./oauth-provider"
+import { openText, patchMcpOauth } from "./oauth-store"
 
 /**
  * Conexão com um MCP pela `@ai-sdk/mcp` (SOMENTE servidor; import sob demanda — o pacote é pesado e
@@ -17,6 +20,27 @@ export interface McpConnection {
     args: string[]
     headers: Record<string, string>
     env: Record<string, string>
+    /** OAuth (OPE-176): MCP salvo e o estado lido do banco; o token entra pelo `authProvider`. */
+    oauth?: { serverId: string; state: IOpexMcpOauth | null }
+}
+
+/**
+ * Falha de autorização: sem token, token recusado (401/403) ou login pedido pelo servidor. Só vale
+ * para MCP com OAuth (com cabeçalhos, 401 é erro de configuração e segue como erro comum).
+ */
+export function isMcpAuthError(error: unknown): boolean {
+    if (error instanceof OpexMcpAuthRequiredError) return true
+    if (error instanceof Error && error.name === "UnauthorizedError") return true
+    const message = error instanceof Error ? `${error.message} ${error.cause instanceof Error ? error.cause.message : ""}` : String(error)
+    return /\b(401|403)\b|unauthori[sz]ed|forbidden|invalid_token|invalid_grant/i.test(message)
+}
+
+async function oauthProviderFor(oauth: NonNullable<McpConnection["oauth"]>) {
+    if (!oauth.state || !openText(oauth.state.tokens)) {
+        if (oauth.state) await patchMcpOauth(oauth.serverId, { status: "needs_auth" }).catch(() => undefined)
+        throw new OpexMcpAuthRequiredError()
+    }
+    return createMcpOauthProvider(oauth.serverId, oauth.state, { mode: "headless" })
 }
 
 const MAX_TOOL_PAGES = 10
@@ -33,7 +57,7 @@ export async function connectMcp(connection: McpConnection, options: { signal?: 
     const transport =
         connection.transport === "stdio"
             ? new (await import("@ai-sdk/mcp/mcp-stdio")).Experimental_StdioMCPTransport({ command: connection.command, args: connection.args, env: connection.env, stderr: "ignore" })
-            : { type: connection.transport, url: connection.url, headers: connection.headers }
+            : { type: connection.transport, url: connection.url, headers: connection.headers, ...(connection.oauth ? { authProvider: await oauthProviderFor(connection.oauth) } : {}) }
     const pending = createMCPClient({ transport, clientName: "opex", initializationOptions: { timeout: timeoutMs, ...(options.signal ? { signal: options.signal } : {}) } })
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {

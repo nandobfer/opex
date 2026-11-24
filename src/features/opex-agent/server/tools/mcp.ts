@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { OPEX_MCP_TRANSPORTS, opexMcpServerInputSchema, type OpexMcpServerDto, type OpexMcpServerInput } from "../../mcp"
+import { EMPTY_OPEX_MCP_OAUTH, OPEX_MCP_AUTH_MODES, OPEX_MCP_TRANSPORTS, opexMcpServerInputSchema, type OpexMcpServerDto, type OpexMcpServerInput } from "../../mcp"
 import { setClientMcpAccess } from "../client-config"
 import { createMcpServer, deleteMcpServer, getMcpServer, listMcpServers, refreshMcpServer, setMcpServerEnabled, setMcpToolConfirmation, updateMcpServer } from "../mcp/service"
 import { defineTool } from "./define"
@@ -14,6 +14,18 @@ const SECRET_REDACTED = "[segredo omitido]"
 const mcpId = z.string().regex(/^[a-f0-9]{24}$/i).describe("Id do MCP (de list_mcp_servers)")
 const secretKey = z.string().describe("Nome do header (HTTP/SSE) ou da variável de ambiente (stdio)")
 const transport = z.enum(OPEX_MCP_TRANSPORTS).describe("http (Streamable HTTP), sse ou stdio (processo no servidor do Opex; só node/npx disponíveis)")
+
+const auth = z.enum(OPEX_MCP_AUTH_MODES).describe("Autenticação do http/sse: headers (cabeçalhos secretos) ou oauth (o dono autoriza na tela do MCP; o token é renovado sozinho)")
+const oauth = z
+    .object({
+        clientId: z.string().optional().describe("Client ID pré-cadastrado no provedor (vazio = registro dinâmico)"),
+        clientSecret: z.string().nullable().optional().describe("Client secret (omitido/null mantém o salvo)"),
+        scope: z.string().optional().describe("Escopos pedidos, separados por espaço (vazio = os do servidor)"),
+    })
+    .optional()
+    .describe("Configuração OAuth (só com auth: oauth)")
+
+const redactOauth = (value: { clientSecret?: string | null } | undefined) => (value ? { ...value, clientSecret: value.clientSecret ? SECRET_REDACTED : (value.clientSecret ?? null) } : value)
 
 /** Sem `tools`: o retrato das ferramentas vem da conexão, não do modelo. */
 const serverOut = (server: OpexMcpServerDto) => ({ ...server, tools: server.tools.map((tool) => ({ name: tool.name, title: tool.title, annotations: tool.annotations })) })
@@ -30,6 +42,8 @@ const createInput = z.object({
     args: z.array(z.string()).optional().describe('Argumentos (stdio), ex.: ["-y", "@modelcontextprotocol/server-everything"]'),
     headers: z.array(z.object({ key: secretKey, value: z.string() })).optional().describe("Headers secretos (http/sse), ex.: Authorization"),
     env: z.array(z.object({ key: secretKey, value: z.string() })).optional().describe("Variáveis de ambiente secretas (stdio)"),
+    auth: auth.optional().describe("Padrão: headers"),
+    oauth,
     enabled: z.boolean().optional().describe("Padrão: true"),
 })
 
@@ -43,6 +57,8 @@ const updateInput = z.object({
     url: z.string().optional(),
     command: z.string().optional(),
     args: z.array(z.string()).optional(),
+    auth: auth.optional(),
+    oauth,
     headers: z
         .array(z.object({ key: secretKey, value: z.string().nullable().optional().describe("Novo valor; omitido/null mantém o salvo") }))
         .optional()
@@ -64,6 +80,12 @@ function updatedInput(current: OpexMcpServerDto, input: z.infer<typeof updateInp
         url: input.url ?? current.url,
         command: input.command ?? current.command,
         args: input.args ?? current.args,
+        auth: input.auth ?? current.auth,
+        oauth: {
+            clientId: input.oauth?.clientId ?? current.oauth?.clientId ?? "",
+            clientSecret: input.oauth?.clientSecret ?? "",
+            scope: input.oauth?.scope ?? current.oauth?.scope ?? "",
+        },
         headers: input.headers ? input.headers.map((entry) => ({ key: entry.key, value: entry.value ?? "" })) : keep(current.headers),
         env: input.env ? input.env.map((entry) => ({ key: entry.key, value: entry.value ?? "" })) : keep(current.env),
         confirmations: current.confirmations,
@@ -106,7 +128,7 @@ export const mcpTools = [
         description: "Cadastra um MCP (servidor Model Context Protocol). As ferramentas dele entram para o agente a partir do próximo turno quando habilitado. Depois de gravar, testa a conexão.",
         input: createInput,
         summarize: (input) => `Cadastrar o MCP ${input.name} (${input.transport})`,
-        redact: (input) => ({ ...input, headers: redactEntries(input.headers), env: redactEntries(input.env) }),
+        redact: (input) => ({ ...input, headers: redactEntries(input.headers), env: redactEntries(input.env), oauth: redactOauth(input.oauth) }),
         execute: async (input, context) => {
             const server = await createMcpServer(
                 opexMcpServerInputSchema.parse({
@@ -118,6 +140,8 @@ export const mcpTools = [
                     url: input.url ?? "",
                     command: input.command ?? "",
                     args: input.args ?? [],
+                    auth: input.auth ?? "headers",
+                    oauth: { ...EMPTY_OPEX_MCP_OAUTH, clientId: input.oauth?.clientId ?? "", clientSecret: input.oauth?.clientSecret ?? "", scope: input.oauth?.scope ?? "" },
                     headers: input.headers ?? [],
                     env: input.env ?? [],
                     confirmations: {},
@@ -136,7 +160,7 @@ export const mcpTools = [
         description: "Edita um MCP: só os campos informados mudam. Em headers/env, a lista informada é a final; valor omitido mantém o salvo.",
         input: updateInput,
         summarize: (input) => `Editar o MCP ${input.name ?? input.id}`,
-        redact: (input) => ({ ...input, headers: redactEntries(input.headers), env: redactEntries(input.env) }),
+        redact: (input) => ({ ...input, headers: redactEntries(input.headers), env: redactEntries(input.env), oauth: redactOauth(input.oauth) }),
         execute: async (input, context) => serverOut(await updateMcpServer(input.id, updatedInput(await getMcpServer(input.id), input), context.actorId)),
     }),
     defineTool({

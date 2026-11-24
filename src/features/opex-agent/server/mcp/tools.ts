@@ -2,12 +2,12 @@ import type { CallToolResult, ListToolsResult, MCPClient } from "@ai-sdk/mcp"
 import { jsonSchema } from "ai"
 import { z } from "zod"
 import { loggerFor } from "@/lib/logger"
-import { OPEX_MCP_CALL_TIMEOUT_MS, OPEX_MCP_TOOL_GROUP, cleanMcpInputSchema, isMcpToolName, mcpToolNames, mcpToolRisk } from "../../mcp"
+import { OPEX_MCP_CALL_TIMEOUT_MS, OPEX_MCP_TOOL_GROUP, cleanMcpInputSchema, isMcpToolName, mcpToolNames, mcpToolRisk, usesMcpOauth } from "../../mcp"
 import type { IOpexMcpServer } from "@/lib/db/models/Opex"
 import { loadClientOpexConfig } from "../client-config"
 import type { OpexServerScope } from "../scope"
 import { OpexToolError, type OpexTool, type OpexToolContext } from "../tools/define"
-import { closeMcp, connectMcp, describeMcpError, listMcpTools, toolInfosOf } from "./connect"
+import { closeMcp, connectMcp, describeMcpError, isMcpAuthError, listMcpTools, toolInfosOf } from "./connect"
 import { loadEnabledMcpServers, mcpConnectionOf, recordMcpStatus } from "./service"
 
 /**
@@ -171,11 +171,12 @@ export async function loadMcpTools(scope: OpexServerScope, signal?: AbortSignal,
         const id = server._id.toString()
         if (outcome.status === "rejected") {
             const message = describeMcpError(outcome.reason)
-            log.warn({ mcp: server.slug, transport: server.transport, err: message }, "[opex-mcp] MCP indisponível no turno")
+            const authRequired = usesMcpOauth(server) && isMcpAuthError(outcome.reason)
+            log.warn({ mcp: server.slug, transport: server.transport, err: message, authRequired }, "[opex-mcp] MCP indisponível no turno")
             // No portal, o aviso é genérico: o erro completo fica no log e na situação do MCP (tela do dono).
-            const reason = scope.kind === "client" ? "" : ` (${message})`
+            const reason = scope.kind === "client" ? "" : authRequired ? " (autorização OAuth necessária: o dono precisa clicar em Autorizar no cadastro do MCP)" : ` (${message})`
             notices.push(`MCP "${server.name}" indisponível neste turno${reason}; as ferramentas dele não estão disponíveis — avise o usuário se ele pedir algo desse MCP.`)
-            void recordMcpStatus(id, { error: message })
+            void recordMcpStatus(id, { error: message, authRequired })
             return
         }
         clients.push(outcome.value.client)

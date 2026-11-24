@@ -86,3 +86,9 @@ export function parseMcpToolsOutput(output: string): { name: string; description
         return null
     }
 }
+
+/** Repassa o retorno do OAuth de um MCP ao servidor temporário do OpenCode no loopback do host. */
+export function forwardOauthCallbackCommand(url: string): string {
+    if (!/^http:\/\/127\.0\.0\.1:\d{1,5}\/[^\s']*$/.test(url)) throw new Error("URL de retorno inválida")
+    return `curl -sS -o /dev/null -w '%{http_code}' --max-time 15 ${quote(url)}`
+}

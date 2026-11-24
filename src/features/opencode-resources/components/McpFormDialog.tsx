@@ -18,6 +18,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { mcpContentFromForm, mcpFormFromDetail, mcpFormSchema, type McpFormValues } from "../form-schemas"
 import { useCreateOpencodeResource, useOpencodeResource, useUpdateOpencodeResource } from "../hooks/useOpencodeResources"
 import type { OpencodeResourceDto } from "../types"
+import { McpAuthFields } from "./McpAuthFields"
 import { SecretRowsField } from "./SecretRowsField"
 
 const TYPE_OPTIONS = [
@@ -56,7 +57,7 @@ function McpForm({ initial, creating, pending, onSubmit, onCancel }: { initial: 
                             <Input id="mcp-url" className="font-mono" placeholder="https://mcp.exemplo.com/mcp" {...form.register("url")} />
                         </Field>
                     )}
-                    <SecretRowsField name={type === "local" ? "environment" : "headers"} label={type === "local" ? "Variáveis de ambiente" : "Cabeçalhos HTTP"} control={form.control} register={form.register} errors={errors} />
+                    {type === "local" ? <SecretRowsField name="environment" label="Variáveis de ambiente" control={form.control} register={form.register} errors={errors} /> : <McpAuthFields form={form} />}
                 </motion.div>
             </AnimatePresence>
             <div className="flex items-center gap-2">

@@ -297,7 +297,7 @@ risco (os catálogos são distintos).
 | Engramind | Uma por operação do catálogo `features/engramind/operations.ts` (configurações e por canal, `set_engramind_secret`, testers, modelos, `reembed_engramind`, apps, agentes, tokens, canais, assinaturas, memórias — inclusive `create/update_engramind_memory` e a busca, que publica o consumo na rede (OPE-109) —, jobs, chamadas ao LLM, consumo, auditoria) mais `get_engramind_connection`, `run_engramind_bootstrap`, `import_engramind_memories`, `get_engramind_env`, `update_engramind_env`, `apply_engramind_env`, `get_engramind_ai_source`, `apply_engramind_ai_source`† (IA do Opex: a chave é lida no servidor) e `resend_engramind_ai_key`. Destrutivas: `delete_engramind_{channel,memory,app,agent}`*, `archive_engramind_{channel,memory}`*, `revoke_engramind_token`*. `issue_engramind_token` devolve só o prefixo e o card ganha **"Ver token"** (ver "Ação no resultado") — `modules/engramind.md` |
 | Serviço do OpenCode | `get_opencode_service_status` (com o impacto: mesas e refinamentos rodando), `get_opencode_service_logs`, `start_opencode_service`, `stop_opencode_service`*, `restart_opencode_service`*, `upgrade_opencode`* (última 2.x; major nova só com `allowMajor`; em segundo plano, o fim chega como `notice`), `get_opencode_service_operation`, `list_opencode_backups`, `restore_opencode_backup`* — ver `modules/opencode-resources.md` |
 | Recursos do OpenCode | `list_opencode_scopes`, `list_opencode_resources` (`kind` skill/agent/command/plugin/mcp, escopo, nome, situação; sem caminho no host), `get_opencode_resource` (MCP só com os nomes dos segredos), `create_opencode_resource`, `update_opencode_resource` (o que não vier fica; segredos do MCP mantidos), `set_opencode_mcp_secrets`* (`redact` nos valores), `set_opencode_resource_enabled`†, `delete_opencode_resource`*, `install_opencode_resource`† (código de terceiros no host), `check_opencode_updates`, `update_opencode_resources`† (ids ou `all`), `test_opencode_mcp` |
-| MCPs | `list_mcp_servers`, `get_mcp_server`, `test_mcp_server` (conecta e atualiza as ferramentas descobertas), `create_mcp_server`*, `update_mcp_server`*, `set_mcp_server_enabled`, `set_mcp_tool_confirmation`†, `delete_mcp_server`*, `set_client_mcp_access`* (libera/retira um MCP de um cliente) — mesmos serviços da seção MCPs; headers/variáveis saem do histórico (`redact`) e nunca são lidos de volta |
+| MCPs | `list_mcp_servers`, `get_mcp_server`, `test_mcp_server` (conecta e atualiza as ferramentas descobertas), `create_mcp_server`*, `update_mcp_server`*, `set_mcp_server_enabled`, `set_mcp_tool_confirmation`†, `delete_mcp_server`*, `set_client_mcp_access`* (libera/retira um MCP de um cliente) — mesmos serviços da seção MCPs; `create`/`update` aceitam `auth` e `oauth` (OPE-176; autorizar exige o navegador do dono, então não há ferramenta de Autorizar); headers/variáveis e o client secret saem do histórico (`redact`) e nunca são lidos de volta |
 | Plugins (OPE-172) | `list_plugins`, `get_plugin`, `read_plugin_source`, `diff_plugin_versions`, `inspect_plugin_runtime`, `set_plugin_active`*, `archive_plugin`*, `rollback_plugin`* — criar ou alterar um plugin é por uma tarefa do tipo Plugin (`create_task` com `taskType: "plugin"` e `pluginTarget`). Ver `modules/plugins.md` |
 | Ferramentas de plugins (`plugin-tools`) | Registradas em tempo de execução pelos plugins do dono (`ctx.tools.register`), com o nome `plugin_{id}_{nome}`. Entram no catálogo e no MCP do dono sem build, com a mesma política de desligar e confirmar; num turno com a prévia do plugin ligada no navegador valem as da versão `preview` |
 | Ferramentas dos MCPs (dinâmicas) | `mcp_{identificador}_{ferramenta}` de cada MCP habilitado — ver "MCPs" |
@@ -501,6 +501,10 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
     **dentro do servidor do Opex** (container; só node/npx; sem os arquivos do host — a tela avisa) e
     herda só `PATH`, `HOME`, `USER`, `LOGNAME`, `SHELL` e `TERM` mais as variáveis cadastradas, nunca as
     do Opex (banco, chave de criptografia…).
+- **Autenticação do HTTP/SSE (OPE-176)**: **Cabeçalhos** (lista vazia = nenhuma) ou **OAuth** (`auth`,
+  `oauth: { clientId, clientSecret, scope }`, tudo opcional). Com OAuth, cabeçalhos extras continuam valendo,
+  menos `Authorization` (vem do token; o schema recusa). Pedidos antigos sem `auth` seguem com cabeçalhos
+  (`opexMcpServerRequestSchema` nas rotas). Ver "OAuth dos MCPs" abaixo.
 - **Segredos**: headers e variáveis ficam cifrados (`secretBox`); a API e a tela devolvem só as chaves
   (`configured`). Na edição, valor vazio mantém o salvo da mesma chave, valor novo substitui e chave
   fora da lista é removida; chave nova sem valor dá 400 `OPEX_MCP_SECRET_REQUIRED`; sem
@@ -537,6 +541,46 @@ puro `mcp.ts` (schemas, nomes, risco e confirmação).
   do cliente pode usar (desligados por padrão; aviso de que os usuários usam as credenciais do MCP).
   Antes de cada chamada no portal, o MCP é revalidado (liberado ao cliente **e** habilitado; senão
   403 `OPEX_TOOL_DISABLED`). Excluir um MCP o retira dos clientes.
+- **OAuth dos MCPs (OPE-176)** — feito pelo servidor do Opex com a `@ai-sdk/mcp` (`server/mcp/oauth.ts`,
+  `oauth-provider.ts`, `oauth-store.ts`), sem SDK extra:
+  - **Autorizar** (painel OAuth no diálogo do MCP salvo; com alterações não salvas, pede para salvar):
+    `POST /api/opex/mcp-servers/[id]/oauth` descobre os metadados (recurso protegido → servidor de
+    autorização), registra o cliente por **registro dinâmico** quando não há client id cadastrado (refaz o
+    registro se o endereço do Opex mudou), gera `state` (32 bytes) e **PKCE S256** e devolve a página do
+    provedor; o navegador vai para lá. O pedido (hash do `state` + `state` e verificador cifrados,
+    endereço de retorno, 10 min) fica em `oauth.pending` (um por MCP).
+  - **Endereço de retorno** = origem pública do navegador (`publicOriginOf`, `src/lib/api/public-origin.ts`:
+    `Origin`, depois `X-Forwarded-Host/Proto`, `Host` e por último a URL da requisição — nunca o bind interno)
+    + `/api/opex/mcp-servers/oauth/callback`. Provedor com cliente pré-cadastrado precisa ter esse endereço
+    registrado.
+  - **Retorno** (`GET /api/opex/mcp-servers/oauth/callback`, sessão do dono): localiza o pedido pelo hash do
+    `state`, consome-o antes da troca (uso único), recusa expirado, erro do provedor, `iss` divergente e
+    `state` desconhecido; troca o código pelo token e volta (303) para
+    `/integracoes/ia?aba=agente-opex&secao=mcps&oauth=ok|erro[&mensagem=…]` na origem pública do pedido (a
+    seção mostra o toast e limpa a URL). **Escopos**: com `scope` configurado, token que não concede todos é
+    revogado e descartado, e a mensagem cita os que faltaram.
+  - **Tokens** (access, refresh, cliente registrado, client secret) cifrados com `secretBox`; o DTO traz só
+    `oauth: { status, clientId, hasClientSecret, scope, dynamicClient, expiresAt, authorizedAt, lastError }`.
+    Situações: `not_authorized`, `authorized`, `needs_auth`, `error`.
+  - **Turno, teste e ação confirmada** passam um `authProvider` sem interação ao transporte: sem token, nem
+    conecta (`OpexMcpAuthRequiredError`); 401 renova pelo refresh token (gravação condicional por
+    `tokenVersion`, para duas renovações simultâneas não apagarem uma à outra); renovação recusada ou
+    401/403 marcam **"Precisa autorizar"** (`needs_auth`) e o MCP fica fora do turno com o aviso de sempre
+    ("autorização OAuth necessária…"; no portal, a mensagem genérica). Conexão boa volta a `authorized`.
+    "Testar conexão" com OAuth exige o MCP salvo e o mesmo endereço.
+  - Trocar a URL/transporte ou o client id invalida tokens, cliente registrado e pedido. Trocar a
+    autenticação para Cabeçalhos (ou excluir o MCP) com token gravado revoga no provedor e apaga os tokens
+    (mesmo caminho do Desconectar).
+  - **Na imagem Docker**, as chamadas de OAuth da `@ai-sdk/mcp` usam o fetch protegido do
+    `@ai-sdk/provider-utils`, que depende do `undici` no standalone; o build garante isso com
+    `scripts/standalone-runtime-deps.mjs` (ver `modules/deployment.md`).
+  - **Desconectar** (`DELETE …/[id]/oauth`, com confirmação): revogação RFC 7009 em melhor esforço, só
+    para endpoint `https` e pelo fetch protegido do `@ai-sdk/provider-utils` (`fetchWithValidatedEndpoint`:
+    sem rede interna, `localhost` nem redirecionamento; endpoint recusado = não revoga e só limpa)
+    (`revocation_endpoint` dos metadados) e limpeza de tokens, pedido e cliente dinâmico.
+  - Auditoria `McpServidor` com `{ oauth: "autorizado" | "falhou" | "desconectado…" }` e
+    `autenticacao`/`oauth: { clientId: bool, clientSecret: bool, escopo }` nos retratos — nunca token, código
+    ou segredo; evento `opex-mcp-updated` a cada mudança de situação.
 - **Auditoria** na entidade `McpServidor` (criar/editar/habilitar/confirmação/excluir; sem segredos,
   sem argumentos e sem a query da URL) e evento `opex-mcp-updated` `{ id }` em `private-app`
   (`useOpexMcpRealtime`).

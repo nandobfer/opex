@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { OPEX_MCP_ARGS_MAX, OPEX_MCP_TRANSPORTS, OPEX_MCP_TRANSPORT_LABELS, type OpexMcpServerDto, type OpexMcpServerInput, type OpexMcpTransport } from "../../../mcp"
+import { OpexMcpAuthFields } from "./OpexMcpAuthFields"
 import { OpexMcpSecretsField } from "./OpexMcpSecretsField"
 
 const TRANSPORT_OPTIONS = OPEX_MCP_TRANSPORTS.map((value) => ({ value, label: OPEX_MCP_TRANSPORT_LABELS[value] }))
@@ -20,7 +21,7 @@ interface OpexMcpConnectionFieldsProps {
     disabled: boolean
 }
 
-/** Transporte e conexão: URL + headers (HTTP/SSE) ou comando, argumentos e variáveis (stdio). */
+/** Transporte e conexão: URL + autenticação (headers ou OAuth) no HTTP/SSE ou comando, argumentos e variáveis (stdio). */
 export function OpexMcpConnectionFields({ form, savedServer, disabled }: OpexMcpConnectionFieldsProps) {
     const transport = useWatch({ control: form.control, name: "transport" })
     const args = useWatch({ control: form.control, name: "args" }) ?? []
@@ -67,6 +68,7 @@ export function OpexMcpConnectionFields({ form, savedServer, disabled }: OpexMcp
                         <Field id="mcp-url" label="URL" error={errors.url?.message}>
                             <Input id="mcp-url" placeholder={transport === "sse" ? "https://exemplo.com/sse" : "https://exemplo.com/mcp"} className="font-mono" autoComplete="off" disabled={disabled} {...form.register("url")} />
                         </Field>
+                        <OpexMcpAuthFields form={form} savedServer={savedServer} disabled={disabled} />
                         <OpexMcpSecretsField form={form} name="headers" saved={savedServer?.headers ?? []} disabled={disabled} />
                     </motion.div>
                 )}
