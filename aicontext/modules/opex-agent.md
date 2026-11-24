@@ -91,6 +91,10 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
 - Cada linha das respostas tem, no hover, **Citar no campo de resposta**: insere `> linha` no cursor
   do campo do chat sem apagar o texto (`ReplyTargetProvider` no `OpexChat`, `ReplyTextarea` no
   `OpexComposer`); selecionando texto, o botão no fim da seleção cita só o trecho.
+- Todo bloco de código das respostas (aqui e no Agente Maddox) tem o botão **Copiar bloco de código**,
+  sempre visível no canto superior direito, numa faixa fora da área que rola, à direita do citar
+  (posição decidida pelo dono no plano da OPE-189, no lugar de "à esquerda do citar"; componente compartilhado do `Markdown`,
+  ver `aicontext/use-para-atualizar-tema-e-componentes-ui.md`, "Copiar bloco de código").
 - **Tentar novamente** quando a resposta falha ou é interrompida; **Parar** durante o turno (a
   resposta parcial é mantida); **Ir para o fim**; conversa virtualizada acima de 50 mensagens.
 - Estados: vazio com sugestões, carregando (skeleton), erro (tentar novamente), agente não
