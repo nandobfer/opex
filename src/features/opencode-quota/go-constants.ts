@@ -19,6 +19,8 @@ export const GO_RECENT_DAY_CACHE_MS = 10 * 60_000
 export const GO_CLOSED_DAY_CACHE_MS = 6 * 60 * 60_000
 /** Chamadas simultâneas ao Console ao montar a série diária. */
 export const GO_SERIES_CONCURRENCY = 5
+/** Leituras simultâneas do `go/status` quando "Todas as chaves" soma várias assinaturas (OPE-180). */
+export const GO_STATUS_CONCURRENCY = 4
 /**
  * Histórico que o Console devolve (dias UTC antes de hoje). A API anuncia ~40 dias; em 16/11/2026 a janela
  * observada ia de 05/10 a 16/11 (hoje − 42). Dia mais antigo volta vazio, sem erro: não é consultado e

@@ -15,7 +15,7 @@ import { apiErrorMessage } from "@/lib/api"
 import { integrationPath } from "@/lib/integrations/catalog"
 import type { UsageQuery } from "@/features/ai/provider-usage"
 import { GO_STALE_AFTER_MS } from "../../go-constants"
-import { isGoUsageStale } from "../../go-logic"
+import { goKeyLabel, isGoUsageStale } from "../../go-logic"
 import { useOpencodeGoUsage, useOpencodeGoUsageRealtime, useRefreshOpencodeGoUsage } from "../../hooks/useOpencodeGoUsage"
 import { GoCoverageNotes } from "./GoCoverageNotes"
 import { GoUsageChart } from "./GoUsageChart"
@@ -38,6 +38,8 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
     const view = query === null ? "invalid" : usage.isLoading ? "loading" : usage.isError ? "request-error" : (data?.state ?? "loading")
     const stale = data?.state === "ok" && isGoUsageStale(data.checkedAt, now, GO_STALE_AFTER_MS)
     const retry = () => refresh.mutate()
+    const keyLabel = data ? goKeyLabel(data.scope, data.keyName) : null
+    const failedKeys = data?.state === "ok" ? (data.scope?.failed ?? []) : []
 
     return (
         <Card>
@@ -54,7 +56,14 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
                 </div>
                 <p className="text-sm text-muted-foreground">
                     Uso da assinatura inteira, lido do Console do OpenCode Go: inclui outros clientes (OpenCode no host ou no desktop), não só o Opex.
-                    {data?.keyName && <> Chave: {data.keyName}.</>}
+                    {keyLabel && (
+                        <>
+                            {" "}
+                            <span data-go-keys title={data?.scope?.keys.map((key) => key.name).join(", ")}>
+                                {keyLabel}.
+                            </span>
+                        </>
+                    )}
                 </p>
             </CardHeader>
             <CardContent>
@@ -74,12 +83,24 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
                         {view === "no-key" && <EmptyState icon={KeyRound} title="Sem assinatura para este filtro" description={data?.message ?? undefined} />}
                         {view === "ok" && data && (
                             <div className="space-y-5">
+                                <AnimatePresence initial={false}>
+                                    {failedKeys.length > 0 && (
+                                        <motion.div key="partial" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: reduceMotion ? 0 : 0.2 }}>
+                                            <PanelMessage
+                                                icon={TriangleAlert}
+                                                tone="warning"
+                                                title="Cobertura parcial"
+                                                description={`Fora da soma: ${failedKeys.map((key) => `${key.name} (${key.message})`).join("; ")}`}
+                                            />
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
                                 <GoUsageHeader data={data} />
                                 <GoUsageWindows meters={data.meters} now={now} />
                                 {data.chart ? (
                                     <div className="space-y-2">
                                         <GoUsageChart chart={data.chart} dailyAverage={data.forecast?.dailyAverage ?? null} />
-                                        <GoCoverageNotes chart={data.chart} />
+                                        <GoCoverageNotes chart={data.chart} scope={data.scope} />
                                     </div>
                                 ) : (
                                     data.chartMessage && <PanelMessage icon={TriangleAlert} tone="warning" title="Gráfico indisponível" description={data.chartMessage} />

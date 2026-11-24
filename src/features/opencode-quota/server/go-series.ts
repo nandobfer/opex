@@ -35,7 +35,8 @@ function dayTtl(key: string, nowMs: number): number {
     return key >= addDaysKey(utcDateKey(nowMs), -1) ? GO_RECENT_DAY_CACHE_MS : GO_CLOSED_DAY_CACHE_MS
 }
 
-async function mapLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
+/** Executa `run` em cada item com no máximo `limit` chamadas simultâneas, preservando a ordem dos resultados. */
+export async function mapLimit<T, R>(items: readonly T[], limit: number, run: (item: T) => Promise<R>): Promise<R[]> {
     const results = new Array<R>(items.length)
     let next = 0
     const worker = async () => {

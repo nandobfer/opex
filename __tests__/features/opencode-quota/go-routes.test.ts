@@ -9,7 +9,7 @@ import { GET } from '@/app/api/opencode/quota/go/route'
 import { POST } from '@/app/api/opencode/quota/go/refresh/route'
 
 const params = { params: Promise.resolve({}) }
-const dto = { state: 'unconfigured', message: 'x', checkedAt: '2026-11-16T12:00:00.000Z', keyName: null, cycle: null, meters: [], monthPercent: null, limitReached: false, forecast: null, realCostUsd: null, chart: null, chartMessage: null }
+const dto = { state: 'unconfigured', message: 'x', checkedAt: '2026-11-16T12:00:00.000Z', keyName: null, scope: null, cycle: null, meters: [], monthPercent: null, limitReached: false, forecast: null, realCostUsd: null, realCostPartial: false, chart: null, chartMessage: null }
 const from = '2026-10-16T03:00:00.000Z'
 const to = '2026-11-17T02:59:59.999Z'
 
