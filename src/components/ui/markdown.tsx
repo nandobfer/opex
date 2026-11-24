@@ -5,6 +5,7 @@ import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { LINE_CODE_PROP, LINE_END_PROP, LINE_PROP, rehypeLogicalLines } from "@/lib/markdown/rehype-logical-lines"
 import { cn } from "@/lib/utils"
+import { MarkdownCodeBlock } from "./markdown-code-block"
 import { LineRenderContext, MarkdownLine } from "./markdown-line"
 import { useInheritedLineAction, type MarkdownLineAction } from "./markdown-line-action"
 import { MarkdownMedia } from "./markdown-media"
@@ -14,7 +15,7 @@ import { MarkdownSelectionLayer } from "./markdown-selection"
  * Markdown (GFM: tabelas, listas de tarefa, tachado) com o estilo do tema. HTML cru é ignorado
  * (padrão do react-markdown) e links externos abrem em nova aba. Cores no estilo do OpenCode, pelos
  * tokens `md-*` do `globals.css`: títulos lilás, negrito e marcadores âmbar, código inline verde e
- * citação ciano.
+ * citação ciano. Todo bloco de código tem o botão "Copiar bloco de código" (`markdown-code-block`).
  */
 /** Tira a prop `node` (AST) que o react-markdown repassa e o DOM não aceita. */
 function rest<P extends { node?: unknown }>(props: P): Omit<P, "node"> {
@@ -39,7 +40,8 @@ const components: Components = {
     img: (props) => <MarkdownMedia {...rest(props)} />,
     blockquote: (props) => <blockquote className="mb-2 border-l-2 border-md-quote/60 pl-3 text-muted-foreground" {...rest(props)} />,
     code: (props) => <code {...rest(props)} className={cn("rounded bg-muted px-1 py-0.5 font-mono text-[0.85em] text-md-code", props.className)} />,
-    pre: (props) => <pre className="mb-2 overflow-x-auto rounded-md border bg-muted/60 p-3 text-xs [&>code]:bg-transparent [&>code]:p-0 [&>code]:text-foreground/90" {...rest(props)} />,
+    // Bloco de código com o botão de copiar sempre visível; o código inline (`code` acima) não ganha botão.
+    pre: (props) => <MarkdownCodeBlock node={props.node} {...rest(props)} />,
     table: (props) => (
         <div className="mb-2 overflow-x-auto">
             <table className="w-full border-collapse text-xs" {...rest(props)} />

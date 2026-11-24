@@ -1419,6 +1419,9 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   nenhum, copia a linha (toast). Selecionando texto, **Citar o trecho no campo de resposta** (botão
   no fim da seleção) cita só o trecho, pelo mesmo destino. Cada fork tem provider próprio: a linha do fork vai para a mensagem
   do fork ou o pedido de ajuste do resumo da integração.
+- **Copiar bloco de código**: todo bloco de código da saída (e do Plano, Descrição e Spec.) tem o botão
+  de copiar sempre visível no canto superior direito, à direita do citar de cada linha (componente
+  compartilhado do `Markdown`; ver `aicontext/use-para-atualizar-tema-e-componentes-ui.md`).
 - **Rolagem da saída** (`useStickToBottom`): a aba "Saída da IA" acompanha o fim do stream sozinha
   sempre que o conteúdo cresce — inclusive quando um item do **meio** da lista muda (ex.: o fim de
   um turno) — enquanto o usuário estiver no fim. Ao rolar para cima, o acompanhamento **para** (não

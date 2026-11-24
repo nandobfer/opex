@@ -453,6 +453,17 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   `flash` destaca a linha (Framer Motion). Sem `lineAction`, o `Markdown` herda do
   `MarkdownLineActionProvider` mais próximo; `lineAction={null}` desliga. Linhas e hash puros em
   `src/lib/markdown/lines.ts` (`sourceLines`, `normalizeLine`, `lineHash` FNV-1a).
+- **Copiar bloco de código** (`ui/markdown-code-block.tsx`, OPE-189): todo `pre` do `Markdown` (todo o
+  app: saídas dos agentes, tarefas, planos, comentários) tem o botão de ícone **Copiar bloco de código**,
+  um por bloco e **sempre visível** (não depende de hover). Fica no canto superior direito, numa faixa
+  que não rola: o `<pre>` (`mr-8`, rolagem horizontal) termina antes dela e a borda/fundo ficam no
+  contêiner, então o botão nunca cobre o código nem o citar do fim de cada linha (que fica à esquerda
+  dele). O texto copiado sai do nó hast (`codeBlockText`, `src/lib/markdown/code-text.ts`), nunca do
+  DOM: sem cerca, rótulo de linguagem, botões ou badges de linha, e sem a quebra final. Copia por
+  `copyText` (`src/lib/clipboard.ts`, com o `execCommand` fora de HTTPS); ao copiar, o ícone vira um
+  check `text-primary` por 2 s (`CODE_COPIED_MS`, troca com Framer Motion) e um `aria-live` anuncia
+  "Copiado"; se nenhum caminho funcionar, toast de erro e o bloco segue intacto. O clique não propaga
+  (cards clicáveis). Código inline não ganha botão.
 - **Citar a linha no campo do agente** (`src/components/agent-reply/`): `ReplyTargetProvider` dá às
   saídas de IA da subárvore a ação "Citar no campo de resposta", que insere `> linha` + linha em
   branco no cursor (`insertQuote`, `src/lib/markdown/quote.ts`), sem apagar o texto, e foca o campo.
