@@ -7,6 +7,9 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
 
 ### Tela
 
+- **Builder do servidor** (OPE-186): card fixo **acima** dos grupos Servidor/PC (`components/builder/`), para o
+  builder do buildx do Docker do servidor (o `buildx_buildkit_<nome>0` do `docker stats`). Ver "Builder do
+  servidor" abaixo.
 - Lista (kit `src/components/list`) agrupada em **Servidor** e **PC** (máquina de execução). Cada
   ambiente mostra o estado (No ar / Parcial / Parado / Nunca implantado / Implantando), portas,
   serviços no ar, CPU/RAM (a lista é consultada a cada 10 s), onde foi o build e o último deploy
@@ -109,6 +112,64 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   (`5050`, só `127.0.0.1`) e tags mantidas por ambiente (`5`). A conexão com o PC é a do Builder
   Machine.
 
+### Builder do servidor (OPE-186)
+
+- **O que é**: o builder do buildx do host do OpenCode usado pelos deploys com build no servidor (e, quando é o
+  builder atual do host, pelas prévias das mesas). O builder do PC (`opex-local-builder`) continua em
+  Integrações › Builder Machine; a linha só traz um link para lá.
+- **Linha** (`BuilderCard` → `BuilderRow`, `GET /api/environments/builder` a cada 10 s e pelo tempo real):
+  nome, container, driver, selos (No ar / Parado / Não existe / Sem container / Não gerenciado / Padrão do
+  host / Recriação pendente), limites **aplicados** no container (RAM, swap além da RAM, CPUs, lidos do
+  `docker inspect`), uso de CPU/RAM (`docker stats --no-stream`), CPUs e memória do servidor e os avisos:
+  falha da última ação ou do Docker, limites salvos diferentes dos aplicados ("use Recriar"), recriação
+  pendente e flags do BuildKit que o Opex não recria. Skeleton com a estrutura da linha e erro com "Tentar
+  novamente".
+- **Sem configuração** (estado inicial): a linha mostra o builder **atual do host** (`docker buildx inspect`
+  sem nome) como "Não gerenciado" com **Gerenciar**: o formulário vem com o nome, os limites lidos do
+  container (inclusive os aplicados por `docker update`), a flag de `network.host` e "padrão do host" ligado
+  quando ele é o atual. Salvar com os mesmos valores não recria nada. Se o atual usa o driver `docker` (sem
+  container nem limites), a sugestão é um builder novo `opex-builder`.
+- **Configuração** (`environmentsBuilderSchema`, em `environments_state.builder`): nome, RAM (GiB), CPUs
+  (fração; até as CPUs do servidor), swap **além da RAM** (vazio = padrão do Docker, 0 = sem swap; exige a
+  RAM; vai como `memory-swap` = RAM + swap), **Builder padrão do host** (`--use`/`docker buildx use`) e
+  **Permitir network=host** (`--buildkitd-flags --allow-insecure-entitlement=network.host`). Limite vazio =
+  sem limite. `PUT /api/environments/builder` (`saveBuilderConfig`):
+  1. builder inexistente: só salva ("use Criar");
+  2. limites e flag iguais aos aplicados: só salva (e marca como padrão do host, se pedido);
+  3. sem build em andamento: recria com `docker buildx rm --keep-state` + `create` com os `--driver-opt`
+     (`default-load=true`, `memory`, `memory-swap`, `cpu-period`/`cpu-quota`) + `--bootstrap`, **na vez da
+     fila global do build** (`runExclusiveBuild`: nenhum build começa no meio);
+  4. com build em andamento (`isBuildActive` da fila global): `docker update` no container na hora (RAM,
+     swap e CPU no modo que o container já usa — `--cpus` ou quota) e a recriação fica **pendente**
+     (`builderPending`).
+- **Aplicar limites — alternativas avaliadas**: (a) recriar com `--keep-state` é o padrão: os limites ficam
+  gravados no buildx (valem em toda recriação) e o cache é mantido, com alguns segundos fora do ar; (b)
+  `docker update` só serve de ponte durante um build: não grava no buildx (uma recriação perde os limites) e
+  não consegue tirar um limite de RAM. A recriação pendente corrige depois.
+- **Recriação pendente** (`runPendingBuilderRecreate`): roda quando nenhum build está em andamento, no tick
+  do agendador (`runEnvironmentsTick`) e no motor da fila do build (`runBuildPump`, **antes** de iniciar a
+  próxima mesa, senão seria sempre passada para trás), na vez da fila; tira a pendência (também na falha,
+  que fica na linha) e audita como `system`. Não roda nas prévias das mesas (`isPreviewInstance`).
+- **Ações** (`POST /api/environments/builder/actions` `{ action, confirm?, force? }`, `runBuilderAction`; exigem
+  a configuração salva): **Criar** (só quando não existe; cria com os limites salvos), **Levantar**
+  (`--bootstrap`), **Derrubar** (`buildx stop`, o cache continua), **Recriar** (`--keep-state`; com build em
+  andamento fica pendente) e **Apagar** (`buildx rm`: remove o builder **e o cache**; confirmação explícita,
+  que avisa quando ele é o builder do host). Derrubar e Apagar com um build em andamento respondem 409
+  `BUILDER_BUILD_RUNNING` sem `force`; a tela pede confirmação dizendo que o build em curso falha.
+  Levantar/Derrubar são otimistas (estado na hora, reversão e toast na falha); salvar e as ações mostram
+  no toast a mensagem do servidor (aplicado, recriado ou pendente). Falha de comando: 502 `BUILDER_FAILED`
+  com a última linha da saída, gravada em `builderLastAction` e mostrada na linha; o estado é sempre relido
+  do host. Uma recriação que falha depois do `rm` deixa a linha em "Não existe" (Criar).
+- **Deploys**: com o builder configurado, o build no servidor vai com `BUILDX_BUILDER=<nome>` (`dockerPrefix`,
+  só em `build`/`up --build`) e o passo de build começa criando o builder quando ele sumiu ("Builder X não
+  existia: criando com os limites salvos.", mesmo passo, dentro da trava). O log do passo diz o builder:
+  "Build com o builder do buildx "X" (BUILDX_BUILDER)." ou, sem configuração, "Build com o builder padrão do
+  host." (comando igual ao de antes). `machineAccess` lê a configuração (`loadBuilderConfig`); falha na leitura
+  cai no padrão do host com aviso no log do servidor.
+- **Auditoria e tempo real**: entidade `Ambiente`, `entidadeId: "builder"` (configurar, criar, levantar,
+  derrubar, recriar, apagar, `forcado` quando houve build em andamento); evento `environments`
+  `{ id: null, change: "builder" }` (não avisa o portal).
+
 ### Consumidores
 
 - **Engramind** (`modules/engramind.md`): a integração aponta para um Ambiente (adotado em
@@ -129,16 +190,21 @@ mesma validação, auditoria, Pusher e erros.
   deploy), `get_environment` (origem, máquinas, só os **nomes** das variáveis, URL de saúde,
   serviços), `get_environment_logs` (últimas linhas, até 200, sem ANSI), `list_environment_deploys`
   (30 últimos), `get_environment_deploy` (resumo + fim do log, o ao vivo do processo quando em
-  andamento), `list_unmanaged_projects`, `get_environments_settings` (com o estado do registry).
+  andamento), `list_unmanaged_projects`, `get_environments_settings` (com o estado do registry),
+  `get_environments_builder` (builder do servidor: estado, limites aplicados e salvos, uso, avisos e, sem
+  configuração, a sugestão para gerenciar).
 - Escrita sem confirmação: `create_environment` (origem central; slug sugerido pelo nome, projeto =
-  slug, ref `main`), `start_environment`.
+  slug, ref `main`), `start_environment`, `create_environments_builder`, `start_environments_builder`.
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
   tela, vazio grava vazio), `restart_environment`, `adopt_project`,
-  `update_environments_settings`, `clean_environments_registry`.
+  `update_environments_settings`, `clean_environments_registry`, `configure_environments_builder` (patch
+  sobre a configuração salva ou, sem ela, sobre a sugestão do host; `null` tira um limite).
 - Destrutivas (confirmação): `deploy_environment` (sem `ref` = a ref salva; outra ref só na origem
   central), `move_environment` (a descrição manda avisar dos volumes e do tempo fora do ar; a saída
-  traz `moveWarning`), `stop_environment`, `delete_environment` (`removeVolumes`).
+  traz `moveWarning`), `stop_environment`, `delete_environment` (`removeVolumes`),
+  `stop_environments_builder`, `recreate_environments_builder` e `delete_environments_builder` (com
+  `force` quando há um build em andamento, depois de avisar que ele falha).
 - **Deploy/mover em segundo plano**: a ferramenta volta na hora com o `deployId`; o deploy grava
   `notifyOpexSessionId` e, no fim (`finishDeploy`, também no deploy retomado), `server/opex-notice.ts`
   manda à sessão um aviso `kind: "notice"` (resultado, duração, ref @ commit, versão, erro). Falha ao
@@ -209,6 +275,13 @@ mesma validação, auditoria, Pusher e erros.
 
 ### Limitações
 
+- Builder do servidor: só os builds conhecidos pela fila global do build deste processo contam como "build
+  em andamento"; um `docker build` manual no host não é detectado (recriar/derrubar/apagar o derrubaria).
+  Recriar pode baixar uma imagem mais nova do BuildKit (`buildx-stable-1`); o estado `--keep-state`
+  costuma ser compatível. Um `buildx rm` feito fora do Opex tira o builder do padrão do host (o `--use`
+  só vale nas criações do Opex). Flags do BuildKit além de `network.host` se perdem ao recriar (a linha
+  avisa).
+
 - O arquivo de variáveis que o app cria vazio só é desconsiderado na checagem de pasta limpa do
   próprio app: por decisão do dono, nada é gravado no repositório (nem `.git/info/exclude`, que nos
   ambientes de central é compartilhado com o repositório da central). Num `git status` manual ele
@@ -253,11 +326,14 @@ mesma validação, auditoria, Pusher e erros.
 ## Código
 
 - `src/features/environments/`: `constants.ts`, `schemas.ts`, `types.ts`, `commands.ts`,
+  `builder-commands.ts` e `builder-view.ts` (builder do servidor, puros), `server/builder.ts`,
+  `hooks/useEnvironmentsBuilder.ts`, `components/builder/` (`BuilderCard`, `BuilderRow`, `BuilderFormDialog`,
+  `BuilderConfirmDialog`),
   `compose-config.ts`, `pipeline.ts`, `view.ts`, `opex-format.ts`, `components/` (tela do dono;
   `EnvironmentStatus.tsx` com o botão e os selos compartilhados com o portal), `hooks/`,
   `portal/` (página, linha e hooks do portal) e `server/` (`models`, `service`, `deploy`, `resume`,
   `hub`, `stream`, `forwards`, `registry`, `settings`, `opex-notice`, `portal`).
-- Rotas: `src/app/api/environments/**` (dono), `src/app/api/cliente/ambientes/**` (portal); páginas
+- Rotas: `src/app/api/environments/**` (dono; builder do servidor em `builder/` e `builder/actions/`), `src/app/api/cliente/ambientes/**` (portal); páginas
   `src/app/(app)/ambientes/` e `src/app/cliente/(portal)/ambientes/`.
 - Integração: item em `APP_NAV`, tick no `runSchedulerTick` (`runEnvironmentsTick`), rotina
   `environments-registry-cleanup` (`catalog.ts` + `registerBuiltInJobs`), `runExclusiveBuild` na fila
@@ -267,5 +343,6 @@ mesma validação, auditoria, Pusher e erros.
 - Dados: `environments`, `environment_deploys` (TTL de 90 dias), `environments_state`; auditoria
   `entidade: "Ambiente"`.
 - Testes: `__tests__/features/environments/` (`commands`, `deploy`, `resume`, `environments-ui`,
-  `opex-tools`, `portal`, `portal-ui`), `__tests__/features/agentic/build-queue.test.ts`
-  (`runExclusiveBuild`), `__tests__/features/opex-agent/client-tools.test.ts` (grupo do portal).
+  `opex-tools`, `portal`, `portal-ui`, `builder-commands`, `builder`, `builder-ui`),
+  `__tests__/features/agentic/build-queue.test.ts` (`runExclusiveBuild` e a recriação pendente antes da
+  próxima mesa), `__tests__/features/opex-agent/client-tools.test.ts` (grupo do portal).

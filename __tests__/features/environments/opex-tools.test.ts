@@ -9,6 +9,9 @@ const mocks = vi.hoisted(() => ({
   getDeploy: vi.fn(),
   runRegistryCleanup: vi.fn(async () => '2 tag(s) apagada(s)'),
   notifyRegistry: vi.fn(async () => undefined),
+  builderStatus: vi.fn(),
+  saveBuilder: vi.fn(),
+  builderAction: vi.fn(),
 }))
 
 vi.mock('@/features/environments/server/settings', () => ({
@@ -42,6 +45,7 @@ vi.mock('@/features/environments/server/service', () => ({
 vi.mock('@/features/environments/server/deploy', () => ({ runEnvironmentAction: mocks.runEnvironmentAction, deleteEnvironment: mocks.deleteEnvironment }))
 vi.mock('@/features/environments/server/registry', () => ({ runRegistryCleanup: mocks.runRegistryCleanup, getRegistryStatus: async () => ({ running: true, port: 5050, detail: 'No ar' }) }))
 vi.mock('@/features/environments/server/opex-notice', () => ({ notifyOpexRegistryCleanup: mocks.notifyRegistry }))
+vi.mock('@/features/environments/server/builder', () => ({ getBuilderStatus: mocks.builderStatus, saveBuilderConfig: mocks.saveBuilder, runBuilderAction: mocks.builderAction }))
 
 import { environmentTools } from '@/features/opex-agent/server/tools/environments'
 import { toolErrorMessage } from '@/features/opex-agent/server/tools/define'
@@ -66,6 +70,24 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     for (const name of ['deploy_environment', 'move_environment', 'stop_environment', 'delete_environment']) expect(find(name).risk).toBe('destructive')
     for (const name of ['restart_environment', 'clean_environments_registry', 'update_environment', 'adopt_project', 'update_environments_settings', 'deploy_environment']) expect(needsConfirmation(find(name) as never)).toBe(true)
     for (const name of ['create_environment', 'start_environment', 'list_environments', 'get_environment_logs']) expect(needsConfirmation(find(name) as never)).toBe(false)
+  })
+
+  it('builder do servidor: leitura, configuração por patch sobre o salvo (ou o do host) e ações pelos mesmos serviços', async () => {
+    const saved = { name: 'limited-builder', memoryGb: 24, cpus: 6, swapGb: 16, useAsDefault: true, allowNetworkHost: true }
+    const dto = { config: null, name: 'limited-builder', managed: false, status: 'running', driver: 'docker-container', container: 'buildx_buildkit_limited-builder0', isHostDefault: true, applied: { memoryGb: 24, swapGb: 16, cpus: 6 }, limitsDiffer: false, flags: [], unknownFlags: [], usage: null, host: { cpus: 8, memoryGb: 31 }, suggested: saved, pending: null, lastAction: null, buildRunning: false, error: null, checkedAt: '' }
+    mocks.builderStatus.mockResolvedValue(dto)
+    mocks.saveBuilder.mockResolvedValue({ builder: dto, message: 'ok' })
+    mocks.builderAction.mockResolvedValue({ builder: dto, message: 'apagado' })
+
+    expect(await run('get_environments_builder', {})).toMatchObject({ nome: 'limited-builder', gerenciado: false, estado: 'No ar', limitesAplicados: 'RAM 24 GiB · swap +16 GiB · 6 CPUs', sugestaoParaGerenciar: saved })
+    await run('configure_environments_builder', { memoryGb: 16, cpus: null })
+    expect(mocks.saveBuilder).toHaveBeenCalledWith({ ...saved, memoryGb: 16, cpus: null }, 'local')
+    await run('delete_environments_builder', { force: true })
+    expect(mocks.builderAction).toHaveBeenCalledWith({ action: 'delete', confirm: true, force: true }, 'local')
+
+    for (const name of ['stop_environments_builder', 'recreate_environments_builder', 'delete_environments_builder']) expect(find(name).risk).toBe('destructive')
+    for (const name of ['configure_environments_builder', 'delete_environments_builder']) expect(needsConfirmation(find(name) as never)).toBe(true)
+    expect(find('get_environments_builder').risk).toBe('read')
   })
 
   it('lista agrupada por máquina com estado, versão e serviços no ar', async () => {
