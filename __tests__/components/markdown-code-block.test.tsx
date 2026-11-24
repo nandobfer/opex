@@ -45,11 +45,32 @@ describe("Markdown — copiar bloco de código", () => {
         expect(buttons).toHaveLength(1)
         const button = buttons[0]!
         expect(button.className).not.toMatch(/\binvisible\b|\bopacity-0\b/)
-        expect(container.querySelector("pre")!.contains(button)).toBe(false)
+        const pre = container.querySelector("pre")!
+        expect(pre.contains(button)).toBe(false)
+        // Botão e `pre` são irmãos no mesmo contêiner relativo (faixa que não rola), sempre visível.
+        const box = button.parentElement!
+        expect(pre.parentElement).toBe(box)
+        expect(box.classList.contains("relative")).toBe(true)
+        expect(box.className).not.toMatch(/\binvisible\b|\bopacity-0\b|group-hover/)
+        const live = button.querySelector("[aria-live='polite']")!
+        expect(live).not.toBeNull()
+        expect(live.textContent).toBe("")
         await click(button)
         expect(writeText).toHaveBeenCalledWith("const a = 1\n\nconst b = 2")
         expect(button.hasAttribute("data-copied")).toBe(true)
-        expect(button.textContent).toContain("Copiado")
+        expect(live.textContent).toBe("Copiado")
+    })
+
+    it("o clique no copiar não propaga para um card clicável em volta", async () => {
+        const onCard = vi.fn()
+        render(
+            <div onClick={onCard}>
+                <Markdown>{md}</Markdown>
+            </div>,
+        )
+        await click(screen.getByRole("button", { name: COPY }))
+        expect(writeText).toHaveBeenCalled()
+        expect(onCard).not.toHaveBeenCalled()
     })
 
     it("com ação por linha: um copiar por bloco, fora do pre, mesmo texto e sem disparar a ação da linha", async () => {

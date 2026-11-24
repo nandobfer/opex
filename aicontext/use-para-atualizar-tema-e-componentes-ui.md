@@ -458,7 +458,9 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   um por bloco e **sempre visível** (não depende de hover). Fica no canto superior direito, numa faixa
   que não rola: o `<pre>` (`mr-8`, rolagem horizontal) termina antes dela e a borda/fundo ficam no
   contêiner, então o botão nunca cobre o código nem o citar do fim de cada linha (que fica à esquerda
-  dele). O texto copiado sai do nó hast (`codeBlockText`, `src/lib/markdown/code-text.ts`), nunca do
+  dele). Essa posição foi decisão do dono no planejamento da OPE-189 (plano v1, R2) e substitui a ordem
+  "copiar à esquerda do citar" do texto original da tarefa: o citar não fica no canto do bloco, e sim
+  colado ao fim do texto de cada linha, dentro da área que rola. O texto copiado sai do nó hast (`codeBlockText`, `src/lib/markdown/code-text.ts`), nunca do
   DOM: sem cerca, rótulo de linguagem, botões ou badges de linha, e sem a quebra final. Copia por
   `copyText` (`src/lib/clipboard.ts`, com o `execCommand` fora de HTTPS); ao copiar, o ícone vira um
   check `text-primary` por 2 s (`CODE_COPIED_MS`, troca com Framer Motion) e um `aria-live` anuncia
