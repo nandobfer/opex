@@ -32,7 +32,7 @@ export async function runExclusiveBuild<T>(run: () => Promise<T>, options: { pol
     state.turn = new Promise<void>((resolve) => (done = resolve))
     try {
         await previous
-        while (await hasActiveBuild()) {
+        while (await isBuildActive()) {
             if (options.signal?.aborted) throw new Error("Build cancelado na fila")
             await new Promise((resolve) => setTimeout(resolve, pollMs))
         }
@@ -49,7 +49,7 @@ export async function runExclusiveBuild<T>(run: () => Promise<T>, options: { pol
 }
 
 /** Um build está em andamento? Conta a mesa `building`/`running` com turno vivo neste processo e os builds externos. */
-async function hasActiveBuild(): Promise<boolean> {
+export async function isBuildActive(): Promise<boolean> {
     if (external().active > 0) return true
     const building = await AgenticWorkbench.find({ stage: "building", runState: "running" }).select({ _id: 1, previewBuild: 1 }).lean()
     return building.some((item) => item.previewBuild?.method !== "github" && isWorkbenchActive(String(item._id)))
@@ -89,7 +89,12 @@ export function pumpBuildQueue(): Promise<void> {
 async function runBuildPump(): Promise<void> {
     try {
         await dbConnect()
-        if (await hasActiveBuild()) return
+        if (await isBuildActive()) return
+        // Recriação do builder do servidor adiada por um build (Ambientes): roda antes de a próxima mesa
+        // começar, senão seria sempre passada para trás. Import dinâmico (Ambientes importa este módulo).
+        await import("@/features/environments/server/builder")
+            .then(({ runPendingBuilderRecreate }) => runPendingBuilderRecreate())
+            .catch((error: unknown) => logger.warn({ err: error }, "[agentic-build-queue] Falha na recriação pendente do builder"))
         // Import dinâmico: o workflow depende deste módulo (busca posições e dispara o motor).
         const { startBuildTurn } = await import("./workflow")
         for (const item of await waitingBuilds()) {

@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import type { LocalDockerSettings } from "../../schemas"
-import { NumberField } from "../NumberField"
+import { FormNumberInput } from "@/components/ui/number-field"
 
 const rowMotion = { initial: { opacity: 0, y: -4 }, animate: { opacity: 1, y: 0 }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.18 } }
 
@@ -41,7 +41,7 @@ export function AliasesCard({ form }: { form: UseFormReturn<LocalDockerSettings>
                                         <Input id={`local-docker-alias-name-${index}`} className="font-mono" {...form.register(`aliases.${index}.name`)} />
                                     </Field>
                                     <Field id={`local-docker-alias-port-${index}`} label="Porta" error={errors.aliases?.[index]?.port?.message}>
-                                        <NumberField control={form.control} name={`aliases.${index}.port`} id={`local-docker-alias-port-${index}`} />
+                                        <FormNumberInput control={form.control} name={`aliases.${index}.port`} id={`local-docker-alias-port-${index}`} />
                                     </Field>
                                     <p className="font-mono text-xs text-muted-foreground sm:col-span-2">
                                         {prefix}

@@ -1,5 +1,6 @@
-import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsSettings } from "./schemas"
-import type { EnvironmentDeploySummaryDto, EnvironmentDto, UnmanagedProjectDto } from "./types"
+import { BUILDER_STATUS_LABELS, builderNotices, limitsText } from "./builder-view"
+import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
+import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
 import { DEPLOY_KIND_LABELS, formatDuration, groupByMachine, healthOf, HEALTH_LABELS, placementLabel, versionLabel } from "./view"
 
 /** Formatação das respostas das ferramentas do Agente Opex para os ambientes (módulo puro). */
@@ -124,6 +125,32 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
 
 export function mergeSettingsPatch(current: EnvironmentsSettings, patch: Partial<EnvironmentsSettings>): EnvironmentsSettings {
     return { baseDir: patch.baseDir ?? current.baseDir, registryPort: patch.registryPort ?? current.registryPort, keepTags: patch.keepTags ?? current.keepTags }
+}
+
+/** Patch do builder: só os campos enviados mudam; `null` em um limite tira o limite. */
+export function mergeBuilderPatch(current: EnvironmentsBuilder, patch: Partial<EnvironmentsBuilder>): EnvironmentsBuilder {
+    const pick = <K extends keyof EnvironmentsBuilder>(key: K): EnvironmentsBuilder[K] => (patch[key] === undefined ? current[key] : (patch[key] as EnvironmentsBuilder[K]))
+    return { name: pick("name"), memoryGb: pick("memoryGb"), cpus: pick("cpus"), swapGb: pick("swapGb"), useAsDefault: pick("useAsDefault"), allowNetworkHost: pick("allowNetworkHost") }
+}
+
+/** Builder do servidor para as ferramentas: estado, limites (salvos e aplicados), uso e avisos. */
+export function builderView(builder: EnvironmentsBuilderDto) {
+    return {
+        nome: builder.name,
+        gerenciado: builder.managed,
+        estado: BUILDER_STATUS_LABELS[builder.status],
+        driver: builder.driver,
+        container: builder.container,
+        padraoDoHost: builder.isHostDefault,
+        limitesAplicados: builder.applied ? limitsText(builder.applied) : null,
+        configuracao: builder.config ? { ...builder.config, limites: limitsText(builder.config) } : null,
+        uso: builder.usage ? { cpu: `${builder.usage.cpuPercent.toFixed(1)}%`, ram: `${builder.usage.memoryUsage} (${builder.usage.memoryPercent.toFixed(1)}%)` } : null,
+        servidor: builder.host,
+        buildEmAndamento: builder.buildRunning,
+        recriacaoPendente: Boolean(builder.pending),
+        avisos: builderNotices(builder).map((notice) => notice.text),
+        ...(builder.managed ? {} : { sugestaoParaGerenciar: builder.suggested }),
+    }
 }
 
 interface FinishedDeploy {

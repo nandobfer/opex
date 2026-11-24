@@ -8,7 +8,7 @@ import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import type { LocalDockerSettings } from "../../schemas"
 import type { LocalDockerSettingsDto } from "../../types"
-import { NumberField } from "../NumberField"
+import { FormNumberInput } from "@/components/ui/number-field"
 import { AliasesCard } from "./AliasesCard"
 import { CertificatesCard } from "./CertificatesCard"
 import { PrepareCard } from "./PrepareCard"
@@ -37,15 +37,15 @@ export function DockerTab({ form, saved, unsaved }: { form: UseFormReturn<LocalD
                             <Input id="local-docker-builder" className="font-mono" {...form.register("builderName")} />
                         </Field>
                         <Field id="local-docker-builder-memory" label="Memória máxima do builder (GiB)" error={errors.builderMemoryGb?.message}>
-                            <NumberField control={form.control} name="builderMemoryGb" id="local-docker-builder-memory" nullable step={0.5} placeholder="Sem limite" />
+                            <FormNumberInput control={form.control} name="builderMemoryGb" id="local-docker-builder-memory" nullable step={0.5} placeholder="Sem limite" />
                             <p className="text-xs text-muted-foreground">Vazio = sem limite</p>
                         </Field>
                         <Field id="local-docker-builder-cpus" label="CPUs do builder" error={errors.builderCpus?.message}>
-                            <NumberField control={form.control} name="builderCpus" id="local-docker-builder-cpus" nullable step={0.5} placeholder="Sem limite" />
+                            <FormNumberInput control={form.control} name="builderCpus" id="local-docker-builder-cpus" nullable step={0.5} placeholder="Sem limite" />
                             <p className="text-xs text-muted-foreground">Vazio = sem limite; aceita fração (ex.: 2.5)</p>
                         </Field>
                         <Field id="local-docker-builder-cache" label="Teto do cache do builder (GB)" error={errors.builderCacheKeepGb?.message}>
-                            <NumberField control={form.control} name="builderCacheKeepGb" id="local-docker-builder-cache" />
+                            <FormNumberInput control={form.control} name="builderCacheKeepGb" id="local-docker-builder-cache" />
                             <p className="text-xs text-muted-foreground">A rotina de limpeza (Integrações › Crons) apaga o cache acima disso</p>
                         </Field>
                     </div>

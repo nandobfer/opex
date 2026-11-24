@@ -15,6 +15,7 @@ import type { Machine } from "../schemas"
 import type { EnvironmentDto, UnmanagedProjectDto } from "../types"
 import { groupByMachine } from "../view"
 import { AdoptDialog } from "./AdoptDialog"
+import { BuilderCard } from "./builder/BuilderCard"
 import { DeleteEnvironmentDialog } from "./DeleteEnvironmentDialog"
 import { DeployHistoryDialog } from "./DeployHistoryDialog"
 import { DeployDrawer } from "./DeployDrawer"
@@ -53,6 +54,7 @@ function EnvironmentsContent() {
                     </Button>
                 </div>
             </CadastroHeader>
+            <BuilderCard />
             {query.isLoading ? (
                 <CadastroTableCard>
                     <CadastroTableSkeleton columns={4} rows={4} />

@@ -9,7 +9,7 @@ import { Input } from "@/components/ui/input"
 import { OptionTabs, type OptionTabsOption } from "@/components/ui/option-tabs"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import type { LocalDockerMode, LocalDockerSettings } from "../../schemas"
-import { NumberField } from "../NumberField"
+import { FormNumberInput } from "@/components/ui/number-field"
 
 export const CONNECTION_MODES: OptionTabsOption<LocalDockerMode>[] = [
     {
@@ -59,7 +59,7 @@ export function ConnectionTab({ form }: { form: UseFormReturn<LocalDockerSetting
                                         <Input id="local-docker-server-host" className="font-mono" placeholder="dev-server" {...form.register("serverSshHost")} />
                                     </Field>
                                     <Field id="local-docker-control-port" label="Porta do túnel de controle (no servidor)" error={errors.controlPort?.message}>
-                                        <NumberField control={form.control} name="controlPort" id="local-docker-control-port" />
+                                        <FormNumberInput control={form.control} name="controlPort" id="local-docker-control-port" />
                                     </Field>
                                 </>
                             ) : (
@@ -68,7 +68,7 @@ export function ConnectionTab({ form }: { form: UseFormReturn<LocalDockerSetting
                                         <Input id="local-docker-pc-host" className="font-mono" placeholder="192.168.100.24" {...form.register("pcHost")} />
                                     </Field>
                                     <Field id="local-docker-pc-port" label="Porta SSH do PC" error={errors.pcSshPort?.message}>
-                                        <NumberField control={form.control} name="pcSshPort" id="local-docker-pc-port" />
+                                        <FormNumberInput control={form.control} name="pcSshPort" id="local-docker-pc-port" />
                                     </Field>
                                 </>
                             )}

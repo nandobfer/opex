@@ -16,12 +16,13 @@ export function pcPortsOf(envs: Pick<IEnvironment, "deployedOn" | "ports">[]): n
 
 /**
  * Tick do agendador: retoma os deploys cujo processo morreu (ex.: o redeploy do
- * próprio app) e, com o túnel do Builder Machine de volta (fechado → aberto, ou o primeiro tick do
+ * próprio app), roda a recriação do builder do servidor adiada por um build e, com o túnel do Builder Machine de volta (fechado → aberto, ou o primeiro tick do
  * processo), reabre os repasses das portas dos ambientes que rodam no PC.
  */
 export async function runEnvironmentsTick(run: HostRunner = runEnvHost): Promise<void> {
     await environmentsDb()
     await resumeInterruptedDeploys(run).catch((error: unknown) => envLog.warn({ err: error }, "[environments] Falha ao retomar deploys interrompidos"))
+    await import("./builder").then(({ runPendingBuilderRecreate }) => runPendingBuilderRecreate(run)).catch((error: unknown) => envLog.warn({ err: error }, "[environments] Falha na recriação pendente do builder"))
     const envs = await Environment.find({ "deployedOn.runOn": "pc" }).select({ deployedOn: 1, ports: 1 }).lean<IEnvironment[]>()
     const ports = pcPortsOf(envs)
     if (!ports.length) return

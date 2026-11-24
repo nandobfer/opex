@@ -2,6 +2,8 @@ import { z } from "zod"
 import { contextSessionId, defineTool } from "./define"
 import {
     adoptInputSchema,
+    environmentsBuilderSchema,
+    type BuilderAction,
     environmentInputSchema,
     environmentsSettingsSchema,
     envVarInputSchema,
@@ -16,7 +18,7 @@ import {
 } from "@/features/environments/schemas"
 import type { IEnvironment } from "@/features/environments/server/models"
 import { moveWarning, slugify } from "@/features/environments/view"
-import { deployView, environmentDetailView, environmentsListView, mergeEnvironmentPatch, mergeSettingsPatch, redactEnvValues, stripAnsi, tailLines } from "@/features/environments/opex-format"
+import { builderView, deployView, environmentDetailView, environmentsListView, mergeBuilderPatch, mergeEnvironmentPatch, mergeSettingsPatch, redactEnvValues, stripAnsi, tailLines } from "@/features/environments/opex-format"
 
 /**
  * Ferramentas do Agente Opex do dono para o módulo Ambientes (montadas no registro do agente). Chamam os mesmos
@@ -27,6 +29,33 @@ import { deployView, environmentDetailView, environmentsListView, mergeEnvironme
 const service = () => import("@/features/environments/server/service")
 const deploys = () => import("@/features/environments/server/deploy")
 const settingsModule = () => import("@/features/environments/server/settings")
+const builderModule = () => import("@/features/environments/server/builder")
+
+const BUILDER_TOOLS: Record<BuilderAction, { name: string; label: string; risk: "write" | "destructive"; description: string; summary: string }> = {
+    create: { name: "create_environments_builder", label: "Criar builder", risk: "write", description: "Cria o builder do buildx do servidor com a configuração salva (quando já existe, só o levanta).", summary: "Criar o builder do servidor" },
+    start: { name: "start_environments_builder", label: "Levantar builder", risk: "write", description: "Levanta o builder do buildx do servidor (o cache continua).", summary: "Levantar o builder do servidor" },
+    stop: {
+        name: "stop_environments_builder",
+        label: "Derrubar builder",
+        risk: "destructive",
+        description: "Derruba o builder do buildx do servidor (o cache continua). Com um build em andamento, falha com BUILDER_BUILD_RUNNING: só envie force=true depois de avisar o dono de que o build em curso falha.",
+        summary: "Derrubar o builder do servidor",
+    },
+    recreate: {
+        name: "recreate_environments_builder",
+        label: "Recriar builder",
+        risk: "destructive",
+        description: "Recria o builder do servidor com --keep-state (o cache é mantido) e os limites salvos. Com um build em andamento, a recriação fica pendente e roda quando ele terminar.",
+        summary: "Recriar o builder do servidor (--keep-state)",
+    },
+    delete: {
+        name: "delete_environments_builder",
+        label: "Apagar builder",
+        risk: "destructive",
+        description: "Apaga o builder do servidor E TODO O CACHE de build. Com um build em andamento, exige force=true (o build em curso falha). A configuração continua salva (create_environments_builder cria de novo).",
+        summary: "Apagar o builder do servidor e todo o cache",
+    },
+}
 
 async function resolve(ref: string): Promise<IEnvironment> {
     return (await service()).resolveEnvironmentRef(ref)
@@ -336,5 +365,53 @@ export const environmentTools = [
                 .catch((error: unknown) => envLog.warn({ err: error instanceof Error ? error.message : error }, "[environments] Falha ao avisar o Agente Opex da limpeza do registry"))
             return { status: "running", nota: sessionId ? "Limpeza em andamento: o resultado chega automaticamente nesta conversa." : "Limpeza em andamento em segundo plano." }
         },
+    }),
+    tool({
+        name: "get_environments_builder",
+        label: "Builder do servidor",
+        risk: "read",
+        description:
+            "Builder do buildx do servidor (linha Builder do servidor em /ambientes): estado (No ar, Parado, Não existe), se é o builder padrão do host, limites aplicados e salvos (RAM, swap além da RAM, CPUs), uso de CPU/RAM, build em andamento, recriação pendente e avisos. Sem configuração, mostra o builder atual do host e a sugestão para gerenciá-lo.",
+        input: z.object({}),
+        execute: async () => builderView(await (await builderModule()).getBuilderStatus()),
+    }),
+    tool({
+        name: "configure_environments_builder",
+        label: "Configurar builder",
+        risk: "write",
+        confirmByDefault: true,
+        description:
+            "Salva a configuração do builder do servidor (só os campos enviados mudam; sem configuração, parte do builder atual do host). Limite null = sem limite; swapGb é o swap além da RAM (null = padrão do Docker, 0 = sem swap). Limites diferentes recriam o builder com --keep-state (cache mantido); com um build em andamento, entram na hora por docker update e a recriação espera o build.",
+        input: z.object({
+            name: environmentsBuilderSchema.shape.name.optional(),
+            memoryGb: environmentsBuilderSchema.shape.memoryGb.optional().describe("RAM máxima em GiB (null = sem limite)"),
+            cpus: environmentsBuilderSchema.shape.cpus.optional().describe("CPUs (fração permitida; null = sem limite)"),
+            swapGb: environmentsBuilderSchema.shape.swapGb.optional().describe("Swap além da RAM em GiB (null = padrão do Docker; 0 = sem swap)"),
+            useAsDefault: z.boolean().optional().describe("Builder atual do host (--use): as prévias das mesas também o usam"),
+            allowNetworkHost: z.boolean().optional().describe("--allow-insecure-entitlement=network.host no BuildKit"),
+        }),
+        summarize: (input) => `Configurar o builder do servidor (${Object.entries(input).map(([key, value]) => `${key}: ${String(value)}`).join(", ") || "sem mudanças"})`,
+        execute: async (input, context) => {
+            const { getBuilderStatus, saveBuilderConfig } = await builderModule()
+            const current = await getBuilderStatus()
+            const result = await saveBuilderConfig(environmentsBuilderSchema.parse(mergeBuilderPatch(current.config ?? current.suggested, input)), context.actorId)
+            return { mensagem: result.message, builder: builderView(result.builder) }
+        },
+    }),
+    ...(Object.keys(BUILDER_TOOLS) as BuilderAction[]).map((action) => {
+        const meta = BUILDER_TOOLS[action]
+        const forceable = action === "stop" || action === "delete"
+        return tool({
+            name: meta.name,
+            label: meta.label,
+            risk: meta.risk,
+            description: meta.description,
+            input: forceable ? z.object({ force: z.boolean().optional().describe("Confirmar mesmo com um build em andamento (ele falha)") }) : z.object({}),
+            summarize: (input: { force?: boolean }) => `${meta.summary}${input.force ? " (com um build em andamento, que falha)" : ""}`,
+            execute: async (input: { force?: boolean }, context) => {
+                const result = await (await builderModule()).runBuilderAction({ action, confirm: action === "delete", force: input.force ?? false }, context.actorId)
+                return { mensagem: result.message, builder: builderView(result.builder) }
+            },
+        })
     }),
 ]
