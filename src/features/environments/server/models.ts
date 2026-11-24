@@ -78,6 +78,12 @@ export interface DeployCheckpoint {
 export interface IEnvironmentsState {
     key: "default"
     settings: Record<string, unknown> | null
+    /** Builder do buildx do servidor (`environmentsBuilderSchema`); `null` = não gerenciado. */
+    builder?: Record<string, unknown> | null
+    /** Recriação com `--keep-state` adiada até o build em andamento terminar. */
+    builderPending?: { requestedAt: Date; reason: string } | null
+    /** Última ação no builder (a falha aparece na linha). */
+    builderLastAction?: { action: string; ok: boolean; message: string; at: Date } | null
     updatedAt: Date | null
 }
 
@@ -134,6 +140,9 @@ const stateSchema = new Schema<IEnvironmentsState>(
     {
         key: { type: String, required: true, unique: true, default: "default" },
         settings: { type: Schema.Types.Mixed, default: null },
+        builder: { type: Schema.Types.Mixed, default: null },
+        builderPending: { type: Schema.Types.Mixed, default: null },
+        builderLastAction: { type: Schema.Types.Mixed, default: null },
         updatedAt: { type: Date, default: null },
     },
     { collection: "environments_state", versionKey: false },

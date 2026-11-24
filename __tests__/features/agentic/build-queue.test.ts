@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   startBuildTurn: vi.fn(),
   isActive: vi.fn(),
+  pendingBuilder: vi.fn(async () => false),
   models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }> }>,
 }))
 
@@ -15,6 +16,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
 })
 vi.mock('@/features/agentic/server/hub', () => ({ isWorkbenchActive: mocks.isActive }))
 vi.mock('@/features/agentic/server/workflow', () => ({ startBuildTurn: mocks.startBuildTurn }))
+vi.mock('@/features/environments/server/builder', () => ({ runPendingBuilderRecreate: mocks.pendingBuilder }))
 
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue, runExclusiveBuild, waitingBuilds } from '@/features/agentic/server/build-queue'
 
@@ -57,6 +59,27 @@ describe('pumpBuildQueue — um build por vez', () => {
 
     await pumpBuildQueue()
     expect(mocks.startBuildTurn.mock.calls.map((call) => call[0])).toEqual([first])
+  })
+
+  it('recriação pendente do builder do servidor roda antes da próxima mesa (e nunca com um build vivo)', async () => {
+    const order: string[] = []
+    mocks.pendingBuilder.mockImplementation(async () => {
+      order.push('builder')
+      return true
+    })
+    mocks.startBuildTurn.mockImplementation(async () => {
+      order.push('mesa')
+      return true
+    })
+    await queued(new Date('2026-01-01T10:00:00Z'))
+    await pumpBuildQueue()
+    expect(order).toEqual(['builder', 'mesa'])
+
+    vi.clearAllMocks()
+    await mocks.models.workbench.create({ centralId: 'c1', taskId: 'w-live', stage: 'building', runState: 'running' })
+    mocks.isActive.mockReturnValue(true)
+    await pumpBuildQueue()
+    expect(mocks.pendingBuilder).not.toHaveBeenCalled()
   })
 
   it('não inicia nada quando já há um build vivo neste processo', async () => {

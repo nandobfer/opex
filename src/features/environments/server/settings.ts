@@ -7,7 +7,7 @@ import { isTunnelOpen } from "@/features/local-docker/server/tunnel"
 import { runOnHost, type HostRunner } from "@/features/local-docker/server/shell"
 import type { DockerTarget } from "../commands"
 import { ENVIRONMENTS_AUDIT_ENTITY, ENVIRONMENTS_EVENT, ENVIRONMENTS_FEATURE } from "../constants"
-import { DEFAULT_ENVIRONMENTS_SETTINGS, environmentsSettingsSchema, type EnvironmentsSettings, type Machine } from "../schemas"
+import { DEFAULT_ENVIRONMENTS_SETTINGS, environmentsBuilderSchema, environmentsSettingsSchema, type EnvironmentsBuilder, type EnvironmentsSettings, type Machine } from "../schemas"
 import type { EnvironmentsSettingsDto } from "../types"
 import { EnvironmentsState, environmentsDb, type IEnvironmentsState } from "./models"
 
@@ -15,7 +15,7 @@ export const envLog = loggerFor({ feature: ENVIRONMENTS_FEATURE })
 /** Comandos no host do OpenCode (o debug sai na integração Builder Machine, dona da conexão com o PC). */
 export const runEnvHost: HostRunner = runOnHost
 
-export type EnvironmentChange = "created" | "updated" | "deleted" | "deploy" | "status" | "settings"
+export type EnvironmentChange = "created" | "updated" | "deleted" | "deploy" | "status" | "settings" | "builder"
 
 /**
  * `{ id, change }` no `private-app` (payload mínimo) e, para ambiente de central, nos canais dos clientes
@@ -23,7 +23,7 @@ export type EnvironmentChange = "created" | "updated" | "deleted" | "deploy" | "
  */
 export async function publishEnvironment(id: string | null, change: EnvironmentChange, options: { centralId?: string | null } = {}): Promise<void> {
     await publishAppEvent(ENVIRONMENTS_EVENT, { id, change })
-    if (!id || change === "settings") return
+    if (!id || change === "settings" || change === "builder") return
     try {
         const { publishPortalEnvironment } = await import("./portal")
         await publishPortalEnvironment(id, change, options.centralId)
@@ -56,6 +56,15 @@ export async function saveEnvironmentsSettings(input: EnvironmentsSettings, acto
     return { settings: input, isDefault: false }
 }
 
+/** Builder do buildx do servidor configurado em Ambientes (`null` = não gerenciado: o padrão do host). */
+export async function loadBuilderConfig(): Promise<EnvironmentsBuilder | null> {
+    await environmentsDb()
+    const state = await EnvironmentsState.findOne({ key: "default" }).select({ builder: 1 }).lean<Pick<IEnvironmentsState, "builder">>()
+    if (!state?.builder) return null
+    const parsed = environmentsBuilderSchema.safeParse(state.builder)
+    return parsed.success ? parsed.data : null
+}
+
 export interface MachineAccess {
     targets: Record<Machine, DockerTarget>
     pcAvailable: boolean
@@ -67,7 +76,11 @@ export async function machineAccess(run: HostRunner = runEnvHost): Promise<Machi
     const builder = await loadBuilderState()
     const { settings } = builderSettingsOf(builder)
     const base = { context: settings.contextName, builder: settings.builderName }
-    const targets: Record<Machine, DockerTarget> = { server: { machine: "server", ...base }, pc: { machine: "pc", ...base } }
+    const serverBuilder = await loadBuilderConfig().catch((error: unknown) => {
+        envLog.warn({ err: error }, "[environments] Falha ao ler o builder do servidor: o build usa o padrão do host")
+        return null
+    })
+    const targets: Record<Machine, DockerTarget> = { server: { machine: "server", ...base, serverBuilder }, pc: { machine: "pc", ...base } }
     if (!builder?.publicKey) return { targets, pcAvailable: false, pcReason: "Configure o Builder Machine (Integrações › Builder Machine) para usar o PC" }
     const problem = connectionProblem(settings)
     if (problem) return { targets, pcAvailable: false, pcReason: problem }

@@ -257,6 +257,8 @@ export function removeContainerCommand(settings: LocalDockerSettings, name: stri
 export interface BuilderLimits {
     memoryGb: number | null
     cpus: number | null
+    /** Swap além da RAM (só com `memoryGb`): `memory-swap` = RAM + swap. `null`/ausente = padrão do Docker. */
+    swapGb?: number | null
 }
 
 export const builderLimitsOf = (settings: LocalDockerSettings): BuilderLimits => ({ memoryGb: settings.builderMemoryGb, cpus: settings.builderCpus })
@@ -266,6 +268,7 @@ export const sameLimits = (a: BuilderLimits | null | undefined, b: BuilderLimits
 export function builderDriverOpts(limits: BuilderLimits): string[] {
     const opts = ["default-load=true"]
     if (limits.memoryGb) opts.push(`memory=${Math.round(limits.memoryGb * 1024)}m`)
+    if (limits.memoryGb && limits.swapGb !== null && limits.swapGb !== undefined) opts.push(`memory-swap=${Math.round((limits.memoryGb + limits.swapGb) * 1024)}m`)
     if (limits.cpus) opts.push("cpu-period=100000", `cpu-quota=${Math.round(limits.cpus * 100_000)}`)
     return opts
 }

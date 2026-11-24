@@ -1,7 +1,7 @@
 import { posix } from "node:path"
 import { cancelForwardCommand, cancelReverseForwardCommand, forwardPortCommand, muxCommand, quote, reverseForwardCommand } from "@/features/local-docker/commands"
 import { COMPOSE_LABELS, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
-import type { EnvironmentsSettings, Machine } from "./schemas"
+import type { EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 /**
  * Comandos (puros) do módulo Ambientes. Rodam no host do OpenCode; o Docker do PC é alcançado pelo
@@ -17,6 +17,8 @@ export interface DockerTarget {
     context: string
     /** Builder do buildx do PC (build no PC). */
     builder: string
+    /** Builder do buildx do servidor configurado em Ambientes (`null`/ausente = o padrão do host). */
+    serverBuilder?: EnvironmentsBuilder | null
 }
 
 /** Pasta e arquivos do compose de um ambiente. */
@@ -36,7 +38,7 @@ export const envBase = (settings: EnvironmentsSettings) => `"$HOME/${settings.ba
 
 /** `docker` apontando para a máquina certa (vale só para arquivos no servidor). */
 function dockerPrefix(target: DockerTarget, build = false): string {
-    if (target.machine === "server") return ""
+    if (target.machine === "server") return build && target.serverBuilder ? `BUILDX_BUILDER=${target.serverBuilder.name} ` : ""
     return `DOCKER_CONTEXT=${target.context} ${build ? `BUILDX_BUILDER=${target.builder} ` : ""}`
 }
 

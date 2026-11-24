@@ -102,6 +102,38 @@ export type EnvironmentsSettings = z.infer<typeof environmentsSettingsSchema>
 
 export const DEFAULT_ENVIRONMENTS_SETTINGS: EnvironmentsSettings = { baseDir: "opex-envs", registryPort: 5050, keepTags: 5 }
 
+/** Nome do builder do buildx (entra em comandos: só caracteres seguros). */
+export const builderNameSchema = z
+    .string()
+    .trim()
+    .regex(/^[a-zA-Z0-9][a-zA-Z0-9_.-]{0,62}$/, "Nome do builder: letras, números, _, . ou - (começando por letra ou número)")
+
+/**
+ * Builder do buildx do servidor (linha "Builder do servidor" em Ambientes). Limites vazios = sem limite;
+ * `swapGb` é o swap além da RAM (vazio = padrão do Docker, 0 = sem swap) e exige a RAM.
+ */
+export const environmentsBuilderSchema = z
+    .object({
+        name: builderNameSchema,
+        memoryGb: z.number("Informe um número").min(0.5, "Mínimo de 0,5 GiB").max(4096).nullable(),
+        cpus: z.number("Informe um número").min(0.1, "Mínimo de 0,1 CPU").max(512).nullable(),
+        swapGb: z.number("Informe um número").min(0, "Use 0 ou mais").max(4096).nullable(),
+        /** Builder atual do host (`--use`): as prévias das mesas também o usam. */
+        useAsDefault: z.boolean(),
+        /** `--allow-insecure-entitlement=network.host` no BuildKit. */
+        allowNetworkHost: z.boolean(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.swapGb !== null && value.memoryGb === null) ctx.addIssue({ code: "custom", path: ["swapGb"], message: "Defina a RAM para limitar o swap" })
+    })
+export type EnvironmentsBuilder = z.infer<typeof environmentsBuilderSchema>
+
+export const BUILDER_ACTIONS = ["create", "start", "stop", "recreate", "delete"] as const
+export type BuilderAction = (typeof BUILDER_ACTIONS)[number]
+/** `confirm`: Apagar (perde o cache). `force`: derrubar/apagar com um build em andamento (ele falha). */
+export const builderActionSchema = z.object({ action: z.enum(BUILDER_ACTIONS, { message: "Ação inválida" }), confirm: z.boolean().optional(), force: z.boolean().optional() })
+export type BuilderActionInput = z.infer<typeof builderActionSchema>
+
 export const adoptInputSchema = z.object({
     machine: z.enum(MACHINES),
     projectName: projectNameSchema,

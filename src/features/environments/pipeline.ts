@@ -1,3 +1,4 @@
+import { builderDeployEnsureCommand } from "./builder-commands"
 import { buildCommand, cancelPorts, cancelReverseRegistry, ensureRegistryCommand, forwardPorts, healthCommand, pullCommand, pushCommand, reverseRegistry, upCommand, type ComposePlan, type DockerTarget } from "./commands"
 import { HEALTH_TIMEOUT_MS } from "./constants"
 import type { EnvironmentsSettings, Machine } from "./schemas"
@@ -46,7 +47,7 @@ export function deploySteps(input: DeployPlanInput): DeployStep[] {
     const run = targets[runOn]
     const steps: DeployStep[] = []
     const cross = buildOn !== runOn && input.buildServices.length > 0
-    if (input.buildServices.length && !input.skipBuild) steps.push({ label: `Build no ${buildOn === "pc" ? "PC" : "servidor"}`, command: buildCommand(plan, build), timeoutMs: BUILD_TIMEOUT, lock: buildOn })
+    if (input.buildServices.length && !input.skipBuild) steps.push(buildStep(plan, buildOn, build))
     if (cross) {
         steps.push({ label: "Registry no servidor", command: ensureRegistryCommand(settings), timeoutMs: 120_000 })
         if (buildOn === "pc") {
@@ -64,6 +65,18 @@ export function deploySteps(input: DeployPlanInput): DeployStep[] {
     if (runOn === "pc" && input.ports.length) steps.push({ label: "Repasse das portas para o servidor", command: forwardPorts(input.ports), timeoutMs: 30_000 })
     if (input.healthUrl) steps.push({ label: "Saúde", command: healthCommand(input.healthUrl, HEALTH_TIMEOUT_MS), timeoutMs: HEALTH_TIMEOUT_MS + 30_000 })
     return steps
+}
+
+/**
+ * Build na máquina do build. No servidor com o builder configurado em Ambientes: cria o builder quando
+ * ele sumiu (mesmo passo, dentro da trava) e o build vai por `BUILDX_BUILDER`; o log diz qual builder.
+ */
+function buildStep(plan: ComposePlan, buildOn: Machine, target: DockerTarget): DeployStep {
+    const label = `Build no ${buildOn === "pc" ? "PC" : "servidor"}`
+    if (buildOn === "pc") return { label, command: buildCommand(plan, target), timeoutMs: BUILD_TIMEOUT, lock: buildOn }
+    const builder = target.serverBuilder
+    if (!builder) return { label, command: buildCommand(plan, target), timeoutMs: BUILD_TIMEOUT, lock: buildOn, note: "Build com o builder padrão do host." }
+    return { label, command: `${builderDeployEnsureCommand(builder)} && ${buildCommand(plan, target)}`, timeoutMs: BUILD_TIMEOUT, lock: buildOn, note: `Build com o builder do buildx "${builder.name}" (BUILDX_BUILDER).` }
 }
 
 /** Derrubar na máquina onde está (e tirar os repasses das portas do PC). */

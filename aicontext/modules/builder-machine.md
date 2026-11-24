@@ -148,6 +148,11 @@ não existe — ver `modules/opencode-resources.md`.
   5. **Docker do PC** (`docker`, última): builder dedicado (contexto, nome, memória, CPUs, teto do
      cache), rede, apelidos, **Certificados do PC** e o preparo do Docker do PC (testar, preparar,
      último preparo; bloqueado com alterações não salvas ou sem a chave).
+  Os campos numéricos (portas, memória e CPUs do builder, teto do cache) usam o `FormNumberInput`
+  compartilhado (`src/components/ui/number-field.tsx`, também usado pelo builder do servidor em
+  Ambientes); o antigo `local-docker/components/NumberField.tsx` foi removido (OPE-186).
+  O builder **do servidor** (o que os deploys dos Ambientes usam) não é configurado aqui: fica na
+  linha "Builder do servidor" de `/ambientes` (`modules/environments.md`).
   Salvar grava a configuração do PC e o Geral da integração. Obrigatórios: usuário do WSL; no modo
   túnel, como o PC acessa o servidor; no direto, o IP; com apelidos, o endereço do servidor.
 - Central › aba **Ambiente**: card **Builder Machine** (`OptionTabs` Padrão global / Sempre que aberto
