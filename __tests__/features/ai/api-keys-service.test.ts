@@ -317,6 +317,39 @@ describe('chaveiro dos provedores de IA', () => {
       expect([...doc.selectedApiKeyIds!].sort()).toEqual([a.id, c.id].sort())
     })
 
+    it('tirar de uso enquanto outra aba torna a mesma chave principal: 409 AI_API_KEY_CONFLICT, a principal fica no rodízio', async () => {
+      const { a, b } = await threeKeys()
+      await setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      await flush()
+      vi.clearAllMocks()
+      // As duas leem B como não principal; a de tornar principal grava primeiro.
+      const [primary, deselect] = await Promise.allSettled([makePrimaryAiApiKey('anthropic', b.id, actor), setAiApiKeySelected('anthropic', b.id, { selected: false }, actor)])
+      expect(primary.status).toBe('fulfilled')
+      expect(deselect).toMatchObject({ status: 'rejected', reason: { status: 409, code: 'AI_API_KEY_CONFLICT' } })
+      const doc = mocks.docs.get('ai_anthropic')!
+      expect(doc.activeApiKeyId).toBe(b.id)
+      expect([...doc.selectedApiKeyIds!].sort()).toEqual([a.id, b.id].sort())
+      // Só a operação vencedora audita e publica.
+      expect(mocks.audit).toHaveBeenCalledOnce()
+      expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ principal: 'B' }) }))
+      expect(mocks.publish).toHaveBeenCalledOnce()
+    })
+
+    it('sem principal, outra principal eleita no meio do "pôr em uso": 409 AI_API_KEY_CONFLICT e o rodízio fica intacto', async () => {
+      const { a, b, c } = await threeKeys()
+      mocks.docs.get('ai_anthropic')!.activeApiKeyId = 'key_removida_000000000'
+      vi.clearAllMocks()
+      // As duas leem "sem principal"; tornar C principal grava primeiro.
+      const [primary, select] = await Promise.allSettled([makePrimaryAiApiKey('anthropic', c.id, actor), setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)])
+      expect(primary.status).toBe('fulfilled')
+      expect(select).toMatchObject({ status: 'rejected', reason: { status: 409, code: 'AI_API_KEY_CONFLICT' } })
+      const doc = mocks.docs.get('ai_anthropic')!
+      expect(doc.activeApiKeyId).toBe(c.id)
+      expect([...doc.selectedApiKeyIds!].sort()).toEqual([a.id, c.id].sort())
+      expect(mocks.audit).toHaveBeenCalledOnce()
+      expect(mocks.publish).toHaveBeenCalledOnce()
+    })
+
     it('documento sem o campo: pôr uma chave em uso grava também a principal; tornar principal mantém a anterior em uso', async () => {
       const { a, b, c } = await threeKeys()
       delete mocks.docs.get('ai_anthropic')!.selectedApiKeyIds
