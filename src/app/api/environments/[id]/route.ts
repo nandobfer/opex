@@ -12,11 +12,14 @@ export const GET = withRoute<{ id: string }>(async ({ params }) => {
     return ok(await getEnvironment(params.id))
 })
 
-/** PUT /api/environments/[id] — edita (variável com valor vazio mantém o valor salvo). */
+/**
+ * PUT /api/environments/[id] — edita pela tela, que mostra os valores: variável com valor vazio grava
+ * vazio; `keep: true` mantém o valor salvo (o formulário não conseguiu lê-lo).
+ */
 export const PUT = withRoute<{ id: string }>(async ({ req, params }) => {
     const body = await parseBody(req, environmentInputSchema)
     if (!body.ok) return body.response
-    await updateEnvironment(params.id, body.data, getLocalUser().id)
+    await updateEnvironment(params.id, body.data, getLocalUser().id, { emptyKeepsSaved: false })
     return ok(await getEnvironment(params.id))
 })
 

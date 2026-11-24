@@ -78,7 +78,7 @@ vi.mock('@/lib/db/models/Orcamento', async () => {
 
 import { createColumn, deleteColumn, firstBoardColumnKey, getBoard, reorderColumns, updateColumn } from '@/features/tasks/server/columns'
 import { updateTaskSchema } from '@/features/tasks/schemas'
-import { addComment, createTask, deleteTask, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, setTaskClient, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
+import { addComment, assertAssignableClient, clientEstimateSnapshot, createTask, deleteTask, findTaskClientRefs, getTask, getTaskOptions, listTasks, listTasksForClient, moveTask, runBulkTasks, setTaskArchived, setTaskClient, updateTask, updateTaskEstimate } from '@/features/tasks/server/service'
 
 const reset = () => {
   for (const model of Object.values(mocks.models)) model.docs.length = 0
@@ -603,5 +603,48 @@ describe('tarefa Plugin com plugin arquivado (OPE-172)', () => {
     await expect(create(pid, { taskType: 'plugin', pluginTarget: { scope: 'owner', clientId: null, pluginId: 'velho' } })).rejects.toMatchObject({ status: 400, code: 'TASK_PLUGIN_ARCHIVED', message: 'O plugin Velho está arquivado. Desarquive-o ou escolha outro' })
     const task = await create(pid, { taskType: 'plugin', pluginTarget: { scope: 'owner', clientId: null, pluginId: 'relogio' } })
     await expect(updateTask(task.id, { pluginTarget: { scope: 'owner', clientId: null, pluginId: 'velho' } } as never, 'local')).rejects.toMatchObject({ code: 'TASK_PLUGIN_ARCHIVED' })
+  })
+})
+
+describe('regra de atribuição de cliente compartilhada (OPE-177)', () => {
+  it('assertAssignableClient devolve o cliente normalizado e recusa inexistente, inativo ou sem o repositório', async () => {
+    const pid = await seedProject()
+    const other = await seedProject({ repo: 'o/outro', sigla: 'OU' })
+    const ok = await seedClient({ name: 'Zaturno', projectIds: [pid], profitFactor: 0.5, hourlyRate: -3 })
+    const inactive = await seedClient({ active: false, projectIds: [pid] })
+
+    await expect(assertAssignableClient(ok, pid)).resolves.toMatchObject({ id: ok, name: 'Zaturno', profitFactor: 1, hourlyRate: 0 })
+    await expect(assertAssignableClient('f'.repeat(24), pid)).rejects.toMatchObject({ status: 404, code: 'CLIENT_NOT_FOUND' })
+    await expect(assertAssignableClient(inactive, pid)).rejects.toMatchObject({ status: 400, code: 'CLIENT_INACTIVE' })
+    await expect(assertAssignableClient(ok, other)).rejects.toMatchObject({ status: 400, code: 'CLIENT_NOT_FOR_PROJECT' })
+  })
+
+  it('createTask com o cliente e o retrato da estimativa grava os dois, como o card Cliente faria', async () => {
+    const pid = await seedProject()
+    const clientId = await seedClient({ projectIds: [pid], profitFactor: 3, hourlyRate: 80 })
+    const client = await assertAssignableClient(clientId, pid)
+    const { hours, clientHours, billingBrl, factor, hourlyRate, model } = clientEstimateSnapshot(client, null)
+    const estimate = { hours, clientHours, billingBrl, factor, hourlyRate, model }
+    const task = await createTask({ title: 'Com cliente', projectId: pid, columnId: 'todo', priority: 'high' } as never, { actorId: 'local', clientId, estimate })
+
+    const detail = await getTask(task.id)
+    expect(detail.clientId).toBe(clientId)
+    expect(detail.estimate).toMatchObject({ hours: 0, clientHours: 0, billingBrl: 0, factor: 3, hourlyRate: 80 })
+    expect(detail.estimateClientName).toBe('ACME')
+  })
+
+  it('findTaskClientRefs junta ids e as tarefas não arquivadas do projeto, sem repetir', async () => {
+    const pid = await seedProject()
+    const other = await seedProject({ repo: 'o/outro', sigla: 'OU' })
+    const a = await create(pid)
+    const b = await create(pid)
+    const archived = await create(pid)
+    await setTaskArchived(archived.id, true, 'local')
+    const foreign = await create(other)
+
+    const refs = await findTaskClientRefs({ ids: [a.id, foreign.id], projectId: pid })
+    expect(refs.map((ref) => ref.id).sort()).toEqual([a.id, b.id, foreign.id].sort())
+    expect(refs.find((ref) => ref.id === foreign.id)).toMatchObject({ code: foreign.code, projectId: other, clientId: null })
+    expect(await findTaskClientRefs({})).toEqual([])
   })
 })

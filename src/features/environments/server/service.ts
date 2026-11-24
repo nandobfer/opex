@@ -8,7 +8,7 @@ import { LocalDockerPreview } from "@/features/local-docker/server/models"
 import { containerVersionsCommand, envDir, gitDirsCommand, parseContainerVersions, parseGitDirs, parseSnapshot, snapshotCommand, type ComposeContainer, type ComposePlan } from "../commands"
 import { ENVIRONMENTS_AUDIT_ENTITY, REGISTRY_CONTAINER } from "../constants"
 import type { AdoptInput, EnvironmentInput, EnvironmentsSettings, Machine } from "../schemas"
-import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsListDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
+import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
 import { Environment, EnvironmentDeploy, environmentsDb, type IEnvironment, type IEnvironmentDeploy } from "./models"
 import { envLog, machineAccess, publishEnvironment, runEnvHost } from "./settings"
@@ -190,13 +190,36 @@ export async function getEnvironment(id: string, run: HostRunner = runEnvHost): 
     return item
 }
 
-/** Variáveis da edição: valor vazio mantém o salvo (o valor nunca volta para a tela). */
-export function mergeEnvVars(input: EnvironmentInput["env"], saved: IEnvironment["env"]): IEnvironment["env"] {
+/**
+ * Variáveis da edição: `keep` mantém o valor salvo; valor vazio também mantém quando `emptyKeepsSaved`
+ * (padrão, ferramentas do Agente Opex, que nunca veem os valores). A tela mostra os valores e passa
+ * `emptyKeepsSaved: false`: apagar o valor grava vazio.
+ */
+export function mergeEnvVars(input: EnvironmentInput["env"], saved: IEnvironment["env"], options: { emptyKeepsSaved?: boolean } = {}): IEnvironment["env"] {
+    const emptyKeepsSaved = options.emptyKeepsSaved ?? true
     const previous = new Map(saved.map((item) => [item.key, item.value]))
-    return input.map(({ key, value }) => {
-        if (value === "" && previous.has(key)) return { key, value: previous.get(key)! }
+    return input.map(({ key, value, keep }) => {
+        if ((keep || (emptyKeepsSaved && value === "")) && previous.has(key)) return { key, value: previous.get(key)! }
         return { key, value: encryptSecret(value) }
     })
+}
+
+/**
+ * Valores das variáveis para o formulário do dono (decifrados um a um: `null` = não foi possível ler
+ * aquele valor, as outras continuam editáveis). Nunca vai para o portal, o Agente Opex, log ou auditoria.
+ */
+export async function readEnvValues(id: string): Promise<EnvironmentEnvValuesDto> {
+    const env = await loadEnvironment(id)
+    return {
+        items: env.env.map((item) => {
+            try {
+                return { key: item.key, value: decryptSecret(item.value) }
+            } catch (error) {
+                envLog.warn({ err: error, id, key: item.key }, "[environments] Não foi possível decifrar o valor da variável")
+                return { key: item.key, value: null }
+            }
+        }),
+    }
 }
 
 async function assertUnique(input: Pick<EnvironmentInput, "slug" | "source">, ignoreId: string | null): Promise<void> {
@@ -228,12 +251,12 @@ export async function createEnvironment(input: EnvironmentInput, actorId: string
     return env
 }
 
-export async function updateEnvironment(id: string, input: EnvironmentInput, actorId: string): Promise<IEnvironment> {
+export async function updateEnvironment(id: string, input: EnvironmentInput, actorId: string, options: { emptyKeepsSaved?: boolean } = {}): Promise<IEnvironment> {
     const before = await loadEnvironment(id)
     if (before.slug !== input.slug && before.deployedOn) throw new DomainError(409, "Derrube o ambiente antes de trocar o slug", "ENVIRONMENT_DEPLOYED")
     if (before.source.projectName !== input.source.projectName && before.deployedOn) throw new DomainError(409, "Derrube o ambiente antes de trocar o projeto do compose", "ENVIRONMENT_DEPLOYED")
     await assertUnique(input, id)
-    const set = { ...input, healthUrl: input.healthUrl || null, env: mergeEnvVars(input.env, before.env), updatedAt: new Date() }
+    const set = { ...input, healthUrl: input.healthUrl || null, env: mergeEnvVars(input.env, before.env, options), updatedAt: new Date() }
     await Environment.updateOne({ _id: id }, { $set: set })
     await recordAudit({ userId: actorId, entidade: ENVIRONMENTS_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: auditView(before), depois: auditView({ ...before, ...set }) })
     await publishEnvironment(id, "updated")

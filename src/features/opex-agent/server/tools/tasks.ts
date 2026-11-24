@@ -6,14 +6,79 @@ import { TASK_AGENTIC_FLOWS, TASK_PRIORITIES, TASK_TYPES } from "@/features/task
 import { applyTaskFilters, DEFAULT_TASK_FILTERS } from "@/features/tasks/filters"
 import { createTaskSchema, moveTaskSchema, taskPluginTargetSchema, updateTaskEstimateSchema, updateTaskSchema } from "@/features/tasks/schemas"
 import { firstBoardColumnKey, getBoard } from "@/features/tasks/server/columns"
-import { addComment, deleteTask, getTask, getTaskOptions, listTasks, moveTask, setTaskArchived, updateTask, updateTaskEstimate } from "@/features/tasks/server/service"
+import {
+    addComment,
+    assertAssignableClient,
+    clientEstimateSnapshot,
+    deleteTask,
+    findActiveClient,
+    findTaskClientRefs,
+    getTask,
+    getTaskOptions,
+    listTasks,
+    moveTask,
+    setTaskArchived,
+    setTaskClient,
+    updateTask,
+    updateTaskEstimate,
+} from "@/features/tasks/server/service"
+import type { TaskDto } from "@/features/tasks/types"
+import { DomainError } from "@/lib/api/route"
 import { runAfterResponse } from "@/lib/after-response"
 import { getLocalUser } from "@/lib/local-user"
 import { chatFilesToAttachments } from "./files"
-import { clipText, collectFeatureStream, resolveTask, slimTask, taskRefSchema } from "./helpers"
+import { clipText, collectFeatureStream, isObjectId, objectIdSchema, resolveTask, slimTask, taskRefSchema } from "./helpers"
 import { contextSessionId, defineTool, OpexToolError } from "./define"
 
 const LIST_LIMIT_MAX = 200
+/** Teto de tarefas por chamada de `set_task_client` (seletor de projeto + lista, já sem repetidas). */
+export const SET_CLIENT_BATCH_MAX = 200
+
+const CLIENT_ID_DESCRIPTION = "Cliente de orçamento da tarefa (id de list_clients); precisa estar ativo e ter o projeto da tarefa em projectIds"
+
+interface BatchFailure {
+    task: string
+    code: string
+    error: string
+}
+
+function batchFailure(task: string, error: unknown): BatchFailure {
+    if (error instanceof DomainError) return { task, code: error.code ?? "ERROR", error: error.message }
+    if (error instanceof OpexToolError) return { task, code: "TASK_NOT_FOUND", error: error.message }
+    return { task, code: "ERROR", error: error instanceof Error ? error.message : String(error) }
+}
+
+/** Resolve códigos/ids/issues em ids (uma leitura da lista para os códigos); as não encontradas viram falha. */
+async function resolveTaskRefs(refs: readonly string[]): Promise<{ ids: Map<string, string>; failed: BatchFailure[] }> {
+    const ids = new Map<string, string>()
+    const failed: BatchFailure[] = []
+    let list: TaskDto[] | null = null
+    for (const raw of refs) {
+        const ref = raw.trim()
+        try {
+            if (isObjectId(ref)) {
+                ids.set(ref.toLowerCase(), ref)
+            } else if (ref.includes("#")) {
+                const { id } = await resolveTask(ref)
+                ids.set(id, ref)
+            } else {
+                list ??= (await listTasks(true)).tasks
+                const found = list.find((task) => task.code.toLowerCase() === ref.toLowerCase())
+                if (found) ids.set(found.id, ref)
+                else failed.push({ task: ref, code: "TASK_NOT_FOUND", error: `Tarefa "${ref}" não encontrada` })
+            }
+        } catch (error) {
+            failed.push(batchFailure(ref, error))
+        }
+    }
+    return { ids, failed }
+}
+
+/** Estimativa inicial da tarefa criada com cliente (o `generatedAt` é gravado pelo `createTask`). */
+function creationEstimate(client: Parameters<typeof clientEstimateSnapshot>[0]) {
+    const { hours, clientHours, billingBrl, factor, hourlyRate, model } = clientEstimateSnapshot(client, null)
+    return { hours, clientHours, billingBrl, factor, hourlyRate, model }
+}
 
 /** Título/descrição mudaram: resumo e tags de IA são regenerados em segundo plano (como a rota da tela). */
 function refreshTaskAi(id: string): void {
@@ -113,7 +178,7 @@ export const taskTools = [
         label: "Criar tarefa",
         risk: "write",
         description:
-            "Cria a tarefa diretamente no Opex, com a issue no GitHub do repositório: é o caminho para criar tarefas. Antes de chamar, confira se o pedido está minimamente aceitável (o que fazer, onde — tela, rota ou módulo — e quando estará pronto); se algo essencial faltar claramente, pergunte ao usuário uma vez. Se ele responder ou mandar seguir, crie assim mesmo: esta ferramenta nunca recusa por critério vago. Arquivos do chat em chatFileIds viram anexos da tarefa.",
+            "Cria a tarefa diretamente no Opex, com a issue no GitHub do repositório: é o caminho para criar tarefas. Aceita o cliente de orçamento (clientId de list_clients): a tarefa já nasce com o cliente e a estimativa com o fator dele. Antes de chamar, confira se o pedido está minimamente aceitável (o que fazer, onde — tela, rota ou módulo — e quando estará pronto); se algo essencial faltar claramente, pergunte ao usuário uma vez. Se ele responder ou mandar seguir, crie assim mesmo: esta ferramenta nunca recusa por critério vago. Arquivos do chat em chatFileIds viram anexos da tarefa.",
         input: z.object({
             projectId: z.string().describe("Id do projeto (de get_task_options)"),
             columnId: z.string().optional().describe("Chave da coluna (de get_task_options; padrão: a primeira coluna do quadro)"),
@@ -127,11 +192,18 @@ export const taskTools = [
                 .optional()
                 .describe('Só no tipo plugin: scope "owner" (app do dono; servidor + interface) ou "client" (portal de um cliente; só interface, com clientId) e, opcionalmente, pluginId de um plugin existente a alterar (list_plugins)'),
             chatFileIds: z.array(z.string()).max(50).optional().describe("fileIds de arquivos do chat a anexar (ex.: prints do problema)"),
+            clientId: objectIdSchema.optional().describe(CLIENT_ID_DESCRIPTION),
         }),
-        summarize: (input) => `Criar a tarefa "${input.title}" (com issue no GitHub)${input.chatFileIds?.length ? ` com ${input.chatFileIds.length} anexo(s)` : ""}`,
-        execute: async ({ chatFileIds, ...input }, context) => {
+        summarize: (input) => `Criar a tarefa "${input.title}" (com issue no GitHub)${input.clientId ? " com cliente" : ""}${input.chatFileIds?.length ? ` com ${input.chatFileIds.length} anexo(s)` : ""}`,
+        execute: async ({ chatFileIds, clientId, ...input }, context) => {
             const columnId = input.columnId ?? (await firstBoardColumnKey())
-            const task = slimTask(await createTaskWithIssue(createTaskSchema.parse({ ...input, columnId }), context.actorId))
+            const parsed = createTaskSchema.parse({ ...input, columnId })
+            // O cliente é validado ANTES da issue: cliente inválido não deixa issue órfã no GitHub.
+            const client = clientId ? await assertAssignableClient(clientId, parsed.projectId) : null
+            const created = client
+                ? await createTaskWithIssue(parsed, context.actorId, { clientId: client.id, estimate: creationEstimate(client) })
+                : await createTaskWithIssue(parsed, context.actorId)
+            const task = { ...slimTask(created), clientId: client?.id ?? null }
             if (!chatFileIds?.length) return task
             const { attached, failed } = await chatFilesToAttachments(contextSessionId(context), chatFileIds, { taskId: task.id })
             return { ...task, attachments: { attached: attached.map((item) => ({ id: item.id, name: item.name })), failed } }
@@ -142,7 +214,8 @@ export const taskTools = [
         group: "tasks",
         label: "Editar tarefa",
         risk: "write",
-        description: "Altera título, descrição, especificação técnica, tipo (com o alvo do plugin no tipo plugin), prioridade, projeto ou o fluxo da mesa (preview/auto_pr; null = padrão da central) de uma tarefa. Envie só os campos que mudam.",
+        description:
+            "Altera título, descrição, especificação técnica, tipo (com o alvo do plugin no tipo plugin), prioridade, projeto, o fluxo da mesa (preview/auto_pr; null = padrão da central) ou o cliente de orçamento (clientId de list_clients; null remove) de uma tarefa. Trocar o cliente recalcula a estimativa preservando as horas reais. Envie só os campos que mudam; para várias tarefas, use set_task_client.",
         input: z.object({
             task: taskRefSchema,
             title: z.string().optional(),
@@ -153,14 +226,68 @@ export const taskTools = [
             pluginTarget: taskPluginTargetSchema.nullable().optional().describe("Só no tipo plugin: escopo, clientId e pluginId (opcional)"),
             projectId: z.string().optional(),
             agenticFlow: z.enum(TASK_AGENTIC_FLOWS).nullable().optional(),
+            clientId: objectIdSchema.nullable().optional().describe(`${CLIENT_ID_DESCRIPTION}; null remove o cliente`),
         }),
-        summarize: (input) => `Editar a tarefa ${input.task}`,
-        execute: async ({ task, ...rest }, context) => {
+        summarize: (input) => `Editar a tarefa ${input.task}${input.clientId === null ? " (remover o cliente)" : input.clientId ? " (definir o cliente)" : ""}`,
+        execute: async ({ task, clientId, ...rest }, context) => {
             const { id } = await resolveTask(task)
-            const parsed = updateTaskSchema.parse(rest)
-            await updateTask(id, parsed, context.actorId)
-            if (parsed.title !== undefined || parsed.description !== undefined) refreshTaskAi(id)
-            return { ok: true, id }
+            const hasTaskFields = Object.values(rest).some((value) => value !== undefined)
+            const parsed = hasTaskFields || clientId === undefined ? updateTaskSchema.parse(rest) : null
+            if (clientId) {
+                // Valida contra o projeto FINAL antes de gravar qualquer campo (não deixa a tarefa pela metade).
+                const projectId = parsed?.projectId ?? (await findTaskClientRefs({ ids: [id] }))[0]?.projectId
+                if (!projectId) throw new OpexToolError(`Tarefa "${task}" não encontrada. Use list_tasks para achar o código certo.`)
+                await assertAssignableClient(clientId, projectId)
+            }
+            if (parsed) {
+                await updateTask(id, parsed, context.actorId)
+                if (parsed.title !== undefined || parsed.description !== undefined) refreshTaskAi(id)
+            }
+            if (clientId === undefined) return { ok: true, id }
+            const assigned = await setTaskClient(id, clientId, context.actorId)
+            return { ok: true, id, clientId: assigned.clientId, estimate: assigned.estimate }
+        },
+    }),
+    defineTool({
+        name: "set_task_client",
+        group: "tasks",
+        label: "Atribuir cliente",
+        risk: "write",
+        description: `Atribui (ou remove, com clientId null) o cliente de orçamento de várias tarefas de uma vez: todas as não arquivadas de um projeto (projectId) e/ou uma lista (tasks: códigos, ids ou issues), até ${SET_CLIENT_BATCH_MAX} por chamada. Usa a mesma regra do card Cliente (cliente ativo, com o projeto da tarefa em projectIds) e recalcula a estimativa preservando as horas reais. Tarefas que já estão com o cliente são puladas; uma tarefa inválida não interrompe o lote e volta em failed com o motivo.`,
+        input: z.object({
+            clientId: objectIdSchema.nullable().describe("Id do cliente (de list_clients); null remove o cliente das tarefas"),
+            projectId: objectIdSchema.optional().describe("Aplica a todas as tarefas não arquivadas deste projeto (de get_task_options)"),
+            tasks: z.array(taskRefSchema).max(SET_CLIENT_BATCH_MAX).optional().describe("Tarefas específicas (código, id ou issue vinculada)"),
+        }),
+        summarize: (input) => {
+            const target = [input.projectId ? "do projeto" : null, input.tasks?.length ? `${input.tasks.length} tarefa(s)` : null].filter(Boolean).join(" e ")
+            return input.clientId ? `Atribuir o cliente às tarefas ${target || "escolhidas"}` : `Remover o cliente das tarefas ${target || "escolhidas"}`
+        },
+        execute: async ({ clientId, projectId, tasks }, context) => {
+            if (!projectId && !tasks?.length) throw new OpexToolError("Informe projectId e/ou tasks para escolher as tarefas.")
+            // Cliente inexistente ou inativo falharia em todas: é erro do lote, antes de qualquer gravação.
+            if (clientId) await findActiveClient(clientId)
+            const resolved = await resolveTaskRefs(tasks ?? [])
+            const refs = await findTaskClientRefs({ ids: [...resolved.ids.keys()], projectId })
+            if (refs.length > SET_CLIENT_BATCH_MAX) throw new OpexToolError(`O lote tem ${refs.length} tarefas; o máximo é ${SET_CLIENT_BATCH_MAX} por chamada. Divida pela lista de tarefas.`)
+            const failed = [...resolved.failed]
+            const foundIds = new Set(refs.map((ref) => ref.id))
+            for (const [id, ref] of resolved.ids) if (!foundIds.has(id)) failed.push({ task: ref, code: "TASK_NOT_FOUND", error: `Tarefa "${ref}" não encontrada` })
+            const updated: string[] = []
+            const skipped: string[] = []
+            for (const ref of refs) {
+                if (ref.clientId === clientId) {
+                    skipped.push(ref.code)
+                    continue
+                }
+                try {
+                    await setTaskClient(ref.id, clientId, context.actorId)
+                    updated.push(ref.code)
+                } catch (error) {
+                    failed.push(batchFailure(ref.code, error))
+                }
+            }
+            return { clientId, total: refs.length, updated, skipped, failed }
         },
     }),
     defineTool({

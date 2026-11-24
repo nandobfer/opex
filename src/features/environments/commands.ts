@@ -71,6 +71,63 @@ export function imagesExistCommand(plan: Pick<ComposePlan, "filesOn">, target: D
 
 export const logsCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, "logs --tail 200 --no-color")
 
+/**
+ * `config` sem resolver os `env_file` nem interpolar: não falha quando falta um arquivo de
+ * variáveis ou uma variável obrigatória, e traz o caminho absoluto de cada `env_file` declarado.
+ */
+export const envFilesConfigCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, "config --no-env-resolution --no-interpolate --format json", { override: false })
+
+/**
+ * Arquivos de variáveis obrigatórios (`env_file` com `required` diferente de `false`) declarados
+ * pelo compose do projeto, sem repetição. Fica de fora caminho ainda com `$` (não dá para saber o
+ * nome) e o `.env.opex`, que é do app.
+ */
+export function parseEnvFiles(output: string): string[] {
+    const start = output.indexOf("{")
+    if (start < 0) return []
+    let parsed: { services?: Record<string, { env_file?: unknown }> }
+    try {
+        parsed = JSON.parse(output.slice(start)) as { services?: Record<string, { env_file?: unknown }> }
+    } catch {
+        return []
+    }
+    const files = new Set<string>()
+    for (const service of Object.values(parsed.services ?? {})) {
+        const raw = service?.env_file
+        const entries = Array.isArray(raw) ? raw : raw === undefined || raw === null ? [] : [raw]
+        for (const entry of entries) {
+            const item = typeof entry === "string" ? { path: entry, required: true } : (entry as { path?: unknown; required?: unknown } | null)
+            if (!item || typeof item.path !== "string" || item.required === false) continue
+            const path = item.path.trim()
+            if (!path || path.includes("$") || posix.basename(path) === ENV_FILE) continue
+            files.add(path)
+        }
+    }
+    return [...files]
+}
+
+const CREATED_MARK = "@@opex-env-file-created "
+
+/**
+ * Cria vazio (com a pasta) cada arquivo de variáveis que ainda não existe; nunca toca num arquivo
+ * que existe. Imprime `@@opex-env-file-created <caminho>` por arquivo criado (relativo à pasta do
+ * ambiente quando está dentro dela).
+ */
+export function ensureEnvFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, files: string[]): string {
+    if (!files.length) return "true"
+    const command = `cd ${plan.dir} && umask 077 && for f in ${files.map(quote).join(" ")}; do if [ ! -e "$f" ]; then mkdir -p "$(dirname "$f")" && : >> "$f" && printf '${CREATED_MARK}%s\\n' "\${f#"$PWD"/}"; fi; done; true`
+    return plan.filesOn === "pc" ? muxCommand(command) : command
+}
+
+export function parseCreatedEnvFiles(output: string): string[] {
+    return output
+        .split("\n")
+        .map((line) => line.replace(/\r$/, ""))
+        .filter((line) => line.startsWith(CREATED_MARK))
+        .map((line) => line.slice(CREATED_MARK.length).trim())
+        .filter(Boolean)
+}
+
 /** Grava um arquivo na pasta (em base64, sem depender de aspas; o debug mostra só o nome). */
 export function writeFileCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, file: string, content: string): string {
     const encoded = Buffer.from(content, "utf8").toString("base64")
@@ -161,8 +218,12 @@ export function removeEnvFileCommand(plan: Pick<ComposePlan, "dir" | "filesOn">)
  * Árvore de trabalho sem alterações (fora os arquivos gerados pelo app): imprime `clean` ou `dirty`.
  * Inclui os arquivos não rastreados, que também entram no contexto do build.
  */
-export function cleanTreeCommand(plan: Pick<ComposePlan, "dir" | "filesOn">): string {
-    const command = `if [ -z "$(git -C ${plan.dir} status --porcelain -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
+export function cleanTreeCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, envFiles: string[] = []): string {
+    const command = envFiles.length
+        ? // Arquivo de variáveis do compose vazio e não rastreado (o que o app cria quando falta) não suja a
+          // pasta; os de fora da pasta já não entram no `git status` dela.
+          `cd ${plan.dir} && set -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' && for f in ${envFiles.map(quote).join(" ")}; do case "$f" in "$PWD"/*) if [ -f "$f" ] && [ ! -s "$f" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then set -- "$@" ":!\${f#"$PWD"/}"; fi ;; esac; done; if [ -z "$(git status --porcelain -- "$@" 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
+        : `if [ -z "$(git -C ${plan.dir} status --porcelain -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
     return plan.filesOn === "pc" ? muxCommand(command) : command
 }
 

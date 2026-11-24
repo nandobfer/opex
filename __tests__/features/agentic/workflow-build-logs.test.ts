@@ -40,6 +40,8 @@ const mocks = vi.hoisted(() => ({
 
 const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
 // Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
+// OPE-178: o contexto da mesa (cabeçalho/MCP `opex_mesa`) é coberto em workflow-workbench-context.test.ts; aqui o prompt fica como o da etapa.
+vi.mock('@/features/agentic/server/workbench-context', () => ({ syncWorkbenchContext: vi.fn(async () => ({ header: '', fallback: null, mcp: false })) }))
 vi.mock('@/features/agent-metrics/server/record', () => ({ recordWorkbenchEvent: vi.fn(async () => undefined), recordPrReviewReplanned: vi.fn(async () => undefined), recordAgentEvent: vi.fn(), recordAgentRun: vi.fn() }))
 vi.mock('@/features/agentic/server/developer-memories', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/agentic/server/developer-memories')>()), syncDeveloperMemories: memories.sync }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
@@ -197,6 +199,8 @@ describe('workflow — build da prévia rodado pelo app', () => {
     await startBuildTurn(String(wb._id))
     await vi.waitFor(() => expect(mocks.allocatePort).toHaveBeenCalled())
     expect(mocks.allocatePort.mock.calls[0]).toEqual([String(wb._id), 'localhost', { min: 6000, max: 6010 }, undefined])
+    // O turno termina antes do próximo caso (um turno ainda rodando contaminaria o build seguinte).
+    await vi.waitFor(() => expect(mocks.settleBuild).toHaveBeenCalled())
   })
 
   it('central personalizada reserva a porta na própria faixa, ignorando o padrão global', async () => {
@@ -207,6 +211,8 @@ describe('workflow — build da prévia rodado pelo app', () => {
     await startBuildTurn(String(wb._id))
     await vi.waitFor(() => expect(mocks.allocatePort).toHaveBeenCalled())
     expect(mocks.allocatePort.mock.calls[0]?.[2]).toEqual({ min: 7000, max: 7005 })
+    // O turno termina antes do próximo caso (um turno ainda rodando contaminaria o build seguinte).
+    await vi.waitFor(() => expect(mocks.settleBuild).toHaveBeenCalled())
   })
 
   it('prévia sem resposta fecha como "unhealthy"', async () => {

@@ -258,14 +258,14 @@ export function forkInstructions(extra: string, readOnly = true): string {
 }
 
 /** Contexto de um fork aberto sem a conversa principal (mesa concluída ou sem sessão). */
-export function forkFreshContextPrompt(ctx: WorkbenchContext, info: { stage: WorkbenchStage; plan: string | null; prUrl: string | null }): string {
-    const plan = (info.plan ?? "").trim()
+export function forkFreshContextPrompt(ctx: WorkbenchContext, info: { stage: WorkbenchStage; plan: { version: number; approved: boolean; text: string } | null; prUrl: string | null }): string {
+    const plan = (info.plan?.text ?? "").trim()
     return [
         `Contexto: mesa de trabalho da tarefa ${ctx.code} (${ctx.title}) do produto ${ctx.projectName}, na etapa "${WORKBENCH_STAGE_LABELS[info.stage]}".`,
         "Esta conversa NÃO tem o histórico da conversa principal da mesa (ela foi encerrada). Use o contexto abaixo e o código do repositório.",
         `Repositório: ${ctx.sessionDirectory}${ctx.repo ? ` (${ctx.repo})` : ""}. Branch da tarefa: ${ctx.branch}.`,
         info.prUrl ? `Pull Request: ${info.prUrl}` : "",
-        plan ? `\n## Último plano da mesa\n${plan}` : "",
+        plan && info.plan ? `\n## Plano da mesa: versão ${info.plan.version} (${info.plan.approved ? "aprovada" : "mais recente"})\n${plan}` : "",
     ]
         .filter(Boolean)
         .join("\n")

@@ -159,6 +159,75 @@ async function resolveProjectClient(projectId: string): Promise<{ name: string; 
     return { name: client.name, profitFactor: Math.max(1, client.profitFactor ?? 1), hourlyRate: Math.max(0, client.hourlyRate ?? 0) }
 }
 
+/** Cliente que pode ser atribuído a uma tarefa, com fator de lucro e custo/hora já normalizados. */
+export interface AssignableClient {
+    id: string
+    name: string
+    profitFactor: number
+    hourlyRate: number
+}
+
+/**
+ * Regra única para atribuir um cliente a uma tarefa (card Cliente, `create_task`/`update_task` e o lote
+ * do Agente Opex): o cliente precisa existir, estar **ativo** e incluir o repositório da tarefa.
+ */
+export async function assertAssignableClient(clientId: string, projectId: string): Promise<AssignableClient> {
+    const client = await findActiveClient(clientId)
+    if (!client.projectIds.includes(projectId)) throw new DomainError(400, "O cliente não inclui o repositório da tarefa", "CLIENT_NOT_FOR_PROJECT")
+    return client
+}
+
+/** Cliente existente e ativo (a parte da regra de atribuição que não depende da tarefa). */
+export async function findActiveClient(clientId: string): Promise<AssignableClient & { projectIds: string[] }> {
+    await dbConnect()
+    const client = await OrcamentoClient.findById(clientId).lean()
+    if (!client) throw new DomainError(404, "Cliente não encontrado", "CLIENT_NOT_FOUND")
+    if (client.active === false) throw new DomainError(400, "O cliente está inativo", "CLIENT_INACTIVE")
+    return {
+        id: String(client._id),
+        name: client.name,
+        profitFactor: Math.max(1, client.profitFactor ?? 1),
+        hourlyRate: Math.max(0, client.hourlyRate ?? 0),
+        projectIds: client.projectIds ?? [],
+    }
+}
+
+/** Referência enxuta de tarefa com o cliente atual (lote de atribuição de cliente). */
+export interface TaskClientRef {
+    id: string
+    code: string
+    projectId: string
+    clientId: string | null
+}
+
+/** Tarefas por id e/ou todas as **não arquivadas** de um projeto, com o cliente atual de cada uma. */
+export async function findTaskClientRefs(filter: { ids?: readonly string[]; projectId?: string }): Promise<TaskClientRef[]> {
+    const or: Record<string, unknown>[] = []
+    if (filter.ids?.length) or.push({ _id: { $in: [...filter.ids] } })
+    if (filter.projectId) or.push({ projectId: filter.projectId, archived: { $ne: true } })
+    if (!or.length) return []
+    await dbConnect()
+    const docs = await DevTask.find({ $or: or }).sort({ _id: 1 }).select({ code: 1, projectId: 1, clientId: 1 }).lean()
+    return docs.map((doc) => ({ id: String(doc._id), code: doc.code, projectId: doc.projectId, clientId: doc.clientId ?? null }))
+}
+
+/**
+ * Estimativa da tarefa com o cliente atribuído: **preserva as horas** já estimadas (`0` sem estimativa) e
+ * recalcula horas do cliente e faturamento com o fator e o custo/hora dele.
+ */
+export function clientEstimateSnapshot(client: Pick<AssignableClient, "profitFactor" | "hourlyRate">, previous: Pick<ITaskEstimate, "hours" | "model" | "generatedAt"> | null): ITaskEstimate {
+    const next = computeClientEstimate(previous?.hours ?? 0, client.profitFactor, client.hourlyRate)
+    return {
+        hours: next.hours,
+        clientHours: next.clientHours,
+        billingBrl: next.billingBrl,
+        factor: client.profitFactor,
+        hourlyRate: client.hourlyRate,
+        model: previous?.model ?? null,
+        generatedAt: previous?.generatedAt ? new Date(previous.generatedAt) : new Date(),
+    }
+}
+
 /**
  * Cliente de orçamento da tarefa: o `clientId` **gravado nela** tem precedência. Sem cliente
  * explícito (`null` — tarefa do dono ou cliente removido), **não** há inflação; apenas registros
@@ -540,23 +609,8 @@ export async function setTaskClient(id: string, clientId: string | null, actorId
         return { clientId: null, estimate: estimate ? toEstimateDto(estimate) : null }
     }
 
-    const client = await OrcamentoClient.findById(clientId).lean()
-    if (!client) throw new DomainError(404, "Cliente não encontrado", "CLIENT_NOT_FOUND")
-    if (client.active === false) throw new DomainError(400, "O cliente está inativo", "CLIENT_INACTIVE")
-    if (!(client.projectIds ?? []).includes(task.projectId)) throw new DomainError(400, "O cliente não inclui o repositório da tarefa", "CLIENT_NOT_FOR_PROJECT")
-
-    const factor = Math.max(1, client.profitFactor ?? 1)
-    const hourlyRate = Math.max(0, client.hourlyRate ?? 0)
-    const next = computeClientEstimate(task.estimate?.hours ?? 0, factor, hourlyRate)
-    const estimate: ITaskEstimate = {
-        hours: next.hours,
-        clientHours: next.clientHours,
-        billingBrl: next.billingBrl,
-        factor,
-        hourlyRate,
-        model: task.estimate?.model ?? null,
-        generatedAt: task.estimate?.generatedAt ? new Date(task.estimate.generatedAt) : new Date(),
-    }
+    const client = await assertAssignableClient(clientId, task.projectId)
+    const estimate = clientEstimateSnapshot(client, task.estimate ?? null)
 
     await DevTask.updateOne({ _id: id }, { $set: { clientId, estimate } })
     // A visibilidade dos anexos acompanha o cliente da tarefa.
@@ -567,7 +621,7 @@ export async function setTaskClient(id: string, clientId: string | null, actorId
         entidadeId: id,
         acao: AcaoAuditoria.ATUALIZAR,
         antes: { codigo: task.code, cliente: beforeName },
-        depois: { codigo: task.code, cliente: client.name, fatorLucro: factor, horasEstimadas: next.hours },
+        depois: { codigo: task.code, cliente: client.name, fatorLucro: estimate.factor, horasEstimadas: estimate.hours },
     })
     await publishTasksUpdated([id])
     return { clientId, estimate: toEstimateDto(estimate) }

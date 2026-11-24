@@ -34,6 +34,11 @@ export interface EnvironmentDeploySummaryDto {
     resumed: boolean
 }
 
+/** Valores das variáveis extras para o formulário do dono (`null` = não foi possível ler aquele valor). */
+export interface EnvironmentEnvValuesDto {
+    items: { key: string; value: string | null }[]
+}
+
 export interface EnvironmentDto {
     id: string
     name: string
