@@ -55,7 +55,7 @@ describe('configuração do Agente Maddox', () => {
 
   it('salva conferindo o modelo no catálogo do OpenCode, normaliza o endereço e registra o MCP do Opex', async () => {
     await saveMaddoxSettings({ ...DEFAULT_MADDOX_AGENT_SETTINGS, enabled: true, main: { model: 'anthropic/claude', variant: '' }, mcpBaseUrl: 'http://opex.local/' }, 'local')
-    expect(mocks.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'opencode', model: 'anthropic/claude', variant: null }))
+    expect(mocks.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'opencode', model: 'anthropic/claude', variant: null }), [])
     expect(mocks.saved).toMatchObject({ mcpBaseUrl: 'http://opex.local', main: { variant: null } })
     expect(mocks.ensureMcp).toHaveBeenCalledWith(expect.anything(), '/home/dono', 'http://opex.local', { force: true })
     expect(mocks.publishToClients).toHaveBeenCalled()

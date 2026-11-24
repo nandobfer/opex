@@ -166,36 +166,59 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
             await RoutineRun.updateOne(own, { $set: { opencodeSessionId: sessionId } })
         }
         await client.session.instructions.entry.put({ sessionID: sessionId, key: INSTRUCTIONS_KEY, value: input.instructions(`${mcpName}_`) })
-        const { runAgentTurn } = await import("@/lib/ai/opencode-run")
+        const [{ runAgentTurn }, { runWithFallback, fallbackNotice }, { DEFAULT_PROVIDER_LIMIT_POLICY }] = await Promise.all([import("@/lib/ai/opencode-run"), import("@/features/agentic/server/model-fallback"), import("@/lib/ai/opencode-events")])
         let graceTimer: ReturnType<typeof setTimeout> | null = null
         const poll = setInterval(() => {
             if (activation.outcome && !graceTimer) graceTimer = setTimeout(() => activation.controller.abort("control"), STOP_GRACE_MS)
         }, 1_000)
         const remaining = remainingActiveMs({ activeMs: activation.baseActiveMs }, run.snapshot.limits)
         try {
-            const result = await runAgentTurn(
-                client,
+            const turnSession = sessionId
+            // Corrente de fallback (OPE-181): o modelo que falha no provedor (cota, limite, indisponível) dá lugar ao próximo na mesma sessão.
+            const result = await runWithFallback(
+                { agent: engine.agent, model: engine.model, variant: engine.variant, fallbacks: engine.fallbacks ?? [] },
+                input.message,
+                (turnAgent, body) =>
+                    // O agente já concluiu/hibernou/pediu confirmação: não há o que retomar com outro modelo.
+                    activation.outcome
+                        ? Promise.resolve({ outcome: "interrupted" as const, text: "", message: null, costUsd: 0, durationMs: 0 })
+                        : runAgentTurn(
+                            client,
+                            {
+                                id: `routine:${runId}`,
+                                sessionId: turnSession,
+                                stage: "Rotineiro",
+                                title: routineAgentTitle(agent.name),
+                                agent: turnAgent,
+                                text: body,
+                                timeoutMs: remaining === null ? DEFAULT_TURN_TIMEOUT_MS : Math.max(60_000, remaining + 60_000),
+                                signal,
+                                consumption: { origin: "routine-agent", subject: runId },
+                                providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
+                            },
+                            {
+                                onText: (delta) => {
+                                    text += delta
+                                },
+                                onStep: (usage) => {
+                                    const tokens = usage.tokens.input + usage.tokens.output + usage.tokens.reasoning
+                                    input.onUsage({ tokens, inputTokens: usage.tokens.input, outputTokens: usage.tokens.output, costUsd: usage.costUsd, stepId: usage.stepId ?? String(Date.now()), model: turnAgent.model ?? engine.model, provider: "opencode", recorded: true })
+                                },
+                                publish: (event) => {
+                                    if (event.type === "tool" && event.state !== "running" && !event.name.startsWith(`${mcpName}_`)) input.onStep({ kind: "tool", label: event.name, toolName: event.name, detail: (event.error ?? event.input ?? null)?.slice(0, 400) ?? null, error: event.state === "error" })
+                                },
+                            },
+                        ),
                 {
-                    id: `routine:${runId}`,
-                    sessionId,
-                    stage: "Rotineiro",
-                    title: routineAgentTitle(agent.name),
-                    agent: { agent: engine.agent, model: engine.model, variant: engine.variant },
-                    text: input.message,
-                    timeoutMs: remaining === null ? DEFAULT_TURN_TIMEOUT_MS : Math.max(60_000, remaining + 60_000),
                     signal,
-                    consumption: { origin: "routine-agent", subject: runId },
-                },
-                {
-                    onText: (delta) => {
-                        text += delta
-                    },
-                    onStep: (usage) => {
-                        const tokens = usage.tokens.input + usage.tokens.output + usage.tokens.reasoning
-                        input.onUsage({ tokens, inputTokens: usage.tokens.input, outputTokens: usage.tokens.output, costUsd: usage.costUsd, stepId: usage.stepId ?? String(Date.now()), model: engine.model, provider: "opencode", recorded: true })
-                    },
-                    publish: (event) => {
-                        if (event.type === "tool" && event.state !== "running" && !event.name.startsWith(`${mcpName}_`)) input.onStep({ kind: "tool", label: event.name, toolName: event.name, detail: (event.error ?? event.input ?? null)?.slice(0, 400) ?? null, error: event.state === "error" })
+                    resumeText: (reason, body) => `A execução anterior não terminou (${reason}). Retome de onde parou e conclua conforme a mensagem abaixo.\n\n${body}`,
+                    onSwitch: (change) => {
+                        if (activation.outcome) return
+                        // O relato vale só o da tentativa que concluir.
+                        text = ""
+                        const notice = fallbackNotice(change)
+                        routineLog.warn({ runId, from: change.from.model, to: change.to.model, index: change.index, total: change.total, reason: change.reason }, `[routine-agents] ${notice}`)
+                        input.onStep({ kind: "notice", label: "Modelo de fallback", detail: notice.slice(0, 400) })
                     },
                 },
             )

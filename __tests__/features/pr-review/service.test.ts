@@ -56,6 +56,31 @@ describe('execução da revisão de PR', () => {
     expect(mocks.audit).toHaveBeenCalled()
   })
 
+  it('OPE-181: limite do provedor no principal: o fallback conclui a revisão na mesma sessão', async () => {
+    mocks.settings.mockResolvedValue({ settings: { ...DEFAULT_PR_REVIEW_SETTINGS, enabled: true, model: 'anthropic/opus', fallbacks: [{ model: 'deepseek/flash', variant: null }] } })
+    mocks.turn
+      .mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/opus (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+      .mockResolvedValueOnce({ outcome: 'succeeded', text: 'Relatório\n```json\n{"verdict":"approved","blocking":0,"summary":"Sem bloqueios"}\n```', costUsd: 0, durationMs: 3 })
+    const id = await create()
+    await pumpPrReviews()
+    await vi.waitFor(() => expect(mocks.finish).toHaveBeenCalledWith(id, 'session-review'))
+    expect(mocks.turn).toHaveBeenCalledTimes(2)
+    expect(mocks.turn.mock.calls[0]![1]).toMatchObject({ agent: { model: 'anthropic/opus' }, providerLimit: { maxWaitMs: 60_000, maxAttempts: 3 } })
+    expect(mocks.turn.mock.calls[1]![1]).toMatchObject({ sessionId: 'session-review', agent: { model: 'deepseek/flash' }, text: expect.stringContaining('A revisão anterior não terminou') })
+    expect(await getPrReview(id)).toMatchObject({ state: 'done', verdict: 'approved' })
+  })
+
+  it('OPE-181: limite sem fallback: a revisão falha com o motivo real', async () => {
+    mocks.settings.mockResolvedValue({ settings: { ...DEFAULT_PR_REVIEW_SETTINGS, enabled: true, model: 'anthropic/opus' } })
+    mocks.turn.mockResolvedValue({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/opus (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+    const id = await create()
+    await pumpPrReviews()
+    await vi.waitFor(() => expect(mocks.finish).toHaveBeenCalledWith(id, 'session-review'))
+    const dto = await getPrReview(id)
+    expect(dto.state).toBe('failed')
+    expect(dto.error).toContain('Nenhum modelo de fallback configurado')
+  })
+
   it('duas chamadas do motor não duplicam a execução', async () => {
     await create()
     await Promise.all([pumpPrReviews(), pumpPrReviews()])

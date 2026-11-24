@@ -2,6 +2,7 @@ import { isSessionNotFoundError } from "@opencode/client"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { DEFAULT_PROVIDER_LIMIT_POLICY } from "@/lib/ai/opencode-events"
 import { runAgentTurn, type TurnEvent, type TurnResult } from "@/lib/ai/opencode-run"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
@@ -170,6 +171,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
     let assembler: GraphAssembler | null = null
     let lastDraftSave = 0
     let endState: IArchitectDiagram["state"] = "interrupted"
+    const fallbackWarnings: string[] = []
     const filter = { _id: diagramId }
     // O stream já atende desde o início (rascunho vazio): quem abre a aba agora vê o progresso.
     openLive(diagramId, emptyDraft())
@@ -342,7 +344,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
                     (agent, body) =>
                         runAgentTurn(
                             opencode,
-                            { id: `architect:${diagramId}`, sessionId: sid, stage: "architect", title, agent, text: body, timeoutMs: settings.timeoutMinutes * 60_000, signal, consumption: { origin: ARCHITECT_CONSUMPTION_ORIGIN, subject: current.workbenchId } },
+                            { id: `architect:${diagramId}`, sessionId: sid, stage: "architect", title, agent, text: body, timeoutMs: settings.timeoutMinutes * 60_000, signal, consumption: { origin: ARCHITECT_CONSUMPTION_ORIGIN, subject: current.workbenchId }, providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY },
                             {
                                 publish: onEvent,
                                 // Ninguém responde durante a geração: a política de leitura decide na hora.
@@ -358,7 +360,16 @@ export async function runDiagram(diagramId: string, controller: AbortController)
                                 },
                             },
                         ),
-                    { signal, onSwitch: (change) => log.warn({ workbenchId: current.workbenchId, diagramId }, `[architect] ${fallbackNotice(change)}`) },
+                    {
+                        signal,
+                        onSwitch: async (change) => {
+                            // A versão passa a mostrar o modelo que continua; o aviso fica nos avisos da versão (OPE-181).
+                            const notice = fallbackNotice(change)
+                            fallbackWarnings.push(notice)
+                            log.warn({ workbenchId: current.workbenchId, diagramId, from: change.from.model, to: change.to.model, index: change.index, total: change.total, reason: change.reason }, `[architect] ${notice}`)
+                            await ArchitectDiagram.updateOne(filter, { $set: { model: change.to.model } }).catch((error: unknown) => log.warn({ err: errorText(error), diagramId }, "[architect] falha ao gravar o modelo de fallback"))
+                        },
+                    },
                 )
             // A sessão guarda a conversa: a correção é só a mensagem nova.
             first = () => turn(applied ? prompt : `${instructions}\n\n---\n${prompt}`, `Agente Arquiteto · v${current.version}`)
@@ -401,7 +412,7 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             await saveDraft(true)
         }
         architectGraphSchema.parse(sanitized.graph)
-        const warnings = [...graphAssembler.warnings, ...sanitized.warnings]
+        const warnings = [...fallbackWarnings, ...graphAssembler.warnings, ...sanitized.warnings]
 
         // Resultado atrasado: um plano mais novo ficou pronto enquanto o agente trabalhava.
         const latest = await AgenticWorkbench.findById(doc.workbenchId, { plans: 1 }).lean()

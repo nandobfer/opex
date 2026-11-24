@@ -78,7 +78,7 @@ export function PrReviewTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean)
                 </CardContent>
             </Card>
 
-            <ProviderModelCard form={form} providers={providers} fixedProvider="opencode" />
+            <ProviderModelCard form={form} providers={providers} fixedProvider="opencode" fallbacksName="fallbacks" />
             <PrReviewScopeCard form={form} githubLogin={reviews.data?.githubLogin} />
             <PrReviewExecutionCard form={form} />
 

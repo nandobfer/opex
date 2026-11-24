@@ -68,7 +68,7 @@ export function normalizeArchitectSettings(input: ArchitectSettings): ArchitectS
 /** Salva conferindo no catálogo do provedor escolhido o modelo, a variante e (OpenCode) o agente. */
 export async function saveArchitectSettings(input: ArchitectSettings, actorId: string): Promise<ArchitectSettingsDto> {
     const next = normalizeArchitectSettings(input)
-    await assertCatalog({ enabled: next.enabled, provider: next.provider, model: next.agent.model, agent: next.provider === "opencode" ? next.agent.agent : null, variant: next.agent.variant, temperature: null, maxOutputTokens: null })
+    await assertCatalog({ enabled: next.enabled, provider: next.provider, model: next.agent.model, agent: next.provider === "opencode" ? next.agent.agent : null, variant: next.agent.variant, temperature: null, maxOutputTokens: null }, next.provider === "opencode" ? (next.agent.fallbacks ?? []) : [])
     const before = await loadArchitectSettings()
     await persistFeature(ARCHITECT_FEATURE, next, actorId, before)
     return getArchitectSettings()

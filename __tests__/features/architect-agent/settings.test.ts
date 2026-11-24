@@ -93,7 +93,8 @@ describe('provedor do Agente Arquiteto', () => {
     const input = { ...DEFAULT_ARCHITECT_SETTINGS, provider: 'anthropic' as const, agent: { agent: 'build', model: 'claude-sonnet', variant: 'high', fallbacks: [{ model: 'openai/gpt', variant: null }] } }
     expect(normalizeArchitectSettings(input).agent).toEqual({ agent: null, model: 'claude-sonnet', variant: 'high', fallbacks: [] })
     await saveArchitectSettings(input, 'local')
-    expect(ai.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', model: 'claude-sonnet', agent: null, variant: 'high' }))
+    // Fora do OpenCode, nenhum fallback vai ao catálogo (OPE-181).
+    expect(ai.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', model: 'claude-sonnet', agent: null, variant: 'high' }), [])
     expect((ai.saved as { provider: string }).provider).toBe('anthropic')
   })
 
@@ -101,7 +102,8 @@ describe('provedor do Agente Arquiteto', () => {
     const input = { ...DEFAULT_ARCHITECT_SETTINGS, agent: { agent: 'build', model: 'anthropic/opus', variant: null, fallbacks: [{ model: 'openai/gpt', variant: null }] } }
     expect(normalizeArchitectSettings(input).agent.fallbacks).toHaveLength(1)
     await saveArchitectSettings(input, 'local')
-    expect(ai.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'opencode', agent: 'build' }))
+    // No OpenCode, os fallbacks também são conferidos no catálogo (OPE-181).
+    expect(ai.assertCatalog).toHaveBeenCalledWith(expect.objectContaining({ provider: 'opencode', agent: 'build' }), [{ model: 'openai/gpt', variant: null }])
   })
 
   it('a disponibilidade confere o provedor escolhido', async () => {

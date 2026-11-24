@@ -64,6 +64,16 @@ ou agir num lado reflete no outro em tempo real (`refinement-updated` e `agentic
   modelo/variante/agente são conferidos no catálogo. O agente
   padrão é o **`plan`** (somente leitura e com a ferramenta de perguntas habilitada); subagentes como
   `general` e `explore` **não** conseguem perguntar pela ferramenta nativa e não devem ser usados.
+- **Modelos de fallback** (`fallbacks`, OPE-181): até 5 modelo + variante no card de provedor/modelo
+  (`FallbackModelsField`, mesma validação das mesas), conferidos no catálogo ao salvar; configurações
+  antigas carregam sem fallback. Cada turno (o primeiro e as consolidações automáticas) roda pela
+  corrente `runWithFallback` com `providerLimit`: o modelo que falha no provedor (cota/limite com
+  `retry-after` longo, indisponível) dá lugar ao próximo na mesma sessão, com o aviso "Agente Refinador: X
+  falhou (motivo): continuando com Y — fallback N de M." na saída e no log; a especificação sai só do
+  texto da tentativa que concluiu e os anexos vão só na primeira mensagem. Na mesa, o "Modelo do
+  Refinamento" trocado vira o principal e a lista continua atrás dele (o papel Refinamento herda a lista do
+  Agente Refinador). **Reconectar nunca troca de modelo.** Corrente esgotada ou sem fallback: o turno falha
+  com o motivo real do limite.
 - A aba se chama **"Agente Refinador"** (id `refinar-tarefa` na URL); o botão da página da tarefa
   continua **Refinar tarefa**.
 

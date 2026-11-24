@@ -1,6 +1,6 @@
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import type { OpencodeTokenUsage } from "@/lib/ai/opencode-events"
+import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
 import { runAgentTurn, type TurnResult } from "@/lib/ai/opencode-run"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
@@ -239,6 +239,8 @@ export async function runAdversaryRound(input: AdversaryRoundInput): Promise<Adv
                         signal: input.signal,
                         consumption: { origin: ADVERSARIAL_CONSUMPTION_ORIGIN, subject: input.workbenchId },
                         files,
+                        // Cota/limite com espera longa: desiste na hora para o fallback assumir (OPE-181).
+                        providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
                     },
                     {
                         publish,
@@ -262,7 +264,9 @@ export async function runAdversaryRound(input: AdversaryRoundInput): Promise<Adv
             {
                 signal: input.signal,
                 onSwitch: (change) => {
-                    publish({ type: "notice", level: "warn", message: `Agente adversário: ${fallbackNotice(change)}` })
+                    const notice = fallbackNotice(change)
+                    log.warn({ workbenchId: input.workbenchId, reviewId, from: change.from.model, to: change.to.model, index: change.index, total: change.total, reason: change.reason }, `[adversarial] ${notice}`)
+                    publish({ type: "notice", level: "warn", message: `Agente adversário: ${notice}` })
                 },
             },
         )

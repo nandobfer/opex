@@ -7,6 +7,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
 import { useAiModels } from "@/features/ai/hooks/useAi"
+import { FallbackModelsField } from "@/features/ai/components/model-picker/FallbackModelsField"
 import type { MaddoxAgentSettings } from "../../schemas"
 
 interface MaddoxModelCardProps {
@@ -26,7 +27,9 @@ export function MaddoxModelCard({ form, target, title, description }: MaddoxMode
     const variant = useWatch({ control: form.control, name: `${target}.variant` })
     const model = models.data?.find((item) => item.id === modelId)
     const error = form.formState.errors[target]?.model?.message
-    const set = (next: { model: string | null; variant: string | null }) => form.setValue(target, next, { shouldDirty: true, shouldValidate: true })
+    // Preserva os fallbacks do modelo principal ao trocar modelo/variante.
+    const set = (next: { model: string | null; variant: string | null }) => form.setValue(target, { ...form.getValues(target), ...next }, { shouldDirty: true, shouldValidate: true })
+    const fallbacks = useWatch({ control: form.control, name: "main.fallbacks" })
     return (
         <Card>
             <CardHeader>
@@ -46,6 +49,15 @@ export function MaddoxModelCard({ form, target, title, description }: MaddoxMode
                     />
                     {model && model.variants.length > 0 && <VariantSelectField id={`maddox-${target}-variant`} label="Variante" variants={model.variants} value={variant} onChange={(next) => set({ model: modelId, variant: next })} />}
                 </div>
+                {target === "main" && (
+                    <FallbackModelsField
+                        id="maddox-main-fallbacks"
+                        value={fallbacks ?? []}
+                        onChange={(next) => form.setValue("main.fallbacks", next, { shouldDirty: true, shouldValidate: true })}
+                        models={models}
+                        primary={{ model: modelId, variant }}
+                    />
+                )}
                 {target === "title" && modelId && (
                     <div className="flex justify-end">
                         <Button type="button" variant="ghost" size="sm" className="gap-1.5" onClick={() => set({ model: null, variant: null })}>

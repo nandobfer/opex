@@ -272,7 +272,7 @@ export interface ProviderLimitPolicy {
     maxAttempts: number
 }
 
-/** Política da mesa e do fork: desiste se a próxima tentativa for daqui a mais de 60 s ou na 3ª tentativa por limite. */
+/** Política de todo turno do OpenCode do app (padrão do `runAgentTurn`, OPE-181): desiste se a próxima tentativa for daqui a mais de 60 s ou na 3ª tentativa por limite. */
 export const DEFAULT_PROVIDER_LIMIT_POLICY: ProviderLimitPolicy = { maxWaitMs: 60_000, maxAttempts: 3 }
 
 /**

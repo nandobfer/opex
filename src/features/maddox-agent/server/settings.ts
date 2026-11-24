@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
+import { normalizeFallbacks } from "@/features/ai/model-fallbacks"
 import { DomainError } from "@/lib/api/route"
 import { normalizeColor } from "@/lib/colors"
 import { loggerFor } from "@/lib/logger"
@@ -63,7 +64,7 @@ export function normalizeMaddoxSettings(input: MaddoxAgentSettings, metas: reado
     }
     return {
         ...input,
-        main: { model: input.main.model || null, variant: input.main.model ? input.main.variant || null : null },
+        main: { model: input.main.model || null, variant: input.main.model ? input.main.variant || null : null, fallbacks: normalizeFallbacks(input.main.fallbacks) },
         title: { model: input.title.model || null, variant: input.title.model ? input.title.variant || null : null },
         mcpBaseUrl: input.mcpBaseUrl ? input.mcpBaseUrl.replace(/\/+$/, "") : null,
         disabledTools: [...new Set(input.disabledTools)].filter((name) => !known.get(name)?.alwaysOn),
@@ -72,7 +73,7 @@ export function normalizeMaddoxSettings(input: MaddoxAgentSettings, metas: reado
 
 /** Confere no catálogo do OpenCode o modelo e a variante (do agente e do subagente de título). */
 async function assertMaddoxCatalog(settings: MaddoxAgentSettings): Promise<void> {
-    await assertCatalog({ enabled: settings.enabled, provider: "opencode", model: settings.main.model, variant: settings.main.variant, agent: null, temperature: null, maxOutputTokens: null })
+    await assertCatalog({ enabled: settings.enabled, provider: "opencode", model: settings.main.model, variant: settings.main.variant, agent: null, temperature: null, maxOutputTokens: null }, settings.main.fallbacks ?? [])
     if (settings.title.model) {
         await assertCatalog({ enabled: settings.enabled, provider: "opencode", model: settings.title.model, variant: settings.title.variant, agent: null, temperature: null, maxOutputTokens: null })
     }

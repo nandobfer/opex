@@ -65,6 +65,17 @@ describe('configuração do "Agente Revisor"', () => {
         expect(mocks.publish).toHaveBeenCalledWith("ai-feature-updated", { feature: "pr-review" })
     })
 
+    it("OPE-181: modelo de fallback fora do catálogo é recusado com a posição; válido é gravado", async () => {
+        await expect(savePrReviewSettings(settings({ fallbacks: [{ model: "sumiu/modelo", variant: null }] }), "local")).rejects.toMatchObject({ code: "AI_MODEL_NOT_FOUND", message: expect.stringContaining("Fallback 1") })
+        expect(mocks.updateOne).not.toHaveBeenCalled()
+        mocks.models.mockResolvedValue([
+            { id: "anthropic/claude", name: "Claude", variants: ["high"], group: "anthropic", contextWindow: null, free: false },
+            { id: "deepseek/flash", name: "Flash", variants: [], group: "deepseek", contextWindow: null, free: false },
+        ])
+        await savePrReviewSettings(settings({ fallbacks: [{ model: "deepseek/flash", variant: "" }] }), "local")
+        expect(mocks.updateOne).toHaveBeenCalledWith({ feature: "pr-review" }, expect.objectContaining({ $set: expect.objectContaining({ settings: expect.objectContaining({ fallbacks: [{ model: "deepseek/flash", variant: null }] }) }) }), { upsert: true })
+    })
+
     it("agente inexistente é recusado sem gravar", async () => {
         await expect(savePrReviewSettings(settings({ agent: "plan" }), "local")).rejects.toMatchObject({ code: "AI_AGENT_NOT_FOUND" })
         expect(mocks.updateOne).not.toHaveBeenCalled()

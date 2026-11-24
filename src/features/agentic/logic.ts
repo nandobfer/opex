@@ -107,14 +107,14 @@ export function draftWorkbenchModels(settings: AgenticSettings, config: Pick<Cen
 }
 
 /** Modelo do Agente Refinador (aba própria em Integrações › IA): base do papel "Refinamento" da mesa. */
-export type RefinerAgent = Pick<AgentConfig, "agent" | "model" | "variant">
+export type RefinerAgent = Pick<AgentConfig, "agent" | "model" | "variant" | "fallbacks">
 
 /**
  * Agente base de um papel da mesa: os papéis do Agente Desenvolvedor seguem central/global; o
  * "Refinamento" (OPE-137) usa o Agente Refinador (`null` = ainda não carregado: modelo padrão do agente).
  */
 export function roleBaseAgent(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, role: WorkbenchModelRole, refiner: RefinerAgent | null): AgentConfig {
-    if (role === "refinement") return { agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.model ? (refiner.variant ?? null) : null, fallbacks: [] }
+    if (role === "refinement") return { agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.model ? (refiner.variant ?? null) : null, fallbacks: refiner?.fallbacks ?? [] }
     return resolveAgent(settings, config, role)
 }
 

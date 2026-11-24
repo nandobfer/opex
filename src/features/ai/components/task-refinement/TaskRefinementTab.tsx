@@ -79,7 +79,7 @@ export function TaskRefinementTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
                 </CardContent>
             </Card>
 
-            <ProviderModelCard form={form} providers={providers} fixedProvider="opencode" />
+            <ProviderModelCard form={form} providers={providers} fixedProvider="opencode" fallbacksName="fallbacks" />
 
             <Card>
                 <CardHeader>

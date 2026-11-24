@@ -1208,6 +1208,14 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   `ModelSearchPicker`); o agente continua o do papel. **Adicionar fallback**, remover e **ordem por
   arrastar** (dnd-kit) — a ordem é a ordem de tentativa. Item repetido ou igual ao modelo principal é
   apontado no campo e recusado pelo schema (`agentConfigSchema.fallbacks`, `superRefine`).
+- **Peças compartilhadas (OPE-181)**: a lista, o limite e a validação ficam no módulo puro
+  `src/features/ai/model-fallbacks.ts` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
+  `addFallbackIssues`, `normalizeFallbacks`; `agentic/schemas.ts` reexporta `MAX_MODEL_FALLBACKS`,
+  `modelChoiceSchema` e `ModelChoice`) e o campo em `src/features/ai/components/model-picker/FallbackModelsField.tsx`.
+  As mesmas peças servem ao Agente Adversário, ao Arquiteto (OpenCode), ao Revisor de PR, ao Refinador,
+  aos agentes rotineiros (motor OpenCode) e ao Maddox; o `ProviderModelCard` mostra a lista com a prop
+  `fallbacksName` (só com o OpenCode). Ao salvar, o `assertCatalog` também confere cada fallback no
+  catálogo do OpenCode ("Fallback 1: modelo … não está disponível no OpenCode").
 - **Na central** (aba Agentes, etapa personalizada): `OptionTabs` **Usar os do padrão** (padrão; resumo
   "Fallback do padrão: A → B"), **Personalizar** (a lista da central **substitui** a padrão, não soma;
   começa com a cópia da padrão) e **Sem fallback**. Etapa que herda o padrão inteiro herda também os
@@ -1219,9 +1227,11 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   ou recusa a mensagem (`TurnResult.failure = "model"`, `lib/ai/opencode-run.ts`).
 - **Cota/limite de uso do provedor** (OPE-127): a cota esgotada da Anthropic chega como HTTP 429
   `provider.rate-limit`, que o OpenCode **não** encerra — agenda novas tentativas
-  (`session.retry.scheduled`) respeitando o `retry-after`, às vezes de horas. Na mesa e no fork o turno
-  leva a política `DEFAULT_PROVIDER_LIMIT_POLICY` (`TurnRequest.providerLimit`, `lib/ai/opencode-events.ts`)
-  e **desiste** das novas tentativas quando o erro é de limite/cota (`isProviderLimitError`: tipos
+  (`session.retry.scheduled`) respeitando o `retry-after`, às vezes de horas. **Todo turno do OpenCode
+  do app** leva a política `DEFAULT_PROVIDER_LIMIT_POLICY` (`TurnRequest.providerLimit`,
+  `lib/ai/opencode-events.ts`): desde a OPE-181 ela é o padrão do próprio `runAgentTurn` quando o pedido
+  não traz outra, e os pontos com corrente de fallback (mesa, fork, Adversário, Arquiteto, Revisor de PR,
+  Refinador, rotineiros e Maddox) também a passam explícita. O turno **desiste** das novas tentativas quando o erro é de limite/cota (`isProviderLimitError`: tipos
   `provider.rate-limit`/`quota`/`free-limit`/`budget-limit`/`model-budget-limit`, status 429 ou mensagem de
   limite/cota) **e** a próxima tentativa fica para daqui a **mais de 60 s** ou já é a **3ª** por limite
   (`shouldAbandonRetry`). A cota que **encerra** a execução (`session.execution.failed` com erro de
@@ -1233,8 +1243,8 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   03/11, 18:40" (horário de Brasília): o fallback assume com o aviso de sempre na saída (gravado no
   histórico da mesa). **Sem fallback** (ou com a corrente esgotada), a mesa/o fork falha na hora com o
   motivo + "Nenhum modelo de fallback configurado para esta etapa." (ou "Todos os modelos de fallback
-  também falharam."), em vez de ficar parada até o tempo limite de 3 h. Os demais agentes (Refinar
-  tarefa, revisão de PR, Adversário, Arquiteto, Maddox) não levam a política e seguem como antes.
+  também falharam."), em vez de ficar parada até o tempo limite de 3 h. O mesmo vale para cada agente
+  com corrente própria: a falha mostra o motivo real do limite, nunca "Interrompido" pelo tempo limite.
   Reconexão (`attach`) não desiste. O **Parar** do usuário durante a janela da desistência (até os 15 s
   de espera do fim da execução) manda mais que o limite: o turno termina **interrompido** e não troca
   de modelo. **Não** troca ao
@@ -1251,7 +1261,13 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
 - **Com a troca de modelo na mesa/fork**: o modelo trocado vira o principal e a lista do papel continua
   valendo atrás dele (pulando o que for igual). No fork vale para as mensagens e para a consolidação
   do resumo (lista do papel Fork da conversa; agente do Mode).
-- Fora do alcance: Refinar tarefa e a revisão automática do PR (configurações próprias).
+- **Regra geral (OPE-181)**: todo turno do OpenCode do app passa `providerLimit` (padrão da lib) e roda
+  pela corrente `runWithFallback`, com o aviso da troca no canal da feature (barramento da mesa, da
+  revisão ou do refinamento; avisos da versão do Arquiteto; passo da execução do rotineiro; linha no chat
+  do Maddox) e no log (`from`, `to`, posição N de M, motivo). Cada feature guarda a própria lista (ver o
+  módulo dela). Fora da corrente, com o motivo: as features one-shot pelo `streamAi` (ver
+  `modules/ai.md`), o Arquiteto com provedor direto, o subagente de título do Maddox e o provisionamento
+  dos rotineiros.
 
 ## Trocar o modelo na mesa e no fork
 
@@ -1563,7 +1579,10 @@ releitura das pendências no buraco do SSE —, o ciclo automático de reconexã
 `auto-reconnect`), acompanhamento do PR (inclusive o relato ao vivo: `pr-watch`, `pr-watch-report`,
 `pr-watch-schedule`, `timeline-pr-watch`, `PrWatchItem`, `hub`; e `__tests__/features/pr-review/gate.test.ts`), rota de ações, barra de ações, troca de modelo na mesa e no fork (`model-override`, `workflow-model`,
 `forks-model`, `model-routes`, `ModelOverridePicker`, `ModelSettingsPopover`), modelos de fallback
-(`model-fallback`, `logic` › modelos de fallback, `workflow-model`, `forks`, `fallback-models-field`, `opencode-run-provider-limit`, `opencode-events` › limite do provedor), exclusão de sessão (`session-cleanup`),
+(`model-fallback`, `logic` › modelos de fallback, `workflow-model`, `forks`, `fallback-models-field`, `opencode-run-provider-limit`, `opencode-events` › limite do provedor; OPE-181:
+`ai/model-fallbacks-schema`, `ai/provider-model-card-fallbacks` e os casos "OPE-181" de `adversarial-agent/review`,
+`architect-agent/generate`, `pr-review/service`, `pr-review/settings`, `refinement/refinement-service`,
+`routine-agents/opencode-engine` e `maddox-agent/runner`), exclusão de sessão (`session-cleanup`),
 conclusão da mesa com exclusão da sessão (`workflow-session-cleanup`), conflito de merge do PR
 (`workflow-pr-conflicts`), CI falho do PR (`ci`, `workflow-pr-ci`, prioridades e limite em
 `pr-watch`, `ciFixPrompt` em `prompts`, padrão global/central em `logic`, `git-section` e

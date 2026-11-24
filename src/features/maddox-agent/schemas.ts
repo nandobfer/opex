@@ -2,6 +2,7 @@ import { z } from "zod"
 import { colorValueSchema } from "@/lib/colors"
 import { DEFAULT_OPEX_TITLE_INSTRUCTIONS, OPEX_FILE_SIZE_MB_DEFAULT, OPEX_FILES_PER_MESSAGE_DEFAULT, OPEX_MESSAGE_MAX, OPEX_TITLE_MAX } from "@/features/opex-agent/constants"
 import { opexFilesSettingsSchema } from "@/features/opex-agent/schemas"
+import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
 import { DEFAULT_MADDOX_INSTRUCTIONS } from "./constants"
 
 /** Modelo do catálogo do OpenCode (`provedor/modelo`) e variante; sem escolha de provedor. */
@@ -11,13 +12,16 @@ export const maddoxModelSchema = z.object({
 })
 export type MaddoxModel = z.infer<typeof maddoxModelSchema>
 
+/** Modelo padrão do agente com os modelos de fallback (OPE-181; ausente em configurações antigas = sem fallback). */
+export const maddoxMainModelSchema = maddoxModelSchema.extend({ fallbacks: fallbackListSchema.optional() })
+
 /** Configuração do Agente Maddox — mesmo schema na tela e na API. */
 export const maddoxAgentSettingsSchema = z
     .object({
         enabled: z.boolean(),
         /** Cor do agente (hex `#RRGGBB`; nomes antigos da paleta viram hex; `null` = primária do tema): ícone, ponto de atividade e popover. */
         color: colorValueSchema.nullable(),
-        main: maddoxModelSchema,
+        main: maddoxMainModelSchema,
         /** Subagente de título e resumo (sem modelo = usa o do agente principal). */
         title: maddoxModelSchema,
         instructions: z.string().trim().min(1, "Informe as instruções").max(12_000, "Até 12.000 caracteres"),
@@ -34,6 +38,7 @@ export const maddoxAgentSettingsSchema = z
         mcpBaseUrl: z.string().trim().url("Endereço inválido").max(500).nullable(),
     })
     .superRefine((value, ctx) => {
+        addFallbackIssues(ctx, value.main.fallbacks, value.main, ["main", "fallbacks"])
         if (value.enabled && !value.main.model) ctx.addIssue({ code: "custom", path: ["main", "model"], message: "Selecione o modelo" })
     })
 export type MaddoxAgentSettings = z.infer<typeof maddoxAgentSettingsSchema>
@@ -41,7 +46,7 @@ export type MaddoxAgentSettings = z.infer<typeof maddoxAgentSettingsSchema>
 export const DEFAULT_MADDOX_AGENT_SETTINGS: MaddoxAgentSettings = {
     enabled: false,
     color: null,
-    main: { model: null, variant: null },
+    main: { model: null, variant: null, fallbacks: [] },
     title: { model: null, variant: null },
     instructions: DEFAULT_MADDOX_INSTRUCTIONS,
     titleInstructions: DEFAULT_OPEX_TITLE_INSTRUCTIONS,

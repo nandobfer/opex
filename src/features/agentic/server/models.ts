@@ -41,7 +41,7 @@ export function workbenchModelChoice(settings: AgenticSettings, config: Pick<Cen
 export async function refinerAgent(): Promise<RefinerAgent | null> {
     try {
         const { settings } = await loadTaskRefinementSettings()
-        return { agent: settings.agent ?? null, model: settings.model ?? null, variant: settings.variant ?? null }
+        return { agent: settings.agent ?? null, model: settings.model ?? null, variant: settings.variant ?? null, fallbacks: settings.fallbacks ?? [] }
     } catch {
         return null
     }
@@ -50,7 +50,7 @@ export async function refinerAgent(): Promise<RefinerAgent | null> {
 /** Agente do turno do refinamento na mesa: o do Agente Refinador com a troca "Refinamento" da mesa. */
 export async function refinementTurnAgent(doc: Pick<IAgenticWorkbench, "modelOverrides">): Promise<AgentConfig> {
     const refiner = await refinerAgent()
-    return applyModelOverride({ agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.variant ?? null, fallbacks: [] }, workbenchOverrides(doc).refinement ?? null)
+    return applyModelOverride({ agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.variant ?? null, fallbacks: refiner?.fallbacks ?? [] }, workbenchOverrides(doc).refinement ?? null)
 }
 
 /**

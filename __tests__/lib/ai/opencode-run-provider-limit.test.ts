@@ -3,8 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 /**
  * Cota/limite do provedor no turno do OpenCode (OPE-127): a cota esgotada da Anthropic chega como 429
  * `provider.rate-limit`, que o OpenCode repete respeitando o `retry-after` (às vezes horas). Com a
- * política (`providerLimit`, mesa e fork), o turno desiste das novas tentativas, interrompe a execução
- * e termina como falha do modelo (`limited`) — elegível ao fallback. Sem a política, nada muda.
+ * política (`providerLimit`; padrão de todo turno desde a OPE-181), o turno desiste das novas tentativas,
+ * interrompe a execução e termina como falha do modelo (`limited`) — elegível ao fallback.
  */
 
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
@@ -48,7 +48,7 @@ function scriptedClient(script: () => unknown[]) {
         })(),
     },
   } as unknown as OpencodeClient
-  return { client, interrupt }
+  return { client, interrupt, push }
 }
 
 const base = { id: 'w1', sessionId: 's1', stage: 'Planejando', title: 'Planejando', agent: { agent: 'plan', model: 'anthropic/claude-opus', variant: null }, text: 'Planeje', timeoutMs: 60_000, signal: new AbortController().signal }
@@ -91,11 +91,24 @@ describe('limite do provedor no turno do OpenCode', () => {
     expect(result.outcome).toBe('succeeded')
   })
 
-  it('sem a política (outros agentes): o mesmo limite não interrompe', async () => {
+  it('OPE-181: sem `providerLimit` explícito o turno aplica a política padrão e desiste da cota esgotada', async () => {
     const { client, interrupt } = scriptedClient(() => [ev('session.retry.scheduled', { attempt: 1, at: Date.now() + 3 * HOURS, error: LIMIT_ERROR }), ev('session.execution.succeeded')])
     const result = await runAgentTurn(client, base)
+    expect(interrupt).toHaveBeenCalledTimes(1)
+    expect(result).toMatchObject({ outcome: 'failed', failure: 'model', limited: true })
+  })
+
+  it('OPE-181: reconexão (attach) não desiste mesmo com a política padrão', async () => {
+    const { client, interrupt, push } = scriptedClient(() => [])
+    ;(client.session as unknown as { active: () => Promise<unknown> }).active = async () => ({ s1: true })
+    ;(client.session.get as ReturnType<typeof vi.fn>).mockResolvedValue({ id: 's1', time: {} })
+    const pending = runAgentTurn(client, { ...base, attach: true, startedAt: Date.now() - 1000 })
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    push(ev('session.retry.scheduled', { attempt: 1, at: Date.now() + 3 * HOURS, error: LIMIT_ERROR }), ev('session.execution.succeeded'))
+    const result = await pending
     expect(interrupt).not.toHaveBeenCalled()
     expect(result.outcome).toBe('succeeded')
+    expect(result.limited).toBeUndefined()
   })
 
   it('mesa de trabalho: o turno da etapa já leva a política e desiste da cota esgotada', async () => {

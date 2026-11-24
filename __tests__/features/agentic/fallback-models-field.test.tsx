@@ -21,7 +21,7 @@ vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
 }))
 
 import { AgentConfigFields } from '@/features/agentic/components/settings/AgentConfigFields'
-import { FallbackModelsField, describeFallbacks, fallbackIssue } from '@/features/agentic/components/settings/FallbackModelsField'
+import { FallbackModelsField, describeFallbacks, fallbackIssue } from '@/features/ai/components/model-picker/FallbackModelsField'
 import type { AgentConfig } from '@/features/agentic/schemas'
 
 const models = { data: [{ id: 'openai/gpt-5', name: 'GPT-5', variants: ['high'], group: 'OpenAI' }, { id: 'deepseek/v3', name: 'DeepSeek V3', variants: [], group: 'DeepSeek' }] as never, isLoading: false, isError: false, error: null }

@@ -92,9 +92,16 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
    portal com cliente, usuário e papel, mais as memórias.
 5. Arquivos da mensagem vão como `data:` URI até 20 MB; acima disso (ou com falha no storage) vai só a
    referência com o `fileId`.
-6. Eventos do OpenCode → linhas NDJSON do mesmo barramento do Agente Opex (`text-delta`,
+6. **Fallback (OPE-181):** o turno roda pela corrente `runWithFallback` com `providerLimit`: o modelo do
+   turno (o da sessão ou o padrão) e, atrás dele, os **modelos de fallback** do modelo padrão
+   (`main.fallbacks`). Se o modelo falhar no provedor (cota/limite com `retry-after` longo, indisponível), a
+   resposta continua na mesma sessão com o próximo ("A resposta anterior não terminou (motivo). Retome…";
+   os arquivos vão só na primeira mensagem), com a linha "> X falhou (motivo): continuando com Y — fallback
+   N de M." no chat e o log; a resposta grava o modelo que concluiu. Sem fallback (ou corrente esgotada), a
+   resposta termina com erro e o motivo real do limite. O subagente de título não tem corrente.
+7. Eventos do OpenCode → linhas NDJSON do mesmo barramento do Agente Opex (`text-delta`,
    `reasoning-delta`, `tool-*`, `tool-confirmation`, `form`, `form-status`, `turn-end`).
-7. Fim: grava a resposta (partes, modelo, tokens somados dos passos), situação da sessão, título e
+8. Fim: grava a resposta (partes, modelo, tokens somados dos passos), situação da sessão, título e
    resumo (subagente pelo OpenCode, `refreshSessionTitleWith`; decide pelo conteúdo do turno, inclusive
    em turnos iniciados por aviso/retomada) e a fila de follow-ups.
 - Tempo limite do turno: 24 h (um pedido de permissão pode esperar). Parar interrompe a sessão do
@@ -154,7 +161,8 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
 `GET /api/ai/features/maddox-agent/mcp` (`?reconnect=1`). Seções (`AgentSettingsTabs`):
 
 - **Geral**: ativo e cor; modelo e variante padrão (só do catálogo do OpenCode; inválido ao salvar é
-  recusado com mensagem); subagente de título e resumo (também pelo OpenCode; vazio = o do agente);
+  recusado com mensagem), com a lista **Modelos de fallback** (`main.fallbacks`, OPE-181; até 5, mesma
+  validação das mesas, conferidos no catálogo; trocar o modelo padrão preserva a lista); subagente de título e resumo (também pelo OpenCode; vazio = o do agente);
   instruções e as do título, com **Restaurar padrão**; card **Arquivos no chat**; card das
   **Ferramentas do Opex no OpenCode** (endereço e situação dos MCPs).
 - **Ferramentas**: árvore das ferramentas do Opex (catálogo do dono **sem jobs** e sem `issue_engramind_token` — `MADDOX_EXCLUDED_TOOLS`, que depende do "Ver token" do card do Agente Opex), com seleção e

@@ -9,8 +9,8 @@ import { Button } from "@/components/ui/button"
 import { FieldTrigger } from "@/components/ui/field-trigger"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import type { AiModelDto } from "@/lib/ai/providers"
-import { MAX_MODEL_FALLBACKS, type ModelChoice } from "../../schemas"
-import { ModelSearchPicker } from "@/features/ai/components/model-picker/ModelSearchPicker"
+import { MAX_MODEL_FALLBACKS, fallbackConflict, type ModelChoice } from "../../model-fallbacks"
+import { ModelSearchPicker } from "./ModelSearchPicker"
 
 const DEFAULT_OPTION = "__default__"
 
@@ -23,14 +23,10 @@ interface FallbackModelsFieldProps {
     primary: { model: string | null; variant: string | null }
 }
 
-const same = (a: { model: string | null; variant: string | null }, b: { model: string | null; variant: string | null }) => a.model === b.model && (a.variant ?? null) === (b.variant ?? null)
-
 /** Problema de um item da lista (mesma regra do schema): igual ao principal ou repetido. */
 export function fallbackIssue(list: ModelChoice[], index: number, primary: { model: string | null; variant: string | null }): string | null {
-    const item = list[index]
-    if (primary.model && same(item, primary)) return "Igual ao modelo principal"
-    if (list.slice(0, index).some((other) => same(other, item))) return "Modelo repetido"
-    return null
+    const conflict = fallbackConflict(list, index, primary)
+    return conflict === "primary" ? "Igual ao modelo principal" : conflict === "duplicate" ? "Modelo repetido" : null
 }
 
 /** Texto curto da lista ("GPT-5 (high) → DeepSeek V3"), para o resumo herdado. */
@@ -40,8 +36,9 @@ export function describeFallbacks(list: ModelChoice[] | null | undefined, models
 }
 
 /**
- * Lista ordenada de modelos de fallback de um papel (até 5): tentados em ordem quando o modelo
- * principal (ou o anterior da lista) falha no provedor. Ordem por arrastar (dnd-kit).
+ * Lista ordenada de modelos de fallback do OpenCode (até 5): tentados em ordem quando o modelo
+ * principal (ou o anterior da lista) falha no provedor. Ordem por arrastar (dnd-kit). Compartilhada
+ * pelas mesas, agentes (Adversário, Arquiteto, Revisor, Refinador, Maddox) e rotineiros (OPE-181).
  */
 export function FallbackModelsField({ id, value, onChange, models, primary }: FallbackModelsFieldProps) {
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }), useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }))

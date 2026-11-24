@@ -9,7 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { apiErrorMessage } from "@/lib/api"
 import type { AiAgentDto, AiModelDto } from "@/lib/ai/providers"
 import type { AgentConfig } from "../../schemas"
-import { FallbackModelsField, describeFallbacks } from "./FallbackModelsField"
+import { FallbackModelsField, describeFallbacks } from "@/features/ai/components/model-picker/FallbackModelsField"
 import { ModelVariantFields } from "@/features/ai/components/model-picker/ModelVariantFields"
 
 const DEFAULT_OPTION = "__default__"

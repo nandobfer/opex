@@ -50,7 +50,7 @@ export function RoutineEngineFields({ form, editing }: { form: UseFormReturn<Rou
                 <p className="text-xs text-muted-foreground">O OpenCode não aparece: ele não aceita as ferramentas do app. Para usar o OpenCode, escolha o motor OpenCode no host.</p>
                 </div>
             ) : (
-                <ProviderModelCard form={form} providers={providers} names={OPENCODE_NAMES} fixedProvider="opencode" idPrefix="routine-opencode" />
+                <ProviderModelCard form={form} providers={providers} names={OPENCODE_NAMES} fixedProvider="opencode" idPrefix="routine-opencode" fallbacksName="opencode.fallbacks" />
             )}
         </div>
     )

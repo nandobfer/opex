@@ -10,6 +10,8 @@ import { getAiProvider, type AiProviderId, type AiProviderStatusDto } from "@/li
 import { useAiAgents, useAiModels } from "../../hooks/useAi"
 import { AiProviderTabs } from "../AiProviderTabs"
 import { ModelPickerField, VariantSelectField } from "../ModelFields"
+import { FallbackModelsField } from "../model-picker/FallbackModelsField"
+import type { ModelChoice } from "../../model-fallbacks"
 
 const DEFAULT_OPTION = "__default__"
 
@@ -34,6 +36,8 @@ interface ProviderModelCardProps<T extends FieldValues> {
     hideAgent?: boolean
     /** Prefixo dos ids dos campos (vários cards na mesma tela). */
     idPrefix?: string
+    /** Caminho da lista de modelos de fallback no formulário (só com o OpenCode; OPE-181). */
+    fallbacksName?: string
 }
 
 export interface ProviderModelNames {
@@ -52,12 +56,13 @@ function errorAt(errors: Record<string, unknown>, path: string): string | undefi
 }
 
 /** Provedor (só os conectados), modelo, agente (OpenCode) e variante/raciocínio. */
-export function ProviderModelCard<T extends FieldValues>({ form, providers, onProviderChange, fixedProvider, names = DEFAULT_NAMES, hideAgent = false, idPrefix = "ai" }: ProviderModelCardProps<T>) {
+export function ProviderModelCard<T extends FieldValues>({ form, providers, onProviderChange, fixedProvider, names = DEFAULT_NAMES, hideAgent = false, idPrefix = "ai", fallbacksName }: ProviderModelCardProps<T>) {
     const cardForm = form as unknown as UseFormReturn<Record<string, unknown>>
     const errors = cardForm.formState.errors as Record<string, unknown>
     const watchedProvider = useWatch({ control: cardForm.control, name: names.provider }) as AiProviderId | null | undefined
     const provider = fixedProvider ?? watchedProvider ?? null
     const modelId = useWatch({ control: cardForm.control, name: names.model }) as string | null
+    const variantId = useWatch({ control: cardForm.control, name: names.variant }) as string | null
     const def = provider ? getAiProvider(provider) : null
     const models = useAiModels(provider)
     const agents = useAiAgents(def?.supportsAgent === true && !hideAgent)
@@ -130,6 +135,22 @@ export function ProviderModelCard<T extends FieldValues>({ form, providers, onPr
                         </Field>
                     )}
                 </div>
+
+                {fallbacksName && provider === "opencode" && (
+                    <Controller
+                        control={cardForm.control}
+                        name={fallbacksName}
+                        render={({ field }) => (
+                            <FallbackModelsField
+                                id={`${idPrefix}-fallbacks`}
+                                value={(field.value as ModelChoice[] | undefined) ?? []}
+                                onChange={(next) => cardForm.setValue(fallbacksName, next, { shouldDirty: true, shouldValidate: true })}
+                                models={models}
+                                primary={{ model: modelId || null, variant: variantId ?? null }}
+                            />
+                        )}
+                    />
+                )}
             </CardContent>
         </Card>
     )

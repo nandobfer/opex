@@ -3,17 +3,9 @@ import { colorValueSchema } from "@/lib/colors"
 import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "./constants"
 import { AGENTIC_FILES_PER_MESSAGE } from "./files"
 
-/** Máximo de modelos de fallback por papel. */
-export const MAX_MODEL_FALLBACKS = 5
+import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
 
-/** Um modelo (`provedor/modelo`) e a variante — item da lista de fallback. */
-export const modelChoiceSchema = z.object({
-    model: z.string().trim().min(1, "Escolha o modelo").max(200),
-    variant: z.string().trim().max(50).nullable(),
-})
-export type ModelChoice = z.infer<typeof modelChoiceSchema>
-
-const sameChoice = (a: { model: string | null; variant: string | null }, b: { model: string | null; variant: string | null }) => a.model === b.model && (a.variant ?? null) === (b.variant ?? null)
+export { MAX_MODEL_FALLBACKS, modelChoiceSchema, type ModelChoice } from "@/features/ai/model-fallbacks"
 
 /**
  * Agente, modelo (`provedor/modelo`) e variante do OpenCode para uma etapa, com os **modelos de
@@ -26,14 +18,9 @@ export const agentConfigSchema = z
         agent: z.string().trim().max(100).nullable(),
         model: z.string().trim().max(200).nullable(),
         variant: z.string().trim().max(50).nullable(),
-        fallbacks: z.array(modelChoiceSchema).max(MAX_MODEL_FALLBACKS, `Até ${MAX_MODEL_FALLBACKS} modelos de fallback`).nullable().optional(),
+        fallbacks: fallbackListSchema.nullable().optional(),
     })
-    .superRefine((value, ctx) => {
-        value.fallbacks?.forEach((item, index) => {
-            if (value.model && sameChoice(item, value)) ctx.addIssue({ code: "custom", path: ["fallbacks", index, "model"], message: "O fallback é igual ao modelo principal" })
-            else if (value.fallbacks!.slice(0, index).some((other) => sameChoice(other, item))) ctx.addIssue({ code: "custom", path: ["fallbacks", index, "model"], message: "Modelo de fallback repetido" })
-        })
-    })
+    .superRefine((value, ctx) => addFallbackIssues(ctx, value.fallbacks, value, ["fallbacks"]))
 export type AgentConfig = z.infer<typeof agentConfigSchema>
 
 const EMPTY_AGENT: AgentConfig = { agent: null, model: null, variant: null }

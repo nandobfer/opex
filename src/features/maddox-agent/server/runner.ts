@@ -16,7 +16,8 @@ import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { OpexConfirmationDto, OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexToolPartGroup, OpexUsageDto } from "@/features/opex-agent/types"
 import { listAiModels } from "@/lib/ai/catalog"
 import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import type { OpencodeFormDto, OpencodePermissionDto } from "@/lib/ai/opencode-events"
+import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
+import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
 import { runAgentTurn, type TurnEvent } from "@/lib/ai/opencode-run"
 import { DomainError } from "@/lib/api/route"
 import { getLocalUser } from "@/lib/local-user"
@@ -395,34 +396,55 @@ async function executeTurn(args: TurnArgs): Promise<void> {
             await setPendingRequest(sessionId, null, id)
         }
 
-        const result = await runAgentTurn(
-            client,
+        // Corrente de fallback (OPE-181): o modelo do turno (o da sessão ou o padrão) e, atrás dele, os fallbacks do modelo padrão.
+        let tries = 0
+        const result = await runWithFallback(
+            { agent: null, model, variant, fallbacks: settings.main.fallbacks ?? [] },
+            prompt,
+            (turnAgent, body) =>
+                runAgentTurn(
+                    client,
+                    {
+                        id: `maddox:${sessionId}`,
+                        sessionId: ocSessionId,
+                        stage: "Maddox",
+                        title: session.title,
+                        agent: turnAgent,
+                        text: body,
+                        timeoutMs: MADDOX_TURN_TIMEOUT_MS,
+                        signal: controller.signal,
+                        consumption: { origin: scope.kind === "client" ? MADDOX_CLIENT_CONSUMPTION_ORIGIN : MADDOX_CONSUMPTION_ORIGIN, subject: sessionId },
+                        // Os arquivos vão só na primeira mensagem (a retomada com o fallback já os tem na sessão).
+                        files: tries++ === 0 ? uris : [],
+                        // A entrada completa só vem para aplicar o `redact` das ferramentas do Opex (`toolInputForDisplay`).
+                        exposeRawToolInput: true,
+                        providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
+                    },
+                    {
+                        publish,
+                        onPermission,
+                        onPermissionClosed,
+                        onForm,
+                        onFormClosed,
+                        onStep: ({ tokens }) => {
+                            usage = {
+                                inputTokens: (usage.inputTokens ?? 0) + tokens.input,
+                                outputTokens: (usage.outputTokens ?? 0) + tokens.output,
+                                totalTokens: (usage.totalTokens ?? 0) + tokens.input + tokens.output + tokens.reasoning,
+                            }
+                        },
+                    },
+                ),
             {
-                id: `maddox:${sessionId}`,
-                sessionId: ocSessionId,
-                stage: "Maddox",
-                title: session.title,
-                agent: { agent: null, model, variant },
-                text: prompt,
-                timeoutMs: MADDOX_TURN_TIMEOUT_MS,
                 signal: controller.signal,
-                consumption: { origin: scope.kind === "client" ? MADDOX_CLIENT_CONSUMPTION_ORIGIN : MADDOX_CONSUMPTION_ORIGIN, subject: sessionId },
-                files: uris,
-                // A entrada completa só vem para aplicar o `redact` das ferramentas do Opex (`toolInputForDisplay`).
-                exposeRawToolInput: true,
-            },
-            {
-                publish,
-                onPermission,
-                onPermissionClosed,
-                onForm,
-                onFormClosed,
-                onStep: ({ tokens }) => {
-                    usage = {
-                        inputTokens: (usage.inputTokens ?? 0) + tokens.input,
-                        outputTokens: (usage.outputTokens ?? 0) + tokens.output,
-                        totalTokens: (usage.totalTokens ?? 0) + tokens.input + tokens.output + tokens.reasoning,
-                    }
+                resumeText: (reason, body) => `A resposta anterior não terminou (${reason}). Retome de onde parou e responda à mensagem abaixo.\n\n${body}`,
+                onSwitch: (change) => {
+                    // A resposta gravada leva o modelo que concluiu.
+                    model = change.to.model
+                    variant = change.to.variant
+                    const notice = fallbackNotice(change)
+                    log.warn({ sessionId, from: change.from.model, to: change.to.model, index: change.index, total: change.total, reason: change.reason }, `[maddox] ${notice}`)
+                    publishLine(sessionId, { type: "text-delta", text: `\n\n> ${notice}\n\n` })
                 },
             },
         )
