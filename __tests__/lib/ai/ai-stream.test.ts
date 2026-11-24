@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   record: vi.fn(async () => {}),
   goModel: vi.fn(),
   goCosts: [] as unknown[],
+  anthropicKey: 'key_anthropic',
 }))
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.record }))
 
@@ -20,7 +21,11 @@ vi.mock('ai', () => ({
     mocks.streamText(options)
     return {
       fullStream: (async function* () {
-        for (const part of mocks.parts) yield part
+        // Função no meio das partes = efeito durante o stream (ex.: a troca de chave do rodízio, OPE-179).
+        for (const part of mocks.parts) {
+          if (typeof part === 'function') part()
+          else yield part
+        }
       })(),
     }
   },
@@ -28,14 +33,14 @@ vi.mock('ai', () => ({
 vi.mock('@/lib/ai/opencode', () => ({
   createOpencodeProvider: async () => ({ provider: Object.assign(mocks.opencodeModel, { dispose: mocks.dispose }), directory: '/home/eu/ia' }),
 }))
-vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => ({ provider: mocks.google, apiKeyId: 'key_google' }) }))
-vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => ({ provider: mocks.anthropic, apiKeyId: 'key_anthropic' }) }))
-vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => ({ provider: mocks.openai, apiKeyId: 'key_openai' }) }))
-vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ provider: mocks.deepseek, apiKeyId: 'key_deepseek' }) }))
+vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => ({ provider: mocks.google, currentKeyId: () => 'key_google' }) }))
+vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => ({ provider: mocks.anthropic, currentKeyId: () => mocks.anthropicKey }) }))
+vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => ({ provider: mocks.openai, currentKeyId: () => 'key_openai' }) }))
+vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ provider: mocks.deepseek, currentKeyId: () => 'key_deepseek' }) }))
 vi.mock('@/lib/ai/opencode-go', () => ({
   createOpencodeGoModel: async (id: string, options: unknown) => {
     mocks.goModel(id, options)
-    return { model: { kind: 'opencode-go', id }, meter: { take: () => mocks.goCosts.shift() ?? null }, apiKeyId: 'key_go' }
+    return { model: { kind: 'opencode-go', id }, meter: { take: () => mocks.goCosts.shift() ?? null }, currentKeyId: () => 'key_go' }
   },
 }))
 
@@ -53,6 +58,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   mocks.parts = []
   mocks.goCosts = []
+  mocks.anthropicKey = 'key_anthropic'
 })
 
 describe('streamAi', () => {
@@ -87,6 +93,12 @@ describe('streamAi', () => {
     mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
     await collect({ provider: 'opencode', model: 'anthropic/claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags' } })
     expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'opencode', apiKeyId: null }))
+  })
+
+  it('com o rodízio (OPE-179), o consumo vai para a chave que respondeu, lida no registro', async () => {
+    mocks.parts = [{ type: 'text-delta', id: 'x', text: 'ok' }, () => (mocks.anthropicKey = 'key_reserva'), { type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'anthropic', model: 'claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags' } })
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'anthropic', apiKeyId: 'key_reserva' }))
   })
 
   it('Gemini: temperatura, máximo de tokens e nível de thinking', async () => {

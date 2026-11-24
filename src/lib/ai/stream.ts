@@ -60,8 +60,11 @@ export interface PreparedModel {
     providerOptions?: StreamTextOptions["providerOptions"]
     /** Nível de raciocínio da AI SDK (Anthropic, OpenAI e DeepSeek). */
     reasoning?: StreamTextOptions["reasoning"]
-    /** Chave de API usada (provedores diretos, OPE-155); `null` no OpenCode. O consumo é atribuído a ela. */
-    apiKeyId: string | null
+    /**
+     * Chave de API da geração (provedores diretos, OPE-155); `null` no OpenCode. Com o rodízio (OPE-179) é a
+     * chave que respondeu por último (getter): leia no momento de registrar o consumo.
+     */
+    readonly apiKeyId: string | null
     /** Custo do passo informado pelo provedor; lê e zera o que foi medido desde a última leitura. */
     takeStepCost: (providerMetadata: unknown) => AiStepCost | null
     dispose: () => Promise<void>
@@ -79,7 +82,7 @@ const DIRECT_PROVIDERS = {
     anthropic: async () => (await import("./anthropic")).createAnthropicProvider(),
     openai: async () => (await import("./openai")).createOpenaiProvider(),
     deepseek: async () => (await import("./deepseek")).createDeepseekProvider(),
-} as const satisfies Partial<Record<AiProviderId, () => Promise<{ provider: (modelId: string) => LanguageModel; apiKeyId: string }>>>
+} as const satisfies Partial<Record<AiProviderId, () => Promise<{ provider: (modelId: string) => LanguageModel; currentKeyId: () => string }>>>
 
 /** Modelo da AI SDK pronto para o provedor (exportado para o loop de ferramentas do Agente Opex). */
 export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "model" | "variant" | "agent" | "title" | "session" | "signal">): Promise<PreparedModel> {
@@ -100,10 +103,12 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
     }
     if (request.provider === "gemini") {
         const { createGeminiProvider } = await import("./gemini")
-        const { provider: google, apiKeyId } = await createGeminiProvider()
+        const { provider: google, currentKeyId } = await createGeminiProvider()
         return {
             model: google(request.model),
-            apiKeyId,
+            get apiKeyId() {
+                return currentKeyId()
+            },
             providerOptions: request.variant ? { google: { thinkingConfig: { thinkingLevel: request.variant, includeThoughts: false } } } : undefined,
             takeStepCost: noCost,
             dispose: noDispose,
@@ -111,10 +116,12 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
     }
     if (request.provider === "opencode-go") {
         const { createOpencodeGoModel } = await import("./opencode-go")
-        const { model, meter, apiKeyId } = await createOpencodeGoModel(request.model, { session: request.session, signal: request.signal })
+        const { model, meter, currentKeyId } = await createOpencodeGoModel(request.model, { session: request.session, signal: request.signal })
         return {
             model,
-            apiKeyId,
+            get apiKeyId() {
+                return currentKeyId()
+            },
             // O esforço vem da lista do próprio modelo (inclui `none` e `max`); a AI SDK traduz para cada API.
             reasoning: request.variant && isOpencodeGoReasoningLevel(request.variant) ? request.variant : undefined,
             takeStepCost: () => meter.take(),
@@ -122,10 +129,12 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
         }
     }
     if (request.provider === "jev") throw new AiProviderError("O JEV decide de forma estruturada e não gera texto")
-    const { provider, apiKeyId } = await DIRECT_PROVIDERS[request.provider]()
+    const { provider, currentKeyId } = await DIRECT_PROVIDERS[request.provider]()
     return {
         model: provider(request.model),
-        apiKeyId,
+        get apiKeyId() {
+            return currentKeyId()
+        },
         reasoning: request.variant && isAiReasoningLevel(request.variant) ? request.variant : undefined,
         takeStepCost: noCost,
         dispose: noDispose,

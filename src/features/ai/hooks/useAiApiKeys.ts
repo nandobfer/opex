@@ -8,7 +8,7 @@ import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import type { ApiResponse } from "@/lib/types/api"
 import { INTEGRATIONS_QUERY_KEY } from "@/features/integrations/hooks/useIntegrations"
-import { AI_PROVIDER_KEYS_UPDATED_EVENT, type AiApiKeyDto, type AiApiKeyProviderId, type CreateAiApiKeyInput, type UpdateAiApiKeyInput } from "../api-keys"
+import { AI_PROVIDER_KEYS_UPDATED_EVENT, type AiApiKeyDto, type AiApiKeyProviderId, type AiApiKeySelectionInput, type CreateAiApiKeyInput, type UpdateAiApiKeyInput } from "../api-keys"
 import { AI_QUERY_KEY } from "./useAi"
 
 /** Chaves de API nomeadas de um provedor de IA (OPE-155). O segredo nunca volta do servidor. */
@@ -68,28 +68,51 @@ export function useRemoveAiApiKey(provider: AiApiKeyProviderId) {
     )
 }
 
-/** Ativar: resposta otimista (o selo "Em uso" muda na hora), com reversão e toast na falha. */
-export function useActivateAiApiKey(provider: AiApiKeyProviderId) {
+/** Mutação otimista do chaveiro: a lista muda na hora (`optimistic`), com reversão e toast na falha. */
+function useOptimisticKeysMutation<V>(provider: AiApiKeyProviderId, request: (vars: V) => Promise<AiApiKeyDto[]>, optimistic: (rows: AiApiKeyDto[], vars: V) => AiApiKeyDto[], messages: { success: (vars: V) => string; error: string }) {
     const queryClient = useQueryClient()
     const key = aiApiKeysKey(provider)
     return useMutation({
-        mutationFn: async (id: string) => unwrapApi((await api.post<ApiResponse<AiApiKeyDto[]>>(`${base(provider)}/${id}/activate`)).data),
-        onMutate: async (id) => {
+        mutationFn: request,
+        onMutate: async (vars: V) => {
             await queryClient.cancelQueries({ queryKey: key })
             const previous = queryClient.getQueryData<AiApiKeyDto[]>(key)
-            queryClient.setQueryData<AiApiKeyDto[]>(key, (rows) => rows?.map((row) => ({ ...row, active: row.id === id })))
+            queryClient.setQueryData<AiApiKeyDto[]>(key, (rows) => (rows ? optimistic(rows, vars) : rows))
             return { previous }
         },
-        onError: (error, _id, context) => {
+        onError: (error, _vars, context) => {
             if (context?.previous) queryClient.setQueryData(key, context.previous)
-            toast.error(apiErrorMessage(error, "Não foi possível ativar a chave"))
+            toast.error(apiErrorMessage(error, messages.error))
         },
-        onSuccess: (keys) => {
+        onSuccess: (keys, vars) => {
             queryClient.setQueryData(key, keys)
             invalidateDependents(queryClient)
-            toast.success("Chave em uso atualizada")
+            toast.success(messages.success(vars))
         },
     })
+}
+
+/** Pôr ou tirar a chave do rodízio (OPE-179); sem principal, a chave posta em uso vira a principal. */
+export function useToggleAiApiKey(provider: AiApiKeyProviderId) {
+    return useOptimisticKeysMutation(
+        provider,
+        async ({ id, selected }: { id: string } & AiApiKeySelectionInput) => unwrapApi((await api.patch<ApiResponse<AiApiKeyDto[]>>(`${base(provider)}/${id}/selection`, { selected })).data),
+        (rows, { id, selected }) => {
+            const noPrimary = !rows.some((row) => row.primary)
+            return rows.map((row) => (row.id === id ? { ...row, active: selected, primary: row.primary || (selected && noPrimary) } : row))
+        },
+        { success: ({ selected }) => (selected ? "Chave posta em uso" : "Chave tirada de uso"), error: "Não foi possível alterar a chave em uso" },
+    )
+}
+
+/** Tornar principal: a chave também entra em uso. */
+export function useMakePrimaryAiApiKey(provider: AiApiKeyProviderId) {
+    return useOptimisticKeysMutation(
+        provider,
+        async (id: string) => unwrapApi((await api.post<ApiResponse<AiApiKeyDto[]>>(`${base(provider)}/${id}/primary`)).data),
+        (rows, id) => rows.map((row) => ({ ...row, primary: row.id === id, active: row.active || row.id === id })),
+        { success: () => "Chave principal atualizada", error: "Não foi possível tornar a chave principal" },
+    )
 }
 
 /** Chaveiro ao vivo: mudanças em outra aba (ou por outro caminho) relêem a lista e o que depende dela. */

@@ -21,6 +21,13 @@ interface ActiveItemRowProps {
     /** `false`: o item não pode ser posto em uso (card sem o botão que cobre a linha). */
     activatable?: boolean
     onActivate: () => void
+    /**
+     * Lista com vários itens em uso (chaves de API, OPE-179): o card em uso também é clicável e o clique o
+     * tira de uso. Sem ele (ex.: contas do OpenCode), o item em uso não tem ação no card.
+     */
+    onDeactivate?: () => void
+    /** Rótulo acessível do card em uso quando `onDeactivate` existe (ex.: "Tirar a chave Pessoal de uso"). */
+    deactivateLabel?: string
     /** Sem ele, não há o botão de renomear. */
     onRename?: () => void
     /** Sem ele, não há o botão de remover. */
@@ -38,14 +45,15 @@ interface ActiveItemRowProps {
 const stop = (event: MouseEvent) => event.stopPropagation()
 
 /**
- * Card de uma lista "um item em uso" (contas dos providers do OpenCode, chaves de API dos provedores
- * de IA). O selo "Em uso" fica à direita do nome, compacto, sem mudar a altura da linha do nome
+ * Card de uma lista com itens em uso (contas dos providers do OpenCode, uma em uso; chaves de API dos
+ * provedores de IA, várias em uso com `onDeactivate`). O selo "Em uso" fica à direita do nome, compacto, sem mudar a altura da linha do nome
  * (`h-5`). O card inteiro ativa o item: um `<button>` real cobre o card (Tab + Enter/Espaço nativos) e
  * as ações ficam numa camada acima dele, sem botão dentro de botão. As ações aparecem no hover ou no
  * foco do card (sempre visíveis em telas de toque) e continuam no DOM para o teclado.
  */
-export function ActiveItemRow({ label, sublabel, active, activateLabel, activateDisabled, activatable = true, onActivate, onRename, onRemove, badges, actions, editing, children }: ActiveItemRowProps) {
-    const clickable = !active && !editing && activatable
+export function ActiveItemRow({ label, sublabel, active, activateLabel, activateDisabled, activatable = true, onActivate, onDeactivate, deactivateLabel, onRename, onRemove, badges, actions, editing, children }: ActiveItemRowProps) {
+    const clickable = (!active || Boolean(onDeactivate)) && !editing && activatable
+    const buttonLabel = active ? (deactivateLabel ?? activateLabel) : activateLabel
     return (
         <motion.li
             layout="position"
@@ -58,6 +66,7 @@ export function ActiveItemRow({ label, sublabel, active, activateLabel, activate
             className={cn(
                 "group relative rounded-lg border bg-card px-3.5 py-3 transition-colors",
                 active ? "border-primary/60 bg-primary/5" : clickable && "hover:border-primary/40 hover:bg-accent/40 focus-within:border-primary/40",
+                active && clickable && "hover:bg-primary/10",
                 clickable && activateDisabled && "opacity-70",
             )}
         >
@@ -65,10 +74,11 @@ export function ActiveItemRow({ label, sublabel, active, activateLabel, activate
             {clickable ? (
                 <button
                     type="button"
-                    aria-label={activateLabel}
-                    title={activateLabel}
+                    aria-label={buttonLabel}
+                    title={buttonLabel}
+                    aria-pressed={onDeactivate ? active : undefined}
                     disabled={activateDisabled}
-                    onClick={onActivate}
+                    onClick={active ? onDeactivate : onActivate}
                     className="absolute inset-0 cursor-pointer rounded-[inherit] outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-progress"
                 />
             ) : null}

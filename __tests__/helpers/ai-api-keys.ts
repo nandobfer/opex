@@ -15,8 +15,10 @@ export function aiApiKeysMock(keys: AiApiKeyDto[] = []) {
     useCreateAiApiKey: mutation,
     useUpdateAiApiKey: mutation,
     useRemoveAiApiKey: mutation,
-    useActivateAiApiKey: mutation,
+    useToggleAiApiKey: mutation,
+    useMakePrimaryAiApiKey: mutation,
   }
 }
 
-export const apiKeyDto = (id: string, name: string, active = false): AiApiKeyDto => ({ id, name, active, createdAt: '2026-11-01T12:00:00.000Z', updatedAt: '2026-11-01T12:00:00.000Z' })
+/** `active` = em uso (rodízio); `primary` (OPE-179) segue `active` por padrão (uma chave em uso = a principal). */
+export const apiKeyDto = (id: string, name: string, active = false, primary = active): AiApiKeyDto => ({ id, name, active, primary, createdAt: '2026-11-01T12:00:00.000Z', updatedAt: '2026-11-01T12:00:00.000Z' })

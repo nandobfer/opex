@@ -1,14 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), fetch: vi.fn(), create: vi.fn(), connect: vi.fn(), audit: vi.fn(), publish: vi.fn(), warn: vi.fn() }))
-// A chave vem do chaveiro (OPE-155): `null` = sem chave ativa.
+// A chave vem do chaveiro (OPE-155): `null` = sem chave ativa. O rodízio (OPE-179) é coberto em key-failover.test.
 vi.mock("@/lib/ai/api-keys", async () => {
     const { AiProviderError } = await import("@/lib/ai/errors")
+    class AiKeysExhaustedError extends AiProviderError {
+        constructor(message: string, readonly lastKeyId: string) {
+            super(message)
+        }
+    }
     return {
-        requireActiveAiProviderKey: async () => {
-            const config = (await mocks.config()) as { apiKey?: string } | null
+        AiKeysExhaustedError,
+        fetchWithKeyFailover: async (_id: string, _label: string, call: (key: { id: string; name: string; apiKey: string }) => Promise<Response>) => {
+            const config = (await mocks.config()) as { apiKey?: string; keys?: { id: string; name: string; apiKey: string }[] } | null
             if (!config?.apiKey) throw new AiProviderError("JEV sem chave de API ativa")
-            return { id: "key_ativa", name: "Principal", apiKey: config.apiKey }
+            const keys = config.keys ?? [{ id: "key_ativa", name: "Principal", apiKey: config.apiKey }]
+            for (const key of keys) {
+                const response = await call(key)
+                if (keys.length === 1 || response.status !== 401) return { response, key }
+            }
+            throw new AiKeysExhaustedError("Todas as chaves em uso do JEV falharam", keys.at(-1)!.id)
         },
     }
 })
@@ -78,6 +89,18 @@ describe("registro centralizado de requisições JEV", () => {
         expect((await askJevSystemOne(input)).answers).toBeTruthy()
         expect(mocks.warn).toHaveBeenCalledOnce()
         expect(mocks.publish).not.toHaveBeenCalled()
+    })
+
+    it("com várias chaves (OPE-179), o uso vai para a chave que respondeu; todas falhando, para a última tentada", async () => {
+        mocks.config.mockResolvedValue({ apiKey: "x", keys: [{ id: "key_a", name: "A", apiKey: "sa" }, { id: "key_b", name: "B", apiKey: "sb" }] })
+        mocks.fetch.mockResolvedValueOnce(response({}, 401))
+        await askJevSystemOne(input)
+        expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ ok: true, apiKeyId: "key_b" }))
+
+        mocks.create.mockClear()
+        mocks.fetch.mockResolvedValue(response({}, 401))
+        await expect(askJevSystemOne(input)).rejects.toThrow("Todas as chaves em uso do JEV falharam")
+        expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ ok: false, apiKeyId: "key_b" }))
     })
 
     it("erro HTTP registra falha; catálogo de modelos não gera usage", async () => {

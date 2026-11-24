@@ -60,8 +60,11 @@ Valores que antes viviam no `.env` são persistidos no MongoDB.
 - Auditoria (`entidade: "Integracao"`, ator `local`) registra os campos públicos alterados e, para
   segredos, apenas `(alterado)`/`(removido)`.
 
-- **Campo de chaveiro** (`keyRing: true`, OPE-155): o segredo vem da **chave em uso** de um chaveiro de
+- **Campo de chaveiro** (`keyRing: true`, OPE-155): o segredo vem da **chave principal** de um chaveiro de
   chaves nomeadas (`apiKeys` + `activeApiKeyId` no documento da integração), não de `secretValues`.
+  Desde a OPE-179 várias chaves ficam **em uso** (`selectedApiKeyIds`, lido por `selectedApiKeysOf`, sempre
+  com a principal) e os clientes de IA revezam entre elas por geração, trocando de chave em 401/402/403/429;
+  o valor resolvido da integração (`values.apiKey`) continua sendo só a principal.
   Hoje é o `apiKey` de `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek`, `ai_opencode_go` (OPE-156) e `ai_jev`
   (`KEY_RING_INTEGRATION_IDS`, `src/lib/integrations/key-ring.ts`). O PATCH genérico recusa gravar ou
   limpar esse campo e o card "Campos privados" não o mostra; a gestão fica nas rotas de chaves

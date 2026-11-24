@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ active: vi.fn(), byId: vi.fn(), allowances: vi.fn(), publish: vi.fn(), fetch: vi.fn() }))
 
-vi.mock('@/lib/ai/api-keys', () => ({ getActiveAiProviderKey: mocks.active, getAiProviderKeyById: mocks.byId }))
+vi.mock('@/lib/ai/api-keys', () => ({ getPrimaryAiProviderKey: mocks.active, getAiProviderKeyById: mocks.byId }))
 vi.mock('@/lib/ai/opencode-go', () => ({ opencodeGoAllowances: mocks.allowances }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
 vi.mock('@/lib/integrations/debug', () => ({

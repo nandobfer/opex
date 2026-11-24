@@ -219,15 +219,16 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
 ### Servidor, rotina e tempo real
 
 - `server/go-usage.ts`: `getOpencodeGoUsage(query)` e `refreshOpencodeGoUsage(query)` (query =
-  `usageQuerySchema`: `from`, `to`, `apiKey`). Chave: "Todas" (padrão) usa a **chave em uso** (sem chave →
-  `unconfigured`); uma chave do chaveiro consulta a assinatura dela (`getAiProviderKeyById`); "Sem chave
+  `usageQuerySchema`: `from`, `to`, `apiKey`). Chave: "Todas" (padrão) usa a **chave principal** (`getPrimaryAiProviderKey`;
+  a cota da assinatura é por chave, então com várias chaves em uso, OPE-179, as outras são vistas escolhendo
+  cada uma no filtro; sem chave → `unconfigured`); uma chave do chaveiro consulta a assinatura dela (`getAiProviderKeyById`); "Sem chave
   identificada" e "Chaves removidas" → `no-key` (não apontam para uma assinatura).
 - O status fica em memória por chave: a tela reaproveita a leitura de até 1 min; o botão força, no máximo,
   uma leitura a cada 30 s por chave.
-- **Rotina `opencode-go-usage-refresh`** (Integrações › Crons, 5 min, ligada): relê o status da chave em uso.
+- **Rotina `opencode-go-usage-refresh`** (Integrações › Crons, 5 min, ligada): relê o status da chave principal.
   Quando os percentuais (uma casa) ou os resets mudam — na rotina ou numa leitura da tela —, publica
   `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app`; `useOpencodeGoUsageRealtime` invalida
-  `["opencode-go-usage"]`. Sem chave em uso, a rotina não chama a API.
+  `["opencode-go-usage"]`. Sem chave principal, a rotina não chama a API.
 - Rotas (sessão do dono, não públicas): `GET /api/opencode/quota/go` e `POST /api/opencode/quota/go/refresh`,
   com a mesma query.
 
