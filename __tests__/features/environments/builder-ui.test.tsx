@@ -30,6 +30,7 @@ const dto = (overrides: Partial<EnvironmentsBuilderDto> = {}): EnvironmentsBuild
   status: 'running',
   driver: 'docker-container',
   container: 'buildx_buildkit_limited-builder0',
+  containerMissing: false,
   isHostDefault: true,
   applied: { memoryGb: 24, swapGb: 16, cpus: 6 },
   limitsDiffer: false,

@@ -88,6 +88,21 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     for (const name of ['stop_environments_builder', 'recreate_environments_builder', 'delete_environments_builder']) expect(find(name).risk).toBe('destructive')
     for (const name of ['configure_environments_builder', 'delete_environments_builder']) expect(needsConfirmation(find(name) as never)).toBe(true)
     expect(find('get_environments_builder').risk).toBe('read')
+    for (const name of ['create_environments_builder', 'start_environments_builder']) {
+      expect(find(name).risk).toBe('write')
+      expect(needsConfirmation(find(name) as never)).toBe(false)
+    }
+    expect(find('configure_environments_builder').risk).toBe('write')
+    for (const tool of environmentTools.filter((item) => item.name.endsWith('_environments_builder'))) expect(tool).toMatchObject({ group: 'environments' })
+  })
+
+  it('derrubar/apagar o builder pela ferramenta: sem force vai sem force (o serviço recusa com build em andamento)', async () => {
+    const { DomainError } = await import('@/lib/api/route')
+    mocks.builderAction.mockRejectedValue(new DomainError(409, 'Há um build em andamento', 'BUILDER_BUILD_RUNNING'))
+    await expect(run('stop_environments_builder', {})).rejects.toMatchObject({ code: 'BUILDER_BUILD_RUNNING' })
+    expect(mocks.builderAction).toHaveBeenCalledWith({ action: 'stop', confirm: false, force: false }, 'local')
+    await expect(run('delete_environments_builder', {})).rejects.toMatchObject({ code: 'BUILDER_BUILD_RUNNING' })
+    expect(mocks.builderAction).toHaveBeenLastCalledWith({ action: 'delete', confirm: true, force: false }, 'local')
   })
 
   it('lista agrupada por máquina com estado, versão e serviços no ar', async () => {

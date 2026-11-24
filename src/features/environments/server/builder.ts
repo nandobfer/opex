@@ -61,7 +61,10 @@ async function readHost(name: string | null, run: HostRunner): Promise<{ parsed:
     try {
         const result = await run(builderStatusCommand(name), STATUS_TIMEOUT, { retryOnLost: true, quiet: true })
         if (result.exitCode !== 0) return { parsed: null, error: `O Docker do servidor não respondeu${lastLine(result.output) ? `: ${lastLine(result.output)}` : ""}` }
-        return { parsed: parseBuilderStatus(result.output), error: null }
+        const parsed = parseBuilderStatus(result.output)
+        // Daemon fora do ar: o `inspect` falha igual a um builder removido; nunca mostrar "Não existe" nem oferecer Criar.
+        if (!parsed.dockerOk) return { parsed: null, error: "O Docker do servidor não respondeu (docker info falhou): o estado do builder é desconhecido" }
+        return { parsed, error: null }
     } catch (error) {
         return { parsed: null, error: error instanceof Error ? error.message : String(error) }
     }
@@ -92,6 +95,7 @@ function toDto(config: EnvironmentsBuilder | null, state: BuilderState | null, p
         status: statusOf(parsed),
         driver: parsed?.driver ?? null,
         container: name && parsed?.exists && parsed.driver === "docker-container" ? builderContainer(name) : null,
+        containerMissing: Boolean(parsed?.exists && parsed.driver === "docker-container" && !parsed.container),
         isHostDefault: Boolean(name && parsed?.current === name),
         applied,
         limitsDiffer: Boolean(config && applied && limitsDiffer(config, applied)),
@@ -128,10 +132,21 @@ async function exec(action: BuilderLastActionDto["action"], command: string, tim
     throw new DomainError(502, message, "BUILDER_FAILED")
 }
 
-/** Recria na vez da fila global do build (nenhum build começa no meio) e tira a pendência. */
-async function recreateNow(config: EnvironmentsBuilder, run: HostRunner, action: BuilderLastActionDto["action"]): Promise<void> {
+/** Recria na vez da fila global do build (nenhum build começa no meio). */
+async function recreateInTurn(config: EnvironmentsBuilder, run: HostRunner, action: BuilderLastActionDto["action"]): Promise<void> {
     await runExclusiveBuild(() => exec(action, builderRecreateCommand(config), RECREATE_TIMEOUT, run, `recriar o builder ${config.name}`))
+}
+
+/** Recria agora (salvar/Recriar) e tira a pendência, que perdeu o sentido. */
+async function recreateNow(config: EnvironmentsBuilder, run: HostRunner, action: BuilderLastActionDto["action"]): Promise<void> {
+    await recreateInTurn(config, run, action)
     await setState({ builderPending: null })
+}
+
+/** Reivindica a pendência de forma atômica: só um chamador (tick, motor da fila) a recebe. */
+async function claimPending(): Promise<boolean> {
+    const claimed = await EnvironmentsState.findOneAndUpdate({ key: "default", builderPending: { $ne: null } }, { $set: { builderPending: null, updatedAt: new Date() } }).lean()
+    return Boolean(claimed)
 }
 
 async function markPending(reason: string): Promise<void> {
@@ -164,7 +179,7 @@ export async function saveBuilderConfig(input: EnvironmentsBuilder, actorId: str
         if (config.useAsDefault && parsed.current !== config.name) await exec("configure", builderUseCommand(config), ACTION_TIMEOUT, run, `marcar ${config.name} como builder do host`)
         message = "Configuração salva (os limites já estavam aplicados)."
     } else if (await buildRunningNow()) {
-        const update = builderUpdateCommand(config, cpuModeOf(parsed.container))
+        const update = parsed.container ? builderUpdateCommand(config, cpuModeOf(parsed.container)) : null
         if (update) await exec("configure", update, ACTION_TIMEOUT, run, `aplicar os limites em ${config.name}`)
         await markPending("Limites alterados durante um build")
         message = update
@@ -236,11 +251,12 @@ export async function runPendingBuilderRecreate(run: HostRunner = runEnvHost): P
         return false
     }
     if (await buildRunningNow()) return false
+    if (!(await claimPending())) return false
     try {
-        await recreateNow(config, run, "pending")
+        await recreateInTurn(config, run, "pending")
     } catch (error) {
+        // A falha fica na linha (`builderLastAction`); a pendência já foi consumida e não volta.
         envLog.warn({ err: error }, "[environments] Falha na recriação pendente do builder do servidor")
-        await setState({ builderPending: null })
         return false
     }
     const message = `Builder ${config.name} recriado depois do build (cache mantido).`

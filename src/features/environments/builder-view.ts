@@ -38,6 +38,7 @@ export function builderNotices(builder: EnvironmentsBuilderDto): { tone: "warnin
     if (!builder.managed && builder.status === "unmanageable")
         notices.push({ tone: "info", text: `O builder atual do host (${builder.name ?? "—"}) usa o driver ${builder.driver ?? "desconhecido"}, sem container nem limites: Gerenciar cria um builder novo do Opex.` })
     if (!builder.managed && builder.status !== "unmanageable") notices.push({ tone: "info", text: "Não gerenciado pelo Opex: Gerenciar assume este builder com os limites de hoje (nada é recriado)." })
+    if (builder.managed && builder.containerMissing) notices.push({ tone: "warning", text: "O container do builder foi removido (a instância continua no buildx): Levantar usaria as opções antigas; use Recriar para aplicar os limites salvos." })
     if (builder.config && builder.limitsDiffer) notices.push({ tone: "warning", text: `Limites salvos (${limitsText(builder.config)}) diferem dos aplicados: use Recriar.` })
     if (builder.pending) notices.push({ tone: "warning", text: "Recriação com --keep-state pendente: roda quando o build em andamento terminar." })
     if (builder.unknownFlags.length) notices.push({ tone: "warning", text: `Flags do BuildKit que o Opex não recria (se perdem ao recriar): ${builder.unknownFlags.join(" ")}` })

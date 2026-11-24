@@ -91,6 +91,7 @@ export function builderStatusCommand(name: string | null): string {
         `[ -n "$n" ] && [ "$(docker inspect -f '{{.State.Running}}' ${container} 2>/dev/null)" = true ] && docker stats --no-stream --format '{{.CPUPerc}}|{{.MemUsage}}|{{.MemPerc}}' ${container} 2>/dev/null`,
         `printf '${MARK}host\\n'`,
         `docker info --format '{{.NCPU}}|{{.MemTotal}}' 2>/dev/null`,
+        `printf '\\n${MARK}docker-exit %s\\n' "$?"`,
         "true",
     ].join("; ")
 }
@@ -105,6 +106,8 @@ export interface BuilderContainerState {
 }
 
 export interface ParsedBuilderStatus {
+    /** O daemon do Docker respondeu (`docker info` saiu com 0): sem ele, "não existe" não é confiável. */
+    dockerOk: boolean
     name: string | null
     exists: boolean
     driver: string | null
@@ -124,7 +127,7 @@ function blocks(output: string): Map<string, string[]> {
     for (const raw of output.replace(/\r/g, "").split("\n")) {
         if (raw.startsWith(MARK)) {
             const [key = "", ...rest] = raw.slice(MARK.length).split(" ")
-            if (key === "name" || key === "inspect-exit") {
+            if (key === "name" || key === "inspect-exit" || key === "docker-exit") {
                 result.set(key, [rest.join(" ").trim()])
                 continue
             }
@@ -169,6 +172,7 @@ export function parseBuilderStatus(output: string): ParsedBuilderStatus {
     const hostLine = (parts.get("host") ?? []).find((line) => line.includes("|"))
     const [ncpu, memTotal] = hostLine?.split("|") ?? []
     return {
+        dockerOk: parts.get("docker-exit")?.[0] === "0",
         name,
         exists,
         driver: exists ? field(inspect, "Driver") : null,
@@ -211,7 +215,9 @@ export const unknownFlags = (flags: string[]) => flags.filter((flag) => !KNOWN_F
 
 /** A recriação muda algo que não dá para ajustar sem ela (limites ou flags)? */
 export function needsRecreate(config: EnvironmentsBuilder, parsed: ParsedBuilderStatus): boolean {
-    if (!parsed.exists || !parsed.container) return false
+    if (!parsed.exists) return false
+    // Instância no buildx sem o container: levantar recriaria com as opções antigas do buildx.
+    if (!parsed.container) return true
     if (limitsDiffer(config, appliedLimits(parsed.container))) return true
     return config.allowNetworkHost !== parsed.flags.includes(NETWORK_HOST_FLAG)
 }

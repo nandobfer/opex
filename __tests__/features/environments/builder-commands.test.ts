@@ -50,6 +50,7 @@ const HOST_OUTPUT = [
   '0.00%|2.589GiB / 24GiB|10.79%',
   '@@opex-builder host',
   '8|33648398336',
+  '@@opex-builder docker-exit 0',
 ].join('\n')
 
 describe('comandos do builder', () => {
@@ -111,7 +112,7 @@ describe('leitura do estado', () => {
 
   it('CPU por quota/período, builder inexistente e flags desconhecidas', () => {
     expect(appliedLimits({ state: 'running', memoryBytes: 0, memorySwapBytes: 0, nanoCpus: 0, cpuPeriod: 100000, cpuQuota: 250000 })).toEqual({ memoryGb: null, swapGb: null, cpus: 2.5 })
-    const missing = parseBuilderStatus(['@@opex-builder name sumiu', '@@opex-builder inspect', 'ERROR: no builder "sumiu" found', '', '@@opex-builder inspect-exit 1', '@@opex-builder current', 'rootless', '@@opex-builder container', '@@opex-builder stats', '@@opex-builder host', '8|33648398336'].join('\n'))
+    const missing = parseBuilderStatus(['@@opex-builder name sumiu', '@@opex-builder inspect', 'ERROR: no builder "sumiu" found', '', '@@opex-builder inspect-exit 1', '@@opex-builder current', 'rootless', '@@opex-builder container', '@@opex-builder stats', '@@opex-builder host', '8|33648398336', '@@opex-builder docker-exit 0'].join('\n'))
     expect(missing).toMatchObject({ name: 'sumiu', exists: false, container: null, current: 'rootless' })
     expect(unknownFlags(['--allow-insecure-entitlement=network.host', '--debug'])).toEqual(['--debug'])
   })
@@ -123,6 +124,19 @@ describe('leitura do estado', () => {
     expect(needsRecreate(config({ allowNetworkHost: false }), parsed)).toBe(true)
     expect(limitsDiffer(config({ swapGb: null }), { memoryGb: 24, swapGb: 24, cpus: 6 })).toBe(false)
     expect(limitsDiffer(config({ cpus: null }), { memoryGb: 24, swapGb: 16, cpus: 6 })).toBe(true)
+  })
+
+  it('Docker fora do ar: o inspect falha, mas dockerOk=false impede ler como "não existe"', () => {
+    const down = parseBuilderStatus(['@@opex-builder name limited-builder', '@@opex-builder inspect', 'ERROR: Cannot connect to the Docker daemon', '', '@@opex-builder inspect-exit 1', '@@opex-builder current', '@@opex-builder container', '@@opex-builder stats', '@@opex-builder host', '', '@@opex-builder docker-exit 1'].join('\n'))
+    expect(down).toMatchObject({ dockerOk: false, exists: false })
+    expect(parseBuilderStatus(HOST_OUTPUT).dockerOk).toBe(true)
+    expect(builderStatusCommand('x')).toContain("docker-exit %s")
+  })
+
+  it('instância no buildx sem o container: os limites precisam ser aplicados (recriar)', () => {
+    const parsed = parseBuilderStatus(HOST_OUTPUT)
+    expect(needsRecreate(config(), { ...parsed, container: null })).toBe(true)
+    expect(needsRecreate(config(), { ...parsed, exists: false, container: null })).toBe(false)
   })
 
   it('swap exige a RAM no schema', () => {
@@ -161,7 +175,7 @@ describe('build dos ambientes no servidor', () => {
 
 describe('textos da linha', () => {
   const dto = (overrides: Partial<EnvironmentsBuilderDto> = {}): EnvironmentsBuilderDto => ({
-    config: config(), name: 'limited-builder', managed: true, status: 'running', driver: 'docker-container', container: 'buildx_buildkit_limited-builder0', isHostDefault: true,
+    config: config(), name: 'limited-builder', managed: true, status: 'running', driver: 'docker-container', container: 'buildx_buildkit_limited-builder0', containerMissing: false, isHostDefault: true,
     applied: { memoryGb: 24, swapGb: 16, cpus: 6 }, limitsDiffer: false, flags: [], unknownFlags: [], usage: null, host: null, suggested: config(), pending: null, lastAction: null, buildRunning: false, error: null, checkedAt: '',
     ...overrides,
   })

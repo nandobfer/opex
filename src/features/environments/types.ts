@@ -129,6 +129,8 @@ export interface EnvironmentsBuilderDto {
     status: BuilderStatus
     driver: string | null
     container: string | null
+    /** O builder existe no buildx, mas o container dele foi removido (Levantar usaria as opções antigas). */
+    containerMissing: boolean
     /** É o builder atual do host (as prévias das mesas também o usam). */
     isHostDefault: boolean
     applied: BuilderLimitsDto | null

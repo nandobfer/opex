@@ -22,6 +22,13 @@ vi.mock('@/features/environments/server/models', () => ({
     updateOne: async (_query: unknown, update: { $set: Record<string, unknown> }) => {
       mocks.doc = { ...(mocks.doc ?? {}), ...update.$set }
     },
+    // Atômico como no Mongo: confere e grava no mesmo passo (sem `await` no meio).
+    findOneAndUpdate: (query: { builderPending?: unknown }, update: { $set: Record<string, unknown> }) => {
+      const before = mocks.doc
+      const matches = Boolean(before) && (!('builderPending' in query) || (before!.builderPending !== null && before!.builderPending !== undefined))
+      if (matches) mocks.doc = { ...before, ...update.$set }
+      return { lean: async () => (matches ? before : null) }
+    },
   },
 }))
 vi.mock('@/features/environments/server/settings', () => ({ envLog: { info: vi.fn(), warn: vi.fn() }, publishEnvironment: mocks.publish, runEnvHost: vi.fn() }))
@@ -31,7 +38,7 @@ import { getBuilderStatus, runBuilderAction, runPendingBuilderRecreate, saveBuil
 const config = (overrides: Partial<EnvironmentsBuilder> = {}): EnvironmentsBuilder => ({ name: 'limited-builder', memoryGb: 24, cpus: 6, swapGb: 16, useAsDefault: true, allowNetworkHost: true, ...overrides })
 
 /** Docker do host simulado: o estado do builder e os comandos que rodaram. */
-function host(options: { exists?: boolean; driver?: string; state?: string; fail?: RegExp } = {}) {
+function host(options: { exists?: boolean; driver?: string; state?: string; fail?: RegExp; dockerDown?: boolean; noContainer?: boolean } = {}) {
   const exists = options.exists ?? true
   const commands: string[] = []
   const status = [
@@ -42,11 +49,12 @@ function host(options: { exists?: boolean; driver?: string; state?: string; fail
     '@@opex-builder current',
     'limited-builder',
     '@@opex-builder container',
-    ...(exists ? [`${options.state ?? 'running'}|25769803776|42949672960|6000000000|0|0`] : []),
+    ...(exists && !options.noContainer ? [`${options.state ?? 'running'}|25769803776|42949672960|6000000000|0|0`] : []),
     '@@opex-builder stats',
-    ...(exists ? ['1.50%|2GiB / 24GiB|8.33%'] : []),
+    ...(exists && !options.noContainer ? ['1.50%|2GiB / 24GiB|8.33%'] : []),
     '@@opex-builder host',
-    '8|33648398336',
+    ...(options.dockerDown ? [] : ['8|33648398336']),
+    `@@opex-builder docker-exit ${options.dockerDown ? 1 : 0}`,
   ].join('\n')
   const run = vi.fn(async (command: string) => {
     if (command.includes('@@opex-builder')) return { exitCode: 0, output: status }
@@ -70,6 +78,16 @@ describe('estado', () => {
     expect(dto).toMatchObject({ managed: false, name: 'limited-builder', status: 'running', isHostDefault: true, applied: { memoryGb: 24, swapGb: 16, cpus: 6 }, container: 'buildx_buildkit_limited-builder0' })
     expect(dto.suggested).toEqual(config())
     expect(dto.usage).toMatchObject({ cpuPercent: 1.5 })
+  })
+
+  it('Docker do servidor fora do ar: "Sem resposta" com o erro (nunca "Não existe"), e salvar recusa sem gravar', async () => {
+    const { run, commands } = host({ exists: false, dockerDown: true })
+    const dto = await getBuilderStatus(run)
+    expect(dto.status).toBe('unknown')
+    expect(dto.error).toContain('O Docker do servidor não respondeu')
+    await expect(saveBuilderConfig(config(), 'local', run)).rejects.toMatchObject({ status: 502, code: 'BUILDER_DOCKER_FAILED' })
+    expect(mocks.doc).toBeNull()
+    expect(commands).toEqual([])
   })
 
   it('builder do driver docker: sem container, a sugestão é um builder novo do Opex', async () => {
@@ -107,6 +125,25 @@ describe('salvar a configuração', () => {
     expect(commands).toEqual(['docker update --memory 16384m --memory-swap 24576m --cpus 6 buildx_buildkit_limited-builder0 >/dev/null'])
     expect(mocks.exclusive).not.toHaveBeenCalled()
     expect(mocks.doc?.builderPending).toMatchObject({ reason: expect.any(String) })
+    expect(result.message).toContain('roda quando o build terminar')
+  })
+
+  it('instância no buildx sem o container: salvar recria com os limites novos e a linha avisa', async () => {
+    mocks.doc = { builder: config() }
+    const { run, commands } = host({ noContainer: true })
+    expect((await getBuilderStatus(run)).containerMissing).toBe(true)
+    const result = await saveBuilderConfig(config({ memoryGb: 16, swapGb: 8 }), 'local', run)
+    expect(commands[0]).toContain('docker buildx rm --keep-state limited-builder')
+    expect(commands[0]).toContain('--driver-opt memory=16384m')
+    expect(result.message).not.toContain('já estavam aplicados')
+  })
+
+  it('instância sem container com build em andamento: sem docker update (não há container), recriação pendente', async () => {
+    mocks.building = true
+    const { run, commands } = host({ noContainer: true })
+    const result = await saveBuilderConfig(config({ memoryGb: 16, swapGb: 8 }), 'local', run)
+    expect(commands).toEqual([])
+    expect(mocks.doc?.builderPending).toBeTruthy()
     expect(result.message).toContain('roda quando o build terminar')
   })
 
@@ -191,6 +228,24 @@ describe('recriação pendente', () => {
     expect(commands[0]).toContain('docker buildx rm --keep-state limited-builder')
     expect(mocks.doc?.builderPending).toBeNull()
     expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ userId: 'system' }))
+  })
+
+  it('dois chamadores ao mesmo tempo (tick e motor da fila): uma única recriação', async () => {
+    mocks.doc = { builder: config(), builderPending: { requestedAt: new Date(), reason: 'x' } }
+    const { run, commands } = host()
+    const results = await Promise.all([runPendingBuilderRecreate(run), runPendingBuilderRecreate(run)])
+    expect(results.filter(Boolean)).toHaveLength(1)
+    expect(commands.filter((command) => command.includes('--keep-state'))).toHaveLength(1)
+    expect(mocks.audit).toHaveBeenCalledTimes(1)
+  })
+
+  it('recriação pendente que falha: a pendência não volta e a falha fica na linha', async () => {
+    mocks.doc = { builder: config(), builderPending: { requestedAt: new Date(), reason: 'x' } }
+    const { run } = host({ fail: /--keep-state/ })
+    expect(await runPendingBuilderRecreate(run)).toBe(false)
+    expect(mocks.doc?.builderPending).toBeNull()
+    expect(mocks.doc?.builderLastAction).toMatchObject({ ok: false })
+    expect(await runPendingBuilderRecreate(run)).toBe(false)
   })
 
   it('sem pendência ou na prévia de uma mesa: não faz nada', async () => {

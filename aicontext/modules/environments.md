@@ -122,8 +122,11 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   host / Recriação pendente), limites **aplicados** no container (RAM, swap além da RAM, CPUs, lidos do
   `docker inspect`), uso de CPU/RAM (`docker stats --no-stream`), CPUs e memória do servidor e os avisos:
   falha da última ação ou do Docker, limites salvos diferentes dos aplicados ("use Recriar"), recriação
-  pendente e flags do BuildKit que o Opex não recria. Skeleton com a estrutura da linha e erro com "Tentar
-  novamente".
+  pendente, flags do BuildKit que o Opex não recria e instância no buildx sem o container (removido por fora:
+  Levantar usaria as opções antigas; salvar ou Recriar recriam com os limites salvos). Com o Docker do
+  servidor fora do ar (`docker info` falha, marcador `docker-exit`), a linha fica em "Sem resposta" com o
+  erro, nunca em "Não existe", e salvar responde 502 `BUILDER_DOCKER_FAILED` sem gravar. Skeleton com a
+  estrutura da linha e erro com "Tentar novamente".
 - **Sem configuração** (estado inicial): a linha mostra o builder **atual do host** (`docker buildx inspect`
   sem nome) como "Não gerenciado" com **Gerenciar**: o formulário vem com o nome, os limites lidos do
   container (inclusive os aplicados por `docker update`), a flag de `network.host` e "padrão do host" ligado
@@ -148,8 +151,9 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   não consegue tirar um limite de RAM. A recriação pendente corrige depois.
 - **Recriação pendente** (`runPendingBuilderRecreate`): roda quando nenhum build está em andamento, no tick
   do agendador (`runEnvironmentsTick`) e no motor da fila do build (`runBuildPump`, **antes** de iniciar a
-  próxima mesa, senão seria sempre passada para trás), na vez da fila; tira a pendência (também na falha,
-  que fica na linha) e audita como `system`. Não roda nas prévias das mesas (`isPreviewInstance`).
+  próxima mesa, senão seria sempre passada para trás), na vez da fila. A pendência é **reivindicada de forma
+  atômica** antes de recriar (`findOneAndUpdate` com `builderPending != null` → `null`): com o tick e o motor
+  da fila chamando juntos, só um recria; numa falha ela não volta (a falha fica na linha) e audita como `system`. Não roda nas prévias das mesas (`isPreviewInstance`).
 - **Ações** (`POST /api/environments/builder/actions` `{ action, confirm?, force? }`, `runBuilderAction`; exigem
   a configuração salva): **Criar** (só quando não existe; cria com os limites salvos), **Levantar**
   (`--bootstrap`), **Derrubar** (`buildx stop`, o cache continua), **Recriar** (`--keep-state`; com build em
