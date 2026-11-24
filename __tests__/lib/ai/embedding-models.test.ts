@@ -14,7 +14,10 @@ vi.mock('@/lib/integrations/config', () => ({
   getIntegration: vi.fn(async () => ({ version: 'v1' })),
   isIntegrationConfigured: () => true,
 }))
-vi.mock('@/lib/ai/api-keys', () => ({ requireActiveAiProviderKey: vi.fn(async () => ({ id: 'key_ativa', name: 'Principal', apiKey: 'chave' })) }))
+vi.mock('@/lib/ai/api-keys', () => {
+  const key = { id: 'key_ativa', name: 'Principal', apiKey: 'chave' }
+  return { fetchWithKeyFailover: vi.fn(async (_id: string, _label: string, call: (k: typeof key) => Promise<Response>) => ({ response: await call(key), key })) }
+})
 vi.mock('@/lib/integrations/debug', () => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),

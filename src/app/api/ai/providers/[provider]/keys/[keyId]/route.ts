@@ -15,7 +15,7 @@ export const PATCH = withRoute<{ provider: string; keyId: string }>(async ({ req
     return ok(await updateAiApiKey(provider, params.keyId, body.data, getLocalUser().id))
 })
 
-/** DELETE /api/ai/providers/[provider]/keys/[keyId] — remove a chave (a ativa só quando é a única: 409 `AI_API_KEY_ACTIVE`). */
+/** DELETE /api/ai/providers/[provider]/keys/[keyId] — remove a chave (a principal só quando é a única: 409 `AI_API_KEY_PRIMARY`). */
 export const DELETE = withRoute<{ provider: string; keyId: string }>(async ({ params }) =>
     ok(await removeAiApiKey(keyRingProvider(params.provider), params.keyId, getLocalUser().id)),
 )

@@ -14,10 +14,12 @@ import {
 import type { AiApiKeyDto, AiApiKeyProviderId } from "../../api-keys"
 import { useRemoveAiApiKey } from "../../hooks/useAiApiKeys"
 
-/** Texto da confirmação: a chave em uso e única deixa o provedor "Não configurado". */
+/** Texto da confirmação: a principal (só removível quando é a única) deixa o provedor "Não configurado"; outra em uso sai do rodízio. */
 export function removeApiKeyMessage(apiKey: AiApiKeyDto, providerName: string): string {
-    if (apiKey.active) return `Esta é a única chave e está em uso: o ${providerName} fica "Não configurado" e as features que dependem dele ficam indisponíveis até você adicionar outra chave.`
-    return "O segredo é apagado do Opex. O consumo já medido com esta chave continua no filtro \"Chaves removidas\"."
+    const history = "O consumo já medido com esta chave continua no filtro \"Chaves removidas\"."
+    if (apiKey.primary) return `Esta é a única chave e está em uso: o ${providerName} fica "Não configurado" e as features que dependem dele ficam indisponíveis até você adicionar outra chave.`
+    if (apiKey.active) return `A chave sai do rodízio e o segredo é apagado do Opex; as outras chaves em uso continuam atendendo o ${providerName}. ${history}`
+    return `O segredo é apagado do Opex. ${history}`
 }
 
 export function RemoveApiKeyDialog({ provider, providerName, apiKey, open, onOpenChange }: { provider: AiApiKeyProviderId; providerName: string; apiKey: AiApiKeyDto; open: boolean; onOpenChange: (open: boolean) => void }) {

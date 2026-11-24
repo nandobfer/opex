@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { AnimatePresence } from "framer-motion"
-import { KeyRound, Plus } from "lucide-react"
+import { Info, KeyRound, Plus } from "lucide-react"
 import { ACTIVE_ITEM_ROW_SKELETON_CLASS } from "@/components/list/ActiveItemRow"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
@@ -10,15 +10,15 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import type { AiApiKeyDto, AiApiKeyProviderId } from "../../api-keys"
+import { feedsEngramind, type AiApiKeyDto, type AiApiKeyProviderId } from "../../api-keys"
 import { useAiApiKeys, useAiApiKeysRealtime } from "../../hooks/useAiApiKeys"
 import { ApiKeyFormDialog } from "./ApiKeyFormDialog"
 import { ApiKeyItem } from "./ApiKeyItem"
 
 /**
- * Chaves de API nomeadas do provedor (aba Configuração, OPE-155): várias chaves, **uma em uso**. Só a
- * chave em uso é usada pelas features, catálogo de modelos, testes e agentes; sem chave em uso o
- * provedor fica "Não configurado". O segredo nunca é exibido.
+ * Chaves de API nomeadas do provedor (aba Configuração, OPE-155/OPE-179): várias chaves, **várias em uso**
+ * (rodízio por geração, com troca para a próxima quando uma falha) e **uma principal** (Engramind e
+ * teste do provedor). Sem chave em uso o provedor fica "Não configurado". O segredo nunca é exibido.
  */
 export function ApiKeysCard({ provider, providerName }: { provider: AiApiKeyProviderId; providerName: string }) {
     const keys = useAiApiKeys(provider)
@@ -34,7 +34,14 @@ export function ApiKeysCard({ provider, providerName }: { provider: AiApiKeyProv
                         <KeyRound className="h-4 w-4 text-primary" aria-hidden />
                         Chaves de API
                     </CardTitle>
-                    <CardDescription>Cadastre várias chaves com nome e escolha qual está em uso. Só a chave em uso é usada pelo Opex; o segredo nunca é exibido.</CardDescription>
+                    <CardDescription>
+                        Cadastre várias chaves com nome e clique para pôr ou tirar cada uma de uso. Com mais de uma em uso, o Opex reveza as chaves a cada geração e, se uma falhar (recusada, sem saldo ou no limite), tenta a próxima. O segredo nunca é exibido.
+                    </CardDescription>
+                    {feedsEngramind(provider) ? (
+                        <p className="flex items-start gap-1.5 text-xs text-muted-foreground" data-slot="engramind-note">
+                            <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-primary" aria-hidden />O Engramind aceita uma só chave: ele recebe a chave principal.
+                        </p>
+                    ) : null}
                 </div>
                 <Button type="button" size="sm" className="gap-1.5" onClick={() => setDialog({ open: true, target: null })}>
                     <Plus className="h-4 w-4" aria-hidden />

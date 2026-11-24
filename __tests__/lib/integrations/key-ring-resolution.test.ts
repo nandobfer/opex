@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { randomBytes } from 'crypto'
 import { encryptSecret } from '@/lib/crypto/secretBox'
 import { getIntegrationDef } from '@/lib/integrations/catalog'
-import { activeApiKeyOf, buildResolvedIntegration, isIntegrationConfigured } from '@/lib/integrations/config'
+import { activeApiKeyOf, buildResolvedIntegration, isIntegrationConfigured, selectedApiKeysOf } from '@/lib/integrations/config'
 import { KEY_RING_INTEGRATION_IDS } from '@/lib/integrations/key-ring'
 import type { StoredIntegration } from '@/lib/integrations/store'
 
@@ -61,5 +61,35 @@ describe('chaveiro das integrações de IA', () => {
   it('id ativo que não existe mais não resolve chave', () => {
     expect(activeApiKeyOf({ apiKeys: [key('key_a', 'x')], activeApiKeyId: 'key_z' })).toBeNull()
     expect(activeApiKeyOf(null)).toBeNull()
+  })
+
+  describe('chaves em uso no rodízio (OPE-179)', () => {
+    const at = (id: string, ms: number) => ({ ...key(id, id), createdAt: new Date(ms) })
+    let keys: ReturnType<typeof at>[] = []
+    beforeEach(() => {
+      keys = [at('key_c', 3), at('key_a', 1), at('key_b', 2)]
+    })
+    const ids = (list: { id: string }[]) => list.map((item) => item.id)
+
+    it('sem o campo (documentos de antes), o rodízio é só a principal', () => {
+      expect(ids(selectedApiKeysOf({ apiKeys: keys, activeApiKeyId: 'key_b' }))).toEqual(['key_b'])
+    })
+
+    it('ordem estável por criação; ids removidos saem; a principal sempre entra (a versão antiga só troca `activeApiKeyId`)', () => {
+      expect(ids(selectedApiKeysOf({ apiKeys: keys, activeApiKeyId: 'key_a', selectedApiKeyIds: ['key_c', 'key_a', 'key_removida'] }))).toEqual(['key_a', 'key_c'])
+      expect(ids(selectedApiKeysOf({ apiKeys: keys, activeApiKeyId: 'key_b', selectedApiKeyIds: ['key_a', 'key_c'] }))).toEqual(['key_a', 'key_b', 'key_c'])
+    })
+
+    it('sem principal válida não há chave em uso (provedor não configurado), mesmo com a lista gravada', () => {
+      expect(selectedApiKeysOf({ apiKeys: keys, activeApiKeyId: null, selectedApiKeyIds: ['key_a'] })).toEqual([])
+      expect(selectedApiKeysOf({ apiKeys: keys, activeApiKeyId: 'key_z', selectedApiKeyIds: ['key_a'] })).toEqual([])
+      expect(selectedApiKeysOf(null)).toEqual([])
+    })
+
+    it('a API key resolvida da integração continua sendo a principal, com várias em uso', () => {
+      const def = getIntegrationDef('ai_gemini')
+      const resolved = buildResolvedIntegration<'ai_gemini'>(def, stored({ apiKeys: keys, activeApiKeyId: 'key_b', selectedApiKeyIds: ['key_a', 'key_b', 'key_c'] }))
+      expect(resolved.values.apiKey).toBe('key_b')
+    })
   })
 })

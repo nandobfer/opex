@@ -2,7 +2,7 @@ import { createOpenAI, type OpenAIProvider } from "@ai-sdk/openai"
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import { AI_REASONING_LEVELS, type AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
-import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
+import { createKeyFailoverFetch, fetchWithKeyFailover, requireAiProviderKeyOrder, type AiProviderKey } from "./api-keys"
 
 /**
  * OpenAI — SOMENTE servidor. Lista de modelos pela REST `v1/models` (filtrada para modelos de
@@ -13,14 +13,7 @@ import { OPENAI_API_URL } from "./endpoints"
 
 export { OPENAI_API_URL }
 
-/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
-async function getOpenaiKey(): Promise<ActiveAiProviderKey> {
-    return requireActiveAiProviderKey("ai_openai", "OpenAI")
-}
-
-async function getOpenaiApiKey(): Promise<string> {
-    return (await getOpenaiKey()).apiKey
-}
+const LABEL = "OpenAI"
 
 interface OpenaiModelRaw {
     id: string
@@ -50,12 +43,13 @@ export function toOpenaiModel(raw: OpenaiModelRaw): AiModelDto {
     }
 }
 
-async function fetchOpenaiModelsRaw(signal?: AbortSignal): Promise<OpenaiModelRaw[]> {
-    const apiKey = await getOpenaiApiKey()
+/** Lista crua; as chaves em uso giram e trocam em falha (OPE-179). `key` confere só aquela chave. */
+async function fetchOpenaiModelsRaw(signal?: AbortSignal, key?: AiProviderKey): Promise<OpenaiModelRaw[]> {
     let res: Response
     try {
-        res = await debugFetch(integrationDebug("ai_openai"), "OpenAI", `${OPENAI_API_URL}/models`, { headers: { Authorization: `Bearer ${apiKey}` }, cache: "no-store", signal })
+        res = (await fetchWithKeyFailover("ai_openai", LABEL, (attempt) => debugFetch(integrationDebug("ai_openai"), LABEL, `${OPENAI_API_URL}/models`, { headers: { Authorization: `Bearer ${attempt.apiKey}` }, cache: "no-store", signal }), { keys: key ? [key] : undefined })).response
     } catch (error) {
+        if (error instanceof AiProviderError) throw error
         throw new AiProviderError(`Não foi possível conectar à OpenAI: ${error instanceof Error ? error.message : String(error)}`)
     }
     if (res.status === 401 || res.status === 403) throw new AiProviderError(`A OpenAI recusou a API key (HTTP ${res.status})`)
@@ -66,8 +60,8 @@ async function fetchOpenaiModelsRaw(signal?: AbortSignal): Promise<OpenaiModelRa
 
 const newestFirst = (a: OpenaiModelRaw, b: OpenaiModelRaw) => (b.created ?? 0) - (a.created ?? 0) || a.id.localeCompare(b.id)
 
-export async function listOpenaiModels(signal?: AbortSignal): Promise<AiModelDto[]> {
-    return (await fetchOpenaiModelsRaw(signal))
+export async function listOpenaiModels(signal?: AbortSignal, key?: AiProviderKey): Promise<AiModelDto[]> {
+    return (await fetchOpenaiModelsRaw(signal, key))
         .filter((model) => isOpenaiTextModel(model.id))
         .sort(newestFirst)
         .map(toOpenaiModel)
@@ -81,8 +75,8 @@ export async function listOpenaiEmbeddingModels(signal?: AbortSignal): Promise<A
         .map((model) => ({ ...toOpenaiModel(model), variants: [] }))
 }
 
-/** Cliente da AI SDK com a chave ativa e o id dela (o consumo é atribuído à chave usada). */
-export async function createOpenaiProvider(): Promise<{ provider: OpenAIProvider; apiKeyId: string }> {
-    const key = await getOpenaiKey()
-    return { provider: createOpenAI({ apiKey: key.apiKey }), apiKeyId: key.id }
+/** Cliente da AI SDK com o rodízio das chaves em uso; `currentKeyId` é a chave que respondeu (consumo). */
+export async function createOpenaiProvider(): Promise<{ provider: OpenAIProvider; currentKeyId: () => string }> {
+    const keys = createKeyFailoverFetch({ order: await requireAiProviderKeyOrder("ai_openai", LABEL), label: LABEL })
+    return { provider: createOpenAI({ apiKey: keys.initialApiKey, fetch: keys.fetch }), currentKeyId: () => keys.current().id }
 }

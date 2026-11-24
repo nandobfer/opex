@@ -1,16 +1,56 @@
 import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
+import { listAnthropicModels } from "@/lib/ai/anthropic"
+import { getAiProviderKeyPool, type AiProviderKey } from "@/lib/ai/api-keys"
 import { clearAiCatalogCache, listAiAgents, listAiModels } from "@/lib/ai/catalog"
+import { listDeepseekModels } from "@/lib/ai/deepseek"
 import { AiProviderError } from "@/lib/ai/errors"
+import { listGeminiModels } from "@/lib/ai/gemini"
+import { listJevModels } from "@/lib/ai/jev"
 import { getOpencodeInfo } from "@/lib/ai/opencode"
 import { verifyOpencodeGoKey } from "@/lib/ai/opencode-go"
-import { AI_PROVIDERS } from "@/lib/ai/providers"
-import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "@/features/integrations/testers/types"
+import { listOpenaiModels } from "@/lib/ai/openai"
+import { AI_PROVIDERS, getAiProvider } from "@/lib/ai/providers"
+import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester, type TestEmit } from "@/features/integrations/testers/types"
+import type { AiApiKeyProviderId } from "../api-keys"
 
 /** Testes de conexão dos provedores de IA e do hub "Inteligência Artificial". */
 
 function failFrom(error: unknown): never {
     fail(error instanceof AiProviderError ? error.message : describeFetchError(error))
+}
+
+/** Conferência de UMA chave, sem rodízio (lista os modelos com ela; no Go, a conferência sem gerar). */
+const KEY_CHECKS: Record<AiApiKeyProviderId, (signal: AbortSignal | undefined, key: AiProviderKey) => Promise<unknown>> = {
+    gemini: listGeminiModels,
+    anthropic: listAnthropicModels,
+    openai: listOpenaiModels,
+    deepseek: listDeepseekModels,
+    jev: listJevModels,
+    "opencode-go": verifyOpencodeGoKey,
+}
+
+/**
+ * Com mais de uma chave em uso (OPE-179), confere cada uma: a chave quebrada aparece no status do
+ * provedor, mesmo com o rodízio cobrindo a falha. Devolve o aviso (ou `null` se todas foram aceitas).
+ */
+export async function checkEachKey(provider: AiApiKeyProviderId, emit: TestEmit, signal: AbortSignal): Promise<string | null> {
+    const pool = await getAiProviderKeyPool(getAiProvider(provider).integrationId)
+    if (pool.length < 2) return null
+    const failures: string[] = []
+    for (const key of pool) {
+        emit("step", `Conferindo a chave “${key.name}”`)
+        try {
+            await KEY_CHECKS[provider](stepSignal(signal, 20_000), key)
+            emit("success", `Chave “${key.name}” aceita`)
+        } catch (error) {
+            const message = error instanceof AiProviderError ? error.message : describeFetchError(error)
+            failures.push(`“${key.name}” (${message})`)
+            emit("error", `Chave “${key.name}”: ${message}`)
+        }
+    }
+    if (failures.length === 0) return null
+    return `${pool.length - failures.length} de ${pool.length} chaves aceitas; falhou: ${failures.join(", ")}`
 }
 
 export const testOpencode: IntegrationTester = async ({ emit, signal }) => {
@@ -43,6 +83,8 @@ export const testGemini: IntegrationTester = async ({ emit, signal }) => {
     emit("step", "GET /v1beta/models")
     const models = await listAiModels("gemini", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
     emit(models.length ? "success" : "warn", `${models.length} modelo(s) de texto disponível(is)`)
+    const keyWarning = await checkEachKey("gemini", emit, signal)
+    if (keyWarning) return warnResult(keyWarning)
     if (!models.length) return warnResult("API key válida, mas nenhum modelo de texto disponível")
     return `API key válida; ${models.length} modelo(s)`
 }
@@ -58,6 +100,8 @@ function apiKeyModelsTester(providerId: keyof typeof API_KEY_INTEGRATIONS, keyHi
         emit("step", `GET ${endpoint}`)
         const models = await listAiModels(providerId, { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
         emit(models.length ? "success" : "warn", `${models.length} modelo(s) de texto disponível(is)`)
+        const keyWarning = await checkEachKey(providerId, emit, signal)
+        if (keyWarning) return warnResult(keyWarning)
         if (!models.length) return warnResult("API key válida, mas nenhum modelo de texto disponível")
         return `API key válida; ${models.length} modelo(s)`
     }
@@ -78,6 +122,8 @@ export const testOpencodeGo: IntegrationTester = async ({ emit, signal }) => {
     emit("step", "POST /openai/v1/chat/completions (conferência da chave, sem gerar)")
     await verifyOpencodeGoKey(stepSignal(signal, 20_000)).catch(failFrom)
     emit("success", "Chave aceita pelo OpenCode Go")
+    const keyWarning = await checkEachKey("opencode-go", emit, signal)
+    if (keyWarning) return warnResult(keyWarning)
     if (!models.length) return warnResult("Chave aceita, mas o Go não listou modelos")
     return `Chave aceita; ${models.length} modelo(s)`
 }
@@ -89,6 +135,8 @@ export const testJev: IntegrationTester = async ({ emit, signal }) => {
     emit("step", "GET /v1/models")
     const models = await listAiModels("jev", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
     emit(models.length ? "success" : "warn", `${models.length} modelo(s) disponível(is)`)
+    const keyWarning = await checkEachKey("jev", emit, signal)
+    if (keyWarning) return warnResult(keyWarning)
     if (!models.length) return warnResult("API key válida, mas nenhum modelo disponível")
     return `API key válida; ${models.length} modelo(s)`
 }

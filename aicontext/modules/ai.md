@@ -9,12 +9,12 @@ e opções na própria aba da página "Inteligência Artificial".
 | Provedor | Integração | Pacote | Configuração |
 |---|---|---|---|
 | OpenCode | `ai_opencode` | `ai-sdk-provider-opencode-sdk` (5.x, OpenCode **2.x**) | URL do `opencode serve` (origem), diretório das sessões (opcional), senha (segredo) |
-| Gemini | `ai_gemini` | `@ai-sdk/google` | Chaves de API do Google AI Studio (chaveiro, uma em uso) |
-| Anthropic | `ai_anthropic` | `@ai-sdk/anthropic` | Chaves de API do Claude Console (chaveiro, uma em uso) |
-| OpenAI | `ai_openai` | `@ai-sdk/openai` (API Responses) | Chaves de API da plataforma OpenAI (chaveiro, uma em uso) |
-| DeepSeek | `ai_deepseek` | `@ai-sdk/deepseek` | Chaves de API da plataforma DeepSeek (chaveiro, uma em uso) |
-| OpenCode Go | `ai_opencode_go` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, conforme o modelo) | Chaves `oc_sk_…` da assinatura Go (chaveiro, uma em uso; OPE-156); gateway fixo `https://opencode.ai/inference/go` |
-| JEV | `ai_jev` | — (HTTP TypeSafe) | Chaves de API da TypeSafe (chaveiro, uma em uso); URL fixa `https://api.typesafe.ai` |
+| Gemini | `ai_gemini` | `@ai-sdk/google` | Chaves de API do Google AI Studio (chaveiro, várias em uso com rodízio e uma principal) |
+| Anthropic | `ai_anthropic` | `@ai-sdk/anthropic` | Chaves de API do Claude Console (chaveiro, várias em uso com rodízio e uma principal) |
+| OpenAI | `ai_openai` | `@ai-sdk/openai` (API Responses) | Chaves de API da plataforma OpenAI (chaveiro, várias em uso com rodízio e uma principal) |
+| DeepSeek | `ai_deepseek` | `@ai-sdk/deepseek` | Chaves de API da plataforma DeepSeek (chaveiro, várias em uso com rodízio e uma principal) |
+| OpenCode Go | `ai_opencode_go` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, conforme o modelo) | Chaves `oc_sk_…` da assinatura Go (chaveiro, várias em uso com rodízio e uma principal; OPE-156); gateway fixo `https://opencode.ai/inference/go` |
+| JEV | `ai_jev` | — (HTTP TypeSafe) | Chaves de API da TypeSafe (chaveiro, várias em uso com rodízio e uma principal); URL fixa `https://api.typesafe.ai` |
 
 - Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
 - **OpenCode** (`src/lib/ai/opencode.ts`): autenticação Basic `opencode:<senha>` em toda rota.
@@ -69,9 +69,9 @@ e opções na própria aba da página "Inteligência Artificial".
   `listOpenaiEmbeddingModels`), com cache separado; outro provedor ou tipo → `422`. Usado pela "IA do
   Opex" do Engramind (`useAiModels(provider, true, "embedding")`). As URLs oficiais ficam em
   `src/lib/ai/endpoints.ts` (puro, reexportadas por cada provedor).
-- **A chave em uso do Gemini, Anthropic, OpenAI e DeepSeek pode alimentar o Engramind** (Redator e
-  embedding, `modules/engramind.md`, "IA do Opex"): quando a chave **em uso** muda (seção "Chaves de
-  API"), o reenvio ao Engramind (`syncEngramindProviderKey`) é agendado depois da resposta. Falha no
+- **A chave principal do Gemini, Anthropic, OpenAI e DeepSeek pode alimentar o Engramind** (Redator e
+  embedding, `modules/engramind.md`, "IA do Opex"; o Engramind aceita uma chave só, então as demais chaves
+  em uso do rodízio não vão para ele): quando a chave **principal** muda (seção "Chaves de API"), o reenvio ao Engramind (`syncEngramindProviderKey`) é agendado depois da resposta. Falha no
   Engramind nunca desfaz nem bloqueia a gravação no Opex. O JEV não alimenta o Engramind. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
 - **Conexão confirmada na hora** (`confirmAiProviderConnection`, `src/lib/ai/connection.ts`,
@@ -89,68 +89,115 @@ e opções na própria aba da página "Inteligência Artificial".
   mesmo com a lista respondendo); hub `ai` = testa cada provedor configurado
   (gravando o status de cada um) e resume (amarelo se só parte conecta; erro se nenhum).
 
-## Chaves de API (chaveiro dos provedores, OPE-155)
+## Chaves de API (chaveiro dos provedores, OPE-155; várias em uso, OPE-179)
 
 Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go (desde a OPE-156) e JEV têm **várias chaves de API
-nomeadas** e **uma em uso** por provedor. O OpenCode no host (`ai_opencode`) fica fora: ele usa a senha
-do `opencode serve`, não uma chave de API.
+nomeadas**, **várias em uso** (rodízio, OPE-179) e **uma principal** por provedor. Nenhum desses provedores
+ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chaveiro: ele usa a senha do
+`opencode serve`, não uma chave de API.
 
 - **Armazenamento**: no próprio documento da integração (`integration_configs`), em `apiKeys`
-  (`{ id: "key_<hex>", name, secret (cifrado, secretBox), createdAt, updatedAt, createdBy }`) e
-  `activeApiKeyId`. Existe um único campo de chave ativa, então nunca há duas chaves em uso.
+  (`{ id: "key_<hex>", name, secret (cifrado, secretBox), createdAt, updatedAt, createdBy }`),
+  `activeApiKeyId` (a **principal**; um campo só, então nunca há duas principais) e `selectedApiKeyIds`
+  (as **em uso**, com a principal). O conjunto em uso é lido sempre por `selectedApiKeysOf`
+  (`src/lib/integrations/config.ts`), normalizado: sem principal válida → nenhuma em uso ("Não
+  configurado"); a principal sempre entra, mesmo fora da lista (a versão antiga, que divide o banco com
+  as prévias, só grava `activeApiKeyId`); ids que não existem mais saem; sem o campo (documentos de antes
+  da OPE-179), o rodízio é só a principal; ordem estável por criação. Por isso **não há migração** do
+  campo: a ausência equivale ao estado anterior.
 - **Resolução**: o campo privado `apiKey` dessas integrações tem `keyRing: true` no catálogo.
-  `buildResolvedIntegration` resolve `values.apiKey` pela **chave em uso** (`activeApiKeyOf`), sem ler
-  `secretValues`. Sem chave em uso, o segredo não existe e o provedor fica **"Não configurado"**, com
-  as features que dependem dele indisponíveis. Trocar a chave em uso muda o `version` e derruba o cache
-  do catálogo. Os clientes (`gemini.ts`, `anthropic.ts`, `openai.ts`, `deepseek.ts`, `opencode-go.ts` e `jev.ts`) leem a
-  chave por `requireActiveAiProviderKey` (`src/lib/ai/api-keys.ts`), que devolve também o `id` dela.
-  Sem chave: "X sem chave de API ativa: cadastre e ative uma chave em Integrações › …".
+  `buildResolvedIntegration` resolve `values.apiKey` pela **principal** (`activeApiKeyOf`), sem ler
+  `secretValues`. É ela que o Engramind, o teste do provedor (exigência de chave) e o "Todas" da
+  assinatura do Go usam. Sem principal, o segredo não existe e o provedor fica **"Não configurado"**,
+  com as features que dependem dele indisponíveis. Trocar a principal muda o `version` e derruba o
+  cache do catálogo.
+- **Rodízio e troca de chave em falha** (`src/lib/ai/api-keys.ts` + puro `src/lib/ai/key-rotation.ts`):
+  - os clientes (`gemini.ts`, `anthropic.ts`, `openai.ts`, `deepseek.ts`, `opencode-go.ts` e `jev.ts`)
+    pegam a ordem das chaves em uso por `requireAiProviderKeyOrder`, que começa na próxima chave do
+    rodízio (cursor por provedor, em memória do processo) e avança o cursor. Sem chave: "X sem chave de
+    API ativa: cadastre e ative uma chave em Integrações › …";
+  - **a unidade do rodízio é a geração (turno)**: cada `prepareModel` (streamAi, Agente Opex, motor
+    Opex dos rotineiros) começa numa chave e fica com ela em todos os passos do turno; só troca se a
+    chave falhar. Chamadas avulsas (JEV `systemone`, listar modelos, catálogo e conferência do Go) giram
+    a cada chamada (`fetchWithKeyFailover`);
+  - nas SDKs da AI SDK, `createKeyFailoverFetch` cria a SDK com o segredo da primeira chave e o `fetch`
+    troca esse segredo, em todos os cabeçalhos (`Authorization: Bearer`, `x-api-key`,
+    `x-goog-api-key`), pelo da chave da tentativa; no Go, `applyKey` também força o `Authorization`;
+  - **falha da chave** = HTTP 401, 402, 403 ou 429 (recusada, sem saldo, limite ou cota). Com outra
+    chave disponível, o corpo da resposta é descartado e a próxima chave é tentada; se todas falham, a
+    feature recebe `AiProviderError` com a lista: "Todas as chaves em uso do Gemini falharam: “Pessoal”
+    (HTTP 401, chave recusada), “Trabalho” (HTTP 429, limite ou cota)." Erro que não é da chave (400,
+    5xx, rede, cancelamento) não troca de chave, e só se repete o pedido cujo corpo pode ser reenviado;
+  - **com uma chave só em uso, nada muda**: a resposta passa intacta para a SDK (inclusive a espera
+    com repetição da própria SDK em 429). Com várias, um 429 troca de chave na hora.
 - **Um só caminho de gravação**: as rotas `/api/ai/providers/[provider]/keys`. O PATCH genérico de
   integrações **recusa** `secrets.apiKey` dessas integrações (400 "Gerencie as chaves deste provedor
   na lista Chaves de API"), e o card "Campos privados" não mostra o campo. O gatilho antigo de
   sincronização com o Engramind no `updateIntegration` foi removido; agora quem dispara é o serviço
-  das chaves.
+  das chaves. A rota `/keys/[keyId]/activate` ("uma em uso") foi **removida** na OPE-179, substituída
+  por `/selection` e `/primary`; o card era o único consumidor.
 - **Regras** (`src/features/ai/server/api-keys.ts`):
   - nome obrigatório, com no máximo 60 caracteres e único no provedor (sem diferenciar maiúsculas);
-  - a **primeira** chave (ou a primeira criada quando não há nenhuma em uso) entra em uso;
+  - a **primeira** chave (ou a criada quando não há principal válida) vira principal e entra em uso; as
+    demais entram fora de uso;
+  - **pôr em uso** (`PATCH .../selection { selected: true }`) inclui a chave no rodízio; sem principal
+    válida, ela vira a principal;
+  - **tirar de uso** (`selected: false`): a principal é recusada com 409 `AI_API_KEY_PRIMARY` ("torne
+    outra chave principal antes"), então o provedor configurado nunca fica sem chave em uso;
+  - **tornar principal** (`POST .../primary`) grava `activeApiKeyId` e põe a chave em uso; a principal
+    anterior continua em uso;
   - **Substituir segredo** mantém o id, então o consumo continua agrupado na chave;
-  - remover a chave **em uso** é recusado com 409 `AI_API_KEY_ACTIVE` enquanto houver outras ("ative
-    outra chave antes de removê-la");
-  - a chave em uso **única** pode ser removida, com confirmação que avisa que o provedor fica "Não
+  - remover a **principal** é recusado com 409 `AI_API_KEY_PRIMARY` enquanto houver outras chaves;
+    uma chave em uso que não é a principal pode ser removida e sai do rodízio (`$pull` em
+    `selectedApiKeyIds`);
+  - a principal **única** pode ser removida, com confirmação que avisa que o provedor fica "Não
     configurado";
   - sem `INTEGRATIONS_ENCRYPTION_KEY` → 409.
 
-  O segredo nunca volta: DTO `AiApiKeyDto { id, name, active, createdAt, updatedAt }`. A auditoria
-  `ChaveApiIA` registra nome, chave em uso e "(substituído)", nunca o valor.
-- **Efeitos quando a chave em uso muda** (ativar, substituir o segredo da que está em uso, primeira
-  chave, remover a que está em uso):
-  - limpa o cache do catálogo e os testes de conexão em memória (no OpenCode Go, também o cache do
-    catálogo próprio do Go, `clearOpencodeGoCatalogCache`);
-  - depois da resposta, testa o provedor de novo (`runIntegrationTest`; só quando ainda há chave em
-    uso);
-  - depois da resposta, reenvia ao Engramind (`syncEngramindProviderKey`). Não vale para o JEV nem
-    para o OpenCode Go (`NOT_ENGRAMIND_SOURCES`): nenhum dos dois é fonte do Redator ou do embedding.
+  O segredo nunca volta: DTO `AiApiKeyDto { id, name, active (em uso), primary, createdAt, updatedAt }`,
+  com a principal primeiro, depois as em uso e as demais da mais nova para a mais antiga. A auditoria
+  `ChaveApiIA` registra nome, `emUso`, `principal` e "(substituído)", nunca o valor.
+- **Efeitos**:
+  - **principal mudou** (tornar principal, substituir o segredo dela, primeira chave, remover a única):
+    limpa o cache do catálogo e os testes de conexão em memória (no OpenCode Go, também o catálogo
+    próprio do Go, `clearOpencodeGoCatalogCache`); depois da resposta, testa o provedor de novo
+    (`runIntegrationTest`, só quando ainda há principal) e reenvia ao Engramind
+    (`syncEngramindProviderKey`). O reenvio não vale para o JEV nem para o OpenCode Go
+    (`AI_API_KEY_ENGRAMIND_PROVIDERS`/`feedsEngramind` no módulo puro `src/features/ai/api-keys.ts`):
+    nenhum dos dois é fonte do Redator ou do embedding;
+  - **só o rodízio mudou** (pôr/tirar de uso, substituir o segredo ou remover uma chave em uso que não
+    é a principal): depois da resposta, testa o provedor de novo, sem reenviar ao Engramind.
 
   Todo ato publica `ai-provider-keys-updated` (`{ provider }`) em `private-app`. O hook
   `useAiApiKeysRealtime` relê a lista, o status dos provedores, os modelos, o consumo e o detalhe da
   integração.
+- **Teste do provedor com várias chaves** (`checkEachKey` em `src/features/ai/server/testers.ts`): depois
+  da listagem (com rodízio), cada chave em uso é conferida isoladamente (lista de modelos com ela; no Go,
+  a conferência sem gerar). Se alguma falha, o resultado é aviso (amarelo): "2 de 3 chaves aceitas;
+  falhou: “X” (…)". Com uma chave só, não há conferência extra.
 - **Tela**: card **Chaves de API** (`ApiKeysCard`, `src/features/ai/components/api-keys/`) na aba
-  Configuração. Cada chave é um card (OPE-159): clicar em qualquer ponto do card ativa a chave
-  (rótulo acessível "Usar a chave <nome>", resposta otimista com reversão); a chave em uso tem o selo
-  "Em uso", borda e barra em `primary` e não ativa de novo. Substituir segredo, Renomear (em linha) e
-  Remover aparecem no hover ou no foco do card. O diálogo de nova chave pede nome e segredo
-  (campo de senha). Nenhum `<form>` próprio: a página já é um formulário. O card e o campo de
-  renomear são compartilhados com a aba Contas do OpenCode (`ActiveItemRow` e `InlineRenameField` em
-  `src/components/list/`).
+  Configuração. A descrição explica o rodízio por geração e a troca em falha; em Gemini, Anthropic,
+  OpenAI e DeepSeek aparece o aviso "O Engramind aceita uma só chave: ele recebe a chave principal".
+  Cada chave é um card (OPE-159): clicar em qualquer ponto do card **põe ou tira a chave de uso**
+  (rótulos acessíveis "Usar a chave <nome>" / "Tirar a chave <nome> de uso", `aria-pressed`, resposta
+  otimista com reversão, `useToggleAiApiKey`). As chaves em uso têm o selo "Em uso", borda e barra em
+  `primary`; a principal tem também o selo "Principal" (estrela) e, ao tentar tirá-la de uso ou
+  removê-la com outras chaves, um toast explica a regra. Nas outras chaves, a ação "Tornar principal"
+  (estrela, `useMakePrimaryAiApiKey`, otimista) aparece junto de Substituir segredo, Renomear (em linha)
+  e Remover, no hover ou no foco do card. O diálogo de nova chave pede nome e segredo (campo de senha).
+  Nenhum `<form>` próprio: a página já é um formulário. O card e o campo de renomear são compartilhados
+  com a aba Contas do OpenCode (`ActiveItemRow` e `InlineRenameField` em `src/components/list/`).
 - **Card `ActiveItemRow`** (compartilhado, OPE-159): um `<button>` real cobre o card inteiro (Tab +
   Enter/Espaço nativos, `aria-label` = `activateLabel`, desabilitado com `aria-busy` enquanto a
   ativação está pendente); nome e sublabel ficam acima dele sem capturar clique. As ações ficam numa
   camada acima, sem botão dentro de botão, com `stopPropagation`: ocultas por opacidade, mas no DOM,
-  aparecem com `group-hover`/`group-focus-within` e ficam sempre visíveis em telas sem hover. O item
-  em uso e o modo de renomear não têm o botão de ativar. O selo "Em uso" fica logo à direita do nome
-  (o nome trunca; o selo, compacto, não encolhe), na mesma linha de altura fixa (`h-5`), para não deixar
-  vazio à direita com as ações ocultas nem mudar a altura do card. O skeleton das listas usa
-  `ACTIVE_ITEM_ROW_SKELETON_CLASS`, a mesma altura do card.
+  aparecem com `group-hover`/`group-focus-within` e ficam sempre visíveis em telas sem hover. Sem
+  `onDeactivate`, o item em uso não tem o botão (contas do OpenCode, uma em uso); com `onDeactivate`
+  (chaves de API, OPE-179), o card em uso também é clicável e o clique o tira de uso
+  (`deactivateLabel`, `aria-pressed`). O modo de renomear não tem o botão. O selo "Em uso" fica logo à
+  direita do nome (o nome trunca; o selo, compacto, não encolhe), na mesma linha de altura fixa (`h-5`),
+  para não deixar vazio à direita com as ações ocultas nem mudar a altura do card. O skeleton das listas
+  usa `ACTIVE_ITEM_ROW_SKELETON_CLASS`, a mesma altura do card.
 - **Migração** `migrate-ai-provider-api-keys`: a API key única de cada provedor vira a chave
   "**Chave principal**", já em uso (a caixa cifrada é reaproveitada). A migração **só copia**: o
   `secretValues.apiKey` legado fica intacto e é ignorado pelo código novo, porque as prévias usam o
@@ -161,12 +208,15 @@ do `opencode serve`, não uma chave de API.
   migrações rodam no `dbConnect()` antes de qualquer leitura de integração, então o Go não passa por
   uma janela "Não configurado" (não há leitura da chave legada como reserva: removida a única chave, o
   provedor fica sem chave). Se a chave do Go for trocada na versão antiga depois que uma prévia já
-  rodou a migração, o chaveiro fica com a cópia anterior: use "Substituir segredo".
-- **Consumo por chave**: a geração atribui o consumo à chave usada na **preparação** do modelo
-  (`PreparedModel.apiKeyId`, `null` no OpenCode). Se a chave em uso trocar no meio de uma execução, o
-  consumo continua indo para a chave certa. O valor é gravado em `apiKeyId` de `ai_consumption_logs`
-  (`streamAi`, Agente Opex, motor Opex dos rotineiros) e de `ai_usage_logs` (JEV). Registros antigos
-  não têm o campo e aparecem como **sem chave identificada**.
+  rodou a migração, o chaveiro fica com a cópia anterior: use "Substituir segredo". A OPE-179 não
+  alterou a migração: `selectedApiKeyIds` ausente já equivale a "só a principal em uso".
+- **Consumo por chave**: a geração atribui o consumo à chave **que respondeu** (`PreparedModel.apiKeyId`,
+  getter lido no momento do registro; `null` no OpenCode). Com troca de chave no meio do turno, o
+  consumo do turno inteiro vai para a chave final. O valor é gravado em `apiKeyId` de
+  `ai_consumption_logs` (`streamAi`, Agente Opex, motor Opex dos rotineiros) e de `ai_usage_logs` (JEV:
+  a chave que respondeu ou, se todas falharam, a última tentada). Registros antigos não têm o campo e
+  aparecem como **sem chave identificada**. O filtro "Chave de API" da aba Consumo marca "(em uso)" em
+  todas as chaves do rodízio.
 
 ## Geração (`src/lib/ai/stream.ts`)
 
@@ -226,12 +276,14 @@ do `opencode serve`, não uma chave de API.
   rotineiros (aceita as ferramentas do app); **não** é oferecido como sessão de agente
   (`supportsAgent: false`) nem nas features exclusivas do OpenCode de sessão.
 - **Integração** `ai_opencode_go` (filha de `ai`, `/integracoes/ia/opencode-go`): só o segredo
-  `apiKey` (sem `env`), gerenciado pelo chaveiro desde a OPE-156 (card **Chaves de API**, uma em uso;
-  ver "Chaves de API"); abas Configuração, Modelos e Consumo. Listagem de modelos, conferência da chave
-  e geração usam a **chave em uso** (`requireActiveAiProviderKey`). Sem ela: `AiProviderError`
-  "OpenCode Go sem chave de API ativa: cadastre e ative uma chave em Integrações › …" antes de
-  qualquer chamada. `createOpencodeGoModel` devolve o `apiKeyId` da chave usada, e `prepareModel` o
-  repassa: o consumo do Go é atribuído à chave.
+  `apiKey` (sem `env`), gerenciado pelo chaveiro desde a OPE-156 (card **Chaves de API**, várias em uso
+  com rodízio desde a OPE-179; ver "Chaves de API"); abas Configuração, Modelos e Consumo. Listagem de
+  modelos, conferência da chave e geração usam as **chaves em uso** com rodízio e troca em falha
+  (`requireAiProviderKeyOrder`, `fetchWithKeyFailover`, `createKeyFailoverFetch` com `applyKey` para o
+  `Authorization`). Sem chave: `AiProviderError` "OpenCode Go sem chave de API ativa: cadastre e ative
+  uma chave em Integrações › …" antes de qualquer chamada. `createOpencodeGoModel` devolve
+  `currentKeyId()` (a chave que respondeu), e `prepareModel` o expõe como `apiKeyId`: o consumo do Go é
+  atribuído à chave.
 - **Endpoints** (`src/lib/ai/endpoints.ts`): base `https://opencode.ai/inference/go`; Chat Completions
   e Responses em `/openai/v1`, Messages em `/anthropic/v1`, Generate Content em `/google/v1beta`.
   Toda requisição leva `Authorization: Bearer <chave>`, `x-opencode-session` (obrigatório: sem ele o Go
@@ -770,9 +822,10 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`; `?kind=embedding` só Gemini/OpenAI, senão 422); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais e o filtro `apiKey` (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna) no mesmo contrato dos provedores diretos: `rows` por origem (`key`), `total`, `coverageFrom` e as contagens de métricas ausentes; métricas ausentes ficam `null` |
-| `GET/POST /api/ai/providers/[provider]/keys` | Chaves de API do provedor (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e JEV; outro → 404), sem segredo / nova chave `{ name, secret }` (a primeira já entra em uso). Devolve a lista |
-| `PATCH/DELETE /api/ai/providers/[provider]/keys/[keyId]` | Renomeia `{ name }` e/ou substitui o segredo `{ secret }` / remove (a em uso só quando é a única: senão 409 `AI_API_KEY_ACTIVE`) |
-| `POST /api/ai/providers/[provider]/keys/[keyId]/activate` | Passa a usar esta chave no provedor |
+| `GET/POST /api/ai/providers/[provider]/keys` | Chaves de API do provedor (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e JEV; outro → 404), sem segredo / nova chave `{ name, secret }` (a primeira já entra como principal e em uso). Devolve a lista |
+| `PATCH/DELETE /api/ai/providers/[provider]/keys/[keyId]` | Renomeia `{ name }` e/ou substitui o segredo `{ secret }` / remove (a principal só quando é a única: senão 409 `AI_API_KEY_PRIMARY`) |
+| `PATCH /api/ai/providers/[provider]/keys/[keyId]/selection` | Põe `{ selected: true }` ou tira `{ selected: false }` a chave do rodízio (OPE-179); a principal não sai (409 `AI_API_KEY_PRIMARY`); sem principal, a chave posta em uso vira a principal |
+| `POST /api/ai/providers/[provider]/keys/[keyId]/primary` | Torna esta a chave principal (Engramind, teste, "Todas" do Go) e a põe em uso |
 | `GET /api/ai/providers/[provider]/usage` | Consumo de Gemini, Anthropic, OpenAI ou DeepSeek por recurso (`from`/`to` ISO opcionais e `apiKey` = id, `none`, `removed` ou `all`; sessão interna) com `rows`, `total`, `coverageFrom` e as contagens `missingInputRequests`, `missingOutputRequests`, `missingTokenRequests` e `missingCostRequests`; outro provedor → 404; intervalo inválido → 400 |
 | `GET /api/ai/providers/opencode/accounts` | Providers do OpenCode com as contas (sem segredos) |
 | `POST /api/ai/providers/opencode/accounts/[integrationId]/key` | Adiciona conta por chave `{ key, label?, answer? }` |
@@ -836,10 +889,15 @@ filtrando o provedor e cleanup); `opencode-usage-card.test.tsx` cobre o painel d
 mesmo card. Os testes de tags e estimativas verificam referências e ausência de
 logs JEV duplicados, inclusive tags avulsas e falha de negócio posterior à resposta.
 
-Chaves de API (OPE-155): `__tests__/lib/integrations/key-ring-resolution.test.ts` (chave em uso como
-API key, provedor sem chave em uso fica "Não configurado", `version`), `__tests__/features/ai/api-keys-service.test.ts`
-(regras, efeitos e ausência do segredo), `api-keys-route.test.ts`, `api-keys-card.test.tsx` (lista,
-ativar, remover a em uso, renomear sem `<form>` aninhado), `migrate-ai-provider-api-keys.test.ts` (só
+Chaves de API (OPE-155/OPE-179): `__tests__/lib/integrations/key-ring-resolution.test.ts` (principal como
+API key, provedor sem principal fica "Não configurado", `version`, conjunto em uso normalizado por
+`selectedApiKeysOf`), `__tests__/features/ai/api-keys-service.test.ts` (regras de uso e principal, efeitos e
+ausência do segredo), `api-keys-route.test.ts` (inclui `selection` e `primary`), `api-keys-card.test.tsx` (lista,
+pôr/tirar de uso, tornar principal, aviso do Engramind, remover a principal, renomear sem `<form>` aninhado),
+`__tests__/lib/ai/key-rotation.test.ts` e `key-failover.test.ts` (rodízio por geração, troca em
+401/402/403/429, segredo trocado em qualquer cabeçalho, mensagem com as chaves que falharam, uma chave só
+passa intacta e geração real da AI SDK com a segunda chave), `opencode-go-tester.test.ts` (conferência por
+chave), `migrate-ai-provider-api-keys.test.ts` (só
 copia, idempotente) e `__tests__/features/integrations/integration-service.test.ts` (PATCH genérico
 recusa a API key). Filtro por chave: `provider-usage.test.ts`, `jev-usage.test.ts`,
 `provider-usage-route.test.ts`, `provider-usage-card.test.tsx` e `jev-usage-card.test.tsx`; atribuição do

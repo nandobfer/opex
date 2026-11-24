@@ -1,4 +1,4 @@
-import { getActiveAiProviderKey, getAiProviderKeyById, type ActiveAiProviderKey } from "@/lib/ai/api-keys"
+import { getAiProviderKeyById, getPrimaryAiProviderKey, type AiProviderKey } from "@/lib/ai/api-keys"
 import { opencodeGoAllowances } from "@/lib/ai/opencode-go"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
@@ -15,7 +15,7 @@ import { loadGoCycleCost, loadGoDays } from "./go-series"
  * Consumo da assinatura OpenCode Go (OPE-167), lido da API do Console com uma chave do chaveiro
  * `ai_opencode_go`: medidores (5h, semana, mês), ciclo, previsão linear, gasto real do ciclo e o gráfico
  * diário em %. Nada é gravado no banco; o status fica em memória por chave e a rotina
- * `opencode-go-usage-refresh` relê a chave em uso e publica `opencode-go-usage-updated` quando muda.
+ * `opencode-go-usage-refresh` relê a chave principal e publica `opencode-go-usage-updated` quando muda.
  */
 
 const log = () => loggerFor({ feature: "opencode-quota", source: "opencode-go" })
@@ -54,12 +54,12 @@ const blank = (state: OpencodeGoUsageDto["state"], message: string, keyName: str
     chartMessage: null,
 })
 
-type KeyResolution = { key: ActiveAiProviderKey } | { dto: OpencodeGoUsageDto }
+type KeyResolution = { key: AiProviderKey } | { dto: OpencodeGoUsageDto }
 
-/** "Todas" usa a chave em uso; uma chave do chaveiro consulta a assinatura dela; "sem chave"/"removidas" não têm assinatura. */
+/** "Todas" usa a chave principal (a cota da assinatura é por chave, OPE-179); uma chave do chaveiro consulta a assinatura dela; "sem chave"/"removidas" não têm assinatura. */
 async function resolveKey(filter: string | undefined): Promise<KeyResolution> {
     if (!filter || filter === USAGE_KEY_ALL) {
-        const key = await getActiveAiProviderKey("ai_opencode_go")
+        const key = await getPrimaryAiProviderKey("ai_opencode_go")
         return key ? { key } : { dto: blank("unconfigured", "Cadastre e ative uma chave do OpenCode Go para ver o consumo da assinatura.") }
     }
     if (API_KEY_ID_PATTERN.test(filter)) {
@@ -76,7 +76,7 @@ const statusHash = (status: GoStatus) =>
     }).join("|")
 
 /** Status da chave: reaproveita a memória recente; `force` relê (respeitando o intervalo mínimo). Publica quando muda. */
-async function readStatus(key: ActiveAiProviderKey, { force, nowMs }: { force: boolean; nowMs: number }): Promise<StatusEntry & { fetched: boolean }> {
+async function readStatus(key: AiProviderKey, { force, nowMs }: { force: boolean; nowMs: number }): Promise<StatusEntry & { fetched: boolean }> {
     const state = store()
     const hit = state.status.get(key.id)
     if (hit && nowMs - hit.at < (force ? GO_MIN_REFRESH_MS : GO_STATUS_CACHE_MS)) return { ...hit, fetched: false }
@@ -186,9 +186,9 @@ export function refreshOpencodeGoUsage(query: UsageQuery = {}): Promise<Opencode
     return buildUsage(query, { force: true })
 }
 
-/** Rotina `opencode-go-usage-refresh`: relê o status da chave em uso e publica quando os percentuais mudam. */
+/** Rotina `opencode-go-usage-refresh`: relê o status da chave principal e publica quando os percentuais mudam. */
 export async function runOpencodeGoUsageRefresh(): Promise<string> {
-    const key = await getActiveAiProviderKey("ai_opencode_go")
+    const key = await getPrimaryAiProviderKey("ai_opencode_go")
     if (!key) return "Sem chave do OpenCode Go em uso"
     try {
         const { status } = await readStatus(key, { force: true, nowMs: Date.now() })

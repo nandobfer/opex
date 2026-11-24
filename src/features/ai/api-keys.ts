@@ -3,7 +3,8 @@ import type { AiProviderId } from "@/lib/ai/providers"
 
 /**
  * Chaves de API nomeadas dos provedores de IA (OPE-155) — módulo PURO (tela e API). Cada provedor por
- * API key tem várias chaves e **uma ativa**; o segredo nunca volta ao navegador (o DTO não o carrega).
+ * API key tem várias chaves, **várias em uso** (rodízio, OPE-179) e **uma principal**; o segredo nunca
+ * volta ao navegador (o DTO não o carrega).
  */
 
 /** Provedores com chaveiro: todos os de API key (OpenCode Go desde a OPE-156); o OpenCode no host usa a senha do `opencode serve` e fica fora. */
@@ -12,6 +13,16 @@ export type AiApiKeyProviderId = (typeof AI_API_KEY_PROVIDER_IDS)[number]
 
 export function isAiApiKeyProviderId(value: string): value is AiApiKeyProviderId {
     return (AI_API_KEY_PROVIDER_IDS as readonly string[]).includes(value)
+}
+
+/**
+ * Provedores que alimentam o Engramind (Redator/embedding): ele aceita uma chave só e recebe a principal.
+ * O JEV não gera texto e o Go não é fonte do Redator nem do embedding.
+ */
+export const AI_API_KEY_ENGRAMIND_PROVIDERS = ["gemini", "anthropic", "openai", "deepseek"] as const satisfies readonly AiApiKeyProviderId[]
+
+export function feedsEngramind(provider: AiApiKeyProviderId): boolean {
+    return (AI_API_KEY_ENGRAMIND_PROVIDERS as readonly string[]).includes(provider)
 }
 
 export const AI_API_KEY_NAME_MAX = 60
@@ -35,10 +46,17 @@ export const updateAiApiKeySchema = z
     .refine((input) => input.name !== undefined || input.secret !== undefined, { message: "Informe o nome ou o novo segredo" })
 export type UpdateAiApiKeyInput = z.infer<typeof updateAiApiKeySchema>
 
+/** Pôr ou tirar uma chave do rodízio (`PATCH .../keys/[keyId]/selection`). */
+export const aiApiKeySelectionSchema = z.object({ selected: z.boolean({ error: "Informe se a chave fica em uso" }) })
+export type AiApiKeySelectionInput = z.infer<typeof aiApiKeySelectionSchema>
+
 export interface AiApiKeyDto {
     id: string
     name: string
+    /** Em uso: entra no rodízio das gerações (OPE-179). */
     active: boolean
+    /** Principal (uma por provedor): Engramind, teste do provedor e "Todas" da assinatura do Go. Sempre em uso. */
+    primary: boolean
     createdAt: string
     updatedAt: string
 }

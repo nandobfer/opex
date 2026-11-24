@@ -1,7 +1,7 @@
 import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
 import type { AiModelDto } from "./providers"
 import { AiProviderError } from "./errors"
-import { requireActiveAiProviderKey, type ActiveAiProviderKey } from "./api-keys"
+import { AiKeysExhaustedError, fetchWithKeyFailover, type AiProviderKey } from "./api-keys"
 import { recordJevUsage, type JevUsageContext } from "./record-jev-usage"
 
 /**
@@ -14,14 +14,7 @@ import { recordJevUsage, type JevUsageContext } from "./record-jev-usage"
 
 export const JEV_API_URL = "https://api.typesafe.ai/v1"
 
-/** Chave de API ativa do chaveiro (OPE-155); sem chave ativa o provedor não está configurado. */
-async function getJevKey(): Promise<ActiveAiProviderKey> {
-    return requireActiveAiProviderKey("ai_jev", "JEV")
-}
-
-async function getJevApiKey(): Promise<string> {
-    return (await getJevKey()).apiKey
-}
+const LABEL = "JEV"
 
 interface JevModelRaw {
     name: string
@@ -41,17 +34,22 @@ export function toJevModel(raw: JevModelRaw): AiModelDto {
     }
 }
 
-/** Modelos e aliases aceitos no campo `model` (`jev-latest`, `jev-preview`, ...). */
-export async function listJevModels(signal?: AbortSignal): Promise<AiModelDto[]> {
-    const apiKey = await getJevApiKey()
+/**
+ * Modelos e aliases aceitos no campo `model` (`jev-latest`, `jev-preview`, ...). As chaves em uso giram e
+ * trocam em falha (OPE-179); `key` confere só aquela chave.
+ */
+export async function listJevModels(signal?: AbortSignal, key?: AiProviderKey): Promise<AiModelDto[]> {
     let res: Response
     try {
-        res = await debugFetch(integrationDebug("ai_jev"), "JEV", `${JEV_API_URL}/models`, {
-            headers: { Authorization: `Bearer ${apiKey}`, Accept: "application/json" },
-            cache: "no-store",
-            signal,
-        })
+        const call = (attempt: AiProviderKey) =>
+            debugFetch(integrationDebug("ai_jev"), LABEL, `${JEV_API_URL}/models`, {
+                headers: { Authorization: `Bearer ${attempt.apiKey}`, Accept: "application/json" },
+                cache: "no-store",
+                signal,
+            })
+        res = (await fetchWithKeyFailover("ai_jev", LABEL, call, { keys: key ? [key] : undefined })).response
     } catch (error) {
+        if (error instanceof AiProviderError) throw error
         throw new AiProviderError(`Não foi possível conectar ao JEV: ${error instanceof Error ? error.message : String(error)}`)
     }
     if (res.status === 401 || res.status === 403) throw new AiProviderError(`O JEV recusou a API key (HTTP ${res.status})`)
@@ -121,19 +119,24 @@ export async function askJevSystemOne(input: JevSystemOneInput): Promise<JevResp
     let failure: string | null = null
     let apiKeyId: string | null = null
     try {
-        const key = await getJevKey()
-        apiKeyId = key.id
-        const apiKey = key.apiKey
         let res: Response
         try {
-            res = await debugFetch(integrationDebug("ai_jev"), "JEV", `${JEV_API_URL}/systemone`, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
-                body: JSON.stringify({ model: input.model, state: input.state, questions: input.questions }),
-                cache: "no-store",
-                signal: input.signal,
+            // Rodízio por chamada (OPE-179): a chave que respondeu recebe o registro de uso.
+            const result = await fetchWithKeyFailover("ai_jev", LABEL, (key) => {
+                apiKeyId = key.id
+                return debugFetch(integrationDebug("ai_jev"), LABEL, `${JEV_API_URL}/systemone`, {
+                    method: "POST",
+                    headers: { Authorization: `Bearer ${key.apiKey}`, "Content-Type": "application/json", Accept: "application/json" },
+                    body: JSON.stringify({ model: input.model, state: input.state, questions: input.questions }),
+                    cache: "no-store",
+                    signal: input.signal,
+                })
             })
+            res = result.response
+            apiKeyId = result.key.id
         } catch (error) {
+            if (error instanceof AiKeysExhaustedError) apiKeyId = error.lastKeyId
+            if (error instanceof AiProviderError) throw error
             throw new AiProviderError(`Não foi possível conectar ao JEV: ${error instanceof Error ? error.message : String(error)}`)
         }
         if (res.status === 401 || res.status === 403) throw new AiProviderError(`O JEV recusou a API key (HTTP ${res.status})`)

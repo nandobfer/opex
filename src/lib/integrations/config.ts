@@ -190,6 +190,18 @@ export function activeApiKeyOf(stored: Pick<StoredIntegration, "apiKeys" | "acti
     return stored.apiKeys?.find((item) => item.id === stored.activeApiKeyId) ?? null
 }
 
+/**
+ * Chaves em uso no rodízio (OPE-179), da mais antiga para a mais nova. Sem principal válida: `[]` (não
+ * configurado). A principal sempre entra (a versão antiga, que divide o banco com as prévias, só
+ * grava `activeApiKeyId`); ids que não existem mais saem; sem o campo, o rodízio é só a principal.
+ */
+export function selectedApiKeysOf(stored: Pick<StoredIntegration, "apiKeys" | "activeApiKeyId" | "selectedApiKeyIds"> | null): StoredApiKey[] {
+    const primary = activeApiKeyOf(stored)
+    if (!primary) return []
+    const ids = new Set([primary.id, ...(stored?.selectedApiKeyIds ?? [])])
+    return (stored?.apiKeys ?? []).filter((item) => ids.has(item.id)).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime() || a.id.localeCompare(b.id))
+}
+
 export function buildResolvedIntegration<Id extends IntegrationId>(
     def: IntegrationDef,
     stored: StoredIntegration | null,

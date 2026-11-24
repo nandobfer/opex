@@ -7,7 +7,8 @@ import { apiKeyDto } from '../../helpers/ai-api-keys'
 
 const mocks = vi.hoisted(() => ({
   keys: [] as unknown[],
-  activate: vi.fn(),
+  toggle: vi.fn(),
+  primary: vi.fn(),
   update: vi.fn(async () => []),
   remove: vi.fn(),
   create: vi.fn(async () => []),
@@ -18,7 +19,8 @@ vi.mock('sonner', () => ({ toast: { error: mocks.toastError, success: vi.fn() } 
 vi.mock('@/features/ai/hooks/useAiApiKeys', () => ({
   useAiApiKeys: () => ({ data: mocks.keys, isLoading: false, isError: false, refetch: vi.fn() }),
   useAiApiKeysRealtime: () => undefined,
-  useActivateAiApiKey: () => ({ mutate: mocks.activate, isPending: false }),
+  useToggleAiApiKey: () => ({ mutate: mocks.toggle, isPending: false }),
+  useMakePrimaryAiApiKey: () => ({ mutate: mocks.primary, isPending: false }),
   useUpdateAiApiKey: () => ({ mutateAsync: mocks.update, isPending: false }),
   useRemoveAiApiKey: () => ({ mutate: mocks.remove, isPending: false }),
   useCreateAiApiKey: () => ({ mutateAsync: mocks.create, isPending: false }),
@@ -28,7 +30,7 @@ import { ApiKeysCard } from '@/features/ai/components/api-keys/ApiKeysCard'
 import { removeApiKeyMessage } from '@/features/ai/components/api-keys/RemoveApiKeyDialog'
 
 const submit = vi.fn((event: React.FormEvent) => event.preventDefault())
-const renderCard = () => render(<form onSubmit={submit}><ApiKeysCard provider="gemini" providerName="Gemini" /></form>)
+const renderCard = (provider: 'gemini' | 'jev' = 'gemini', name = 'Gemini') => render(<form onSubmit={submit}><ApiKeysCard provider={provider} providerName={name} /></form>)
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -36,26 +38,56 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe('ApiKeysCard (chaves de API nomeadas, OPE-155)', () => {
-  it('lista as chaves com a em uso marcada e ativa outra; nunca mostra segredo', () => {
+describe('ApiKeysCard (chaves de API nomeadas, OPE-155/OPE-179)', () => {
+  it('lista as chaves com a principal marcada; clicar põe outra em uso; nunca mostra segredo', () => {
     renderCard()
     const list = screen.getByRole('list', { name: 'Chaves de API do Gemini' })
     expect(within(list).getByText('Em uso')).toBeTruthy()
+    expect(within(list).getByText('Principal')).toBeTruthy()
     expect(within(list).getAllByText(/Segredo definido/).length).toBe(2)
-    expect(screen.queryByRole('button', { name: 'Usar a chave Pessoal' })).toBeNull()
     fireEvent.click(screen.getByRole('button', { name: 'Usar a chave Empresa' }))
-    expect(mocks.activate).toHaveBeenCalledWith('key_bbbbbbbbbbbbbbbbbb')
+    expect(mocks.toggle).toHaveBeenCalledWith({ id: 'key_bbbbbbbbbbbbbbbbbb', selected: true })
   })
 
-  it('remover a em uso com outras chaves avisa para ativar outra antes, sem abrir a confirmação', () => {
+  it('chave em uso que não é a principal sai de uso pelo clique; a principal avisa a regra e não sai', () => {
+    mocks.keys = [apiKeyDto('key_aaaaaaaaaaaaaaaaaa', 'Pessoal', true), apiKeyDto('key_bbbbbbbbbbbbbbbbbb', 'Empresa', true, false)]
+    renderCard()
+    expect(screen.getAllByText('Em uso').length).toBe(2)
+    const empresa = screen.getByRole('button', { name: 'Tirar a chave Empresa de uso' })
+    expect(empresa.getAttribute('aria-pressed')).toBe('true')
+    fireEvent.click(empresa)
+    expect(mocks.toggle).toHaveBeenCalledWith({ id: 'key_bbbbbbbbbbbbbbbbbb', selected: false })
+
+    fireEvent.click(screen.getByRole('button', { name: 'Tirar a chave Pessoal de uso' }))
+    expect(mocks.toggle).toHaveBeenCalledOnce()
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('torne outra chave principal antes de tirá-la de uso'))
+  })
+
+  it('"Tornar principal" só aparece nas outras chaves', () => {
+    renderCard()
+    expect(screen.queryByRole('button', { name: 'Tornar Pessoal a chave principal' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: 'Tornar Empresa a chave principal' }))
+    expect(mocks.primary).toHaveBeenCalledWith('key_bbbbbbbbbbbbbbbbbb')
+  })
+
+  it('remover a principal com outras chaves avisa para tornar outra principal antes, sem abrir a confirmação', () => {
     renderCard()
     fireEvent.click(screen.getByRole('button', { name: 'Remover Pessoal' }))
-    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('ative outra chave'))
+    expect(mocks.toastError).toHaveBeenCalledWith(expect.stringContaining('torne outra chave principal antes de removê-la'))
     expect(screen.queryByRole('alertdialog')).toBeNull()
   })
 
-  it('confirmação da única chave em uso avisa que o provedor fica não configurado', () => {
+  it('avisa que o Engramind recebe só a principal nos provedores que o alimentam (não no JEV)', () => {
+    const { container, unmount } = renderCard()
+    expect(container.querySelector('[data-slot="engramind-note"]')?.textContent).toContain('chave principal')
+    unmount()
+    const jev = renderCard('jev', 'JEV')
+    expect(jev.container.querySelector('[data-slot="engramind-note"]')).toBeNull()
+  })
+
+  it('confirmação: a principal única deixa o provedor não configurado; outra em uso sai do rodízio', () => {
     expect(removeApiKeyMessage(apiKeyDto('k', 'A', true), 'Gemini')).toContain('"Não configurado"')
+    expect(removeApiKeyMessage(apiKeyDto('k', 'A', true, false), 'Gemini')).toContain('sai do rodízio')
     expect(removeApiKeyMessage(apiKeyDto('k', 'A'), 'Gemini')).toContain('Chaves removidas')
   })
 

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { randomBytes } from 'crypto'
 
-/** Chaveiro dos provedores de IA (OPE-155): regras do serviço sobre um documento de integração em memória. */
+/** Chaveiro dos provedores de IA (OPE-155/OPE-179): regras do serviço sobre um documento de integração em memória. */
 
-type Doc = { integrationId: string; apiKeys?: Record<string, unknown>[]; activeApiKeyId?: string | null; [key: string]: unknown }
+type Doc = { integrationId: string; apiKeys?: Record<string, unknown>[]; activeApiKeyId?: string | null; selectedApiKeyIds?: string[]; [key: string]: unknown }
 
 const mocks = vi.hoisted(() => ({
   docs: new Map<string, Doc>(),
@@ -27,8 +27,9 @@ function applyUpdate(doc: Doc, update: Record<string, unknown>, keyId?: string) 
   }
   if (update.$push) keys.push((update.$push as { apiKeys: Record<string, unknown> }).apiKeys)
   if (update.$pull) {
-    const id = ((update.$pull as { apiKeys: { id: string } }).apiKeys).id
-    doc.apiKeys = keys.filter((candidate) => candidate.id !== id)
+    const pull = update.$pull as { apiKeys: { id: string }; selectedApiKeyIds?: string }
+    doc.apiKeys = keys.filter((candidate) => candidate.id !== pull.apiKeys.id)
+    if (pull.selectedApiKeyIds && doc.selectedApiKeyIds) doc.selectedApiKeyIds = doc.selectedApiKeyIds.filter((id) => id !== pull.selectedApiKeyIds)
   }
 }
 
@@ -66,7 +67,7 @@ vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderK
 
 import { DomainError } from '@/lib/api/route'
 import { decryptSecret, type EncryptedSecret } from '@/lib/crypto/secretBox'
-import { activateAiApiKey, createAiApiKey, keyRingProvider, listAiApiKeys, removeAiApiKey, updateAiApiKey } from '@/features/ai/server/api-keys'
+import { createAiApiKey, keyRingProvider, listAiApiKeys, makePrimaryAiApiKey, removeAiApiKey, setAiApiKeySelected, updateAiApiKey } from '@/features/ai/server/api-keys'
 
 const saved = process.env.INTEGRATIONS_ENCRYPTION_KEY
 const actor = 'local'
@@ -85,10 +86,11 @@ describe('chaveiro dos provedores de IA', () => {
   it('a primeira chave entra ativa, cifrada; a segunda não troca a em uso; nada de segredo no DTO, na auditoria ou no evento', async () => {
     const first = await createAiApiKey('gemini', { name: 'Pessoal', secret: 'gm-pessoal' }, actor)
     expect(first).toHaveLength(1)
-    expect(first[0]).toMatchObject({ name: 'Pessoal', active: true })
+    expect(first[0]).toMatchObject({ name: 'Pessoal', active: true, primary: true })
     const stored = mocks.docs.get('ai_gemini')!
     expect(decryptSecret(stored.apiKeys![0]!.secret as EncryptedSecret)).toBe('gm-pessoal')
     expect(stored.activeApiKeyId).toBe(first[0]!.id)
+    expect(stored.selectedApiKeyIds).toEqual([first[0]!.id])
 
     const second = await createAiApiKey('gemini', { name: 'Empresa', secret: 'gm-empresa' }, actor)
     expect(second.map((key) => [key.name, key.active])).toEqual([['Pessoal', true], ['Empresa', false]])
@@ -112,7 +114,7 @@ describe('chaveiro dos provedores de IA', () => {
     await flush()
     expect(mocks.sync).not.toHaveBeenCalled()
 
-    await activateAiApiKey('openai', keys[1]!.id, actor)
+    await makePrimaryAiApiKey('openai', keys[1]!.id, actor)
     await flush()
     expect(mocks.docs.get('ai_openai')!.activeApiKeyId).toBe(keys[1]!.id)
     expect(mocks.sync).toHaveBeenCalledWith('ai_openai')
@@ -131,11 +133,12 @@ describe('chaveiro dos provedores de IA', () => {
     await flush()
     vi.clearAllMocks()
     const reserve = keys.find((key) => key.name === 'Reserva')!
-    await expect(removeAiApiKey('opencode-go', main!.id, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_ACTIVE' })
+    await expect(removeAiApiKey('opencode-go', main!.id, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_PRIMARY' })
 
-    const after = await activateAiApiKey('opencode-go', reserve.id, actor)
+    const after = await makePrimaryAiApiKey('opencode-go', reserve.id, actor)
     await flush()
-    expect(after.map((key) => [key.name, key.active])).toEqual([['Reserva', true], ['Assinatura', false]])
+    // A principal anterior continua em uso (rodízio); a nova principal entra em uso.
+    expect(after.map((key) => [key.name, key.active, key.primary])).toEqual([['Reserva', true, true], ['Assinatura', true, false]])
     expect(mocks.docs.get('ai_opencode_go')!.activeApiKeyId).toBe(reserve.id)
     expect(mocks.clearGoCatalog).toHaveBeenCalledOnce()
     expect(mocks.clearCatalog).toHaveBeenCalled()
@@ -174,11 +177,11 @@ describe('chaveiro dos provedores de IA', () => {
     expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain('ds-2')
   })
 
-  it('remover a ativa com outras chaves é recusado; a única ativa sai e deixa o provedor sem chave', async () => {
+  it('remover a principal com outras chaves é recusado; a única sai e deixa o provedor sem chave', async () => {
     const [a] = await createAiApiKey('gemini', { name: 'A', secret: 'a' }, actor)
     const keys = await createAiApiKey('gemini', { name: 'B', secret: 'b' }, actor)
     const b = keys.find((key) => key.name === 'B')!
-    await expect(removeAiApiKey('gemini', a!.id, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_ACTIVE' })
+    await expect(removeAiApiKey('gemini', a!.id, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_PRIMARY' })
 
     expect(await removeAiApiKey('gemini', b.id, actor)).toHaveLength(1)
     expect(mocks.docs.get('ai_gemini')!.activeApiKeyId).toBe(a!.id)
@@ -193,10 +196,97 @@ describe('chaveiro dos provedores de IA', () => {
   })
 
   it('chave inexistente responde 404; provedor sem chaveiro (OpenCode) também', async () => {
-    await expect(activateAiApiKey('gemini', 'key_000000000000000000', actor)).rejects.toMatchObject({ status: 404 })
+    await expect(makePrimaryAiApiKey('gemini', 'key_000000000000000000', actor)).rejects.toMatchObject({ status: 404 })
+    await expect(setAiApiKeySelected('gemini', 'key_000000000000000000', { selected: true }, actor)).rejects.toMatchObject({ status: 404 })
     expect(() => keyRingProvider('opencode')).toThrow(DomainError)
     expect(keyRingProvider('jev')).toBe('jev')
     expect(keyRingProvider('opencode-go')).toBe('opencode-go')
+  })
+
+  describe('várias chaves em uso (OPE-179)', () => {
+    async function threeKeys() {
+      await createAiApiKey('anthropic', { name: 'A', secret: 'sk-a' }, actor)
+      await createAiApiKey('anthropic', { name: 'B', secret: 'sk-b' }, actor)
+      const keys = await createAiApiKey('anthropic', { name: 'C', secret: 'sk-c' }, actor)
+      await flush()
+      vi.clearAllMocks()
+      const byName = (name: string) => keys.find((key) => key.name === name)!
+      return { a: byName('A'), b: byName('B'), c: byName('C') }
+    }
+
+    it('pôr em uso entra no rodízio e testa o provedor de novo, sem reenviar ao Engramind', async () => {
+      const { a, b } = await threeKeys()
+      const list = await setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      await flush()
+      expect(mocks.docs.get('ai_anthropic')!.selectedApiKeyIds).toEqual([a.id, b.id])
+      expect(list.map((key) => [key.name, key.active, key.primary])).toEqual([['A', true, true], ['B', true, false], ['C', false, false]])
+      expect(mocks.test).toHaveBeenCalledWith('ai_anthropic', { source: 'scheduler' })
+      expect(mocks.sync).not.toHaveBeenCalled()
+      expect(mocks.clearCatalog).not.toHaveBeenCalled()
+      expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ acao: 'ATUALIZAR', antes: expect.objectContaining({ emUso: false }), depois: expect.objectContaining({ emUso: true }) }))
+      expect(mocks.publish).toHaveBeenCalledWith('ai-provider-keys-updated', { provider: 'anthropic' })
+    })
+
+    it('tirar de uso sai do rodízio; a principal não sai (409) e repetir o estado não grava nada', async () => {
+      const { a, b } = await threeKeys()
+      await setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      const list = await setAiApiKeySelected('anthropic', b.id, { selected: false }, actor)
+      expect(list.find((key) => key.id === b.id)).toMatchObject({ active: false, primary: false })
+      expect(mocks.docs.get('ai_anthropic')!.selectedApiKeyIds).toEqual([a.id])
+
+      await expect(setAiApiKeySelected('anthropic', a.id, { selected: false }, actor)).rejects.toMatchObject({ status: 409, code: 'AI_API_KEY_PRIMARY' })
+      vi.clearAllMocks()
+      await setAiApiKeySelected('anthropic', b.id, { selected: false }, actor)
+      expect(mocks.audit).not.toHaveBeenCalled()
+      expect(mocks.publish).not.toHaveBeenCalled()
+    })
+
+    it('tornar principal põe a chave em uso e reenvia ao Engramind', async () => {
+      const { a, c } = await threeKeys()
+      const list = await makePrimaryAiApiKey('anthropic', c.id, actor)
+      await flush()
+      const doc = mocks.docs.get('ai_anthropic')!
+      expect(doc.activeApiKeyId).toBe(c.id)
+      expect(doc.selectedApiKeyIds).toEqual([a.id, c.id])
+      expect(list[0]).toMatchObject({ name: 'C', primary: true, active: true })
+      expect(mocks.sync).toHaveBeenCalledWith('ai_anthropic')
+      expect(mocks.clearCatalog).toHaveBeenCalled()
+    })
+
+    it('remover uma chave em uso que não é a principal a tira do rodízio', async () => {
+      const { a, b } = await threeKeys()
+      await setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      await flush()
+      vi.clearAllMocks()
+      await removeAiApiKey('anthropic', b.id, actor)
+      await flush()
+      expect(mocks.docs.get('ai_anthropic')!.selectedApiKeyIds).toEqual([a.id])
+      expect(mocks.test).toHaveBeenCalledWith('ai_anthropic', { source: 'scheduler' })
+      expect(mocks.sync).not.toHaveBeenCalled()
+    })
+
+    it('sem principal (versão antiga removeu tudo), a chave posta em uso vira a principal', async () => {
+      const { a, b } = await threeKeys()
+      mocks.docs.get('ai_anthropic')!.activeApiKeyId = 'key_removida_000000000'
+      const list = await setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      await flush()
+      expect(mocks.docs.get('ai_anthropic')!.activeApiKeyId).toBe(b.id)
+      expect(list.find((key) => key.id === b.id)).toMatchObject({ active: true, primary: true })
+      expect(list.find((key) => key.id === a.id)).toMatchObject({ active: false, primary: false })
+      expect(mocks.sync).toHaveBeenCalledWith('ai_anthropic')
+    })
+
+    it('documento sem `selectedApiKeyIds` (produção antiga): só a principal está em uso', async () => {
+      const { a } = await threeKeys()
+      delete mocks.docs.get('ai_anthropic')!.selectedApiKeyIds
+      const list = await listAiApiKeys('anthropic')
+      expect(list.filter((key) => key.active).map((key) => key.id)).toEqual([a.id])
+    })
+
+    it('selecionar valida o corpo', async () => {
+      const { b } = await threeKeys()
+      await expect(setAiApiKeySelected('anthropic', b.id, { selected: 'sim' }, actor)).rejects.toThrow()
+    })
   })
 
   it('sem a chave de criptografia, recusa gravar com 409 acionável', async () => {

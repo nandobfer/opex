@@ -1,23 +1,25 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
-const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), activate: vi.fn() }))
+const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), select: vi.fn(), primary: vi.fn() }))
 vi.mock('@/features/ai/server/api-keys', async (importOriginal) => ({
   keyRingProvider: (await importOriginal<typeof import('@/features/ai/server/api-keys')>()).keyRingProvider,
   listAiApiKeys: mocks.list,
   createAiApiKey: mocks.create,
   updateAiApiKey: mocks.update,
   removeAiApiKey: mocks.remove,
-  activateAiApiKey: mocks.activate,
+  setAiApiKeySelected: mocks.select,
+  makePrimaryAiApiKey: mocks.primary,
 }))
 
 import { GET, POST } from '@/app/api/ai/providers/[provider]/keys/route'
 import { DELETE, PATCH } from '@/app/api/ai/providers/[provider]/keys/[keyId]/route'
-import { POST as ACTIVATE } from '@/app/api/ai/providers/[provider]/keys/[keyId]/activate/route'
+import { POST as PRIMARY } from '@/app/api/ai/providers/[provider]/keys/[keyId]/primary/route'
+import { PATCH as SELECTION } from '@/app/api/ai/providers/[provider]/keys/[keyId]/selection/route'
 
 const url = (path: string) => `http://localhost/api/ai/providers/${path}`
 const json = (path: string, method: string, body: unknown) => new NextRequest(url(path), { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })
-const keys = [{ id: 'key_aaaaaaaaaaaaaaaaaa', name: 'Pessoal', active: true, createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z' }]
+const keys = [{ id: 'key_aaaaaaaaaaaaaaaaaa', name: 'Pessoal', active: true, primary: true, createdAt: '2026-11-01T00:00:00.000Z', updatedAt: '2026-11-01T00:00:00.000Z' }]
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -51,12 +53,21 @@ describe('rotas do chaveiro dos provedores de IA (OPE-155)', () => {
     expect(mocks.update).not.toHaveBeenCalled()
   })
 
-  it('renomeia/substitui, remove e ativa', async () => {
+  it('põe e tira de uso (OPE-179): corpo validado; provedor sem chaveiro responde 404', async () => {
+    const params = { params: Promise.resolve({ provider: 'deepseek', keyId: 'key_aaaaaaaaaaaaaaaaaa' }) }
+    expect((await SELECTION(json('deepseek/keys/key_aaaaaaaaaaaaaaaaaa/selection', 'PATCH', { selected: true }), params)).status).toBe(200)
+    expect(mocks.select).toHaveBeenCalledWith('deepseek', 'key_aaaaaaaaaaaaaaaaaa', { selected: true }, 'local')
+    expect((await SELECTION(json('deepseek/keys/k/selection', 'PATCH', { selected: 'sim' }), { params: Promise.resolve({ provider: 'deepseek', keyId: 'k' }) })).status).toBe(400)
+    expect((await SELECTION(json('opencode/keys/k/selection', 'PATCH', { selected: true }), { params: Promise.resolve({ provider: 'opencode', keyId: 'k' }) })).status).toBe(404)
+    expect(mocks.select).toHaveBeenCalledOnce()
+  })
+
+  it('renomeia/substitui, remove e torna principal', async () => {
     const params = { params: Promise.resolve({ provider: 'openai', keyId: 'key_aaaaaaaaaaaaaaaaaa' }) }
     expect((await PATCH(json('openai/keys/key_aaaaaaaaaaaaaaaaaa', 'PATCH', { secret: 'sk' }), params)).status).toBe(200)
     expect(mocks.update).toHaveBeenCalledWith('openai', 'key_aaaaaaaaaaaaaaaaaa', { secret: 'sk' }, 'local')
     expect((await DELETE(new NextRequest(url('openai/keys/key_aaaaaaaaaaaaaaaaaa'), { method: 'DELETE' }), { params: Promise.resolve({ provider: 'openai', keyId: 'key_aaaaaaaaaaaaaaaaaa' }) })).status).toBe(200)
-    expect((await ACTIVATE(new NextRequest(url('openai/keys/key_aaaaaaaaaaaaaaaaaa/activate'), { method: 'POST' }), { params: Promise.resolve({ provider: 'openai', keyId: 'key_aaaaaaaaaaaaaaaaaa' }) })).status).toBe(200)
-    expect(mocks.activate).toHaveBeenCalledWith('openai', 'key_aaaaaaaaaaaaaaaaaa', 'local')
+    expect((await PRIMARY(new NextRequest(url('openai/keys/key_aaaaaaaaaaaaaaaaaa/primary'), { method: 'POST' }), { params: Promise.resolve({ provider: 'openai', keyId: 'key_aaaaaaaaaaaaaaaaaa' }) })).status).toBe(200)
+    expect(mocks.primary).toHaveBeenCalledWith('openai', 'key_aaaaaaaaaaaaaaaaaa', 'local')
   })
 })

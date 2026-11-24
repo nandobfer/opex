@@ -4,6 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { runAfterResponse } from "@/lib/after-response"
 import { encryptSecret, SecretBoxKeyError, type EncryptedSecret } from "@/lib/crypto/secretBox"
 import { getIntegrationDef } from "@/lib/integrations/catalog"
+import { activeApiKeyOf, selectedApiKeysOf } from "@/lib/integrations/config"
 import { newApiKeyId } from "@/lib/integrations/key-ring"
 import { invalidateStoredIntegrations, type StoredApiKey } from "@/lib/integrations/store"
 import { getAiProvider } from "@/lib/ai/providers"
@@ -11,7 +12,9 @@ import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import {
     AI_PROVIDER_KEYS_UPDATED_EVENT,
+    aiApiKeySelectionSchema,
     createAiApiKeySchema,
+    feedsEngramind,
     updateAiApiKeySchema,
     type AiApiKeyDto,
     isAiApiKeyProviderId,
@@ -19,23 +22,25 @@ import {
 } from "../api-keys"
 
 /**
- * Chaveiro dos provedores de IA (OPE-155) — SOMENTE servidor. As chaves ficam no documento da
- * integração (`integration_configs.apiKeys` + `activeApiKeyId`): uma ativa por construção. É o ÚNICO
- * caminho de gravação da API key desses provedores (o PATCH genérico de integrações a recusa).
+ * Chaveiro dos provedores de IA (OPE-155/OPE-179) — SOMENTE servidor. As chaves ficam no documento da
+ * integração: `apiKeys`, a **principal** em `activeApiKeyId` (uma por construção; é o único campo que a
+ * versão antiga lê) e as **em uso** (rodízio) em `selectedApiKeyIds`, lidas sempre por
+ * `selectedApiKeysOf` (a principal entra mesmo fora da lista). É o ÚNICO caminho de gravação da API
+ * key desses provedores (o PATCH genérico de integrações a recusa).
  *
- * Quando a chave **efetiva** muda (ativar, substituir o segredo da ativa, primeira chave, remover a
- * ativa), limpa os caches (inclusive o catálogo do Go), testa o provedor de novo e reenvia a chave ao
- * Engramind depois da resposta (só os provedores que o Engramind usa).
+ * Quando a **principal** muda (tornar principal, substituir o segredo dela, primeira chave, remover a
+ * única), limpa os caches (inclusive o catálogo do Go), testa o provedor de novo e reenvia a chave ao
+ * Engramind depois da resposta (só os provedores que o Engramind usa). Quando só o rodízio muda, o
+ * provedor é testado de novo (conferência por chave), sem reenviar ao Engramind.
  */
 
 const log = loggerFor({ module: "ai", feature: "api-keys" })
-/** Provedores que não alimentam o Engramind: o JEV não gera texto e o Go não é fonte do Redator nem do embedding. */
-const NOT_ENGRAMIND_SOURCES: readonly AiApiKeyProviderId[] = ["jev", "opencode-go"]
 export const AI_API_KEY_AUDIT_ENTITY = "ChaveApiIA"
 
 interface KeyRingDoc {
     apiKeys?: StoredApiKey[]
     activeApiKeyId?: string | null
+    selectedApiKeyIds?: string[]
 }
 
 /** Provedor da rota com chaveiro; os demais (OpenCode, desconhecidos) respondem 404. */
@@ -50,26 +55,38 @@ function integrationOf(provider: AiApiKeyProviderId) {
 
 async function loadKeyRing(provider: AiApiKeyProviderId): Promise<KeyRingDoc | null> {
     await dbConnect()
-    return (await Integration.findOne({ integrationId: integrationOf(provider) }).select({ apiKeys: 1, activeApiKeyId: 1 }).lean()) as KeyRingDoc | null
+    return (await Integration.findOne({ integrationId: integrationOf(provider) }).select({ apiKeys: 1, activeApiKeyId: 1, selectedApiKeyIds: 1 }).lean()) as KeyRingDoc | null
 }
 
-function toDto(item: StoredApiKey, activeId: string | null | undefined): AiApiKeyDto {
+/** Id da principal válida (existe no chaveiro) ou `null`. */
+function primaryIdOf(doc: KeyRingDoc | null): string | null {
+    return activeApiKeyOf(doc)?.id ?? null
+}
+
+/** Ids em uso, normalizados (com a principal, sem ids removidos). */
+function selectedIdsOf(doc: KeyRingDoc | null): string[] {
+    return selectedApiKeysOf(doc).map((item) => item.id)
+}
+
+function toDto(item: StoredApiKey, primaryId: string | null, selected: ReadonlySet<string>): AiApiKeyDto {
     return {
         id: item.id,
         name: item.name,
-        active: item.id === activeId,
+        active: selected.has(item.id),
+        primary: item.id === primaryId,
         createdAt: new Date(item.createdAt).toISOString(),
         updatedAt: new Date(item.updatedAt).toISOString(),
     }
 }
 
-/** Chaves do provedor (a ativa primeiro; as demais da mais nova para a mais antiga). Nunca devolve o segredo. */
+/** Chaves do provedor (a principal primeiro, depois as em uso, as demais da mais nova para a mais antiga). Nunca devolve o segredo. */
 export async function listAiApiKeys(provider: AiApiKeyProviderId): Promise<AiApiKeyDto[]> {
     const doc = await loadKeyRing(provider)
-    const active = doc?.activeApiKeyId ?? null
+    const primaryId = primaryIdOf(doc)
+    const selected = new Set(selectedIdsOf(doc))
     return (doc?.apiKeys ?? [])
-        .map((item) => toDto(item, active))
-        .sort((a, b) => Number(b.active) - Number(a.active) || b.createdAt.localeCompare(a.createdAt))
+        .map((item) => toDto(item, primaryId, selected))
+        .sort((a, b) => Number(b.primary) - Number(a.primary) || Number(b.active) - Number(a.active) || b.createdAt.localeCompare(a.createdAt))
 }
 
 function encrypt(secret: string): EncryptedSecret {
@@ -102,35 +119,46 @@ async function ensureIntegrationDoc(provider: AiApiKeyProviderId, actorId: strin
     await doc.save()
 }
 
-/** Efeitos da troca da chave efetiva: caches, novo teste do provedor e cópia no Engramind. */
-async function afterEffectiveKeyChange(provider: AiApiKeyProviderId, hasActive: boolean): Promise<void> {
+interface KeyRingEffects {
+    /** A principal mudou (ou o segredo dela): caches, novo teste e Engramind. */
+    primaryChanged: boolean
+    /** Só o rodízio mudou (ou o segredo de uma chave em uso): novo teste do provedor. */
+    poolChanged: boolean
+    /** Ainda há principal depois da ação (sem ela não há o que testar). */
+    hasPrimary: boolean
+}
+
+/** Efeitos da troca: caches, novo teste do provedor e cópia da principal no Engramind. */
+async function afterKeyRingChange(provider: AiApiKeyProviderId, effects: KeyRingEffects): Promise<void> {
     const integrationId = integrationOf(provider)
-    const [{ clearAiCatalogCache }, { resetAiConnectionProbes }] = await Promise.all([import("@/lib/ai/catalog"), import("@/lib/ai/connection")])
-    clearAiCatalogCache()
-    resetAiConnectionProbes()
-    if (provider === "opencode-go") (await import("@/lib/ai/opencode-go")).clearOpencodeGoCatalogCache()
+    if (effects.primaryChanged) {
+        const [{ clearAiCatalogCache }, { resetAiConnectionProbes }] = await Promise.all([import("@/lib/ai/catalog"), import("@/lib/ai/connection")])
+        clearAiCatalogCache()
+        resetAiConnectionProbes()
+        if (provider === "opencode-go") (await import("@/lib/ai/opencode-go")).clearOpencodeGoCatalogCache()
+    }
     runAfterResponse("ai-api-key-effects", async () => {
-        if (hasActive) {
+        if (effects.hasPrimary) {
             const { runIntegrationTest } = await import("@/features/integrations/services/integration-test-runner")
-            await runIntegrationTest(integrationId, { source: "scheduler" }).catch((error: unknown) => log.warn({ err: error, integrationId }, "[ai] falha ao testar o provedor com a nova chave"))
+            await runIntegrationTest(integrationId, { source: "scheduler" }).catch((error: unknown) => log.warn({ err: error, integrationId }, "[ai] falha ao testar o provedor com as chaves novas"))
         }
-        if (!NOT_ENGRAMIND_SOURCES.includes(provider)) {
+        if (effects.primaryChanged && feedsEngramind(provider)) {
             const { syncEngramindProviderKey } = await import("@/features/engramind/server/ai-source")
             await syncEngramindProviderKey(integrationId)
         }
     })
 }
 
-async function finish(provider: AiApiKeyProviderId, actorId: string, keyId: string, acao: (typeof AcaoAuditoria)[keyof typeof AcaoAuditoria], antes: Record<string, unknown> | undefined, depois: Record<string, unknown> | undefined, effective: { changed: boolean; hasActive: boolean }): Promise<AiApiKeyDto[]> {
+async function finish(provider: AiApiKeyProviderId, actorId: string, keyId: string, acao: (typeof AcaoAuditoria)[keyof typeof AcaoAuditoria], antes: Record<string, unknown> | undefined, depois: Record<string, unknown> | undefined, effects: KeyRingEffects): Promise<AiApiKeyDto[]> {
     invalidateStoredIntegrations()
     await recordAudit({ userId: actorId, entidade: AI_API_KEY_AUDIT_ENTITY, entidadeId: `${provider}:${keyId}`, acao, antes, depois })
-    log.info({ provider, keyId, acao, effectiveChanged: effective.changed }, "[ai] chaveiro do provedor alterado")
-    if (effective.changed) await afterEffectiveKeyChange(provider, effective.hasActive)
+    log.info({ provider, keyId, acao, primaryChanged: effects.primaryChanged, poolChanged: effects.poolChanged }, "[ai] chaveiro do provedor alterado")
+    if (effects.primaryChanged || effects.poolChanged) await afterKeyRingChange(provider, effects)
     await publishAppEvent(AI_PROVIDER_KEYS_UPDATED_EVENT, { provider })
     return listAiApiKeys(provider)
 }
 
-/** Nova chave. A primeira do provedor (ou sem nenhuma ativa) já entra ativa. */
+/** Nova chave. A primeira do provedor (ou sem principal válida) já entra como principal e em uso; as demais, fora de uso. */
 export async function createAiApiKey(provider: AiApiKeyProviderId, raw: unknown, actorId: string): Promise<AiApiKeyDto[]> {
     const input = createAiApiKeySchema.parse(raw)
     const doc = await loadKeyRing(provider)
@@ -139,12 +167,12 @@ export async function createAiApiKey(provider: AiApiKeyProviderId, raw: unknown,
     await ensureIntegrationDoc(provider, actorId)
     const now = new Date()
     const item: StoredApiKey = { id: newApiKeyId(), name: input.name, secret, createdAt: now, updatedAt: now, createdBy: actorId }
-    const activate = !doc?.activeApiKeyId || !doc.apiKeys?.some((candidate) => candidate.id === doc.activeApiKeyId)
+    const primary = !primaryIdOf(doc)
     await Integration.updateOne(
         { integrationId: integrationOf(provider) },
-        { $push: { apiKeys: item }, ...(activate ? { $set: { activeApiKeyId: item.id } } : {}), _auditContext: { userId: actorId } },
+        { $push: { apiKeys: item }, ...(primary ? { $set: { activeApiKeyId: item.id, selectedApiKeyIds: [item.id] } } : {}), _auditContext: { userId: actorId } },
     )
-    return finish(provider, actorId, item.id, AcaoAuditoria.CRIAR, undefined, { provider, name: item.name, active: activate, secret: "(definido)" }, { changed: activate, hasActive: true })
+    return finish(provider, actorId, item.id, AcaoAuditoria.CRIAR, undefined, { provider, name: item.name, emUso: primary, principal: primary, secret: "(definido)" }, { primaryChanged: primary, poolChanged: primary, hasPrimary: true })
 }
 
 /** Renomear e/ou substituir o segredo (mantém o id: o consumo continua agrupado na chave). */
@@ -168,32 +196,69 @@ export async function updateAiApiKey(provider: AiApiKeyProviderId, keyId: string
     }
     if (Object.keys(depois).length === 0) return listAiApiKeys(provider)
     await Integration.updateOne({ integrationId: integrationOf(provider), "apiKeys.id": keyId }, { $set, _auditContext: { userId: actorId } })
-    const isActive = doc?.activeApiKeyId === keyId
-    return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, ...antes }, { provider, ...depois }, { changed: isActive && input.secret !== undefined, hasActive: true })
-}
-
-/** Marca a chave como a ativa do provedor (só uma por vez). */
-export async function activateAiApiKey(provider: AiApiKeyProviderId, keyId: string, actorId: string): Promise<AiApiKeyDto[]> {
-    const doc = await loadKeyRing(provider)
-    const item = findKey(doc, keyId)
-    if (doc?.activeApiKeyId === keyId) return listAiApiKeys(provider)
-    const previous = doc?.apiKeys?.find((candidate) => candidate.id === doc.activeApiKeyId)
-    await Integration.updateOne({ integrationId: integrationOf(provider), "apiKeys.id": keyId }, { $set: { activeApiKeyId: keyId }, _auditContext: { userId: actorId } })
-    return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, ativa: previous?.name ?? null }, { provider, ativa: item.name }, { changed: true, hasActive: true })
+    const replaced = input.secret !== undefined
+    return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, ...antes }, { provider, ...depois }, {
+        primaryChanged: replaced && primaryIdOf(doc) === keyId,
+        poolChanged: replaced && selectedIdsOf(doc).includes(keyId),
+        hasPrimary: primaryIdOf(doc) !== null,
+    })
 }
 
 /**
- * Remove a chave. A ativa só sai quando é a ÚNICA do provedor (o provedor fica "Não configurado");
- * com outras chaves, é preciso ativar outra antes.
+ * Põe ou tira a chave do rodízio. Sem principal, a chave posta em uso vira a principal. A principal não
+ * sai de uso (409 `AI_API_KEY_PRIMARY`): o provedor configurado nunca fica sem chave em uso.
+ */
+export async function setAiApiKeySelected(provider: AiApiKeyProviderId, keyId: string, raw: unknown, actorId: string): Promise<AiApiKeyDto[]> {
+    const { selected } = aiApiKeySelectionSchema.parse(raw)
+    const doc = await loadKeyRing(provider)
+    const item = findKey(doc, keyId)
+    const primaryId = primaryIdOf(doc)
+    const ids = selectedIdsOf(doc)
+    if (selected === ids.includes(keyId)) return listAiApiKeys(provider)
+    if (!selected && keyId === primaryId) throw new DomainError(409, "Esta é a chave principal: torne outra chave principal antes de tirá-la de uso", "AI_API_KEY_PRIMARY")
+    const becomesPrimary = selected && !primaryId
+    const next = selected ? (becomesPrimary ? [keyId] : [...ids, keyId]) : ids.filter((id) => id !== keyId)
+    await Integration.updateOne(
+        { integrationId: integrationOf(provider), "apiKeys.id": keyId },
+        { $set: { selectedApiKeyIds: next, ...(becomesPrimary ? { activeApiKeyId: keyId } : {}) }, _auditContext: { userId: actorId } },
+    )
+    return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, name: item.name, emUso: !selected }, { provider, name: item.name, emUso: selected, ...(becomesPrimary ? { principal: true } : {}) }, {
+        primaryChanged: becomesPrimary,
+        poolChanged: true,
+        hasPrimary: true,
+    })
+}
+
+/** Torna a chave a principal do provedor (só uma por vez); ela entra em uso se ainda não estava. */
+export async function makePrimaryAiApiKey(provider: AiApiKeyProviderId, keyId: string, actorId: string): Promise<AiApiKeyDto[]> {
+    const doc = await loadKeyRing(provider)
+    const item = findKey(doc, keyId)
+    const primaryId = primaryIdOf(doc)
+    if (primaryId === keyId) return listAiApiKeys(provider)
+    const previous = doc?.apiKeys?.find((candidate) => candidate.id === primaryId)
+    const ids = selectedIdsOf(doc)
+    const next = ids.includes(keyId) ? ids : [...ids, keyId]
+    await Integration.updateOne({ integrationId: integrationOf(provider), "apiKeys.id": keyId }, { $set: { activeApiKeyId: keyId, selectedApiKeyIds: next }, _auditContext: { userId: actorId } })
+    return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, principal: previous?.name ?? null }, { provider, principal: item.name }, { primaryChanged: true, poolChanged: true, hasPrimary: true })
+}
+
+/**
+ * Remove a chave (e a tira do rodízio). A principal só sai quando é a ÚNICA do provedor (o provedor fica
+ * "Não configurado"); com outras chaves, é preciso tornar outra principal antes.
  */
 export async function removeAiApiKey(provider: AiApiKeyProviderId, keyId: string, actorId: string): Promise<AiApiKeyDto[]> {
     const doc = await loadKeyRing(provider)
     const item = findKey(doc, keyId)
-    const isActive = doc?.activeApiKeyId === keyId
-    if (isActive && (doc?.apiKeys?.length ?? 0) > 1) throw new DomainError(409, "Esta é a chave em uso: ative outra chave antes de removê-la", "AI_API_KEY_ACTIVE")
+    const isPrimary = primaryIdOf(doc) === keyId
+    const wasSelected = selectedIdsOf(doc).includes(keyId)
+    if (isPrimary && (doc?.apiKeys?.length ?? 0) > 1) throw new DomainError(409, "Esta é a chave principal: torne outra chave principal antes de removê-la", "AI_API_KEY_PRIMARY")
     await Integration.updateOne(
         { integrationId: integrationOf(provider) },
-        { $pull: { apiKeys: { id: keyId } }, ...(isActive ? { $set: { activeApiKeyId: null } } : {}), _auditContext: { userId: actorId } },
+        { $pull: { apiKeys: { id: keyId }, selectedApiKeyIds: keyId }, ...(isPrimary ? { $set: { activeApiKeyId: null } } : {}), _auditContext: { userId: actorId } },
     )
-    return finish(provider, actorId, keyId, AcaoAuditoria.EXCLUIR, { provider, name: item.name, active: isActive }, undefined, { changed: isActive, hasActive: false })
+    return finish(provider, actorId, keyId, AcaoAuditoria.EXCLUIR, { provider, name: item.name, emUso: wasSelected, principal: isPrimary }, undefined, {
+        primaryChanged: isPrimary,
+        poolChanged: wasSelected && !isPrimary,
+        hasPrimary: !isPrimary,
+    })
 }

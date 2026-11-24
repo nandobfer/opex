@@ -2,7 +2,7 @@ import { randomBytes } from "crypto"
 import { INTEGRATIONS, type IntegrationId } from "./catalog"
 
 /**
- * Chaveiro de chaves de API nomeadas (OPE-155): várias chaves por integração, uma ativa. Hoje vale
+ * Chaveiro de chaves de API nomeadas (OPE-155): várias chaves por integração, várias em uso (rodízio, OPE-179) e uma principal. Hoje vale
  * para os provedores de IA por API key (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e JEV); o
  * OpenCode no host usa a senha do `opencode serve` e fica fora.
  */

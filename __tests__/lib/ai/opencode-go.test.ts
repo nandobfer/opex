@@ -10,14 +10,18 @@ const mocks = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
-vi.mock('@/lib/ai/api-keys', async () => {
+vi.mock('@/lib/ai/api-keys', async (importOriginal) => {
   const { AiProviderError } = await import('@/lib/ai/errors')
-  return {
-    requireActiveAiProviderKey: mocks.requireKey.mockImplementation(async (integrationId: string, name: string) => {
-      if (integrationId !== 'ai_opencode_go' || !mocks.key) throw new AiProviderError(`${name} sem chave de API ativa: cadastre e ative uma chave em Integrações › Inteligência Artificial › ${name}`)
-      return mocks.key
-    }),
+  const original = (await importOriginal()) as { createKeyFailoverFetch: unknown }
+  const requireOrder = mocks.requireKey.mockImplementation(async (integrationId: string, name: string) => {
+    if (integrationId !== 'ai_opencode_go' || !mocks.key) throw new AiProviderError(`${name} sem chave de API ativa: cadastre e ative uma chave em Integrações › Inteligência Artificial › ${name}`)
+    return [mocks.key]
+  })
+  const fetchWithKeyFailover = async (integrationId: string, label: string, call: (key: unknown) => Promise<Response>, options: { keys?: unknown[] } = {}) => {
+    const keys = options.keys?.length ? options.keys : await requireOrder(integrationId, label)
+    return { response: await call(keys[0]), key: keys[0] }
   }
+  return { createKeyFailoverFetch: original.createKeyFailoverFetch, requireAiProviderKeyOrder: requireOrder, fetchWithKeyFailover }
 })
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/lib/integrations/debug', () => ({
@@ -135,8 +139,8 @@ describe('chaveiro do Go (OPE-156)', () => {
     mocks.key = { id: 'key_go_2', name: 'Reserva', apiKey: 'oc_sk_reserva' }
     await verifyOpencodeGoKey()
     clearOpencodeGoCatalogCache()
-    const { apiKeyId } = await createOpencodeGoModel('deepseek-v4.1-flash')
-    expect(apiKeyId).toBe('key_go_2')
+    const { currentKeyId } = await createOpencodeGoModel('deepseek-v4.1-flash')
+    expect(currentKeyId()).toBe('key_go_2')
     const auth = mocks.fetch.mock.calls.map(([, init]) => (init.headers instanceof Headers ? init.headers.get('authorization') : (init.headers as Record<string, string>).Authorization))
     expect(auth).toEqual(['Bearer oc_sk_teste', 'Bearer oc_sk_reserva', 'Bearer oc_sk_reserva'])
     expect(mocks.requireKey).toHaveBeenCalledWith('ai_opencode_go', 'OpenCode Go')
@@ -157,8 +161,8 @@ describe('createOpencodeGoModel', () => {
         },
       ])
     })
-    const { model, meter, apiKeyId } = await createOpencodeGoModel('deepseek-v4.1-flash', { session: 'opex-agent-abc' })
-    expect(apiKeyId).toBe('key_go_1')
+    const { model, meter, currentKeyId } = await createOpencodeGoModel('deepseek-v4.1-flash', { session: 'opex-agent-abc' })
+    expect(currentKeyId()).toBe('key_go_1')
     const result = streamText({ model, prompt: 'Diga ok', reasoning: 'max' })
     let text = ''
     let reasoning = ''

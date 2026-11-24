@@ -114,7 +114,7 @@ export interface SecretFieldDef {
     /** Valor de várias linhas (ex.: chave privada SSH): a tela usa área de texto mascarada. */
     readonly multiline?: boolean
     /**
-     * Segredo resolvido do **chaveiro** da integração (várias chaves nomeadas, uma ativa — OPE-155),
+     * Segredo resolvido do **chaveiro** da integração (várias chaves nomeadas, a principal — OPE-155/OPE-179),
      * não de `secretValues`. Gerenciado só pelas rotas de chaves; o PATCH genérico o recusa.
      */
     readonly keyRing?: boolean
@@ -679,7 +679,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Google AI Studio (aistudio.google.com/apikey); gerenciada na lista Chaves de API (uma ativa)", required: true, keyRing: true }],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Google AI Studio (aistudio.google.com/apikey); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],
     },
     {
         id: "ai_anthropic",
@@ -689,7 +689,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Claude Console (platform.claude.com/settings/keys); gerenciada na lista Chaves de API (uma ativa)", required: true, keyRing: true }],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave do Claude Console (platform.claude.com/settings/keys); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],
     },
     {
         id: "ai_openai",
@@ -699,7 +699,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma OpenAI (platform.openai.com/api-keys); gerenciada na lista Chaves de API (uma ativa)", required: true, keyRing: true }],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma OpenAI (platform.openai.com/api-keys); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],
     },
     {
         id: "ai_deepseek",
@@ -709,7 +709,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma DeepSeek (platform.deepseek.com/api_keys); gerenciada na lista Chaves de API (uma ativa)", required: true, keyRing: true }],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma DeepSeek (platform.deepseek.com/api_keys); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],
     },
     {
         id: "ai_opencode_go",
@@ -719,7 +719,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "Chave do OpenCode Go", description: "Chave oc_sk_… da assinatura Go (opencode.ai › Go); gerenciada na lista Chaves de API (uma ativa). DeepSeek V4.1 Flash e V4 Pro exigem a região Global em Settings › Privacy", required: true, keyRing: true }],
+        secretFields: [{ key: "apiKey", label: "Chave do OpenCode Go", description: "Chave oc_sk_… da assinatura Go (opencode.ai › Go); gerenciada na lista Chaves de API (várias em uso, uma principal). DeepSeek V4.1 Flash e V4 Pro exigem a região Global em Settings › Privacy", required: true, keyRing: true }],
     },
     {
         id: "ai_jev",
@@ -729,7 +729,7 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         streamsDebugOverPusher: true,
         parent: "ai",
         publicFields: [],
-        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da TypeSafe (console.typesafe.ai/keys); gerenciada na lista Chaves de API (uma ativa)", required: true, keyRing: true }],
+        secretFields: [{ key: "apiKey", label: "API key", description: "Chave da TypeSafe (console.typesafe.ai/keys); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],
     },
     {
         id: "orcamentos",

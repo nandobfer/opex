@@ -28,8 +28,10 @@ export interface StoredIntegration {
     secretValues: Record<string, EncryptedSecret | null>
     /** Chaveiro de chaves de API nomeadas (provedores de IA, OPE-155). Ausente nas demais integrações. */
     apiKeys?: StoredApiKey[]
-    /** Chave do chaveiro em uso; `null`/ausente = nenhuma ativa (integração não configurada). */
+    /** Chave principal do chaveiro; `null`/ausente = nenhuma (integração não configurada). */
     activeApiKeyId?: string | null
+    /** Chaves em uso no rodízio (OPE-179), com a principal; ausente = só a principal. Leia por `selectedApiKeysOf`. */
+    selectedApiKeyIds?: string[]
     updatedAt?: Date
     updatedBy?: string
 }
