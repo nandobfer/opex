@@ -26,11 +26,29 @@ function applyUpdate(doc: Doc, update: Record<string, unknown>, keyId?: string) 
     } else doc[path] = value
   }
   if (update.$push) keys.push((update.$push as { apiKeys: Record<string, unknown> }).apiKeys)
+  if (update.$addToSet) {
+    const values = (update.$addToSet as { selectedApiKeyIds: { $each: string[] } }).selectedApiKeyIds.$each
+    const current = (doc.selectedApiKeyIds ??= [])
+    for (const value of values) if (!current.includes(value)) current.push(value)
+  }
   if (update.$pull) {
-    const pull = update.$pull as { apiKeys: { id: string }; selectedApiKeyIds?: string }
-    doc.apiKeys = keys.filter((candidate) => candidate.id !== pull.apiKeys.id)
+    const pull = update.$pull as { apiKeys?: { id: string }; selectedApiKeyIds?: string }
+    if (pull.apiKeys) doc.apiKeys = keys.filter((candidate) => candidate.id !== pull.apiKeys!.id)
     if (pull.selectedApiKeyIds && doc.selectedApiKeyIds) doc.selectedApiKeyIds = doc.selectedApiKeyIds.filter((id) => id !== pull.selectedApiKeyIds)
   }
+}
+
+/** Filtro do `updateOne` como o Mongo: a chave precisa existir e `activeApiKeyId` (valor, `null` = ausente, ou `$ne`) casar. */
+function matches(doc: Doc | undefined, filter: Record<string, unknown>): boolean {
+  if (!doc) return false
+  if (filter['apiKeys.id'] && !doc.apiKeys?.some((candidate) => candidate.id === filter['apiKeys.id'])) return false
+  if ('activeApiKeyId' in filter) {
+    const expected = filter.activeApiKeyId as string | null | { $ne: string }
+    const actual = doc.activeApiKeyId ?? null
+    if (expected !== null && typeof expected === 'object') return actual !== expected.$ne
+    return actual === expected
+  }
+  return true
 }
 
 vi.mock('@/lib/db', () => ({
@@ -49,9 +67,12 @@ vi.mock('@/lib/db/models/Integration', () => {
     findOne: (filter: { integrationId: string }) => ({ select: () => ({ lean: async () => structuredClone(mocks.docs.get(filter.integrationId) ?? null) }) }),
     exists: async (filter: { integrationId: string }) => (mocks.docs.has(filter.integrationId) ? { _id: 1 } : null),
     updateOne: async (filter: { integrationId: string; 'apiKeys.id'?: string }, update: Record<string, unknown>) => {
+      // Entrega a gravação na próxima volta do loop, como o banco: leituras concorrentes acontecem antes.
+      await new Promise((resolve) => setTimeout(resolve, 0))
       const doc = mocks.docs.get(filter.integrationId)
-      if (doc) applyUpdate(doc, update, filter['apiKeys.id'])
-      return { modifiedCount: doc ? 1 : 0 }
+      const matched = matches(doc, filter)
+      if (matched) applyUpdate(doc!, update, filter['apiKeys.id'])
+      return { matchedCount: matched ? 1 : 0, modifiedCount: matched ? 1 : 0 }
     },
   })
   return { Integration }
@@ -281,6 +302,43 @@ describe('chaveiro dos provedores de IA', () => {
       delete mocks.docs.get('ai_anthropic')!.selectedApiKeyIds
       const list = await listAiApiKeys('anthropic')
       expect(list.filter((key) => key.active).map((key) => key.id)).toEqual([a.id])
+    })
+
+    it('cliques concorrentes em chaves diferentes não se sobrescrevem: as duas ficam em uso', async () => {
+      const { a, b, c } = await threeKeys()
+      await Promise.all([setAiApiKeySelected('anthropic', b.id, { selected: true }, actor), setAiApiKeySelected('anthropic', c.id, { selected: true }, actor)])
+      expect([...mocks.docs.get('ai_anthropic')!.selectedApiKeyIds!].sort()).toEqual([a.id, b.id, c.id].sort())
+      const list = await listAiApiKeys('anthropic')
+      expect(list.every((key) => key.active)).toBe(true)
+
+      await Promise.all([setAiApiKeySelected('anthropic', b.id, { selected: false }, actor), makePrimaryAiApiKey('anthropic', c.id, actor)])
+      const doc = mocks.docs.get('ai_anthropic')!
+      expect(doc.activeApiKeyId).toBe(c.id)
+      expect([...doc.selectedApiKeyIds!].sort()).toEqual([a.id, c.id].sort())
+    })
+
+    it('documento sem o campo: pôr uma chave em uso grava também a principal; tornar principal mantém a anterior em uso', async () => {
+      const { a, b, c } = await threeKeys()
+      delete mocks.docs.get('ai_anthropic')!.selectedApiKeyIds
+      await setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      expect(mocks.docs.get('ai_anthropic')!.selectedApiKeyIds).toEqual([a.id, b.id])
+
+      delete mocks.docs.get('ai_anthropic')!.selectedApiKeyIds
+      await makePrimaryAiApiKey('anthropic', c.id, actor)
+      expect(mocks.docs.get('ai_anthropic')!.selectedApiKeyIds).toEqual([a.id, c.id])
+    })
+
+    it('chave removida entre a leitura e a gravação: 404, sem auditoria nem evento', async () => {
+      const { b } = await threeKeys()
+      // O timer dispara depois da leitura (microtarefas) e antes da gravação (o updateOne espera um timer).
+      setTimeout(() => {
+        const doc = mocks.docs.get('ai_anthropic')!
+        doc.apiKeys = doc.apiKeys!.filter((candidate) => candidate.id !== b.id)
+      }, 0)
+      const pending = setAiApiKeySelected('anthropic', b.id, { selected: true }, actor)
+      await expect(pending).rejects.toMatchObject({ status: 404, code: 'AI_API_KEY_NOT_FOUND' })
+      expect(mocks.audit).not.toHaveBeenCalled()
+      expect(mocks.publish).not.toHaveBeenCalled()
     })
 
     it('selecionar valida o corpo', async () => {

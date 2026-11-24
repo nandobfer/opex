@@ -205,23 +205,44 @@ export async function updateAiApiKey(provider: AiApiKeyProviderId, keyId: string
 }
 
 /**
+ * Gravação atômica sobre a chave: `matchedCount` 0 = a chave sumiu entre a leitura e a gravação (404)
+ * ou a condição lida mudou (409), sem auditoria nem evento de um sucesso que não houve.
+ */
+async function updateKey(provider: AiApiKeyProviderId, keyId: string, filter: Record<string, unknown>, update: Record<string, unknown>): Promise<void> {
+    const result = await Integration.updateOne({ integrationId: integrationOf(provider), "apiKeys.id": keyId, ...filter }, update)
+    if (result.matchedCount > 0) return
+    findKey(await loadKeyRing(provider), keyId)
+    throw new DomainError(409, "O chaveiro mudou ao mesmo tempo: confira a lista e tente de novo", "AI_API_KEY_CONFLICT")
+}
+
+/** Ids a acrescentar ao rodízio: a chave e a principal lida (documentos sem o campo ganham a principal explicitamente). */
+function addToPool(primaryId: string | null, keyId: string): { $addToSet: { selectedApiKeyIds: { $each: string[] } } } {
+    return { $addToSet: { selectedApiKeyIds: { $each: primaryId && primaryId !== keyId ? [primaryId, keyId] : [keyId] } } }
+}
+
+/**
  * Põe ou tira a chave do rodízio. Sem principal, a chave posta em uso vira a principal. A principal não
- * sai de uso (409 `AI_API_KEY_PRIMARY`): o provedor configurado nunca fica sem chave em uso.
+ * sai de uso (409 `AI_API_KEY_PRIMARY`): o provedor configurado nunca fica sem chave em uso. A gravação é
+ * atômica (`$addToSet`/`$pull`): cliques seguidos em chaves diferentes não se sobrescrevem.
  */
 export async function setAiApiKeySelected(provider: AiApiKeyProviderId, keyId: string, raw: unknown, actorId: string): Promise<AiApiKeyDto[]> {
     const { selected } = aiApiKeySelectionSchema.parse(raw)
     const doc = await loadKeyRing(provider)
     const item = findKey(doc, keyId)
     const primaryId = primaryIdOf(doc)
-    const ids = selectedIdsOf(doc)
-    if (selected === ids.includes(keyId)) return listAiApiKeys(provider)
+    if (selected === selectedIdsOf(doc).includes(keyId)) return listAiApiKeys(provider)
     if (!selected && keyId === primaryId) throw new DomainError(409, "Esta é a chave principal: torne outra chave principal antes de tirá-la de uso", "AI_API_KEY_PRIMARY")
     const becomesPrimary = selected && !primaryId
-    const next = selected ? (becomesPrimary ? [keyId] : [...ids, keyId]) : ids.filter((id) => id !== keyId)
-    await Integration.updateOne(
-        { integrationId: integrationOf(provider), "apiKeys.id": keyId },
-        { $set: { selectedApiKeyIds: next, ...(becomesPrimary ? { activeApiKeyId: keyId } : {}) }, _auditContext: { userId: actorId } },
-    )
+    const audit = { userId: actorId }
+    if (becomesPrimary) {
+        // Sem principal válida, o rodízio recomeça só com esta chave; só grava se ninguém elegeu outra principal no meio.
+        await updateKey(provider, keyId, { activeApiKeyId: doc?.activeApiKeyId ?? null }, { $set: { activeApiKeyId: keyId, selectedApiKeyIds: [keyId] }, _auditContext: audit })
+    } else if (selected) {
+        await updateKey(provider, keyId, {}, { ...addToPool(primaryId, keyId), _auditContext: audit })
+    } else {
+        // A principal não sai: só grava se esta chave ainda não virou a principal no meio.
+        await updateKey(provider, keyId, { activeApiKeyId: { $ne: keyId } }, { $pull: { selectedApiKeyIds: keyId }, _auditContext: audit })
+    }
     return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, name: item.name, emUso: !selected }, { provider, name: item.name, emUso: selected, ...(becomesPrimary ? { principal: true } : {}) }, {
         primaryChanged: becomesPrimary,
         poolChanged: true,
@@ -229,16 +250,14 @@ export async function setAiApiKeySelected(provider: AiApiKeyProviderId, keyId: s
     })
 }
 
-/** Torna a chave a principal do provedor (só uma por vez); ela entra em uso se ainda não estava. */
+/** Torna a chave a principal do provedor (só uma por vez); ela entra em uso se ainda não estava, e a anterior continua em uso. */
 export async function makePrimaryAiApiKey(provider: AiApiKeyProviderId, keyId: string, actorId: string): Promise<AiApiKeyDto[]> {
     const doc = await loadKeyRing(provider)
     const item = findKey(doc, keyId)
     const primaryId = primaryIdOf(doc)
     if (primaryId === keyId) return listAiApiKeys(provider)
     const previous = doc?.apiKeys?.find((candidate) => candidate.id === primaryId)
-    const ids = selectedIdsOf(doc)
-    const next = ids.includes(keyId) ? ids : [...ids, keyId]
-    await Integration.updateOne({ integrationId: integrationOf(provider), "apiKeys.id": keyId }, { $set: { activeApiKeyId: keyId, selectedApiKeyIds: next }, _auditContext: { userId: actorId } })
+    await updateKey(provider, keyId, {}, { $set: { activeApiKeyId: keyId }, ...addToPool(primaryId, keyId), _auditContext: { userId: actorId } })
     return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, principal: previous?.name ?? null }, { provider, principal: item.name }, { primaryChanged: true, poolChanged: true, hasPrimary: true })
 }
 

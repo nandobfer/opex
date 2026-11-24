@@ -146,6 +146,11 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
     outra chave principal antes"), então o provedor configurado nunca fica sem chave em uso;
   - **tornar principal** (`POST .../primary`) grava `activeApiKeyId` e põe a chave em uso; a principal
     anterior continua em uso;
+  - as gravações do rodízio são **atômicas** (`$addToSet`/`$pull` em `selectedApiKeyIds`, nunca o array
+    inteiro), então cliques seguidos em chaves diferentes não se sobrescrevem; ao acrescentar, a principal
+    lida entra junto (documento sem o campo). A chave que sumiu entre a leitura e a gravação responde
+    404 `AI_API_KEY_NOT_FOUND`, e uma condição lida que mudou no meio (outra principal eleita) responde
+    409 `AI_API_KEY_CONFLICT`, sem auditoria nem evento;
   - **Substituir segredo** mantém o id, então o consumo continua agrupado na chave;
   - remover a **principal** é recusado com 409 `AI_API_KEY_PRIMARY` enquanto houver outras chaves;
     uma chave em uso que não é a principal pode ser removida e sai do rodízio (`$pull` em
