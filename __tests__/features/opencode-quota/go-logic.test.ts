@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   axisDateLabel,
   buildGoChart,
+  combineGoDays,
   dateKeysBetween,
   dayPercentFromModels,
   formatGoDate,
@@ -11,12 +12,102 @@ import {
   goConsoleStatusMessage,
   goCycleFor,
   goForecast,
+  goKeyLabel,
+  goReferenceIndex,
+  goSharedKeyGroups,
+  groupGoSubscriptions,
   goYMax,
   goYTicks,
   meterPercent,
   subUtcMonths,
+  sumGoMeters,
   type GoDayValue,
 } from '@/features/opencode-quota/go-logic'
+import type { GoStatus } from '@/features/opencode-quota/go-schemas'
+
+const goStatus = (overrides: { used?: number; limit?: number; startsAt?: string; endsAt?: string; fiveHourReset?: string | null } = {}): GoStatus => ({
+  product: 'go',
+  access: {
+    startsAt: overrides.startsAt ?? '2026-11-05T12:15:35.000Z',
+    endsAt: overrides.endsAt ?? '2026-12-05T12:15:35.000Z',
+    meters: {
+      fiveHour: { resetsAt: overrides.fiveHourReset === undefined ? '2026-11-16T22:00:00.000Z' : overrides.fiveHourReset, limitMicroCents: 1_200_000_000, usedMicroCents: 37_061_887 },
+      week: { resetsAt: '2026-11-23T00:00:00.000Z', limitMicroCents: 3_000_000_000, usedMicroCents: 168_599_483 },
+      month: { resetsAt: overrides.endsAt ?? '2026-12-05T12:15:35.000Z', limitMicroCents: overrides.limit ?? 6_000_000_000, usedMicroCents: overrides.used ?? 2_634_252_498 },
+    },
+  },
+})
+
+describe('soma das assinaturas em "Todas as chaves" (OPE-180)', () => {
+  it('soma uso e limite com o % truncado sobre a soma; com uma assinatura é o próprio medidor', () => {
+    const one = sumGoMeters([goStatus()])
+    expect(meterPercent(one.month.usedMicroCents, one.month.limitMicroCents)).toBe(43.9)
+    const two = sumGoMeters([goStatus(), goStatus({ used: 1_365_747_502 })])
+    expect(two.month).toMatchObject({ usedMicroCents: 4_000_000_000, limitMicroCents: 12_000_000_000 })
+    expect(meterPercent(two.month.usedMicroCents, two.month.limitMicroCents)).toBe(33.3)
+  })
+
+  it('o reset de cada janela é o mais próximo, ignorando os nulos', () => {
+    const sum = sumGoMeters([goStatus({ fiveHourReset: null }), goStatus({ fiveHourReset: '2026-11-16T21:00:00.000Z' }), goStatus({ fiveHourReset: '2026-11-16T23:00:00.000Z' })])
+    expect(sum.fiveHour.resetsAt).toBe('2026-11-16T21:00:00.000Z')
+    expect(sumGoMeters([goStatus({ fiveHourReset: null })]).fiveHour.resetsAt).toBeNull()
+  })
+
+  it('referência: renovação mais próxima; empate pela maior cota, depois a principal, depois o nome', () => {
+    const sub = (name: string, status: GoStatus, primary = false) => ({ name, status, primary })
+    expect(goReferenceIndex([sub('A', goStatus()), sub('B', goStatus({ endsAt: '2026-11-28T08:00:00.000Z' }))])).toBe(1)
+    expect(goReferenceIndex([sub('A', goStatus()), sub('B', goStatus({ limit: 9_000_000_000 }))])).toBe(1)
+    expect(goReferenceIndex([sub('A', goStatus()), sub('B', goStatus(), true)])).toBe(1)
+    expect(goReferenceIndex([sub('Z', goStatus()), sub('B', goStatus())])).toBe(1)
+    expect(goReferenceIndex([sub('A', goStatus())])).toBe(0)
+  })
+
+  it('status idênticos viram um grupo; uma diferença no uso separa', () => {
+    const groups = groupGoSubscriptions([
+      { id: 1, status: goStatus() },
+      { id: 2, status: goStatus({ used: 1 }) },
+      { id: 3, status: goStatus() },
+    ])
+    expect(groups.map((group) => group.map((item) => item.id))).toEqual([[1, 3], [2]])
+  })
+
+  it('combina os dias pela cota mensal: nulo sem dados de nenhuma, incompleto sem dados de alguma, parcial propagado', () => {
+    const dates = ['2026-11-10', '2026-11-11', '2026-11-12', '2026-11-13']
+    const a = days({ '2026-11-10': 3, '2026-11-11': null, '2026-11-12': 4, '2026-11-13': 2 }, ['2026-11-13'])
+    const b = days({ '2026-11-10': 6, '2026-11-11': null, '2026-11-12': null, '2026-11-13': 2 })
+    const combined = combineGoDays([{ days: a, weight: 1 }, { days: b, weight: 2 }], dates)
+    expect(combined.get('2026-11-10')).toEqual({ percent: 5, partial: false })
+    expect(combined.get('2026-11-11')).toEqual({ percent: null, partial: false })
+    expect(combined.get('2026-11-12')!.percent).toBeCloseTo(4 / 3, 10)
+    expect(combined.get('2026-11-12')!.incomplete).toBe(true)
+    expect(combined.get('2026-11-13')).toEqual({ percent: 2, partial: true })
+    // Assinatura sem série (catálogo indisponível) conta 0 e deixa os dias incompletos.
+    expect(combineGoDays([{ days: a, weight: 1 }, { days: null, weight: 1 }], ['2026-11-10']).get('2026-11-10')).toEqual({ percent: 1.5, partial: false, incomplete: true })
+    // Uma só assinatura: a própria série.
+    expect(combineGoDays([{ days: a, weight: 5 }], dates).get('2026-11-10')).toEqual({ percent: 3, partial: false })
+  })
+
+  it('o gráfico conta os dias de cobertura incompleta', () => {
+    const input = new Map<string, GoDayValue>([
+      ['2026-11-06', { percent: 2, partial: false, incomplete: true }],
+      ['2026-11-07', { percent: 2, partial: false }],
+    ])
+    const chart = buildGoChart({ cycle: { startMs: START, endMs: END, current: true }, nowMs: NOW, days: input, monthRatio: 43.9, forecast: goForecast({ startMs: START, endMs: END, nowMs: NOW, percent: 43.9 }), historyFrom: '2026-10-05' })
+    expect(chart.incompleteDays).toBe(1)
+  })
+
+  it('rótulo das chaves e grupos de chaves da mesma assinatura', () => {
+    const scope = (keys: [string, number][], subscriptions: number) => ({ mode: 'all' as const, keys: keys.map(([name, subscription]) => ({ name, subscription })), subscriptions, failed: [], cycleKeyName: null, cyclesDiffer: false })
+    expect(goKeyLabel(null, 'Pessoal')).toBe('Chave: Pessoal')
+    expect(goKeyLabel(null, null)).toBeNull()
+    expect(goKeyLabel(scope([['Pessoal', 0]], 1), null)).toBe('Chave: Pessoal')
+    expect(goKeyLabel(scope([['A', 0], ['B', 1], ['C', 2]], 3), null)).toBe('Chaves: 3')
+    expect(goKeyLabel(scope([['A', 0], ['B', 0], ['C', 1]], 2), null)).toBe('Chaves: 3 (2 assinaturas)')
+    expect(goKeyLabel(scope([['A', 0], ['B', 0]], 1), null)).toBe('Chaves: 2 (1 assinatura)')
+    expect(goSharedKeyGroups(scope([['A', 0], ['B', 0], ['C', 1]], 2))).toEqual([['A', 'B']])
+    expect(goSharedKeyGroups(null)).toEqual([])
+  })
+})
 
 const START = Date.parse('2026-11-05T12:15:35.000Z')
 const END = Date.parse('2026-12-05T12:15:35.000Z')

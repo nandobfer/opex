@@ -27,6 +27,7 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
   message: null,
   checkedAt: new Date().toISOString(),
   keyName: 'Chave principal',
+  scope: { mode: 'all', keys: [{ name: 'Chave principal', subscription: 0 }], subscriptions: 1, failed: [], cycleKeyName: null, cyclesDiffer: false },
   cycle: { startsAt: '2026-11-05T12:15:35.000Z', endsAt: '2026-12-05T12:15:35.000Z' },
   meters: [
     { id: 'fiveHour', label: '5h', percent: 3.1, resetsAt: inHours(2) },
@@ -37,6 +38,7 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
   limitReached: false,
   forecast: { dailyAverage: 3.9, projectedPercent: 116.2, crossesAt: '2026-12-01T07:46:58.320Z' },
   realCostUsd: 42.85,
+  realCostPartial: false,
   chart: {
     cycle: { startsAt: START, endsAt: END, current: true },
     points: [
@@ -51,6 +53,7 @@ const usage = (overrides: Partial<OpencodeGoUsageDto> = {}): OpencodeGoUsageDto 
     yMax: 150,
     missingDays: 2,
     partialDays: 0,
+    incompleteDays: 0,
     historyFrom: '2026-10-05',
   },
   chartMessage: null,
@@ -99,7 +102,40 @@ describe('OpencodeGoSubscriptionCard', () => {
     expect(table.querySelectorAll('tbody tr')).toHaveLength(4)
     expect(table.textContent).toContain('116,2%')
     expect(document.querySelector('[data-go-note="missing"]')!.textContent).toContain('2 dias do ciclo sem dados')
-    expect(screen.getByText(/Chave: Chave principal/)).toBeTruthy()
+    expect(document.querySelector('[data-go-keys]')!.textContent).toBe('Chave: Chave principal.')
+    expect(document.querySelector('[data-go-cost-partial]')).toBeNull()
+    expect(document.querySelector('[role="alert"]')).toBeNull()
+  })
+
+  it('"Todas as chaves" (OPE-180): rótulo do consolidado, chaves da mesma assinatura, ciclo de referência, cobertura parcial e gasto parcial', async () => {
+    const data = usage()
+    renderCard({
+      ...data,
+      keyName: null,
+      scope: {
+        mode: 'all',
+        keys: [
+          { name: 'Pessoal', subscription: 0 },
+          { name: 'Pessoal 2', subscription: 0 },
+          { name: 'Trabalho', subscription: 1 },
+        ],
+        subscriptions: 2,
+        failed: [{ name: 'Antiga', message: 'O OpenCode Go recusou a chave (HTTP 401).' }],
+        cycleKeyName: 'Trabalho',
+        cyclesDiffer: true,
+      },
+      realCostPartial: true,
+      chart: { ...data.chart!, missingDays: 0, incompleteDays: 3 },
+    })
+    const label = await screen.findByText('Chaves: 3 (2 assinaturas).')
+    expect(label.getAttribute('title')).toBe('Pessoal, Pessoal 2, Trabalho')
+    expect(screen.getByText('Cobertura parcial')).toBeTruthy()
+    expect(screen.getByText(/Fora da soma: Antiga \(O OpenCode Go recusou a chave \(HTTP 401\)\.\)/)).toBeTruthy()
+    expect(document.querySelector('[data-go-renewal]')!.getAttribute('title')).toContain('chave Trabalho')
+    expect(document.querySelector('[data-go-cost-partial]')).toBeTruthy()
+    expect(document.querySelector('[data-go-note="incomplete"]')!.textContent).toContain('3 dias sem dados de alguma assinatura')
+    expect(document.querySelector('[data-go-note="shared"]')!.textContent).toBe('As chaves Pessoal e Pessoal 2 leem a mesma assinatura: contadas uma vez na soma.')
+    expect(document.querySelector('[data-go-note="cycle"]')!.textContent).toContain('ciclo da chave Trabalho (renovação mais próxima)')
   })
 
   it('filtro num ciclo passado mostra o título do ciclo e o gráfico sem previsão', async () => {

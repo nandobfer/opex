@@ -53,8 +53,25 @@ export interface GoChartDto {
     missingDays: number
     /** Dias com custo de modelo sem cota conhecida no catálogo (custo fora da soma). */
     partialDays: number
+    /** Dias somados em que alguma assinatura ficou sem dados (contou 0), OPE-180. */
+    incompleteDays: number
     /** Primeiro dia que a API ainda devolve. */
     historyFrom: string
+}
+
+/** Chaves e assinaturas consideradas na leitura (OPE-180). Só nomes: nunca ids secretos nem dados de pagamento. */
+export interface GoKeyScopeDto {
+    /** `all` = "Todas as chaves" (soma das chaves em uso); `key` = uma chave do filtro. */
+    mode: "all" | "key"
+    /** Chaves lidas com sucesso; `subscription` = índice da assinatura (chaves com status idêntico dividem o índice). */
+    keys: { name: string; subscription: number }[]
+    subscriptions: number
+    /** Chaves cuja leitura falhou: ficaram fora da soma. */
+    failed: { name: string; message: string }[]
+    /** Chave cujo ciclo rege gráfico e previsão (renovação mais próxima), com mais de uma assinatura. */
+    cycleKeyName: string | null
+    /** As assinaturas somadas têm ciclos diferentes. */
+    cyclesDiffer: boolean
 }
 
 export interface OpencodeGoUsageDto {
@@ -62,7 +79,9 @@ export interface OpencodeGoUsageDto {
     message: string | null
     /** Leitura do status (medidores). */
     checkedAt: string
+    /** Nome da chave do filtro ou da única chave lida; `null` na soma de várias. */
     keyName: string | null
+    scope: GoKeyScopeDto | null
     cycle: { startsAt: string; endsAt: string } | null
     meters: GoMeterDto[]
     monthPercent: number | null
@@ -70,6 +89,8 @@ export interface OpencodeGoUsageDto {
     forecast: GoForecastDto | null
     /** Gasto real (US$) no ciclo atual, do `cost-by-day`; não é o medidor. */
     realCostUsd: number | null
+    /** O gasto real de alguma assinatura não pôde ser lido: o total é só das que responderam. */
+    realCostPartial: boolean
     chart: GoChartDto | null
     /** Por que o gráfico não pôde ser montado (ex.: catálogo indisponível). */
     chartMessage: string | null

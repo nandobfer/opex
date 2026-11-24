@@ -1,5 +1,6 @@
-import { GO_DISPLAY_TIME_ZONE } from "./go-constants"
-import type { GoChartDto, GoChartPointDto } from "./go-types"
+import { GO_DISPLAY_TIME_ZONE, GO_METER_IDS, type GoMeterId } from "./go-constants"
+import type { GoStatus } from "./go-schemas"
+import type { GoChartDto, GoChartPointDto, GoKeyScopeDto } from "./go-types"
 
 /**
  * Regras da assinatura OpenCode Go (OPE-167), módulo PURO: percentual do medidor, previsão linear,
@@ -136,6 +137,120 @@ export interface GoDayValue {
     /** Pontos percentuais do dia; `null` sem dados. */
     percent: number | null
     partial: boolean
+    /** Soma de assinaturas em que alguma ficou sem dados no dia (contou 0), OPE-180. */
+    incomplete?: boolean
+}
+
+/**
+ * Identidade de uma assinatura pelo status (OPE-180): duas chaves do mesmo workspace leem o mesmo `go/status`
+ * (ciclo e as três janelas iguais até o micro-cent) e contam como uma assinatura só na soma.
+ */
+export function goSubscriptionSignature(status: GoStatus): string {
+    const meters = GO_METER_IDS.map((id) => {
+        const meter = status.access.meters[id]
+        return `${meter.usedMicroCents}:${meter.limitMicroCents}:${meter.resetsAt ?? ""}`
+    })
+    return [status.access.startsAt, status.access.endsAt, ...meters].join("|")
+}
+
+/** Agrupa as leituras por assinatura, na ordem da primeira chave de cada uma. */
+export function groupGoSubscriptions<T extends { status: GoStatus }>(reads: readonly T[]): T[][] {
+    const groups = new Map<string, T[]>()
+    for (const read of reads) {
+        const signature = goSubscriptionSignature(read.status)
+        const group = groups.get(signature)
+        if (group) group.push(read)
+        else groups.set(signature, [read])
+    }
+    return [...groups.values()]
+}
+
+export interface GoMeterSum {
+    usedMicroCents: number
+    limitMicroCents: number
+    resetsAt: string | null
+}
+
+/** Janelas somadas entre as assinaturas: uso e limite somados; o reset é o mais próximo (ignora os nulos). */
+export function sumGoMeters(statuses: readonly GoStatus[]): Record<GoMeterId, GoMeterSum> {
+    const sum = (id: GoMeterId): GoMeterSum => {
+        let usedMicroCents = 0
+        let limitMicroCents = 0
+        let resetsAt: string | null = null
+        for (const status of statuses) {
+            const meter = status.access.meters[id]
+            usedMicroCents += meter.usedMicroCents
+            limitMicroCents += meter.limitMicroCents
+            if (meter.resetsAt && (resetsAt === null || Date.parse(meter.resetsAt) < Date.parse(resetsAt))) resetsAt = meter.resetsAt
+        }
+        return { usedMicroCents, limitMicroCents, resetsAt }
+    }
+    return { fiveHour: sum("fiveHour"), week: sum("week"), month: sum("month") }
+}
+
+/**
+ * Assinatura cujo ciclo rege o gráfico, a previsão e o "Renova em" (decisão do dono, OPE-180): a da renovação
+ * mais próxima; empate pela maior cota mensal, depois a chave principal, depois o nome.
+ */
+export function goReferenceIndex(subscriptions: readonly { status: GoStatus; primary: boolean; name: string }[]): number {
+    let best = 0
+    for (let index = 1; index < subscriptions.length; index++) {
+        const a = subscriptions[index]!
+        const b = subscriptions[best]!
+        const byEnd = Date.parse(a.status.access.endsAt) - Date.parse(b.status.access.endsAt)
+        const byLimit = b.status.access.meters.month.limitMicroCents - a.status.access.meters.month.limitMicroCents
+        const byPrimary = Number(b.primary) - Number(a.primary)
+        const order = byEnd || byLimit || byPrimary || a.name.localeCompare(b.name, "pt-BR")
+        if (order < 0) best = index
+    }
+    return best
+}
+
+/**
+ * Série diária somada (OPE-180): `Σ(% do dia × limite mensal) / Σ limites mensais` — o mesmo que `Σ custo / Σ cota`.
+ * Assinatura sem dados no dia (ou sem série) conta 0 e marca o dia como incompleto; sem dados de nenhuma, o dia
+ * fica `null`. Com uma só assinatura, devolve a série dela.
+ */
+export function combineGoDays(series: readonly { days: ReadonlyMap<string, GoDayValue> | null; weight: number }[], dates: readonly string[]): Map<string, GoDayValue> {
+    const only = series.length === 1 ? series[0]!.days : null
+    if (only) return new Map(only)
+    const totalWeight = series.reduce((total, item) => total + item.weight, 0)
+    const combined = new Map<string, GoDayValue>()
+    for (const date of dates) {
+        let weighted = 0
+        let known = 0
+        let partial = false
+        for (const item of series) {
+            const day = item.days?.get(date)
+            if (!day || day.percent === null) continue
+            known++
+            weighted += day.percent * item.weight
+            partial ||= day.partial
+        }
+        if (known === 0 || totalWeight <= 0) combined.set(date, { percent: null, partial: false })
+        else combined.set(date, { percent: weighted / totalWeight, partial, ...(known < series.length ? { incomplete: true } : {}) })
+    }
+    return combined
+}
+
+const plural = (count: number, one: string, many: string) => `${count} ${count === 1 ? one : many}`
+
+/** Rótulo das chaves no cabeçalho do card: "Chave: X" com uma chave; "Chaves: 3 (2 assinaturas)" na soma. */
+export function goKeyLabel(scope: GoKeyScopeDto | null, keyName: string | null): string | null {
+    if (!scope || scope.keys.length <= 1) {
+        const name = scope?.keys[0]?.name ?? keyName
+        return name ? `Chave: ${name}` : null
+    }
+    const keys = `Chaves: ${scope.keys.length}`
+    return scope.subscriptions < scope.keys.length ? `${keys} (${plural(scope.subscriptions, "assinatura", "assinaturas")})` : keys
+}
+
+/** Chaves que leem a mesma assinatura (contadas uma vez), uma lista de nomes por assinatura. */
+export function goSharedKeyGroups(scope: GoKeyScopeDto | null): string[][] {
+    if (!scope) return []
+    const groups = new Map<number, string[]>()
+    for (const key of scope.keys) groups.set(key.subscription, [...(groups.get(key.subscription) ?? []), key.name])
+    return [...groups.values()].filter((names) => names.length > 1)
 }
 
 export interface GoChartInput {
@@ -198,6 +313,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
     let cumulative = 0
     let missingDays = 0
     let partialDays = 0
+    let incompleteDays = 0
 
     for (const key of cycleDayKeys(cycle, untilMs - 1)) {
         const dayStart = dayStartMs(key)
@@ -209,6 +325,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         const percent = day?.percent ?? null
         if (percent === null && !isToday) missingDays++
         else if (day?.partial) partialDays++
+        if (percent !== null && day?.incomplete) incompleteDays++
         if (isToday) break
         // Primeiro e último dia do ciclo entram pró-rateados — no acumulado e no "uso do dia" da dica.
         const share = percent === null ? null : percent * ((to - from) / DAY_MS)
@@ -252,6 +369,7 @@ export function buildGoChart(input: GoChartInput): GoChartDto {
         yMax: goYMax(values),
         missingDays,
         partialDays,
+        incompleteDays,
         historyFrom,
     }
 }

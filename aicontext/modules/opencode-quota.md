@@ -138,7 +138,8 @@ OpenCode, já calculou: o percentual usado de cada janela (5h, semanal, mensal�
 ## Assinatura OpenCode Go (API do Console, OPE-167)
 
 Segunda fonte, **independente do plugin**: o consumo da assinatura OpenCode Go lido direto da API do
-Console com uma chave do chaveiro `ai_opencode_go`. Aparece em `/integracoes/ia/opencode-go?aba=consumo`
+Console com as chaves do chaveiro `ai_opencode_go` (uma chave do filtro, ou a soma das chaves em uso em
+"Todas as chaves", OPE-180). Aparece em `/integracoes/ia/opencode-go?aba=consumo`
 (card **Assinatura OpenCode Go**, acima do consumo do Opex), não no painel de `/desenvolvimento`. O
 número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, não só o Opex.
 
@@ -181,6 +182,33 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
   vazio sem erro, então não é consultado. Dia fora do histórico ou com falha é **sem dados**.
 - Catálogo indisponível: os medidores aparecem e o gráfico dá lugar ao aviso "Gráfico indisponível".
 
+### Soma das chaves em "Todas as chaves" (OPE-180)
+
+Com várias chaves em uso (OPE-179), "Todas as chaves" mostra **um card consolidado e um gráfico único com um
+teto de 100%** (antes mostrava só a chave principal). Regras (puras em `go-logic.ts`):
+
+- **Chaves consideradas**: as em uso (`getAiProviderKeyPool`, com a principal). Grupo vazio → `unconfigured`.
+- **Uma assinatura por status** (decisão do dono no planejamento): chaves cujo `go/status` é idêntico (ciclo e as
+  três janelas iguais até o micro-cent, `goSubscriptionSignature`/`groupGoSubscriptions`) leem a mesma assinatura
+  e contam **uma vez** (série, gasto e medidores lidos com a primeira delas).
+- **Medidores** (`sumGoMeters`): `used` e `limit` somados por janela; o % (uma casa, truncado) é sobre a soma;
+  o reset de cada janela é o mais próximo.
+- **Ciclo de referência** (`goReferenceIndex`, decisão do dono: "renovação mais próxima"): o da assinatura que
+  renova primeiro (empate: maior cota mensal, depois a principal, depois o nome). Rege o gráfico, a previsão
+  (`goForecast` sobre o % somado) e o "Renova em".
+- **Série diária** (`combineGoDays`): `Σ(% do dia × limite mensal) / Σ limites mensais` (= `Σ custo / Σ cota`).
+  Assinatura sem dados no dia (falha ou catálogo indisponível) conta 0 e o dia fica **incompleto**
+  (`incompleteDays`); sem dados de nenhuma, o dia fica sem dados como antes. As séries são lidas uma assinatura
+  por vez (cada uma com `GO_SERIES_CONCURRENCY`); o catálogo de cotas é lido uma vez por produto.
+- **Gasto real**: soma do gasto de cada assinatura (cada uma desde o início do próprio ciclo); se alguma falhar,
+  o total é das que responderam e sai `realCostPartial` ("parcial" na tela).
+- **Falhas**: chave cujo status falha sai da soma e entra em `scope.failed` (estado continua `ok`, com aviso
+  "Cobertura parcial"); todas falhando → `error` com a mensagem da primeira.
+- DTO: `scope` (`mode`, nomes das chaves com o índice da assinatura, número de assinaturas, `failed`,
+  `cycleKeyName`, `cyclesDiffer`) — só nomes, nunca ids secretos nem dados de pagamento; `keyName` = chave do
+  filtro ou a única chave lida. `checkedAt` é a leitura mais antiga da soma.
+- O filtro por **uma chave** continua lendo só aquela assinatura (a soma de uma vale a própria).
+
 ### Gráfico, ciclo e previsão (`go-logic.ts`, puro)
 
 - **Um ciclo por vez** (decisão do dono, 17/11/2026, depois da prévia; substitui o "acumula através dos
@@ -219,16 +247,17 @@ número é da **assinatura inteira**: inclui OpenCode no host ou no desktop, nã
 ### Servidor, rotina e tempo real
 
 - `server/go-usage.ts`: `getOpencodeGoUsage(query)` e `refreshOpencodeGoUsage(query)` (query =
-  `usageQuerySchema`: `from`, `to`, `apiKey`). Chave: "Todas" (padrão) usa a **chave principal** (`getPrimaryAiProviderKey`;
-  a cota da assinatura é por chave, então com várias chaves em uso, OPE-179, as outras são vistas escolhendo
-  cada uma no filtro; sem chave → `unconfigured`); uma chave do chaveiro consulta a assinatura dela (`getAiProviderKeyById`); "Sem chave
+  `usageQuerySchema`: `from`, `to`, `apiKey`). Chave: "Todas" (padrão) **soma as chaves em uso**
+  (`getAiProviderKeyPool`, OPE-180, ver "Soma das chaves"; sem chave em uso → `unconfigured`); uma chave do chaveiro consulta a assinatura dela (`getAiProviderKeyById`); "Sem chave
   identificada" e "Chaves removidas" → `no-key` (não apontam para uma assinatura).
 - O status fica em memória por chave: a tela reaproveita a leitura de até 1 min; o botão força, no máximo,
-  uma leitura a cada 30 s por chave.
-- **Rotina `opencode-go-usage-refresh`** (Integrações › Crons, 5 min, ligada): relê o status da chave principal.
-  Quando os percentuais (uma casa) ou os resets mudam — na rotina ou numa leitura da tela —, publica
-  `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app`; `useOpencodeGoUsageRealtime` invalida
-  `["opencode-go-usage"]`. Sem chave principal, a rotina não chama a API.
+  uma leitura a cada 30 s por chave; o dia de hoje e o gasto só são relidos nas assinaturas cujo status foi relido.
+  Os status das várias chaves são lidos com até `GO_STATUS_CONCURRENCY` (4) chamadas simultâneas.
+- **Rotina `opencode-go-usage-refresh`** (Integrações › Crons, 5 min, ligada): relê o status de **todas as chaves
+  em uso** (OPE-180; assim a mudança numa chave que não é a principal chega à soma em tempo real) e resume cada
+  uma. Quando os percentuais (uma casa) ou os resets de alguma chave mudam — na rotina ou numa leitura da tela —,
+  publica **um** `opencode-go-usage-updated` (`{ checkedAt }`) por leitura em `private-app`;
+  `useOpencodeGoUsageRealtime` invalida `["opencode-go-usage"]`. Sem chave em uso, a rotina não chama a API.
 - Rotas (sessão do dono, não públicas): `GET /api/opencode/quota/go` e `POST /api/opencode/quota/go/refresh`,
   com a mesma query.
 
@@ -259,6 +288,12 @@ Reproduz o card de uso do Console do OpenCode Go:
   (`--foreground`, `--border`…) guardam só os números do HSL e, num `fill`/`stroke`, deixavam o texto preto e o
   teto sem desenho (achado da prévia de 17/11). Teto de 100%: `--color-foreground` com opacidade 0,7 e 1,5 px,
   contra a grade em `--color-border` a 0,5 e 1 px; a marca "Teto mensal" da legenda usa a mesma cor do teto.
+- Rótulo das chaves no subtítulo do card (`goKeyLabel`): "Chave: X" com uma chave; na soma, "Chaves: 3" ou
+  "Chaves: 3 (2 assinaturas)" quando há chaves da mesma assinatura, com os nomes na dica. Na soma (OPE-180): aviso
+  "Cobertura parcial" (`PanelMessage` âmbar) com as chaves que falharam; "(parcial…)" ao lado do gasto real;
+  dica do "Renova em" com a chave do ciclo quando os ciclos diferem; e notas em `GoCoverageNotes` para dias
+  incompletos, chaves contadas uma vez e "As assinaturas têm ciclos diferentes: o gráfico e a previsão seguem o
+  ciclo da chave X (renovação mais próxima)". O skeleton não muda (são linhas de texto opcionais).
 - Estados: skeleton com a mesma estrutura (`GoUsageSkeleton`, constantes de `layout.ts`), chave não
   configurada (atalho para a integração), filtro sem assinatura, erro com "Tentar novamente" e selo
   "Desatualizado" quando a última leitura passa de 15 min.

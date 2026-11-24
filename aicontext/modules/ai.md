@@ -107,8 +107,8 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   campo: a ausência equivale ao estado anterior.
 - **Resolução**: o campo privado `apiKey` dessas integrações tem `keyRing: true` no catálogo.
   `buildResolvedIntegration` resolve `values.apiKey` pela **principal** (`activeApiKeyOf`), sem ler
-  `secretValues`. É ela que o Engramind, o teste do provedor (exigência de chave) e o "Todas" da
-  assinatura do Go usam. Sem principal, o segredo não existe e o provedor fica **"Não configurado"**,
+  `secretValues`. É ela que o Engramind e o teste do provedor (exigência de chave) usam; o "Todas" da
+  assinatura do Go soma as chaves em uso (OPE-180, `getAiProviderKeyPool`). Sem principal, o segredo não existe e o provedor fica **"Não configurado"**,
   com as features que dependem dele indisponíveis. Trocar a principal muda o `version` e derruba o
   cache do catálogo.
 - **Rodízio e troca de chave em falha** (`src/lib/ai/api-keys.ts` + puro `src/lib/ai/key-rotation.ts`):
@@ -436,7 +436,8 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
 - **Aba Consumo do OpenCode Go** (OPE-167, `OpencodeGoUsageTab`): a barra de filtros (período + chave,
   `UsageFiltersBar`, extraída do `ProviderUsageCard`) aparece **uma vez** no topo e vale para os dois cards
   abaixo (os filtros vivem na URL): **Assinatura OpenCode Go** (`OpencodeGoSubscriptionCard`, lido do Console
-  — ver `modules/opencode-quota.md`, "Assinatura OpenCode Go") e **Consumo do OpenCode Go pelo Opex** (o
+  — ver `modules/opencode-quota.md`, "Assinatura OpenCode Go"; em "Todas as chaves" é a **soma das
+  assinaturas das chaves em uso**, num gráfico único com um teto de 100%, OPE-180) e **Consumo do OpenCode Go pelo Opex** (o
   `ProviderUsageCard` com `hideFilters`). Os demais provedores continuam com o filtro dentro do próprio card.
 - **Chave por id** (`getAiProviderKeyById`, `src/lib/ai/api-keys.ts`): lê e decifra no servidor uma chave
   do chaveiro em uso ou não (filtro de chave da assinatura do Go); `null` se não existe ou não decifra.

@@ -15,6 +15,13 @@ export function goStatusLine(data: OpencodeGoUsageDto): { text: string; tone: "w
     return null
 }
 
+/** Dica do "Renova em": data e hora e, na soma de assinaturas com ciclos diferentes, de qual chave é o ciclo (OPE-180). */
+export function goRenewalTitle(data: OpencodeGoUsageDto): string | undefined {
+    if (!data.cycle) return undefined
+    const base = `Renova em ${formatGoDateTime(data.cycle.endsAt)}`
+    return data.scope?.cyclesDiffer && data.scope.cycleKeyName ? `${base} — renovação mais próxima entre as assinaturas somadas (chave ${data.scope.cycleKeyName})` : base
+}
+
 const TONE_CLASSES = { warning: "text-warning font-medium", destructive: "text-destructive font-medium", muted: "text-muted-foreground" } as const
 
 /**
@@ -34,7 +41,9 @@ export function GoUsageHeader({ data }: { data: OpencodeGoUsageDto }) {
                     {data.cycle && (
                         <>
                             <span aria-hidden>·</span>
-                            <span title={`Renova em ${formatGoDateTime(data.cycle.endsAt)}`}>Renova em {formatGoDate(data.cycle.endsAt)}</span>
+                            <span title={goRenewalTitle(data)} data-go-renewal>
+                                Renova em {formatGoDate(data.cycle.endsAt)}
+                            </span>
                         </>
                     )}
                     <AnimatePresence mode="wait" initial={false}>
@@ -59,6 +68,7 @@ export function GoUsageHeader({ data }: { data: OpencodeGoUsageDto }) {
             {data.realCostUsd !== null && (
                 <p className="pt-1 text-[11px] text-muted-foreground" title="Soma do custo real por dia (usage/cost-by-day) desde o início do ciclo. Não é o medidor da assinatura, que normaliza o custo pela cota de cada modelo.">
                     Gasto real no ciclo: {formatGoUsd(data.realCostUsd)}
+                    {data.realCostPartial && <span data-go-cost-partial> (parcial: o gasto de alguma assinatura não pôde ser lido)</span>}
                 </p>
             )}
         </div>
