@@ -11,5 +11,5 @@ import { AgentUniverseCard } from "./AgentUniverseCard"
  */
 export function MemoryUniverseSection({ consumer, centralId }: { consumer: MemoryConsumer; centralId?: string | null }) {
     const def = memoryUniverseOf(consumer, { centralId })
-    return <AgentUniverseCard agent={def.agent} description={def.description} defaultCreateChannel={def.defaultCreateChannel} channels={def.channels} noticesConsumer={consumer} />
+    return <AgentUniverseCard agent={def.agent} description={def.description} defaultCreateChannel={def.defaultCreateChannel} channels={def.channels} noticesConsumer={consumer} consumer={consumer} />
 }

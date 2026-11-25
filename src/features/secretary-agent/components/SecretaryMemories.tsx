@@ -36,6 +36,7 @@ export function SecretaryMemories() {
                         defaultCreateChannel={focus.defaultCreateChannel}
                         channels={focus.channels}
                         noticesConsumer="secretario"
+                        consumer="secretario"
                     />
                 </>
             ) : (
