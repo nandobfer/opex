@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({ mutate: vi.fn(), data: undefined as unknown })
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("@/features/evolution-api/hooks/useEvolution", () => ({ useEvolutionAction: () => ({ mutate: mocks.mutate, isPending: false, data: mocks.data }) }))
 
-import { PairingCode, QrConnect } from "@/features/evolution-api/components/InstanceTab"
+import { ConnectedProfile, PairingCode, QrConnect } from "@/features/evolution-api/components/InstanceTab"
 import { ConversationLabel } from "@/features/evolution-api/components/ConversationPicker"
 import { CriteriaTester } from "@/features/secretary-agent/components/CriteriaTab"
 
@@ -35,6 +35,21 @@ describe("pareamento", () => {
         render(<PairingCode code="ABCD-EFGH" />)
         expect(screen.getByLabelText("Código de pareamento").textContent).toBe("ABCD-EFGH")
         expect(screen.getByLabelText("Código de pareamento").classList.contains("text-4xl")).toBe(true)
+    })
+})
+
+describe("ConnectedProfile", () => {
+    it("mostra o nome em cima e o @usuário com o número formatado embaixo", () => {
+        const { container } = render(<ConnectedProfile profile={{ name: "Fernando", number: "5541984556795", pictureUrl: null, username: "nandoburgos" }} />)
+        expect(screen.getByTestId("evolution-profile-name").textContent).toBe("Fernando")
+        expect(container.textContent).toContain("@nandoburgos · +55 (41) 9 8455-6795")
+    })
+
+    it("sem nome nem usuário, mostra o aviso e só o número", () => {
+        const { container } = render(<ConnectedProfile profile={{ name: null, number: "5541984556795", pictureUrl: null, username: null }} />)
+        expect(screen.getByTestId("evolution-profile-name").textContent).toBe("WhatsApp sem nome de exibição")
+        expect(container.textContent).toContain("+55 (41) 9 8455-6795")
+        expect(container.textContent).not.toContain("@")
     })
 })
 

@@ -16,7 +16,20 @@ import { Switch } from "@/components/ui/switch"
 import { EVOLUTION_INSTANCE_OPTIONS, EVOLUTION_READ_MESSAGES_LOCKED_REASON, EVOLUTION_STATE_LABELS } from "../constants"
 import { useEvolution, useEvolutionAction } from "../hooks/useEvolution"
 import { createInstanceSchema, instanceOptionsSchema, phoneNumberSchema } from "../schemas"
-import type { EvolutionInstanceDto, EvolutionInstanceOptionsDto, EvolutionInstancesDto, EvolutionQrDto } from "../types"
+import type { EvolutionInstanceDto, EvolutionInstanceOptionsDto, EvolutionInstancesDto, EvolutionProfileDto, EvolutionQrDto } from "../types"
+import { profileSecondLine } from "../phone"
+import { AvatarLabel } from "@/components/ui/avatar-label"
+
+const PROFILE_AVATAR = "h-12 w-12 text-base"
+
+/** Perfil conectado: nome do WhatsApp em cima; embaixo `@usuário` (quando houver) e o número com máscara. */
+export function ConnectedProfile({ profile }: { profile: EvolutionProfileDto }) {
+    return <AvatarLabel className="gap-3" avatarClassName={PROFILE_AVATAR} image={profile.pictureUrl} title={profile.name?.trim() || "WhatsApp sem nome de exibição"} subtitle={profileSecondLine(profile.username, profile.number)} subtitleClassName="text-sm" testId="evolution-profile-name" />
+}
+
+function ConnectedProfileSkeleton() {
+    return <div className="flex items-center gap-3" aria-hidden><Skeleton className={`${PROFILE_AVATAR} rounded-full`} /><div className="flex-1 space-y-2"><Skeleton className="h-4 w-40" /><Skeleton className="h-4 w-56" /></div></div>
+}
 
 export function QrConnect({ qr }: { qr: EvolutionQrDto }) {
     const [now, setNow] = useState(Date.now)
@@ -68,14 +81,10 @@ function InstanceDetails({ name }: { name: string }) {
     const state = query.data
     return <>
         <Card><CardHeader><CardTitle>Conexão · {state ? EVOLUTION_STATE_LABELS[state.state] : "Consultando…"}</CardTitle></CardHeader><CardContent className="space-y-4">
-            {query.isPending && <Skeleton className="h-24 w-full" />}
+            {query.isPending && <ConnectedProfileSkeleton />}
             {(state?.error || query.isError) && <p role="alert">{state?.error ?? "Falha ao consultar a conexão."} <Button variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button></p>}
             {state?.webhookError && <p role="alert">Não foi possível registrar o webhook: {state.webhookError}. Confira a aba Webhook.</p>}
-            {state?.profile && <div className="flex items-center gap-3">
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                {state.profile.pictureUrl && <img src={state.profile.pictureUrl} className="size-12 rounded-full object-cover" alt="" referrerPolicy="no-referrer" />}
-                <div><p>{state.profile.name}</p><p className="text-sm text-muted-foreground">{state.profile.number}</p></div>
-            </div>}
+            {state?.profile && <ConnectedProfile profile={state.profile} />}
             {state && state.state !== "connected" && <>
                 {state.qrLimitReached && <p>O limite de QR codes foi atingido.</p>}
                 {state.qr?.mode === "qr" && <QrConnect qr={state.qr} />}

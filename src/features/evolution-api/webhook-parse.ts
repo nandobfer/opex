@@ -70,6 +70,16 @@ export function connectionOf(data: unknown): ConnectionUpdate | null {
     return { state, ownerJid: str(row.wuid) ? normalizeJid(String(row.wuid)) : null, profileName: str(row.profileName), profilePictureUrl: str(row.profilePictureUrl) }
 }
 
+/**
+ * Só os campos de perfil que vieram preenchidos: o `CONNECTION_UPDATE` nem sempre traz o nome e a foto, e gravar
+ * `null` apagaria o perfil que o `fetchInstances` já tinha completado.
+ */
+export function filledProfileFields<T extends Record<string, string | null | undefined>>(fields: T): Partial<Record<keyof T, string>> {
+    const out: Partial<Record<keyof T, string>> = {}
+    for (const [key, value] of Object.entries(fields)) if (typeof value === "string" && value.trim()) out[key as keyof T] = value
+    return out
+}
+
 export interface QrUpdate {
     base64: string | null
     code: string | null

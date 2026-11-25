@@ -23,6 +23,8 @@ export interface EvolutionProfileDto {
     name: string | null
     number: string | null
     pictureUrl: string | null
+    /** Nome de usuário do WhatsApp, só quando a Evolution devolve. */
+    username: string | null
 }
 
 export interface EvolutionInstanceDto {

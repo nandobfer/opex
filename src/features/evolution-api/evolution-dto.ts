@@ -104,6 +104,8 @@ export const evolutionSentSchema = z.looseObject({ key: evolutionMessageKeySchem
 export const evolutionBase64Schema = z.looseObject({ base64: z.string(), mimetype: str, fileName: str })
 
 export const evolutionPictureSchema = z.looseObject({ profilePictureUrl: str, wuid: str })
+/** `POST /chat/fetchProfile`: nome, foto e status; `username` só quando a Evolution devolve (não é garantido na 2.3.8). */
+export const evolutionProfileSchema = z.looseObject({ name: str, wuid: str, picture: str, username: str })
 
 /** Corpo do webhook (`webhook.controller.ts`, `emit`): o `apikey` vem junto e NUNCA é logado nem gravado. */
 export const evolutionWebhookBodySchema = z.object({

@@ -65,6 +65,14 @@ describe("processEvolutionEvent", () => {
         expect(mocks.warn).toHaveBeenCalledWith(expect.objectContaining({ instance: "outra" }), expect.any(String))
     })
 
+    it("CONNECTION_UPDATE sem o nome não apaga o perfil salvo", async () => {
+        await processEvolutionEvent({ event: "connection.update", instance: "opex", data: { state: "open", wuid: "5541984556795@s.whatsapp.net" } } as never)
+        const patch = mocks.patchState.mock.calls.map((call) => call[1] as Record<string, unknown>).find((item) => item.state === "open")!
+        expect(patch).toMatchObject({ state: "open", ownerJid: "5541984556795@s.whatsapp.net" })
+        expect(patch).not.toHaveProperty("profileName")
+        expect(patch).not.toHaveProperty("profilePictureUrl")
+    })
+
     it("não grava nem loga a chave que a Evolution manda no corpo", async () => {
         await processEvolutionEvent({ ...message("K"), apikey: "chave-global" } as never)
         expect(JSON.stringify(mocks.patchState.mock.calls)).not.toContain("chave-global")

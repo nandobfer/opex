@@ -3,7 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto"
 import { evolutionWebhookBodySchema, type EvolutionMessage, type EvolutionWebhookBody } from "../evolution-dto"
 import { isGroupJid, LID_JID_SUFFIX, normalizeJid } from "../constants"
 import { parseEvolutionMessage, type ParsedMessage } from "../message"
-import { connectionOf, contactsOf, messagesOf, normalizeEventName, qrOf, type ContactUpdate } from "../webhook-parse"
+import { connectionOf, contactsOf, filledProfileFields, messagesOf, normalizeEventName, qrOf, type ContactUpdate } from "../webhook-parse"
 import { evolutionConfig, patchState } from "./instances"
 import { contactKey, EvolutionContact, EvolutionInstanceState, EvolutionSeenEvent, evolutionDb } from "./models"
 import { evolutionLog, publishEvolution } from "./shared"
@@ -119,7 +119,7 @@ export async function processEvolutionEvent(body: EvolutionWebhookBody): Promise
             if (update) {
                 await patchState(instance, {
                     state: update.state,
-                    ...(update.state === "open" ? { qr: null, qrLimitReached: false, ownerJid: update.ownerJid, profileName: update.profileName, profilePictureUrl: update.profilePictureUrl } : {}),
+                    ...(update.state === "open" ? { qr: null, qrLimitReached: false, ...filledProfileFields({ ownerJid: update.ownerJid, profileName: update.profileName, profilePictureUrl: update.profilePictureUrl }) } : {}),
                     ...(update.state === "refused" ? { qr: null, qrLimitReached: true } : {}),
                 })
                 message = `Conexão: ${update.state}`

@@ -17,6 +17,7 @@ import {
     evolutionMessageSchema,
     evolutionNumberCheckSchema,
     evolutionPictureSchema,
+    evolutionProfileSchema,
     evolutionSentSchema,
     evolutionSettingsSchema,
     evolutionWebhookSchema,
@@ -176,6 +177,9 @@ export const evolution = {
     findChats: (name: string, options?: CallOptions) => evolutionCall("POST", `/chat/findChats/${inst(name)}`, evolutionChatSchema.array(), { label: "Conversas", body: {}, timeoutMs: 60_000, ...options }),
     fetchGroups: (name: string, options?: CallOptions) =>
         evolutionCall("GET", `/group/fetchAllGroups/${inst(name)}`, evolutionGroupSchema.array(), { label: "Grupos", query: { getParticipants: "false" }, timeoutMs: 60_000, ...options }),
+    /** Perfil de um número (nome, foto e, quando a Evolution devolve, o nome de usuário). */
+    fetchProfile: (name: string, number: string, options?: CallOptions) =>
+        evolutionCall("POST", `/chat/fetchProfile/${inst(name)}`, evolutionProfileSchema, { label: "Perfil", body: { number }, ...options }),
     profilePicture: (name: string, number: string, options?: CallOptions) =>
         evolutionCall("POST", `/chat/fetchProfilePictureUrl/${inst(name)}`, evolutionPictureSchema, { label: "Foto do perfil", body: { number }, ...options }),
     mediaBase64: (name: string, messageId: string, options?: CallOptions) =>

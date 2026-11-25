@@ -31,6 +31,10 @@ export interface IEvolutionInstanceState {
     ownerLid?: string | null
     profileName: string | null
     profilePictureUrl: string | null
+    /** Nome de usuário do WhatsApp (`fetchProfile`), quando a Evolution devolve. */
+    username?: string | null
+    /** Última leitura do perfil pelo `fetchProfile` (renovada a cada `EVOLUTION_PROFILE_REFRESH_MS`). */
+    profileFetchedAt?: Date | null
     qr: IEvolutionQr | null
     /** Fim do pareamento pelo limite de QR (`refused`): a tela pede "Gerar novo QR". */
     qrLimitReached: boolean
@@ -81,6 +85,8 @@ const instanceSchema = new Schema<IEvolutionInstanceState>(
         ownerLid: { type: String, default: null },
         profileName: { type: String, default: null },
         profilePictureUrl: { type: String, default: null },
+        username: { type: String, default: null },
+        profileFetchedAt: { type: Date, default: null },
         qr: { type: qrSchema, default: null },
         qrLimitReached: { type: Boolean, default: false },
         lastEvent: { type: new Schema({ at: Date, event: String, ok: Boolean, message: { type: String, default: null } }, { _id: false }), default: null },

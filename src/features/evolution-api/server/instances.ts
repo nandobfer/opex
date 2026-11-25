@@ -11,6 +11,7 @@ import {
     jidNumber,
 } from "../constants"
 import { defaultWebhookUrl } from "../prefill"
+import { filledProfileFields } from "../webhook-parse"
 import type { ConnectInstanceInput, InstanceOptionsInput } from "../schemas"
 import type { EvolutionInstanceDto, EvolutionInstanceOptionsDto, EvolutionInstancesDto, EvolutionLastEventDto, EvolutionWebhookDto } from "../types"
 import { evolution, EvolutionError, toDomainError } from "./client"
@@ -94,7 +95,35 @@ export async function createInstance(name: string, actorId: string): Promise<Evo
 
 function profileOf(state: IEvolutionInstanceState | null) {
     if (!state?.ownerJid && !state?.profileName) return null
-    return { name: state.profileName ?? null, number: state.ownerJid ? jidNumber(state.ownerJid) : null, pictureUrl: state.profilePictureUrl ?? null }
+    return { name: state.profileName ?? null, number: state.ownerJid ? jidNumber(state.ownerJid) : null, pictureUrl: state.profilePictureUrl ?? null, username: state.username ?? null }
+}
+
+/** De quanto em quanto tempo o perfil conectado é relido pelo `fetchProfile` (o estado é consultado a cada 8 s). */
+export const EVOLUTION_PROFILE_REFRESH_MS = 10 * 60_000
+
+/**
+ * Completa o perfil conectado (nome, foto e o nome de usuário, quando a Evolution devolve) pelo `fetchProfile` do
+ * número do dono e, sem nome, pelo `pushName` do cache de contatos. Falha só é logada: o perfil fica com o que já
+ * havia (nome e foto do `fetchInstances`).
+ */
+async function refreshOwnerProfile(name: string): Promise<void> {
+    const state = await loadState(name)
+    if (!state?.ownerJid) return
+    if (state.profileFetchedAt && Date.now() - state.profileFetchedAt.getTime() < EVOLUTION_PROFILE_REFRESH_MS && state.profileName) return
+    const patch: Partial<IEvolutionInstanceState> = { profileFetchedAt: new Date() }
+    try {
+        const profile = await evolution.fetchProfile(name, jidNumber(state.ownerJid) ?? state.ownerJid)
+        Object.assign(patch, filledProfileFields({ profileName: profile.name, profilePictureUrl: profile.picture }), { username: profile.username?.trim() || null })
+    } catch (error) {
+        evolutionLog.warn({ instance: name, err: messageOf(error) }, "[evolution] Não foi possível ler o perfil conectado")
+    }
+    if (!patch.profileName && !state.profileName) {
+        const { EvolutionContact } = await import("./models")
+        const contact = await EvolutionContact.findOne({ instance: name, jid: state.ownerJid }).select("name pushName").lean()
+        const fallback = contact?.name || contact?.pushName
+        if (fallback) patch.profileName = fallback
+    }
+    await patchState(name, patch)
 }
 
 function toDto(name: string, state: IEvolutionInstanceState | null, managerUrl: string | null, error: string | null): EvolutionInstanceDto {
@@ -137,9 +166,10 @@ export async function getInstance(name: string): Promise<EvolutionInstanceDto> {
         const raw = state.instance.state ?? info?.connectionStatus ?? "close"
         await patchState(name, {
             state: raw,
-            ...(info ? { ownerJid: info.ownerJid ?? null, profileName: info.profileName ?? null, profilePictureUrl: info.profilePicUrl ?? null } : {}),
+            ...(info ? filledProfileFields({ ownerJid: info.ownerJid, profileName: info.profileName, profilePictureUrl: info.profilePicUrl }) : {}),
             ...(raw === "open" ? { qr: null, qrLimitReached: false } : {}),
         })
+        if (raw === "open") await refreshOwnerProfile(name)
     } catch (caught) {
         error = messageOf(caught)
     }
@@ -252,7 +282,7 @@ export async function runInstanceAction(name: string, action: InstanceAction, ac
         await publishEvolution("instances", name)
         return { deleted: true }
     }
-    await patchState(name, action === "logout" ? { state: "close", qr: null, ownerJid: null, profileName: null, profilePictureUrl: null } : {})
+    await patchState(name, action === "logout" ? { state: "close", qr: null, ownerJid: null, profileName: null, profilePictureUrl: null, username: null, profileFetchedAt: null } : {})
     await publishEvolution("connection", name)
     return getInstance(name)
 }

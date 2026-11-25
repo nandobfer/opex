@@ -9,12 +9,13 @@ export function LabelAvatar({ name, image, className }: { name: string; image?: 
     ) : <span className={cn(base, "flex items-center justify-center text-[10px] font-semibold uppercase text-muted-foreground", className)} aria-hidden>{name.slice(0, 1)}</span>
 }
 
-export function AvatarLabel({ title, image, subtitle, badge, nameClassName, nameStyle, testId }: { title: string; image?: string | null; subtitle?: string | null; badge?: ReactNode; nameClassName?: string; nameStyle?: CSSProperties; testId?: string }) {
-    return <span className="flex min-w-0 flex-1 items-center gap-2">
-        <LabelAvatar name={title} image={image} />
+/** `avatarClassName`/`subtitleClassName`: tamanho do avatar e do subtítulo (padrão: o compacto das listas). */
+export function AvatarLabel({ title, image, subtitle, badge, nameClassName, nameStyle, testId, avatarClassName, subtitleClassName, className }: { title: string; image?: string | null; subtitle?: string | null; badge?: ReactNode; nameClassName?: string; nameStyle?: CSSProperties; testId?: string; avatarClassName?: string; subtitleClassName?: string; className?: string }) {
+    return <span className={cn("flex min-w-0 flex-1 items-center gap-2", className)}>
+        <LabelAvatar name={title} image={image} className={avatarClassName} />
         <span className="min-w-0 flex-1">
             <span className={cn("block truncate font-medium", nameClassName)} style={nameStyle} data-testid={testId}>{title}</span>
-            {subtitle && <span className="block truncate text-xs text-muted-foreground">{subtitle}</span>}
+            {subtitle && <span className={cn("block truncate text-xs text-muted-foreground", subtitleClassName)}>{subtitle}</span>}
         </span>
         {badge}
     </span>
