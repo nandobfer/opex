@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({ mutate: vi.fn() }))
 vi.mock("@/features/evolution-api/hooks/useEvolution", () => ({ useEvolution: () => ({}), useEvolutionAction: () => ({ mutate: mocks.mutate, isPending: false }) }))
 vi.mock("@/features/secretary-agent/components/SecretaryAgentTab", () => ({ SecondaryModel: () => null }))
 
-import { PersonalityEditor } from "@/features/secretary-agent/components/PersonalityTab"
+import { AnalysisProgress, PersonalityEditor } from "@/features/secretary-agent/components/PersonalityTab"
 import { emptyPersonality } from "@/features/secretary-agent/personality"
 
 function data(versionId: string, tone: string) {
@@ -18,6 +18,16 @@ function data(versionId: string, tone: string) {
     return { versionId, versions: [], snapshot: { base: { blocks: base.blocks.map((block) => (block.key === "tom" ? { ...block, content: tone } : block)) }, variants: [] } }
 }
 const toneField = () => screen.getByLabelText("Tom e formalidade") as HTMLTextAreaElement
+
+it("mostra o motivo por conversa e encerra a fase ao concluir com falhas", () => {
+    const error = "Command Code recusou a chamada (HTTP 400)."
+    render(<AnalysisProgress contacts={[]} run={{ _id: "a1", status: "done", phase: "writing", at: "2026-11-25T15:32:11Z", messages: 12, cost: 0.1, discoveries: [], chats: [
+        { jid: "1@g.us", state: "read" }, { jid: "2@g.us", state: "failed", error }, { jid: "3@g.us", state: "failed" },
+    ] }} />)
+    expect(screen.getByText(/Concluída com 2 erros/)).toBeTruthy()
+    expect(screen.getByTitle(error).textContent).toBe(error)
+    expect(screen.queryByText(/Escrevendo/)).toBeNull()
+})
 
 afterEach(() => {
     cleanup()

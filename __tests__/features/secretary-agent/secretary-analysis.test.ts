@@ -32,7 +32,7 @@ const mocks = vi.hoisted(() => {
         rows,
         model,
         jobs: [] as (() => Promise<void>)[],
-        writeVersion: vi.fn(async (..._args: unknown[]): Promise<string> => "v1"),
+        writeVersion: vi.fn<(...args: unknown[]) => Promise<string>>(async () => "v1"),
         publish: vi.fn(),
         inference: vi.fn(),
         messages: vi.fn(),
@@ -130,9 +130,24 @@ describe("análise de personalidade", () => {
         await mocks.jobs[0]!()
         expect(first()).toMatchObject({ status: "done" })
         expect(first().chats).toEqual([
-            { jid: A, state: "failed" },
+            { jid: A, state: "failed", error: expect.stringContaining("Confira a conexão") },
             { jid: B, state: "read" },
         ])
+    })
+
+    it.each([false, true])("interrompe três recusas iguais apenas sem leitura anterior (%s)", async (readFirst) => {
+        const jids = Array.from({ length: 5 }, (_, i) => `553192222222${i}@s.whatsapp.net`)
+        if (readFirst) mocks.inference.mockResolvedValueOnce({ blocks: [], variant: null })
+        for (let i = 0; i < 3; i++) mocks.inference.mockRejectedValueOnce(Object.assign(new Error("dados privados"), { statusCode: 400 }))
+        await startAnalysis({ scope: "selected", jids, months: 6 }, "local")
+        await mocks.jobs[0]!()
+        expect(mocks.inference).toHaveBeenCalledTimes(readFirst ? 5 : 3)
+        expect(first().status).toBe(readFirst ? "done" : "failed")
+        expect(first().chats).toContainEqual(expect.objectContaining({ state: "failed", error: expect.stringContaining("OpenCode Go recusou a chamada (HTTP 400)") }))
+        if (!readFirst) {
+            expect(first().error).toContain("O modelo da análise recusou as chamadas")
+            expect(mocks.writeVersion).not.toHaveBeenCalled()
+        }
     })
 
     it("personalidade editada durante a análise guarda o aprendizado numa versão não aplicada", async () => {

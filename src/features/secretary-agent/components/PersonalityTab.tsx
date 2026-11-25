@@ -122,7 +122,7 @@ function VersionItem({ version }: { version: History }) {
     </details>
 }
 
-type AnalysisDto = { _id: string; status: AnalysisStatus; phase: AnalysisPhase; at: string; chats: { jid: string; state: AnalysisChatState }[]; current?: string; messages: number; cost: number; discoveries: string[]; error?: string }
+type AnalysisDto = { _id: string; status: AnalysisStatus; phase: AnalysisPhase; at: string; chats: { jid: string; state: AnalysisChatState; error?: string }[]; current?: string; messages: number; cost: number; discoveries: string[]; error?: string }
 
 function AnalysisPanel({ contacts }: { contacts: EvolutionContactDto[] }) {
     const [scope, setScope] = useState<AnalysisStartInput["scope"]>("all")
@@ -144,8 +144,10 @@ function AnalysisPanel({ contacts }: { contacts: EvolutionContactDto[] }) {
     </CardContent></Card>
 }
 
-function AnalysisProgress({ run, contacts }: { run: AnalysisDto; contacts: EvolutionContactDto[] }) {
+export function AnalysisProgress({ run, contacts }: { run: AnalysisDto; contacts: EvolutionContactDto[] }) {
     const read = run.chats.filter((item) => item.state === "read" || item.state === "empty").length
+    const failures = run.chats.filter((item) => item.state === "failed").length
+    const status = run.status === "done" && failures ? `Concluída com ${failures} ${failures === 1 ? "erro" : "erros"}` : ANALYSIS_STATUS_LABELS[run.status]
     const pct = read / Math.max(1, run.chats.length)
     const [now, setNow] = useState(Date.now)
     useEffect(() => {
@@ -155,13 +157,13 @@ function AnalysisProgress({ run, contacts }: { run: AnalysisDto; contacts: Evolu
     const eta = read > 0 && run.status === "running" ? Math.max(1, Math.ceil(((now - Date.parse(run.at)) * (1 - pct)) / pct / 60_000)) : null
     const current = contacts.find((item) => item.jid === run.current)
     return <details open={run.status === "running" || undefined} className="rounded-lg border p-3">
-        <summary>{ANALYSIS_STATUS_LABELS[run.status]} · {new Date(run.at).toLocaleString("pt-BR")} · {read} de {run.chats.length} conversas lidas</summary>
+        <summary>{status} · {new Date(run.at).toLocaleString("pt-BR")} · {read} de {run.chats.length} conversas lidas</summary>
         <div className="mt-3 flex items-center gap-3" role="progressbar" aria-valuemin={0} aria-valuemax={run.chats.length} aria-valuenow={read} aria-label="Conversas lidas">
             <svg viewBox="0 0 40 40" className="size-12 text-primary" aria-hidden="true"><circle cx="20" cy="20" r="16" stroke="currentColor" opacity="0.2" strokeWidth="4" fill="none" /><motion.circle cx="20" cy="20" r="16" stroke="currentColor" strokeWidth="4" fill="none" initial={{ pathLength: 0 }} animate={{ pathLength: pct }} /></svg>
-            <div><p>{ANALYSIS_PHASE_LABELS[run.phase]} · {run.messages} mensagens · US$ {run.cost.toFixed(4)}{eta ? ` · ~${eta} min` : ""}</p>{current ? <ConversationLabel contact={current} /> : run.current}</div>
+            <div><p>{run.status === "running" && `${ANALYSIS_PHASE_LABELS[run.phase]} · `}{run.messages} mensagens · US$ {run.cost.toFixed(4)}{eta ? ` · ~${eta} min` : ""}</p>{run.status === "running" && (current ? <ConversationLabel contact={current} /> : run.current)}</div>
         </div>
         {run.error && <p role="alert">{run.error}</p>}
-        <ul className="my-2 divide-y">{run.chats.map((item) => <li key={item.jid} className="py-1 text-sm">{contacts.find((contact) => contact.jid === item.jid)?.name ?? item.jid} · {ANALYSIS_CHAT_STATE_LABELS[item.state]}</li>)}</ul>
+        <ul className="my-2 divide-y">{run.chats.map((item) => <li key={item.jid} className="py-1 text-sm">{contacts.find((contact) => contact.jid === item.jid)?.name ?? item.jid} · {ANALYSIS_CHAT_STATE_LABELS[item.state]}{item.error && <p className="text-xs text-destructive" title={item.error}>{item.error}</p>}</li>)}</ul>
         {run.discoveries.length > 0 && <><p className="font-medium">Descobertas</p><ul className="list-inside list-disc text-sm">{run.discoveries.map((item, index) => <li key={index}>{item}</li>)}</ul></>}
     </details>
 }
