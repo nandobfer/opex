@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
     countDecisions: vi.fn(async () => 3),
     pausedUntil: null as Date | null,
     contacts: vi.fn(async (): Promise<Map<string, { name: string }>> => new Map([["5531999999999@s.whatsapp.net", { name: "Alfredo Petri" }]])),
-    memory: vi.fn(async (..._args: unknown[]) => ({ block: "- Ana é vizinha", counts: { full: 1, titles: 2, overflow: 0 } })),
+    memory: vi.fn<(...args: unknown[]) => Promise<{ block: string; counts: { full: number; titles: number; overflow: number } }>>(async () => ({ block: "- Ana é vizinha", counts: { full: 1, titles: 2, overflow: 0 } })),
 }))
 vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mocks.contacts }))
 
