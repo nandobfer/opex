@@ -8,7 +8,7 @@ import { Bell, Brain, ListFilter, MessagesSquare, Settings2, Sparkles } from "lu
 import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
-import { ProviderModelCard } from "@/features/ai/components/shared/ProviderModelCard"
+import { SecretaryModelCard } from "./SecretaryModelCard"
 import { SecretaryMemories } from "./SecretaryMemories"
 import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
 import { isOpexProviderId } from "@/features/opex-agent/constants"
@@ -77,13 +77,11 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     }}</AgentSettingsTabs>
 }
 
-const names = (prefix: string) => ({ provider: `${prefix}.provider`, model: `${prefix}.model`, agent: `${prefix}.agent`, variant: `${prefix}.variant` })
-
 export function SecondaryModel({ form, field, label }: { form: SecretaryForm; field: "media.model" | "analysis.model"; label: string }) {
     const providers = useAiProviderStatuses().providers.filter((item) => isOpexProviderId(item.id))
     const same = form.watch(`${field}.sameAsAgent`)
     return <div className="space-y-3"><OptionTabs aria-label={label} value={same ? "same" : "own"} options={[{ value: "same", label: "Mesmo do agente" }, { value: "own", label: "Outro modelo" }]} onChange={(value) => form.setValue(`${field}.sameAsAgent`, value === "same", { shouldDirty: true, shouldValidate: true })} />
-        {!same && <ProviderModelCard form={form} providers={providers} names={names(field)} hideAgent idPrefix={field} />}</div>
+        {!same && <SecretaryModelCard form={form} providers={providers} prefix={field} idPrefix={field} />}</div>
 }
 
 function GeneralSettings({ form }: { form: SecretaryForm }) {
@@ -96,7 +94,7 @@ function GeneralSettings({ form }: { form: SecretaryForm }) {
     const numberFields = [["human.groupingSeconds", "Agrupar mensagens (s)"], ["human.delayMinSeconds", "Atraso mínimo (s)"], ["human.delayMaxSeconds", "Atraso máximo (s)"], ["pauseMinutes", "Pausa quando o dono responde (min)"], ["limits.repliesPerHour", "Respostas por conversa por hora"], ["limits.dailyBudgetUsd", "Orçamento diário (US$)"]] as const
     const prices = [...new Map(modelsInUse(settings).filter((item) => needsPrice(item.provider)).map((item) => [priceKey(item.provider, item.model), item])).entries()]
     return <>
-        <ProviderModelCard form={form} providers={providers} names={names("main")} hideAgent idPrefix="secretary-main" />
+        <SecretaryModelCard form={form} providers={providers} prefix="main" idPrefix="secretary-main" />
         <Card><CardHeader><CardTitle>Funcionamento</CardTitle></CardHeader><CardContent className="space-y-4">
             <label className="flex items-center gap-2"><Switch checked={settings.enabled} onCheckedChange={(value) => set("enabled", value)} /> Ligar agente</label>
             <SearchPicker items={instances.data?.instances ?? []} getKey={(item) => item.name} searchKeys={["name"]} renderItem={(item) => item.name} onPick={(item) => set("instance", item.name)} trigger={<FieldTrigger placeholder="Instância do WhatsApp" value={settings.instance || undefined} />} searchLabel="Buscar instância" listLabel="Instâncias" emptyText="Configure a Evolution API primeiro" emptySearchText="Nenhuma instância encontrada" />
