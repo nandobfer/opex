@@ -47,6 +47,9 @@ export interface Notice {
     kind: SecretaryNoticeKind
     status: SecretaryNoticeStatus
     text: string
+    excerpt?: string
+    author?: string
+    contactName?: string
     sentMessageId: string | null
     answer: string | null
     memoryChannel: string | null
@@ -57,7 +60,7 @@ export interface Notice {
     answeringAt: Date | null
 }
 const noticeSchema = new Schema<Notice>({ _id: String, instance: String, chatId: String, jid: String, kind: String, status: String, text: String,
-    sentMessageId: String, answer: String, memoryChannel: String, at: Date, trigger: Schema.Types.Mixed, ownerRevision: Date, answeringAt: Date,
+    excerpt: String, author: String, contactName: String, sentMessageId: String, answer: String, memoryChannel: String, at: Date, trigger: Schema.Types.Mixed, ownerRevision: Date, answeringAt: Date,
 }, { collection: "secretary_notices", versionKey: false })
 noticeSchema.index({ instance: 1, status: 1, at: -1 })
 export const SecretaryNotice = (models.SecretaryNotice as Model<Notice> | undefined) ?? model<Notice>("SecretaryNotice", noticeSchema)

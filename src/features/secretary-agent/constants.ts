@@ -64,7 +64,10 @@ export function isStaleMessage(timestamp: Date, now: Date = new Date()): boolean
     return now.getTime() - timestamp.getTime() > SECRETARY_STALE_MESSAGE_MS
 }
 
-/** Decisões do registro (uma por mensagem recebida). */
+export const PAUSED_MESSAGE_REASON = "Pausa ativa nesta conversa."
+export const OWNER_TAKEOVER_REASON = "O dono assumiu a conversa pelo WhatsApp."
+
+/** Decisões do registro: entrada original e, quando houver, retomada após responder a uma pergunta. */
 export const SECRETARY_DECISIONS = [
     "replied",
     "ignored",

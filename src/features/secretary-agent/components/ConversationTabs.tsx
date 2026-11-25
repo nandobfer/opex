@@ -7,7 +7,10 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
-import { MessagesSquare } from "lucide-react"
+import { Bell, MessagesSquare } from "lucide-react"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
+import { EmptyState } from "@/components/feedback/EmptyState"
 import { ConversationLabel } from "@/features/evolution-api/components/ConversationPicker"
 import { EvolutionSyncAction } from "@/features/evolution-api/components/EvolutionSyncAction"
 import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks/useEvolution"
@@ -40,19 +43,19 @@ function ConversationRow({ row, minutes }: { row: Conversation; minutes: number 
     const action = useEvolutionAction<unknown, ConversationActionInput>(`/secretary/conversations/${encodeURIComponent(row.chatId)}`, "post", "Conversa atualizada")
     return <div className="flex flex-wrap items-center gap-3 border-b py-3">
         <Link href={`/integracoes/ia?aba=agente-secretario&secao=memorias&${CONVERSATION_PARAM}=${encodeURIComponent(row.chatId)}`} className="min-w-0 flex-1"><ConversationLabel contact={row} /></Link>
-        <p className="text-sm">{CONVERSATION_STATE_LABELS[row.state]}{row.state === "paused" && row.pausedUntil ? ` até ${new Date(row.pausedUntil).toLocaleString("pt-BR")}` : ""}</p>
+        <p className="text-sm">{CONVERSATION_STATE_LABELS[row.state]}{row.state === "paused" && row.pausedUntil ? ` até ${format(new Date(row.pausedUntil), "Pp", { locale: ptBR })}` : ""}</p>
         <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate(row.state === "paused" ? { action: "resume" } : { action: "pause", minutes })}>{row.state === "paused" ? "Retomar" : "Pausar"}</Button>
         <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate({ action: row.state === "excluded" ? "include" : "exclude" })}>{row.state === "excluded" ? "Voltar a responder" : "Nunca responder"}</Button>
     </div>
 }
 
-interface NoticeDto { _id: string; text: string; jid: string; kind: SecretaryNoticeKind; status: string; answer?: string; memoryChannel?: string }
+interface NoticeDto { _id: string; text: string; contact: EvolutionContactDto; author?: string; excerpt?: string; kind: SecretaryNoticeKind; status: string; answer?: string; memoryChannel?: string }
 export function NoticesTab() {
     const query = useEvolution<{ pending: number; items: NoticeDto[] }>("/secretary/notices")
     return <Card><CardHeader><CardTitle>Avisos · {query.data?.pending ?? 0} pendentes</CardTitle></CardHeader><CardContent className="space-y-4">
-        {query.isPending && <Skeleton className="h-40" />}
+        {query.isPending && <div role="status" aria-label="Carregando avisos" className="space-y-4">{[0, 1].map((row) => <div key={row} className="space-y-2 rounded-lg border p-4"><Skeleton className="h-9 w-44" /><Skeleton className="h-4 w-3/4" /><Skeleton className="h-4 w-1/2" /></div>)}</div>}
         {query.isError && <Button variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>}
-        {query.data?.items.length === 0 && <p>Nenhum aviso registrado.</p>}
+        {query.data?.items.length === 0 && <EmptyState icon={Bell} title="Nenhum aviso registrado." description="Perguntas ao dono e avisos de limite aparecem aqui." actionLabel="Atualizar avisos" onAction={() => void query.refetch()} />}
         {query.data?.items.map((notice) => <NoticeItem key={notice._id} notice={notice} />)}
     </CardContent></Card>
 }
@@ -60,7 +63,9 @@ function NoticeItem({ notice }: { notice: NoticeDto }) {
     const [answer, setAnswer] = useState("")
     const action = useEvolutionAction<unknown, NoticeActionInput>(`/secretary/notices/${encodeURIComponent(notice._id)}`, "post", "Aviso atualizado")
     return <article className="space-y-2 rounded-lg border p-4">
-        <p className="font-medium">{NOTICE_KIND_LABELS[notice.kind]} · {notice.jid}</p><p>{notice.text}</p>
+        <ConversationLabel contact={notice.contact} />
+        <p className="text-sm font-medium">{NOTICE_KIND_LABELS[notice.kind]}{notice.author ? ` · ${notice.author}` : ""}</p><p>{notice.text}</p>
+        {notice.excerpt && <blockquote className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm text-muted-foreground">{notice.excerpt}</blockquote>}
         {notice.answer && <p className="text-sm">Sua resposta: {notice.answer}</p>}
         {notice.memoryChannel && <p className="text-sm text-muted-foreground">Memória gravada em {notice.memoryChannel}</p>}
         {notice.status === "answering" && <p className="text-sm text-muted-foreground">Aprendendo a resposta… Se travar por mais de 5 minutos, você pode responder de novo ou descartar.</p>}

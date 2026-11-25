@@ -1025,8 +1025,9 @@ enquanto `title_state = pending`).
 
 Com o Engramind fora do ar (`ENGRAMIND_UNREACHABLE`, `PROXY_MASKED`, `DATABASE_UNAVAILABLE`, `REQUEST_TIMEOUT`,
 `MIGRATIONS_PENDING`), a gravação de memória de um agente que usa a fila (hoje o Agente Secretário: criar,
-editar e ativar/desativar) vai para `engramind_pending_writes` com `_id = <canal>:<alvo>` (hash do texto ao criar,
-id da memória ao editar) e a ferramenta devolve `pendente:<chave>`. A rotina interna `engramind-pending-writes`
+editar e ativar/desativar) vai para `engramind_pending_writes`. Criações usam `<canal>:<hash do texto>` para
+deduplicar; edições usam `<canal>:<id da memória>:<id da operação>` para preservar alterações sucessivas.
+A ferramenta devolve `pendente:<chave>`. A rotina interna `engramind-pending-writes`
 (1 min, Crons) reprocessa as mais antigas primeiro, para no primeiro sinal de que o Engramind segue fora e descarta
 (com log) a pendência que o Engramind recusa por regra. Nunca guarda token.
 

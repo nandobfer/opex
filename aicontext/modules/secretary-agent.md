@@ -7,6 +7,8 @@ Tem memórias próprias no Engramind, aprende sozinho e pergunta ao dono o que n
 Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|simulacao|personalidade|memorias|conversas|avisos>`.
 Página de métricas: `/agente-secretario` (Visão geral, Histórico e Memórias).
 O custo da Visão geral inclui turno, análise e decisões de assunto (modelo de texto ou JEV), mas não Simulação.
+O painel separa **Mensagens em pausa** (mensagens barradas) de **Intervenções do dono** (mensagens do dono
+registradas como assunção da conversa no WhatsApp).
 
 Código: `src/features/secretary-agent/` — puros: `constants.ts`, `schemas.ts`, `criteria.ts`, `personality.ts`,
 `criteria-describe.ts`, `jev-subjects.ts`, `conversation-id.ts`, `split.ts`, `cost.ts`, `limits.ts`, `owner-reply.ts`;
@@ -80,8 +82,9 @@ Validação: "Só os escolhidos" exige ao menos uma conversa e "Só os assuntos 
   origem/feature `secretary-decision`, que conta no orçamento diário. O tópico (ou o nome do assunto que bateu, no
    JEV) alimenta "assuntos mais frequentes".
    O JEV pode ser selecionado em “Outro modelo ou o JEV” quando sua integração está conectada.
-- **Registro de decisões** (`secretary_decisions`, `GET /api/secretary/decisions?jid=`), uma por mensagem
-  recebida: respondeu, ignorou, pausado, assunto bloqueado (também quando o assunto não é um dos liberados), limite
+- **Registro de decisões** (`secretary_decisions`, `GET /api/secretary/decisions?jid=`): a decisão original é mantida
+  quando o turno é retomado após a resposta do dono (a retomada tem registro próprio). Decisões: respondeu,
+  ignorou, pausado, assunto bloqueado (também quando o assunto não é um dos liberados), limite
   atingido, só observar, perguntou ao dono, desligado, agrupada, descartada, erro.
 - Seleção de contatos/grupos com foto e busca (`ConversationPickerField`, com "Sincronizar contatos e conversas" ao
   lado quando a lista está vazia).
@@ -143,8 +146,9 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 ## Perguntar ao dono e aba Avisos
 
 - Quando o modelo não sabe, responde uma frase natural de espera e devolve a pergunta: o agente cria o aviso
-  (`secretary_notices`, `question`), envia "❓ <contato>: pergunta + trecho" à conversa do dono consigo mesmo e
-  guarda o id da mensagem.
+  (`secretary_notices`, `question`), envia a pergunta à conversa do dono consigo mesmo, com o nome do contato ou
+  grupo (e autor no grupo) e um trecho de até 500 caracteres do texto agrupado, incluindo mídia interpretada.
+  A aba Avisos mostra o mesmo trecho, com nome e foto da conversa quando disponíveis. O aviso guarda o id do envio.
 - Resposta do dono (`resolveOwnerReply`): citando a pergunta, vale para ela; sem citação e com uma pendente, vale
   para ela; com várias, o agente pede que cite; sem pendentes, ignora. Também pela aba Avisos.
 - Depois: a pergunta fica reservada (`answering`), a IA extrai um fato e escolhe o canal (global ou da conversa) e a

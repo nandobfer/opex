@@ -63,6 +63,15 @@ describe("fila de pendências do Engramind", () => {
         expect(mocks.create).toHaveBeenCalledWith("secretary-global", "a", "local", {})
     })
 
+    it("reprocessa na ordem o novo texto e a desativação da mesma memória", async () => {
+        const input = { channel: "c", list: "secretary-global" as const, options: {}, actorId: "local" }
+        const texto = { texto: "novo texto" }
+        const ativa = { ativa: false }
+        for (const patch of [texto, ativa]) await enqueuePendingWrite({ ...input, write: { op: "update", memoryId: "m1", patch } })
+        expect(await flushPendingWrites()).toEqual({ done: 2, failed: 0, remaining: 0 })
+        expect(mocks.update.mock.calls).toEqual([texto, ativa].map((patch) => ["secretary-global", "m1", patch, "local", {}]))
+    })
+
     it("erro que não é de disponibilidade não entra na fila", async () => {
         await expect(withPendingQueue({ list: "secretary-global", conversationId: null, actorId: "local", write: { op: "create", texto: "a" } }, async () => {
             throw new DomainError(409, "duplicada", "ENGRAMIND_MEMORY_DUPLICATE")

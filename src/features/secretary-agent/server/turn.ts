@@ -8,7 +8,7 @@ import { evolution } from "@/features/evolution-api/server/client"
 import { mentionsOwner, messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "@/features/evolution-api/message"
 import { evaluateAudience } from "../criteria"
 import { checkLimits, lastHourSince } from "../limits"
-import { SECRETARY_CONSUMPTION_ORIGIN, SECRETARY_DECISION_CONSUMPTION_ORIGIN, SECRETARY_HISTORY_LIMIT } from "../constants"
+import { SECRETARY_CONSUMPTION_ORIGIN, SECRETARY_DECISION_CONSUMPTION_ORIGIN, SECRETARY_HISTORY_LIMIT, PAUSED_MESSAGE_REASON, type SecretaryDecision } from "../constants"
 import { randomDelayMs, typingMs } from "../split"
 import { spentTodayUsd } from "./budget"
 import { recordDecision } from "./inbound"
@@ -44,16 +44,17 @@ async function memoryToolSet(input: { chatId: string; token: string; write: Prom
 interface Turn { id: string; instance: string; chatId: string; ownerJid: string; ownerLid?: string | null; token: string; message: ParsedMessage; ownerAnswer?: string }
 
 export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLid = null, token, message, ownerAnswer }: Turn) {
+    const decide = (decision: SecretaryDecision, reason: string, topic?: string | null) =>
+        recordDecision(instance, chatId, message, decision, reason, topic, ownerAnswer !== undefined)
     const state = await SecretaryConversation.findOneAndUpdate({ _id: id, token }, { $set: { pending: [] } }).lean()
     if (!state) {
-        await recordDecision(instance, chatId, message, "grouped", "Outra mensagem chegou na janela de agrupamento.")
+        await decide("grouped", "Outra mensagem chegou na janela de agrupamento.")
         return
     }
     const messages = (state.pending?.length ? state.pending : [message]).sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime())
     const ownerRevision = state.lastOwnerMessageAt ?? null
     const current = async () => Boolean(await SecretaryConversation.exists({ _id: id, token, lastOwnerMessageAt: ownerRevision,
         $or: [{ pausedUntil: null }, { pausedUntil: { $lte: new Date() } }] }))
-    const decide = recordDecision.bind(null, instance, chatId, message)
     try {
         const { settings } = await loadSecretarySettings()
         if (!settings.enabled || !settings.main.provider || !settings.main.model || settings.instance !== instance) return await decide("disabled", "Agente desligado ou instância alterada.")
@@ -61,7 +62,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         const mentioned = messages.some((item) => mentionsOwner(item, ownerJid, ownerLid))
         const audience = evaluateAudience(settings.criteria, { jid: message.chatJid, isGroup: message.isGroup, mentioned })
         if (audience.failure) return await decide("ignored", audience.failure.reason)
-        if (state.pausedUntil && state.pausedUntil > new Date()) return await decide("paused", "Pausa ativa nesta conversa.")
+        if (state.pausedUntil && state.pausedUntil > new Date()) return await decide("paused", PAUSED_MESSAGE_REASON)
         const now = new Date()
         const [repliesLastHour, spent] = await Promise.all([
             SecretaryDecisionRecord.countDocuments({ instance, chatId, at: { $gte: lastHourSince(now) }, decision: { $in: ["replied", "asked-owner"] } }),
@@ -117,7 +118,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         }
         if (!sent) return await decide("discarded", "A conversa mudou antes do envio.", subject.topic)
         if (result.question && !ownerAnswer && await current()) {
-            await askOwner({ instance, ownerJid, chatId, message, question: result.question, ownerRevision })
+            await askOwner({ instance, ownerJid, chatId, message, text, question: result.question, ownerRevision })
             return await decide("asked-owner", "Enviou uma frase de espera e perguntou ao dono.", subject.topic)
         }
         await decide("replied", verdict.reason, subject.topic)

@@ -4,15 +4,15 @@ import { normalizeJid } from "@/features/evolution-api/constants"
 import type { ParsedMessage } from "@/features/evolution-api/message"
 import { EvolutionInstanceState } from "@/features/evolution-api/server/models"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import { FROM_ME_SETTLE_MS, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, isStaleMessage, type SecretaryDecision } from "../constants"
+import { FROM_ME_SETTLE_MS, OWNER_TAKEOVER_REASON, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, isStaleMessage, type SecretaryDecision } from "../constants"
 import { conversationIdOfJid } from "../conversation-id"
 import { SecretaryConversation, SecretaryDecisionRecord, SecretarySent, secretaryDb } from "./models"
 import { loadSecretarySettings } from "./settings"
 import { runSecretaryTurn } from "./turn"
 import { handleOwnerReply } from "./owner-questions"
 
-export async function recordDecision(instance: string, chatId: string, message: ParsedMessage, decision: SecretaryDecision, reason: string, topic: string | null = null) {
-    await SecretaryDecisionRecord.updateOne({ _id: `${instance}:${message.id}` }, { $set: { instance, chatId, jid: message.chatJid, decision, reason, topic, at: new Date() } }, { upsert: true })
+export async function recordDecision(instance: string, chatId: string, message: ParsedMessage, decision: SecretaryDecision, reason: string, topic: string | null = null, resumed = false) {
+    await SecretaryDecisionRecord.updateOne({ _id: `${instance}:${message.id}${resumed ? ":resume" : ""}` }, { $set: { instance, chatId, jid: message.chatJid, decision, reason, topic, at: new Date() } }, { upsert: true })
     await publishAppEvent(SECRETARY_DECISION_EVENT, { chatId })
 }
 
@@ -50,7 +50,7 @@ export async function handleIncomingMessage(instance: string, message: ParsedMes
         }
         await SecretaryConversation.updateOne({ _id: id }, { $setOnInsert: { instance, jid: message.chatJid },
             $max: { lastOwnerMessageAt: sentAt, pausedUntil } }, { upsert: true })
-        await recordDecision(instance, chatId, message, "paused", "O dono assumiu a conversa pelo WhatsApp.")
+        await recordDecision(instance, chatId, message, "paused", OWNER_TAKEOVER_REASON)
         await publishAppEvent(SECRETARY_CONVERSATION_EVENT, { chatId })
         return
     }

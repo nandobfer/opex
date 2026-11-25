@@ -17,6 +17,7 @@ const mocks = vi.hoisted(() => ({
     readMedia: vi.fn(async (_settings: unknown, _instance: string, message: ParsedMessage) => ({ text: message.text || "[áudio]", understood: false })),
     inference: vi.fn(),
     decide: vi.fn(),
+    decisionsById: new Map<string, string>(),
     send: vi.fn(async () => "S1"),
     askOwner: vi.fn(),
     markAsRead: vi.fn(),
@@ -36,7 +37,12 @@ vi.mock("@/features/engramind/server/pending-writes", () => ({ enqueuePendingWri
 vi.mock("@/features/evolution-api/server/client", () => ({
     evolution: { findMessages: async () => ({ records: [] }), markAsRead: mocks.markAsRead, sendPresence: mocks.presence },
 }))
-vi.mock("@/features/secretary-agent/server/inbound", () => ({ recordDecision: mocks.decide }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: vi.fn() }))
+vi.mock("@/features/secretary-agent/server/inbound", async (original) => {
+    const actual = (await original()) as typeof import("@/features/secretary-agent/server/inbound")
+    mocks.decide.mockImplementation(actual.recordDecision)
+    return { ...actual, recordDecision: mocks.decide }
+})
 vi.mock("@/features/secretary-agent/server/settings", () => ({ loadSecretarySettings: async () => ({ settings: mocks.settings }) }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
 vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
@@ -50,7 +56,10 @@ vi.mock("@/features/secretary-agent/server/models", () => ({
         exists: async () => (++mocks.currentCalls > mocks.currentAfter ? null : mocks.current ? { _id: "x" } : null),
         updateOne: vi.fn(),
     },
-    SecretaryDecisionRecord: { countDocuments: async () => mocks.replies },
+    SecretaryDecisionRecord: {
+        countDocuments: async () => mocks.replies,
+        updateOne: async (filter: { _id: string }, update: { $set: { decision: string } }) => { mocks.decisionsById.set(filter._id, update.$set.decision) },
+    },
     SecretaryNotice: { updateOne: mocks.noticeUpsert },
 }))
 
@@ -61,7 +70,7 @@ import { runSecretaryTurn } from "@/features/secretary-agent/server/turn"
 function msg(patch: Partial<ParsedMessage> = {}): ParsedMessage {
     return { id: "M1", chatJid: CONTACT, fromMe: false, isGroup: false, participant: null, pushName: "Ana", text: "oi, tudo bem?", media: null, quotedId: null, quotedAuthor: null, mentioned: [], timestamp: new Date(), ignorable: false, ...patch }
 }
-const turn = (message = msg()) => runSecretaryTurn({ id: "opex:5531999999999", instance: "opex", chatId: "5531999999999", ownerJid: "5531988887777@s.whatsapp.net", token: "T", message })
+const turn = (message = msg(), ownerAnswer?: string) => runSecretaryTurn({ id: "opex:5531999999999", instance: "opex", chatId: "5531999999999", ownerJid: "5531988887777@s.whatsapp.net", token: "T", message, ownerAnswer })
 const decisions = () => mocks.decide.mock.calls.map((call) => call[3])
 const MONEY = { id: "dinheiro", name: "Dinheiro", description: "", examples: [] }
 const withCriteria = (patch: { audience?: object; subjects?: object }) => {
@@ -71,6 +80,7 @@ const withCriteria = (patch: { audience?: object; subjects?: object }) => {
 
 beforeEach(() => {
     vi.clearAllMocks()
+    mocks.decisionsById.clear()
     Object.assign(mocks, { state: { pending: [msg()], lastOwnerMessageAt: null, pausedUntil: null }, current: true, currentAfter: Infinity, currentCalls: 0, replies: 0, spent: 0, subject: null })
     mocks.settings = {
         ...DEFAULT_SECRETARY_SETTINGS,
@@ -85,6 +95,18 @@ beforeEach(() => {
 })
 
 describe("runSecretaryTurn", () => {
+    it("registra a retomada da mesma mensagem sem sobrescrever a pergunta ao dono", async () => {
+        const message = msg()
+        mocks.inference.mockResolvedValueOnce({ text: "vou conferir", question: "Você vai?" })
+        await turn(message)
+        await turn(message, "sim")
+        expect([...mocks.decisionsById]).toEqual([["opex:M1", "asked-owner"], ["opex:M1:resume", "replied"]])
+    })
+
+    it("instrui a responder em primeira pessoa sem se apresentar como assistente", async () => {
+        await turn()
+        expect(mocks.inference.mock.calls[0]?.[0].instructions).toMatch(/próprio dono.*primeira pessoa.*Não se apresente como assistente nem como IA/)
+    })
     it("registra a falha do provedor com diagnóstico seguro sem enviar", async () => {
         mocks.inference.mockRejectedValueOnce(Object.assign(new Error("mensagem privada"), { statusCode: 400 }))
         await turn()

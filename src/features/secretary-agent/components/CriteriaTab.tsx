@@ -2,7 +2,11 @@
 
 import { useState } from "react"
 import Link from "next/link"
-import { FlaskConical } from "lucide-react"
+import { ClipboardList, FlaskConical } from "lucide-react"
+import { format } from "date-fns"
+import { ptBR } from "date-fns/locale"
+import { EmptyState } from "@/components/feedback/EmptyState"
+import { Skeleton } from "@/components/ui/skeleton"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ConversationPicker } from "@/features/evolution-api/components/ConversationPicker"
@@ -52,7 +56,7 @@ export function CriteriaTab({ form, contacts }: { form: SecretaryForm; contacts:
 
 type DecisionRow = { _id: string; jid: string; decision: SecretaryDecision; reason: string; at: string }
 
-function DecisionLog({ contacts }: { contacts: EvolutionContactDto[] }) {
+export function DecisionLog({ contacts }: { contacts: EvolutionContactDto[] }) {
     const [jid, setJid] = useState<string[]>([])
     const rows = useEvolution<DecisionRow[]>(`/secretary/decisions${jid[0] ? `?jid=${encodeURIComponent(jid[0])}` : ""}`)
     return (
@@ -64,12 +68,13 @@ function DecisionLog({ contacts }: { contacts: EvolutionContactDto[] }) {
                 <ConversationPicker items={contacts} selected={jid} onChange={setJid} multiple={false} placeholder="Todas as conversas" />
                 {jid.length > 0 && <Button variant="ghost" onClick={() => setJid([])}>Limpar filtro</Button>}
                 {rows.isError && <Button variant="outline" onClick={() => void rows.refetch()}>Tentar novamente</Button>}
-                {rows.data?.length === 0 && <p>Nenhuma decisão registrada.</p>}
+                {rows.isPending && <div role="status" aria-label="Carregando decisões" className="divide-y">{[0, 1, 2].map((row) => <div key={row} className="space-y-2 py-2"><Skeleton className="h-4 w-44" /><Skeleton className="h-4 w-3/4" /></div>)}</div>}
+                {rows.data?.length === 0 && <EmptyState icon={ClipboardList} title="Nenhuma decisão registrada." description={jid.length ? "Não há decisões para a conversa selecionada." : "As decisões do Secretário aparecem aqui ao avaliar mensagens."} actionLabel={jid.length ? "Ver todas as conversas" : "Atualizar decisões"} onAction={() => { if (jid.length) setJid([]); else void rows.refetch() }} />}
                 <ul className="divide-y">
                     {rows.data?.map((row) => (
                         <li key={row._id} className="py-2">
                             <strong>{SECRETARY_DECISION_LABELS[row.decision]}</strong> · {contacts.find((contact) => contact.jid === row.jid)?.name ?? row.jid}
-                            <p className="text-sm text-muted-foreground">{row.reason} · {new Date(row.at).toLocaleString("pt-BR")}</p>
+                            <p className="text-sm text-muted-foreground">{row.reason} · {format(new Date(row.at), "Pp", { locale: ptBR })}</p>
                         </li>
                     ))}
                 </ul>

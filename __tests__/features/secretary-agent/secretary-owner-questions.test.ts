@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     audit: vi.fn(),
     turn: vi.fn(),
     reserve: vi.fn(async () => ({ modifiedCount: 1 })),
+    create: vi.fn(),
 }))
 
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: vi.fn() }))
@@ -21,6 +22,7 @@ vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" }, recordAu
 vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, job: () => Promise<void>) => mocks.jobs.push(job) }))
 vi.mock("@/features/ai/server/agent-memory-service", () => ({ createAgentMemory: mocks.createMemory }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: { sendText: mocks.sendText } }))
+vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: async (jids: string[]) => new Map([[jids[0], { name: "Grupo da família" }]]) }))
 vi.mock("@/features/evolution-api/server/models", () => ({ EvolutionInstanceState: { findById: () => ({ lean: async () => ({ ownerJid: OWNER, ownerLid: "999@lid" }) }) } }))
 vi.mock("@/features/secretary-agent/server/settings", () => ({
     loadSecretarySettings: async () => ({ settings: { ...DEFAULT_SECRETARY_SETTINGS, enabled: true, mode: "reply", main: { ...DEFAULT_SECRETARY_SETTINGS.main, provider: "opencode-go", model: "m" } } }),
@@ -55,12 +57,12 @@ vi.mock("@/features/secretary-agent/server/models", () => {
                 if (notice) Object.assign(notice, update.$set)
                 return { modifiedCount: notice ? 1 : 0 }
             },
-            create: vi.fn(),
+            create: mocks.create,
         },
     }
 })
 
-import { answerNotice, discardNotice, handleOwnerReply } from "@/features/secretary-agent/server/owner-questions"
+import { answerNotice, askOwner, discardNotice, handleOwnerReply } from "@/features/secretary-agent/server/owner-questions"
 
 const trigger = { id: "T", chatJid: "5531999999999@s.whatsapp.net", text: "você vai?" } as ParsedMessage
 function question(id: string, sentMessageId: string, ownerRevision: Date | null = null) {
@@ -80,6 +82,13 @@ beforeEach(() => {
 })
 
 describe("perguntar ao dono", () => {
+    it("envia e guarda o trecho agrupado com transcrição, grupo e autor", async () => {
+        const message = { ...trigger, chatJid: "123@g.us", isGroup: true, participant: "999@lid", pushName: "João", text: "" }
+        const text = "Oi, estamos combinando a festa.\n[áudio]\nVocê vai no sábado?"
+        await askOwner({ instance: "opex", ownerJid: OWNER, chatId: "g-123", message, text, question: "Você vai?", ownerRevision: null })
+        expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ contactName: "Grupo da família", author: "João", excerpt: text }))
+        expect(mocks.sendText).toHaveBeenCalledWith("opex", { number: OWNER, text: `❓ Grupo da família (João): Você vai?\n\n${text}` })
+    })
     it("resposta citada resolve a pergunta citada, grava a memória, audita e retoma a conversa depois", async () => {
         mocks.notices = [question("q1", "m1"), question("q2", "m2")]
         await handleOwnerReply("opex", OWNER, reply({ quotedId: "m2" }))

@@ -7,6 +7,7 @@ import { createAgentMemory } from "@/features/ai/server/agent-memory-service"
 import { memoryChannelOf } from "@/features/ai/agents"
 import { evolution } from "@/features/evolution-api/server/client"
 import { EvolutionInstanceState } from "@/features/evolution-api/server/models"
+import { contactsByJid } from "@/features/evolution-api/server/contacts"
 import type { ParsedMessage } from "@/features/evolution-api/message"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { runAfterResponse } from "@/lib/after-response"
@@ -29,12 +30,20 @@ export async function publishNotices() {
     await publishAppEvent(SECRETARY_NOTICES_EVENT, { pending: await SecretaryNotice.countDocuments({ status: "pending" }) })
 }
 
-export async function askOwner(input: { instance: string; ownerJid: string; chatId: string; message: ParsedMessage; question: string; ownerRevision: Date | null }) {
-    const { instance, ownerJid, chatId, message, question, ownerRevision } = input
+export async function askOwner(input: { instance: string; ownerJid: string; chatId: string; message: ParsedMessage; text: string; question: string; ownerRevision: Date | null }) {
+    const { instance, ownerJid, chatId, message, text, question, ownerRevision } = input
     const id = randomUUID()
-    await SecretaryNotice.create({ _id: id, instance, chatId, jid: message.chatJid, kind: "question", status: "pending", text: question, at: new Date(), trigger: message, ownerRevision })
+    const contacts = await contactsByJid([message.chatJid, ...(message.participant ? [message.participant] : [])], instance).catch((error: unknown) => {
+        secretaryLog.warn(safeErr(error), "[secretario] Nome e foto indisponíveis no aviso; usando identificação da conversa")
+        return null
+    })
+    const chatNumber = message.chatJid.split("@")[0]
+    const contactName = contacts?.get(message.chatJid)?.name || (message.isGroup ? `Grupo ${chatNumber}` : message.pushName || chatNumber)
+    const author = message.isGroup ? (message.participant ? contacts?.get(message.participant)?.name : null) || message.pushName || message.participant?.split("@")[0] || "Autor desconhecido" : undefined
+    const excerpt = text.trim().slice(0, 500)
+    await SecretaryNotice.create({ _id: id, instance, chatId, jid: message.chatJid, kind: "question", status: "pending", text: question, excerpt, author, contactName, at: new Date(), trigger: message, ownerRevision })
     try {
-        const sentMessageId = await sendSecretaryText(instance, ownerJid, `❓ ${message.pushName ?? message.chatJid}: ${question}\n\n${message.text.slice(0, 500)}`)
+        const sentMessageId = await sendSecretaryText(instance, ownerJid, `❓ ${contactName}${author ? ` (${author})` : ""}: ${question}${excerpt ? `\n\n${excerpt}` : ""}`)
         await SecretaryNotice.updateOne({ _id: id }, { $set: { sentMessageId } })
     } finally {
         await publishNotices()
