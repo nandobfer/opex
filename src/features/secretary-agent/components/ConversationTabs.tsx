@@ -7,7 +7,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Textarea } from "@/components/ui/textarea"
+import { MessagesSquare } from "lucide-react"
 import { ConversationLabel } from "@/features/evolution-api/components/ConversationPicker"
+import { EvolutionSyncAction } from "@/features/evolution-api/components/EvolutionSyncAction"
 import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks/useEvolution"
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
 import { CONVERSATION_STATE_LABELS, NOTICE_KIND_LABELS, type ConversationAgentState, type SecretaryNoticeKind } from "../constants"
@@ -23,7 +25,11 @@ export function ConversationsTab({ minutes }: { minutes: number }) {
     return <Card><CardHeader><CardTitle>Conversas</CardTitle></CardHeader><CardContent>
         {query.isPending && <Skeleton className="h-64" />}
         {query.isError && <Button variant="outline" onClick={() => void query.refetch()}>Tentar novamente</Button>}
-        {query.data?.length === 0 && <p>Nenhuma conversa disponível. Sincronize na integração Evolution API.</p>}
+        {query.data?.length === 0 && <div className="flex flex-col items-center gap-3 py-8 text-center">
+            <MessagesSquare className="h-8 w-8 text-muted-foreground" aria-hidden />
+            <p>Nenhuma conversa ainda.</p>
+            <EvolutionSyncAction />
+        </div>}
         {rows.length <= 50 ? rows.map((row) => <ConversationRow key={row.chatId} row={row} minutes={minutes} />) : <div className="max-h-[65vh] overflow-auto" ref={scroll}>
             <div className="relative" style={{ height: virtual.getTotalSize() }}>{virtual.getVirtualItems().map((item) => <div key={rows[item.index]!.chatId} data-index={item.index} ref={virtual.measureElement} className="absolute inset-x-0 top-0" style={{ transform: `translateY(${item.start}px)` }}><ConversationRow row={rows[item.index]!} minutes={minutes} /></div>)}</div>
         </div>}

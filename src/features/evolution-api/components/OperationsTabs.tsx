@@ -15,6 +15,7 @@ import { EVOLUTION_WEBHOOK_EVENT_LABELS, type EvolutionWebhookEvent } from "../c
 import { checkNumberSchema, sendTestSchema, webhookUrlSchema, type ContactKind } from "../schemas"
 import type { EvolutionContactDto, EvolutionNumberCheckDto, EvolutionWebhookDto } from "../types"
 import { ConversationPicker } from "./ConversationPicker"
+import { EvolutionSyncAction } from "./EvolutionSyncAction"
 
 export function WebhookTab() {
     const path = "/evolution/webhook-config"
@@ -43,7 +44,6 @@ export function OperationsTab({ instance }: { instance: string }) {
     const [kind, setKind] = useState<ContactKind>("chats")
     const [selected, setSelected] = useState<string[]>([])
     const contacts = useEvolution<EvolutionContactDto[]>(`/evolution/contacts?kind=${kind}`, Boolean(instance))
-    const sync = useEvolutionAction("/evolution/contacts", "post", "Fotos e nomes sincronizados")
     const send = useEvolutionAction("/evolution/send-test", "post", "Mensagem de teste enviada")
     const check = useEvolutionAction<EvolutionNumberCheckDto>("/evolution/check-number", "post", "Número consultado")
     const sendForm = useForm({ resolver: zodResolver(sendTestSchema), defaultValues: { number: "", text: "" } })
@@ -54,7 +54,7 @@ export function OperationsTab({ instance }: { instance: string }) {
             <OptionTabs value={kind} onChange={(value) => { setKind(value); setSelected([]) }} aria-label="Tipo de conversa" options={[{ value: "chats", label: "Conversas" }, { value: "contacts", label: "Contatos" }, { value: "groups", label: "Grupos" }]} />
             <ConversationPicker items={contacts.data ?? []} selected={selected} onChange={setSelected} />
             {contacts.isError && <Button variant="outline" onClick={() => void contacts.refetch()}>Tentar novamente</Button>}
-            <Button variant="outline" disabled={sync.isPending} onClick={() => sync.mutate(undefined)}>Sincronizar fotos e nomes</Button>
+            <EvolutionSyncAction instance={instance} label="Sincronizar fotos e nomes" />
         </CardContent></Card>
         <Card><CardHeader><CardTitle>Enviar mensagem de teste</CardTitle></CardHeader><CardContent><form className="space-y-3" onSubmit={sendForm.handleSubmit((input) => send.mutate(input))}>
             <Field label="Número com DDI e DDD" id="evolution-test-number" error={sendForm.formState.errors.number?.message}><Input id="evolution-test-number" type="tel" {...sendForm.register("number")} /></Field>
