@@ -29,6 +29,9 @@ interface Account {
   /** `since` (ISO) → totalMonthlyCredits. */
   since: Record<string, number>
   cost: number
+  /** Ciclo próprio da conta (padrão: START → END). */
+  start?: string
+  end?: string
 }
 
 const defaultAccount = (): Account => ({
@@ -50,12 +53,12 @@ function route(url: string, init?: RequestInit) {
   const account = accounts[auth]!
   if (path === '/whoami') return json({ success: true, user: { id: account.user, name: 'Fulano', email: 'fulano@exemplo.com', userName: 'fulano' }, org: null })
   if (path === '/billing/credits') return json(account.credits)
-  if (path === '/billing/subscriptions') return json({ data: { status: 'active', planId: 'individual-goat', currentPeriodStart: START, currentPeriodEnd: END, cancelAtPeriodEnd: false, quantity: 1, pendingPhase: null, orgId: null } })
+  if (path === '/billing/subscriptions') return json({ data: { status: 'active', planId: 'individual-goat', currentPeriodStart: account.start ?? START, currentPeriodEnd: account.end ?? END, cancelAtPeriodEnd: false, quantity: 1, pendingPhase: null, orgId: null } })
   if (path === '/usage/summary') {
     const since = parsed.searchParams.get('since')!
     const value = account.since[since]
     if (value === undefined) return json({ error: 'x' }, 500)
-    return json({ totalCount: 5, totalCost: since === START ? account.cost : 1, totalMonthlyCredits: value, totalTokens: 100, periodBasis: 'billing-period' })
+    return json({ totalCount: 5, totalCost: since === (account.start ?? START) ? account.cost : 1, totalMonthlyCredits: value, totalTokens: 100, periodBasis: 'billing-period' })
   }
   throw new Error(`URL inesperada ${url}`)
 }
@@ -196,6 +199,29 @@ describe('Todas as chaves', () => {
       ['month', 7.1],
     ])
     expect(sum.monthPercent).toBe(7.1)
+  })
+
+  it('contas com ciclos diferentes: o ciclo da renovação mais próxima rege o gráfico e o % do mês soma a série desde o início dele', async () => {
+    mocks.pool.mockResolvedValue([KEY, KEY2])
+    // Conta B renova 12 h depois (06/12 00:00): a referência é a conta A (Pessoal), que renova primeiro.
+    accounts[KEY2.apiKey] = {
+      user: 'u2',
+      start: '2026-11-06T00:00:00.000Z',
+      end: '2026-12-06T00:00:00.000Z',
+      credits: { credits: { monthlyCredits: 45 }, windowLimits: { limited: true, fiveHour: { used: 0, cap: 14, resetAt: 0 }, weekly: { used: 0, cap: 35, resetAt: 0 } } },
+      since: { [START]: 6, '2026-11-06T00:00:00.000Z': 5, '2026-11-07T00:00:00.000Z': 2 },
+      cost: 4,
+    }
+    const dto = await getCommandCodeUsage({})
+    expect(dto.scope).toMatchObject({ accounts: 2, cyclesDiffer: true, cycleKeyName: 'Pessoal' })
+    expect(dto.cycle).toEqual({ startsAt: START, endsAt: END })
+    // Mensal das janelas: cada conta no próprio ciclo, (10 + 5) / (70 + 50).
+    expect(dto.meters.find((meter) => meter.id === 'month')?.percent).toBe(12.5)
+    // % do mês na referência: dias somados desde 05/11 12:00 — (2+1) + (5+3) + (3+2) = 16 de 120.
+    expect(dto.monthPercent).toBe(13.3)
+    expect(dto.chart?.today?.percent).toBe(13.33)
+    expect(dto.chart?.points.filter((point) => point.usage !== null).map((point) => point.usage)).toEqual([0, 2.5, 9.17, 13.33])
+    expect(dto.usageValueUsd).toBe(16.5)
   })
 
   it('uma chave falha: fica fora da soma (cobertura parcial); todas falhando: o estado da primeira', async () => {

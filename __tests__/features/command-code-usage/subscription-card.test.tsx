@@ -96,6 +96,14 @@ describe('CommandCodeSubscriptionCard', () => {
     expect(document.querySelector('[data-cc-note="missing"]')!.textContent).toContain('1 dia do ciclo sem dados')
   })
 
+  it('contas com ciclos diferentes: nota do ciclo de referência e a chave dele na dica da renovação', async () => {
+    renderCard(usage({ scope: { mode: 'all', keys: [{ name: 'Pessoal', account: 0 }, { name: 'Trabalho', account: 1 }], accounts: 2, failed: [], cycleKeyName: 'Trabalho', cyclesDiffer: true } }))
+    expect(await screen.findByText('Renova em 5 dez')).toBeTruthy()
+    expect(document.querySelector('[data-cc-note="cycle"]')!.textContent).toBe('As contas têm ciclos diferentes: o gráfico e a previsão seguem o ciclo da chave Trabalho (renovação mais próxima).')
+    expect(screen.getByText('Renova em 5 dez').getAttribute('title')).toContain('chave Trabalho')
+    expect(document.querySelector('[data-cc-keys]')!.textContent).toContain('Chaves: 2')
+  })
+
   it('assinatura não legível (API da CLI mudou): aviso claro, sem medidores nem gráfico', async () => {
     renderCard(usage({ state: 'unavailable', message: 'A API da CLI do Command Code (/alpha) não respondeu este endpoint (HTTP 404): a assinatura não é legível por ela no momento.', meters: [], chart: null, cycle: null, monthPercent: null }))
     expect(await screen.findByText('Assinatura não legível')).toBeTruthy()

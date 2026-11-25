@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { ccAccountKey, ccDailyCredits, ccKeyLabel, ccMonthPool, ccSeriesBoundaries, combineCcDays, groupCcAccounts, hasCcWindows, sumCcMeters } from '@/features/command-code-usage/logic'
+import { ccAccountKey, ccReferenceIndex, ccDailyCredits, ccKeyLabel, ccMonthPool, ccSeriesBoundaries, combineCcDays, groupCcAccounts, hasCcWindows, sumCcMeters } from '@/features/command-code-usage/logic'
 import { ccCreditsSchema, ccSubscriptionSchema, ccWhoamiSchema, toIsoInstant } from '@/features/command-code-usage/schemas'
 import { joinCommandCodeCatalog, commandCodeRoute, toCommandCodeModels } from '@/lib/ai/command-code-models'
 
@@ -104,6 +104,13 @@ describe('contas e rótulos', () => {
     expect(ccAccountKey({ user: { id: 'u1' }, org: null })).toBe('user:u1')
     const groups = groupCcAccounts([{ account: 'user:u1', n: 1 }, { account: 'user:u2', n: 2 }, { account: 'user:u1', n: 3 }, { account: null, n: 4 }])
     expect(groups.map((group) => group.map((item) => item.n))).toEqual([[1, 3], [2], [4]])
+  })
+
+  it('ciclo de referência: renovação mais próxima; empate pelo maior pool, depois a principal, depois o nome', () => {
+    expect(ccReferenceIndex([{ endMs: 20, pool: 100, primary: true, name: 'A' }, { endMs: 10, pool: 10, primary: false, name: 'B' }])).toBe(1)
+    expect(ccReferenceIndex([{ endMs: 10, pool: 50, primary: true, name: 'A' }, { endMs: 10, pool: 70, primary: false, name: 'B' }])).toBe(1)
+    expect(ccReferenceIndex([{ endMs: 10, pool: 70, primary: false, name: 'A' }, { endMs: 10, pool: 70, primary: true, name: 'B' }])).toBe(1)
+    expect(ccReferenceIndex([{ endMs: 10, pool: 70, primary: false, name: 'Zeta' }, { endMs: 10, pool: 70, primary: false, name: 'Alfa' }])).toBe(1)
   })
 
   it('rótulo: uma chave ou "Chaves: 3 (2 contas)"', () => {

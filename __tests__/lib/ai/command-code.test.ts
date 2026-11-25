@@ -30,7 +30,7 @@ vi.mock('@/lib/integrations/debug', () => ({
 import { streamText } from 'ai'
 import { clearCommandCodeCatalogCache, commandCodeModelInputs, createCommandCodeModel, listCommandCodeModels, verifyCommandCodeKey } from '@/lib/ai/command-code'
 import { COMMAND_CODE_USER_AGENT } from '@/lib/ai/endpoints'
-import { describeAiError } from '@/lib/ai/stream'
+import { describeAiError, prepareModel } from '@/lib/ai/stream'
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 
@@ -173,6 +173,31 @@ describe('createCommandCodeModel', () => {
     for await (const part of streamText({ model, prompt: 'x', maxRetries: 0 }).fullStream) void part
     expect(auth).toEqual(['Bearer user_a', 'Bearer user_b'])
     expect(currentKeyId()).toBe('key_cc_2')
+  })
+})
+
+describe('prepareModel (Command Code)', () => {
+  it('a variante válida vira o reasoning da AI SDK; a inválida é ignorada; sem custo', async () => {
+    mocks.fetch.mockImplementation(catalogFetch(() => json({ error: { message: 'x' } }, 400)))
+    const prepared = await prepareModel({ provider: 'command-code', model: 'claude-sonnet-5-5', variant: 'high' })
+    expect(prepared.reasoning).toBe('high')
+    expect(prepared.takeStepCost({})).toBeNull()
+    expect((await prepareModel({ provider: 'command-code', model: 'claude-sonnet-5-5', variant: 'turbo' })).reasoning).toBeUndefined()
+    expect((await prepareModel({ provider: 'command-code', model: 'claude-sonnet-5-5', variant: null })).reasoning).toBeUndefined()
+  })
+
+  it('apiKeyId acompanha o rodízio: começa na primeira chave e passa para a que respondeu depois do 429', async () => {
+    mocks.keys = [
+      { id: 'key_cc_1', name: 'Pessoal', apiKey: 'user_a' },
+      { id: 'key_cc_2', name: 'Trabalho', apiKey: 'user_b' },
+    ]
+    mocks.fetch.mockImplementation(
+      catalogFetch((_url, init) => ((init.headers as Headers).get('authorization') === 'Bearer user_a' ? json({ error: { message: 'limite' } }, 429) : json({ error: { message: 'parar' } }, 400))),
+    )
+    const prepared = await prepareModel({ provider: 'command-code', model: 'gpt-6-astra', variant: null })
+    expect(prepared.apiKeyId).toBe('key_cc_1')
+    for await (const part of streamText({ model: prepared.model, prompt: 'x', maxRetries: 0 }).fullStream) void part
+    expect(prepared.apiKeyId).toBe('key_cc_2')
   })
 })
 
