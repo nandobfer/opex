@@ -110,6 +110,41 @@ describe('revisões do compose gerenciado', () => {
     expect(await rejection(getComposeRevision(id, 9))).toMatchObject({ status: 404 })
   })
 
+  it('gravação concorrente (chave duplicada): recalcula a versão e grava a seguinte', async () => {
+    const id = await create()
+    const model = EnvironmentComposeVersion as unknown as { create: (doc: Record<string, unknown>) => Promise<unknown> }
+    const original = model.create
+    const spy = vi.spyOn(model, 'create').mockImplementationOnce(async () => {
+      // Outra gravação levou a v2 entre a leitura da vigente e a inserção.
+      await original({ environmentId: id, version: 2, content: V2, authorId: 'local', note: null, createdAt: new Date(), deployedAt: null })
+      throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 })
+    })
+    const saved = await saveComposeRevision(id, { content: `${V2}# minha\n` }, 'local')
+    expect(saved.version).toBe(3)
+    expect(revisions.docs.map((item) => item.version)).toEqual([1, 2, 3])
+    expect(sourceOf().composeVersion).toBe(3)
+    spy.mockRestore()
+  })
+
+  it('chave duplicada em todas as tentativas: 409 ENVIRONMENT_COMPOSE_CONFLICT, sem gravar', async () => {
+    const id = await create()
+    const spy = vi.spyOn(EnvironmentComposeVersion as unknown as { create: () => Promise<unknown> }, 'create').mockRejectedValue(Object.assign(new Error('E11000 duplicate key'), { code: 11000 }))
+    expect(await rejection(saveComposeRevision(id, { content: V2 }, 'local'))).toMatchObject({ status: 409, code: 'ENVIRONMENT_COMPOSE_CONFLICT' })
+    expect(spy).toHaveBeenCalledTimes(5)
+    expect(revisions.docs).toHaveLength(1)
+    expect(sourceOf().composeVersion).toBe(1)
+    expect(mocks.publish).not.toHaveBeenCalledWith(id, 'compose')
+    spy.mockRestore()
+  })
+
+  it('outro erro do banco não é repetido: sobe como está', async () => {
+    const id = await create()
+    const spy = vi.spyOn(EnvironmentComposeVersion as unknown as { create: () => Promise<unknown> }, 'create').mockRejectedValue(new Error('conexão perdida'))
+    expect(await rejection(saveComposeRevision(id, { content: V2 }, 'local'))).toMatchObject({ message: 'conexão perdida' })
+    expect(spy).toHaveBeenCalledTimes(1)
+    spy.mockRestore()
+  })
+
   it('ambiente de outra origem não tem revisões', async () => {
     const env = await createEnvironment(input({ slug: 'loja', compose: undefined, source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } }), 'local')
     expect(await rejection(listComposeRevisions(String(env._id)))).toMatchObject({ status: 422, code: 'ENVIRONMENT_NOT_MANAGED' })
