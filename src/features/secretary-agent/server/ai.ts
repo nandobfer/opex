@@ -2,6 +2,7 @@ import type { LanguageModelUsage, ModelMessage, ToolSet } from "ai"
 import { z } from "zod"
 import { prepareModel } from "@/lib/ai/stream"
 import { recordAiConsumption } from "@/lib/ai/consumption"
+import { SecretaryDeliveryError } from "../ai-errors"
 import { SECRETARY_CONSUMPTION_ORIGIN } from "../constants"
 import { priceKey, stepCostUsd } from "../cost"
 import type { SecretaryMainModel, SecretarySettings } from "../schemas"
@@ -24,14 +25,30 @@ export async function secretaryInference<T>(options: {
             costUsd: cost.costUsd, billing: reported?.billing, apiKeyId: prepared.apiKeyId })
     }
     try {
-        const input = { model: prepared.model, providerOptions: prepared.providerOptions, abortSignal: signal, maxRetries: 0,
-            instructions: options.instructions, messages: options.messages, output: ai.Output.object({ schema: options.schema }),
+        let streamError: unknown
+        const run = ai.streamText({ model: prepared.model, providerOptions: prepared.providerOptions, abortSignal: signal, maxRetries: 0,
+            instructions: `${options.instructions}\nTermine sempre chamando a ferramenta entregar.`, messages: options.messages,
+            tools: { ...options.tools, entregar: ai.tool({ description: "Entrega o resultado final.", inputSchema: options.schema }) },
+            toolChoice: "required", stopWhen: [ai.hasToolCall("entregar"), ai.stepCountIs(8)],
+            onError: ({ error }) => { streamError ??= error },
             onStepFinish: async (part: { usage: LanguageModelUsage; providerMetadata?: Parameters<typeof prepared.takeStepCost>[0] }) => usage(part.usage, part.providerMetadata),
+        })
+        try {
+            await run.consumeStream()
+            const steps = await run.steps
+            if (streamError !== undefined) throw streamError
+            signal.throwIfAborted()
+            const delivery = steps.at(-1)?.toolCalls.find((call) => call.toolName === "entregar")
+            if (!delivery) throw new SecretaryDeliveryError("missing")
+            const parsed = await options.schema.safeParseAsync(delivery.input)
+            if (!parsed.success || delivery.invalid) throw new SecretaryDeliveryError("invalid")
+            return parsed.data
+        } catch (error) {
+            signal.throwIfAborted()
+            const cause = streamError ?? error
+            if (ai.ToolChoiceViolationError.isInstance(cause)) throw new SecretaryDeliveryError("missing")
+            throw cause
         }
-        if (!options.tools) return (await ai.generateText(input)).output
-        const run = ai.streamText({ ...input, tools: options.tools, stopWhen: ai.stepCountIs(8) })
-        await run.consumeStream()
-        return await run.output
     } finally {
         await prepared.dispose()
     }

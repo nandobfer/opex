@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { MockLanguageModelV4 } from "ai/test"
+import { APICallError, tool } from "ai"
 import { z } from "zod"
 import { DEFAULT_SECRETARY_SETTINGS, type SecretarySettings } from "@/features/secretary-agent/schemas"
 import type { ParsedMessage } from "@/features/evolution-api/message"
@@ -32,15 +33,19 @@ function settings(patch: Partial<SecretarySettings["media"]> = {}, provider: "op
 function msg(kind: "image" | "audio" | "document", text = ""): ParsedMessage {
     return { id: "M1", chatJid: "5531@s.whatsapp.net", fromMe: false, isGroup: false, participant: null, pushName: null, text, media: { kind, mimetype: `${kind}/x`, fileName: kind === "document" ? "nota.pdf" : null }, quotedId: null, quotedAuthor: null, mentioned: [], timestamp: new Date(), ignorable: false }
 }
+const usage = { inputTokens: { total: 1_000_000, noCache: 1_000_000, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 500_000, text: 500_000, reasoning: 0 } }
+function toolStream(payload: unknown, toolName = "entregar") {
+    return async () => ({ stream: new ReadableStream({ start(controller) {
+        controller.enqueue({ type: "stream-start", warnings: [] })
+        if (toolName) controller.enqueue({ type: "tool-call", toolCallId: toolName, toolName, input: JSON.stringify(payload) })
+        controller.enqueue({ type: "finish", finishReason: { unified: toolName ? "tool-calls" : "stop", raw: "stop" }, usage })
+        controller.close()
+    } }) })
+}
 function jsonModel(payload: unknown) {
     return new MockLanguageModelV4({
-        doGenerate: async () => ({
-            content: [{ type: "text", text: JSON.stringify(payload) }],
-            finishReason: { unified: "stop", raw: "stop" },
-            usage: { inputTokens: { total: 1_000_000, noCache: 1_000_000, cacheRead: 0, cacheWrite: 0 }, outputTokens: { total: 500_000, text: 500_000, reasoning: 0 } },
-            warnings: [],
-        }),
-    } as ConstructorParameters<typeof MockLanguageModelV4>[0])
+        doStream: toolStream(payload),
+    })
 }
 
 beforeEach(() => {
@@ -78,20 +83,41 @@ describe("readTurnMedia", () => {
 })
 
 describe("secretaryInference (SDK real, modelo fake)", () => {
+    const infer = (tools?: Parameters<typeof secretaryInference>[0]["tools"]) => secretaryInference({ settings: settings({}, "anthropic"), model: { provider: "anthropic", model: "m", variant: null }, id: "t1", instructions: "x", messages: [{ role: "user", content: "oi" }], schema: z.object({ ok: z.boolean() }), tools })
     it("entrega o JSON Schema ao modelo, valida a resposta e grava o consumo estimado pela tabela", async () => {
         const model = jsonModel({ ok: true })
         mocks.model = model
-        const result = await secretaryInference({ settings: settings({}, "anthropic"), model: { provider: "anthropic", model: "m", variant: null }, id: "t1", instructions: "x", messages: [{ role: "user", content: "oi" }], schema: z.object({ ok: z.boolean() }) })
+        const result = await infer()
         expect(result).toEqual({ ok: true })
-        const format = model.doGenerateCalls[0]!.responseFormat as { type: string; schema?: { properties?: Record<string, unknown> } }
-        expect(format.type).toBe("json")
-        expect(format.schema?.properties).toHaveProperty("ok")
+        const call = model.doStreamCalls[0]!
+        expect(call.responseFormat?.type).not.toBe("json")
+        expect(call.toolChoice).toEqual({ type: "required" })
+        expect(call.tools).toContainEqual(expect.objectContaining({ name: "entregar", inputSchema: expect.objectContaining({ properties: { ok: { type: "boolean" } } }) }))
         // 1M de entrada a US$ 1 + 0,5M de saída a US$ 2 = US$ 2.
         expect(mocks.consumption).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", origin: "secretary-agent", costUsd: 2, apiKeyId: "k1" }))
     })
 
     it("resposta fora do schema falha (o turno registra erro em vez de enviar lixo)", async () => {
         mocks.model = jsonModel({ outro: 1 })
-        await expect(secretaryInference({ settings: settings(), model: { provider: "opencode-go", model: "m", variant: null }, id: "t2", instructions: "x", messages: [{ role: "user", content: "oi" }], schema: z.object({ ok: z.boolean() }) })).rejects.toThrow()
+        await expect(infer()).rejects.toThrow("formato inválido")
+    })
+
+    it("executa a ferramenta de memória antes de entregar", async () => {
+        const execute = vi.fn(async () => "gravado")
+        mocks.model = new MockLanguageModelV4({ doStream: [await toolStream({}, "remember")(), await toolStream({ ok: true })()] })
+        await expect(infer({ remember: tool({ inputSchema: z.object({}), execute }) })).resolves.toEqual({ ok: true })
+        expect(execute).toHaveBeenCalledTimes(1)
+        expect(mocks.consumption).toHaveBeenCalledTimes(2)
+    })
+
+    it("não inventa uma saída quando o modelo termina sem entregar", async () => {
+        mocks.model = new MockLanguageModelV4({ doStream: toolStream({}, "") })
+        await expect(infer()).rejects.toThrow("O modelo terminou sem entregar a resposta.")
+    })
+
+    it("preserva o erro original da API", async () => {
+        const error = new APICallError({ message: "Bad Request", url: "https://example.test", requestBodyValues: {}, statusCode: 400, responseBody: '{"error":{"message":"response_format"}}' })
+        mocks.model = new MockLanguageModelV4({ doStream: async () => { throw error } })
+        await expect(infer()).rejects.toBe(error)
     })
 })
