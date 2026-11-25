@@ -42,11 +42,13 @@ export function PersonalityTab({ form, contacts }: { form: SecretaryForm; contac
  * edição se baseou: o servidor recusa (409) se ela mudou no meio.
  */
 export function PersonalityEditor({ data, contacts }: { data: Data; contacts: EvolutionContactDto[] }) {
-    const [source, setSource] = useState({ versionId: data.versionId, blocks: data.snapshot.base.blocks })
+    // `replaced`: a versão que o próprio salvamento substituiu. Enquanto o refetch não chega, `data` ainda vem nela, e
+    // isso não é mudança externa (não recarrega o texto antigo nem trava o Salvar).
+    const [source, setSource] = useState<{ versionId: string | null; blocks: typeof data.snapshot.base.blocks; replaced?: string | null }>({ versionId: data.versionId, blocks: data.snapshot.base.blocks })
     const [base, setBase] = useState(data.snapshot.base.blocks)
     const [jid, select] = useState<string[]>([])
     const dirty = JSON.stringify(base) !== JSON.stringify(source.blocks)
-    const changed = data.versionId !== source.versionId
+    const changed = data.versionId !== source.versionId && !(source.replaced !== undefined && data.versionId === source.replaced)
     const reload = () => {
         setSource({ versionId: data.versionId, blocks: data.snapshot.base.blocks })
         setBase(data.snapshot.base.blocks)
@@ -57,7 +59,7 @@ export function PersonalityEditor({ data, contacts }: { data: Data; contacts: Ev
     const submit = () => {
         const input = personalitySchema.safeParse({ blocks: base })
         if (!input.success) return
-        save.mutate({ ...input.data, expectedVersionId: source.versionId }, { onSuccess: (saved) => setSource({ versionId: saved.versionId, blocks: base }) })
+        save.mutate({ ...input.data, expectedVersionId: source.versionId }, { onSuccess: (saved) => setSource({ versionId: saved.versionId, blocks: input.data.blocks, replaced: source.versionId }) })
     }
     return <>
         <Card><CardHeader><CardTitle>Personalidade base</CardTitle></CardHeader><CardContent className="space-y-4">

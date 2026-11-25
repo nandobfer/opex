@@ -54,6 +54,24 @@ describe("PersonalityEditor", () => {
         expect((screen.getByRole("button", { name: "Salvar blocos" }) as HTMLButtonElement).disabled).toBe(false)
     })
 
+    it("entre o Salvar e o refetch, o texto salvo fica na tela e o que se digita nessa janela não trava o Salvar", () => {
+        mocks.mutate.mockImplementation((_input: unknown, options: { onSuccess: (saved: { versionId: string }) => void }) => options.onSuccess({ versionId: "v2" }))
+        const { rerender } = render(<PersonalityEditor data={data("v1", "Formal")} contacts={[]} />)
+        fireEvent.change(toneField(), { target: { value: "Informal" } })
+        fireEvent.click(screen.getByRole("button", { name: "Salvar blocos" }))
+        // O refetch ainda não chegou: `data` continua na v1.
+        rerender(<PersonalityEditor data={data("v1", "Formal")} contacts={[]} />)
+        expect(toneField().value).toBe("Informal")
+        fireEvent.change(toneField(), { target: { value: "Informal e direto" } })
+        rerender(<PersonalityEditor data={data("v2", "Informal")} contacts={[]} />)
+        expect(toneField().value).toBe("Informal e direto")
+        expect(screen.queryByRole("alert")).toBeNull()
+        expect((screen.getByRole("button", { name: "Salvar blocos" }) as HTMLButtonElement).disabled).toBe(false)
+        // Uma versão externa depois disso ainda é detectada.
+        rerender(<PersonalityEditor data={data("v3", "Da análise")} contacts={[]} />)
+        expect(screen.getByRole("alert")).toBeTruthy()
+    })
+
     it("com versão nova e edição pendente, o Salvar fica travado até recarregar", () => {
         const { rerender } = render(<PersonalityEditor data={data("v1", "Formal")} contacts={[]} />)
         fireEvent.change(toneField(), { target: { value: "Meu texto" } })
