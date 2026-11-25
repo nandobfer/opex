@@ -3,6 +3,7 @@ import { IntegrationStatus, type IIntegrationStatus } from "@/lib/db/models/Inte
 import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
 import { listAnthropicModels } from "./anthropic"
+import { listCommandCodeModels } from "./command-code"
 import { listDeepseekModels } from "./deepseek"
 import { listGeminiEmbeddingModels, listGeminiModels } from "./gemini"
 import { listJevModels } from "./jev"
@@ -23,6 +24,7 @@ const MODEL_LISTERS: Record<AiProviderId, (signal?: AbortSignal) => Promise<AiMo
     openai: listOpenaiModels,
     deepseek: listDeepseekModels,
     "opencode-go": listOpencodeGoModels,
+    "command-code": listCommandCodeModels,
     jev: listJevModels,
 }
 

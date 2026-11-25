@@ -24,7 +24,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -78,7 +78,7 @@ describe('catálogo de integrações', () => {
   })
 
   it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada), anexos abandonados (30 min), resumo diário dos agentes (1 h) e quota do OpenCode (1 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup'])
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', 'command-code-usage-refresh', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup'])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
@@ -93,6 +93,9 @@ describe('catálogo de integrações', () => {
     // OPE-167: assinatura OpenCode Go (Console) a cada 5 minutos, ligada e sem integração dona.
     expect(DEFAULT_CRON_JOBS.find((job) => job.id === 'opencode-go-usage-refresh')).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 5 } })
     expect(cronJobIntegration('opencode-go-usage-refresh')).toBeNull()
+    // OPE-190: assinatura Command Code (API da CLI) a cada 5 minutos, ligada e sem integração dona.
+    expect(DEFAULT_CRON_JOBS.find((job) => job.id === 'command-code-usage-refresh')).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 5 } })
+    expect(cronJobIntegration('command-code-usage-refresh')).toBeNull()
     // OPE-145: recursos do servidor a cada 10 segundos, ligada.
     expect(DEFAULT_CRON_JOBS.find((job) => job.id === HOST_METRICS_JOB_ID)).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', seconds: 10 } })
     const jobs = getIntegrationDef('crons').publicFields.find((field) => field.key === 'jobs')?.defaultValue
@@ -133,9 +136,10 @@ describe('catálogo de integrações', () => {
       ['ai_openai', 'ai'],
       ['ai_deepseek', 'ai'],
       ['ai_opencode_go', 'ai'],
+      ['ai_command_code', 'ai'],
       ['ai_jev', 'ai'],
     ])
-    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_jev'] as const) {
+    for (const id of ['ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev'] as const) {
       const def = getIntegrationDef(id)
       expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
     }
@@ -148,13 +152,16 @@ describe('catálogo de integrações', () => {
       ['opencodeBin', false],
       ['sshHostFingerprint', false],
     ])
-    for (const id of ['ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go'] as const) {
+    for (const id of ['ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code'] as const) {
       expect(getIntegrationDef(id).secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     }
     expect(getIntegrationDef('ai_jev').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     expect(getIntegrationDef('ai_jev').publicFields).toEqual([])
     // OpenCode Go: só a chave oc_sk_… como segredo, sem campo público (a URL do gateway é fixa).
     expect(getIntegrationDef('ai_opencode_go')).toMatchObject({ name: 'OpenCode Go', defaultEnvironment: 'externo', publicFields: [] })
+    // Command Code (OPE-190): só a chave do Studio no chaveiro, sem campo público (a URL da Provider API é fixa).
+    expect(getIntegrationDef('ai_command_code')).toMatchObject({ name: 'Command Code', defaultEnvironment: 'externo', publicFields: [], secretFields: [expect.objectContaining({ key: 'apiKey', keyRing: true })] })
+    expect(integrationPath('ai_command_code')).toBe('/integracoes/ia/command-code')
   })
 
   it('SMTP e Storage S3: campos, defaults e sem .env', () => {

@@ -17,11 +17,11 @@ import type { UsageQuery } from "@/features/ai/provider-usage"
 import { GO_STALE_AFTER_MS } from "../../go-constants"
 import { goKeyLabel, isGoUsageStale } from "../../go-logic"
 import { useOpencodeGoUsage, useOpencodeGoUsageRealtime, useRefreshOpencodeGoUsage } from "../../hooks/useOpencodeGoUsage"
+import { CycleUsageChart } from "@/features/subscription-usage/components/CycleUsageChart"
+import { SubscriptionUsageSkeleton } from "@/features/subscription-usage/components/SubscriptionUsageSkeleton"
+import { UsageWindows } from "@/features/subscription-usage/components/UsageWindows"
 import { GoCoverageNotes } from "./GoCoverageNotes"
-import { GoUsageChart } from "./GoUsageChart"
 import { GoUsageHeader } from "./GoUsageHeader"
-import { GoUsageSkeleton } from "./GoUsageSkeleton"
-import { GoUsageWindows } from "./GoUsageWindows"
 
 /**
  * Consumo da assinatura OpenCode Go (OPE-167), lido do Console com a chave do filtro: % do mês, renovação,
@@ -70,7 +70,7 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
                 <AnimatePresence mode="wait" initial={false}>
                     <motion.div key={view} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: reduceMotion ? 0 : 0.15 }}>
                         {view === "invalid" && <ErrorState title="Período inválido" description="Selecione datas válidas, com início anterior ao fim." />}
-                        {view === "loading" && <GoUsageSkeleton />}
+                        {view === "loading" && <SubscriptionUsageSkeleton />}
                         {view === "request-error" && <ErrorState title="Não foi possível carregar a assinatura" description={apiErrorMessage(usage.error, "Tente novamente.")} onRetry={() => void usage.refetch()} />}
                         {view === "error" && <ErrorState title="Não foi possível ler a assinatura" description={data?.message ?? "Tente novamente."} onRetry={retry} />}
                         {view === "unconfigured" && (
@@ -96,10 +96,10 @@ export function OpencodeGoSubscriptionCard({ query }: { query: UsageQuery | null
                                     )}
                                 </AnimatePresence>
                                 <GoUsageHeader data={data} />
-                                <GoUsageWindows meters={data.meters} now={now} />
+                                <UsageWindows meters={data.meters} now={now} subject="OpenCode Go" />
                                 {data.chart ? (
                                     <div className="space-y-2">
-                                        <GoUsageChart chart={data.chart} dailyAverage={data.forecast?.dailyAverage ?? null} />
+                                        <CycleUsageChart chart={data.chart} dailyAverage={data.forecast?.dailyAverage ?? null} subject="OpenCode Go" />
                                         <GoCoverageNotes chart={data.chart} scope={data.scope} />
                                     </div>
                                 ) : (

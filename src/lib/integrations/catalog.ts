@@ -2,7 +2,7 @@
  * Catálogo das integrações administráveis (copiado do CRM Marketing Campanhas).
  *
  * Integrações ativas: Pusher, API interna, Crons, GitHub, Inteligência Artificial (hub `ai`
- * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek`, `ai_opencode_go` e `ai_jev`, que só aparecem dentro do hub), Clientes,
+ * com os provedores `ai_opencode`, `ai_gemini`, `ai_anthropic`, `ai_openai`, `ai_deepseek`, `ai_opencode_go`, `ai_command_code` e `ai_jev`, que só aparecem dentro do hub), Clientes,
  * SMTP, Storage S3 e Builder Machine (prévias no Docker do PC; liga pelo campo "Integração ativa").
  * `google_drive` aparece como "Em desenvolvimento" (sem campos, teste, debug nem ações).
  *
@@ -18,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -210,6 +210,7 @@ export const BUILDER_MACHINE_CLEANUP_JOB_ID = "builder-machine-cleanup"
 export const OPENCODE_QUOTA_JOB_ID = "opencode-quota-refresh"
 /** Lê o status da assinatura OpenCode Go (Console) com a chave em uso e avisa a tela quando os percentuais mudam (OPE-167). */
 export const OPENCODE_GO_USAGE_JOB_ID = "opencode-go-usage-refresh"
+export const COMMAND_CODE_USAGE_JOB_ID = "command-code-usage-refresh"
 /** Lê CPU, RAM, swap e disco da máquina do OpenCode (RPC do opencode-htop ou shell) e avisa a tela quando muda. */
 export const HOST_METRICS_JOB_ID = "host-metrics-refresh"
 /** Ambientes: mantém as últimas tags de cada ambiente no registry e roda o garbage-collect. */
@@ -339,6 +340,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
     {
         id: OPENCODE_GO_USAGE_JOB_ID,
         label: "Atualizar o consumo da assinatura OpenCode Go (Console)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 5 },
+        enabled: true,
+    },
+    {
+        id: COMMAND_CODE_USAGE_JOB_ID,
+        label: "Atualizar o consumo da assinatura Command Code (API da CLI)",
         kind: "internal",
         schedule: { type: "interval", minutes: 5 },
         enabled: true,
@@ -722,6 +730,16 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         secretFields: [{ key: "apiKey", label: "Chave do OpenCode Go", description: "Chave oc_sk_… da assinatura Go (opencode.ai › Go); gerenciada na lista Chaves de API (várias em uso, uma principal). DeepSeek V4.1 Flash e V4 Pro exigem a região Global em Settings › Privacy", required: true, keyRing: true }],
     },
     {
+        id: "ai_command_code",
+        name: "Command Code",
+        description: "Modelos do Command Code (Claude, GPT, Gemini e abertos) pela Provider API, sem sessão do OpenCode no host",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        parent: "ai",
+        publicFields: [],
+        secretFields: [{ key: "apiKey", label: "Chave do Command Code", description: "Chave do Studio do Command Code (commandcode.ai › Studio › API keys; a mesma da CLI); gerenciada na lista Chaves de API (várias em uso, uma principal). O plano Go não tem acesso à API", required: true, keyRing: true }],
+    },
+    {
         id: "ai_jev",
         name: "JEV",
         description: "Modelo TypeSafe (JEV) de decisão estruturada, não de geração de texto",
@@ -847,6 +865,7 @@ const CUSTOM_PATHS: Partial<Record<IntegrationId, string>> = {
     ai_openai: `${INTEGRATIONS_BASE_PATH}/ia/openai`,
     ai_deepseek: `${INTEGRATIONS_BASE_PATH}/ia/deepseek`,
     ai_opencode_go: `${INTEGRATIONS_BASE_PATH}/ia/opencode-go`,
+    ai_command_code: `${INTEGRATIONS_BASE_PATH}/ia/command-code`,
     ai_jev: `${INTEGRATIONS_BASE_PATH}/ia/jev`,
     orcamentos: `${INTEGRATIONS_BASE_PATH}/clientes`,
 }

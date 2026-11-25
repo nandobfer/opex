@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
   clearCatalog: vi.fn(),
   resetProbes: vi.fn(),
   clearGoCatalog: vi.fn(),
+  clearCcCatalog: vi.fn(),
   invalidate: vi.fn(),
 }))
 
@@ -83,6 +84,7 @@ vi.mock('@/lib/integrations/store', () => ({ invalidateStoredIntegrations: mocks
 vi.mock('@/lib/ai/catalog', () => ({ clearAiCatalogCache: mocks.clearCatalog }))
 vi.mock('@/lib/ai/connection', () => ({ resetAiConnectionProbes: mocks.resetProbes }))
 vi.mock('@/lib/ai/opencode-go', () => ({ clearOpencodeGoCatalogCache: mocks.clearGoCatalog }))
+vi.mock('@/lib/ai/command-code', () => ({ clearCommandCodeCatalogCache: mocks.clearCcCatalog }))
 vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.test }))
 vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.sync }))
 
@@ -174,6 +176,24 @@ describe('chaveiro dos provedores de IA', () => {
     await createAiApiKey('gemini', { name: 'A', secret: 'gm' }, actor)
     await flush()
     expect(mocks.clearGoCatalog).not.toHaveBeenCalled()
+    expect(mocks.clearCcCatalog).not.toHaveBeenCalled()
+  })
+
+  it('Command Code (OPE-190): a troca da principal limpa o catálogo do Command Code e testa de novo, sem alimentar o Engramind nem limpar o do Go', async () => {
+    await createAiApiKey('command-code', { name: 'Pessoal', secret: 'user_1' }, actor)
+    await flush()
+    expect(mocks.clearCcCatalog).toHaveBeenCalledOnce()
+    const keys = await createAiApiKey('command-code', { name: 'Trabalho', secret: 'user_2' }, actor)
+    await flush()
+    vi.clearAllMocks()
+    await makePrimaryAiApiKey('command-code', keys.find((key) => key.name === 'Trabalho')!.id, actor)
+    await flush()
+    expect(mocks.clearCcCatalog).toHaveBeenCalledOnce()
+    expect(mocks.clearGoCatalog).not.toHaveBeenCalled()
+    expect(mocks.test).toHaveBeenCalledWith('ai_command_code', { source: 'scheduler' })
+    expect(mocks.publish).toHaveBeenCalledWith('ai-provider-keys-updated', { provider: 'command-code' })
+    expect(mocks.sync).not.toHaveBeenCalled()
+    expect(JSON.stringify([mocks.audit.mock.calls, mocks.publish.mock.calls])).not.toContain('user_')
   })
 
   it('nome repetido (sem diferenciar maiúsculas) é recusado', async () => {

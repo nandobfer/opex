@@ -1,5 +1,6 @@
 import { OPENCODE_GO_BASE_URL } from "./endpoints"
 import type { AiModelDto } from "./providers"
+import { AI_SDK_REASONING_LEVELS, isAiSdkReasoningLevel, type AiSdkReasoningLevel } from "./reasoning-levels"
 
 /**
  * Catálogo do OpenCode Go (módulo PURO): converte a lista `GET /openai/v1/models` do gateway em
@@ -19,11 +20,11 @@ export const OPENCODE_GO_API_BASES: Record<OpencodeGoApi, string> = {
 }
 
 /** Esforços de raciocínio que a AI SDK aceita (opção `reasoning`); o Go informa quais cada modelo usa. */
-export const OPENCODE_GO_REASONING_LEVELS = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const
-export type OpencodeGoReasoningLevel = (typeof OPENCODE_GO_REASONING_LEVELS)[number]
+export const OPENCODE_GO_REASONING_LEVELS = AI_SDK_REASONING_LEVELS
+export type OpencodeGoReasoningLevel = AiSdkReasoningLevel
 
 export function isOpencodeGoReasoningLevel(value: string): value is OpencodeGoReasoningLevel {
-    return (OPENCODE_GO_REASONING_LEVELS as readonly string[]).includes(value)
+    return isAiSdkReasoningLevel(value)
 }
 
 /** Modelo como o gateway devolve (só os campos usados). */

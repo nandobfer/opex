@@ -224,6 +224,9 @@ sem pedido explícito.
 - Assinatura OpenCode Go (OPE-167): `opencode-go-usage-updated` (`{ checkedAt }`) em `private-app` quando os
   percentuais da assinatura (5h, semanal, mensal, com uma casa) ou os resets mudam, publicado pela rotina
   `opencode-go-usage-refresh` ou por uma leitura da tela (ver `aicontext/modules/opencode-quota.md`).
+- Assinatura Command Code (OPE-190): `command-code-usage-updated` (`{ checkedAt }`) em `private-app` quando os
+  percentuais (5h, semanal, mensal, com uma casa) ou os resets mudam, publicado pela rotina `command-code-usage-refresh`
+  ou por uma leitura da tela (ver `aicontext/modules/opencode-quota.md`, "Assinatura Command Code").
 - Plugins (OPE-172): `plugin-updated` (`{ id, version, channel }`) em `private-app` e, nos plugins de cliente,
   em `private-client-{clientId}` (a interface troca de versão ao vivo); `plugin-event`
   (`{ pluginId, event, data }`) em `private-app`, publicado pelo servidor de um plugin com `ctx.realtime.publish`;
@@ -361,7 +364,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Logging: Pino
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
   (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/deepseek` e `@ai-sdk/openai-compatible`
-  (OpenCode Go), sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
+  (OpenCode Go e Command Code), sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
   Integrações › Inteligência Artificial (`aicontext/modules/ai.md`); cliente MCP do Agente Opex com
   `@ai-sdk/mcp` (importada sob demanda; `aicontext/modules/opex-agent.md`, "MCPs")
 - Testes: Vitest 5 + React Testing Library, DOM com happy-dom (jsdom só como exceção); CI com

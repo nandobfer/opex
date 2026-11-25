@@ -2,7 +2,7 @@ import type { ModelMessage } from "ai"
 import { Types } from "mongoose"
 import { OpexMessage, type IOpexMessage } from "@/lib/db/models/Opex"
 import type { OpexProviderId } from "../constants"
-import { opencodeGoFileKinds, type OpexFileKind } from "../files"
+import { modelFileKinds, type OpexFileKind } from "../files"
 import { selectHistory, stripPastReasoning, withTurnContext } from "../history"
 import { resolveFileMarkers } from "./files"
 import { nowContext } from "./tools/context"
@@ -12,11 +12,17 @@ import { nowContext } from "./tools/context"
  * que cabem no orçamento, sem o raciocínio passado e com os arquivos no formato do provedor.
  */
 
-/** Tipos de arquivo que o modelo lê: no OpenCode Go vêm do catálogo (por modelo); nos demais, do provedor. */
+/** Tipos de arquivo que o modelo lê: no OpenCode Go e no Command Code vêm do catálogo (por modelo); nos demais, do provedor. */
 async function acceptedFileKinds(provider: OpexProviderId, model: string, signal?: AbortSignal): Promise<ReadonlySet<OpexFileKind> | undefined> {
-    if (provider !== "opencode-go") return undefined
-    const { opencodeGoModelInputs } = await import("@/lib/ai/opencode-go")
-    return opencodeGoFileKinds(await opencodeGoModelInputs(model, signal))
+    if (provider === "opencode-go") {
+        const { opencodeGoModelInputs } = await import("@/lib/ai/opencode-go")
+        return modelFileKinds(await opencodeGoModelInputs(model, signal))
+    }
+    if (provider === "command-code") {
+        const { commandCodeModelInputs } = await import("@/lib/ai/command-code")
+        return modelFileKinds(await commandCodeModelInputs(model, signal))
+    }
+    return undefined
 }
 
 export function turnContext(notices: readonly string[] = []): string {

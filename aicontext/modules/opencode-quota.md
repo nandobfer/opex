@@ -269,23 +269,26 @@ teto de 100%** (antes mostrava só a chave principal). Regras (puras em `go-logi
 - Rotas (sessão do dono, não públicas): `GET /api/opencode/quota/go` e `POST /api/opencode/quota/go/refresh`,
   com a mesma query.
 
-### Interface (`components/go/`)
+### Interface (`components/go/` + `subscription-usage/components/`)
 
-Reproduz o card de uso do Console do OpenCode Go:
+Reproduz o card de uso do Console do OpenCode Go. Desde a OPE-190 o cabeçalho, as janelas, o gráfico, a faixa de
+datas, a dica, a legenda, as cores, o layout e o skeleton são **compartilhados** (`src/features/subscription-usage/`,
+ver "Módulo compartilhado de assinatura por ciclo") e o Command Code usa as mesmas peças; ficam em `components/go/`
+só o card, o cabeçalho com o gasto real e as notas de cobertura do Go:
 
-- Cabeçalho (`GoUsageHeader`): o % do mês grande (`AnimatedNumber`, uma casa, `text-foreground`) e abaixo
+- Cabeçalho (`GoUsageHeader` sobre `SubscriptionUsageHeader`): o % do mês grande (`AnimatedNumber`, uma casa, `text-foreground`) e abaixo
   "Uso do Go · Renova em 5 dez · No ritmo atual, atinge o limite em 1 dez" (trecho final em âmbar; ou
   "Previsão de X% até a renovação", ou "Limite mensal atingido" em vermelho). Datas no fuso de São Paulo
   (`formatGoDate`); a dica da renovação traz data e hora. "Gasto real no ciclo" discreto à direita.
 - As três janelas (5h, Semanal, Mensal) com a `UsageBar` compartilhada (`fractionDigits={1}`) e o tempo até
   o reset (`formatResetIn`), com "Reinicia em dd/MM às HH:mm" na dica.
-- Gráfico (`GoUsageChart`, recharts `ComposedChart`, 260 px): grade horizontal apagada nas marcas de `goYTicks` (passo adaptativo de no máximo 6 marcas, com o 100% e o
+- Gráfico (`CycleUsageChart`, recharts `ComposedChart`, 260 px): grade horizontal apagada nas marcas de `cycleYTicks` (passo adaptativo de no máximo 6 marcas, com o 100% e o
   topo; ex.: "0%", "50%", "100%", "120%");
   **teto de 100% pontilhado e destacado** (mais claro e mais grosso que a grade, sem texto); verticais
   tracejadas apagadas em hoje e no cruzamento; uso em área verde (`--chart-positive-1`, gradiente) até o
   círculo vazado de hoje; previsão em reta amarela (`--chart-negative-3`) com hachura diagonal por baixo;
   círculos vazados no cruzamento (sobre os 100%) e no fim, com o % previsto inteiro ("116%") acima; faixa de
-  datas arredondada (`GoAxisStrip`, desenhada dentro do gráfico com `usePlotArea`/`useXAxisScale`) com a data
+  datas arredondada (`CycleAxisStrip`, desenhada dentro do gráfico com `usePlotArea`/`useXAxisScale`) com a data
   do cruzamento em amarelo e negrito. Rodapé: "Média de **3,9%** por dia" e a legenda Uso / Previsão / Teto
   mensal (barrinhas verticais, a do teto pontilhada, `LegendBar`). Ciclo passado ganha o título "Ciclo de 5 out
   a 5 nov" e não tem previsão. Dica por ponto, que acompanha o mouse dia a dia: no trecho verde, data, "Uso do
@@ -302,6 +305,99 @@ Reproduz o card de uso do Console do OpenCode Go:
   dica do "Renova em" com a chave do ciclo quando os ciclos diferem; e notas em `GoCoverageNotes` para dias
   incompletos, chaves contadas uma vez e "As assinaturas têm ciclos diferentes: o gráfico e a previsão seguem o
   ciclo da chave X (renovação mais próxima)". O skeleton não muda (são linhas de texto opcionais).
-- Estados: skeleton com a mesma estrutura (`GoUsageSkeleton`, constantes de `layout.ts`), chave não
+- Estados: skeleton com a mesma estrutura (`SubscriptionUsageSkeleton`, constantes de `layout.ts`), chave não
   configurada (atalho para a integração), filtro sem assinatura, erro com "Tentar novamente" e selo
   "Desatualizado" quando a última leitura passa de 15 min.
+
+## Módulo compartilhado de assinatura por ciclo (`src/features/subscription-usage`, OPE-190)
+
+Extraído do OpenCode Go para o Command Code usar o mesmo card e o mesmo gráfico sem se acoplar à API do Console.
+
+- `cycle-logic.ts` (puro): dias UTC, `meterRatio`/`meterPercent` (uma casa, truncado), previsão linear
+  (`cycleForecast`), ciclo pelo fim do filtro (`cycleFor`, `subUtcMonths`), `cycleDayKeys`, eixo Y (`cycleYMax`,
+  `cycleYTicks`), o gráfico de um ciclo (`buildCycleChart`), a faixa de datas (`cycleAxisTicks`), os formatadores em
+  São Paulo e a linha de status do cabeçalho (`usageStatusLine`). O `go-logic.ts` reexporta essas funções com os
+  nomes antigos (`buildGoChart`, `goForecast`, `goYTicks`…) e fica só com o que é do Go (cota por modelo, soma de
+  assinaturas, mensagens do Console).
+- `types.ts`: `UsageMeterDto`, `UsageForecastDto`, `CycleChartDto`/`CycleChartPointDto` e `UsageHeaderView` (os tipos
+  `Go*Dto` são apelidos deles).
+- `components/`: `SubscriptionUsageHeader` (rótulo, dica da renovação e o valor em US$ como `aside`), `UsageWindows`
+  e `CycleUsageChart` (recebem `subject`, o nome da assinatura nos rótulos acessíveis), `CycleAxisStrip`,
+  `CycleChartTooltip`, `LegendBar`, `chart-style.ts`, `layout.ts` e `SubscriptionUsageSkeleton`. Atributos de teste
+  `data-usage-*` (janelas, status, renovação, legenda, média, ciclo passado, faixa e dica).
+
+## Assinatura Command Code (API da CLI `/alpha`, OPE-190)
+
+Consumo da assinatura Command Code lido com as chaves do chaveiro `ai_command_code`, em
+`/integracoes/ia/command-code?aba=consumo` (card **Assinatura Command Code**, acima do consumo do Opex). O número é da
+**conta inteira** (CLI, outros clientes e o Opex).
+
+### Fonte (não documentada; decisão do dono no planejamento de 24/11/2026)
+
+A Provider API documentada (`/provider/v1`) não tem consumo (`/usage`, `/credits`, `/limits` dão 404). O Opex lê os
+mesmos endpoints que o `/usage` da CLI oficial usa, com `Authorization: Bearer <chave>`, o `User-Agent` do Opex e
+prazo de 15 s (`server/api.ts`):
+
+- `GET /alpha/whoami`: só `user.id` e `org.id` (identidade da conta; o `orgId` vai nas demais chamadas);
+- `GET /alpha/billing/credits`: `credits.monthlyCredits` (o que **resta** do pool mensal), `purchasedCredits`,
+  `freeCredits` e `windowLimits.{limited, fiveHour, weekly}` com `{ used, cap, resetAt }` (`resetAt` em ISO ou epoch;
+  0 = janela não usada → sem reset);
+- `GET /alpha/billing/subscriptions`: `planId` e o ciclo (`currentPeriodStart`/`currentPeriodEnd`); sem assinatura
+  (pago por uso) segue sem ciclo;
+- `GET /alpha/usage/summary?since=<ISO>`: `totalMonthlyCredits` (créditos do pool usados desde o instante) e
+  `totalCost` (valor das requisições a preço de API).
+
+O `z.object` dos schemas descarta nome, e-mail, `quantity`, `pendingPhase`, `cancelAtPeriodEnd`, `orgId` da assinatura
+etc.; o debug registra só método, URL, cabeçalhos mascarados e status. Respostas embrulhadas em `{ data }` são aceitas.
+
+### Derivados (`logic.ts`, puro)
+
+- **Janelas** 5h e Semanal: `used / cap`, uma casa, truncado. Janela com `cap` 0 ou plano com `limited: false` não aparece.
+- **Mensal**: pool do ciclo = `summary(since = início do ciclo).totalMonthlyCredits` + `monthlyCredits` restante;
+  % = usado ÷ pool. Sem o `totalMonthlyCredits`, o Mensal e o gráfico ficam indisponíveis (nada estimado).
+- **Série diária**: dia = `since(início do dia) − since(início do dia seguinte)` (o primeiro dia começa no início
+  do ciclo; hoje = `since(início de hoje)`), em % do pool. Diferença negativa (consumo entre duas leituras) conta 0
+  e marca o dia como parcial; limite que falhou deixa o dia **sem dados** (quebra a linha, conta 0, nota "Acumulado
+  parcial"). Os dias ficam em memória por (chave, ciclo, dia): fechados 6 h, hoje 10 min, falha 90 s
+  (`server/series.ts`, até 5 chamadas simultâneas). O primeiro dia é dividido pela fração do ciclo nele, porque o
+  gráfico pró-rateia de volta.
+- **Ciclos anteriores não são legíveis** (a API só informa o saldo do ciclo atual): filtro que termina antes do
+  ciclo atual mostra "Ciclos anteriores não são legíveis: o Command Code só informa o saldo do ciclo atual." O
+  gráfico, a previsão e o eixo seguem as regras compartilhadas do Go (um ciclo, ponta em "agora" com o medidor, teto
+  de 100%, previsão linear).
+- **Valores em US$ discretos**: "Valor de uso no ciclo" (`totalCost` desde o início do ciclo; a dica diz que é preço
+  de API, não o cobrado) e "Créditos extras" (comprados + gratuitos restantes).
+- **Plano sem janelas** (Provider, pago por uso): sem medidores nem gráfico, com a nota "Plano sem janelas de uso:
+  não há teto mensal para o gráfico".
+
+### Soma das chaves em "Todas as chaves"
+
+Chaves em uso (`getAiProviderKeyPool`); grupo vazio → `unconfigured`. Chaves da **mesma conta** (`org:<id>` ou, sem
+organização, `user:<id>` do `whoami`) contam **uma vez** (vale a leitura mais recente). Contas diferentes somam
+`used`/`cap` por janela (reset mais próximo) e os pools no Mensal. O ciclo de referência é o da renovação mais
+próxima (empate: maior pool, depois a principal, depois o nome); com ciclos diferentes, o % do mês é a soma dos dias
+da série desde o início da referência sobre a soma dos pools. Chave que falha sai da soma (`scope.failed`, aviso
+"Cobertura parcial"); todas falhando → o estado da primeira. O filtro por uma chave lê só aquela conta.
+
+### Estados, servidor, rotina e tempo real
+
+- Estados (`CommandCodeUsageDto.state`): `ok`; `unconfigured` (nenhuma chave em uso, atalho "Cadastrar chave");
+  `no-key` (filtro "sem chave"/"removidas" ou chave inexistente); `error` (401/403, 429, rede ou timeout, com "Tentar
+  novamente"); **`unavailable`** (endpoint com 404 ou formato não reconhecido): "Assinatura não legível", com a
+  mensagem citando só os nomes dos campos, nunca valores — o consumo do Opex continua abaixo.
+- `server/usage.ts`: `getCommandCodeUsage(query)` e `refreshCommandCodeUsage(query)`; a leitura da conta fica em
+  memória por chave (1 min para a tela, mínimo de 30 s para o botão).
+- **Rotina `command-code-usage-refresh`** (Integrações › Crons, 5 min, ligada): relê as chaves em uso e publica
+  `command-code-usage-updated` (`{ checkedAt }`) em `private-app` quando os percentuais (uma casa) ou os resets mudam
+  (uma vez por leitura, na rotina ou na tela). `useCommandCodeUsageRealtime` invalida `["command-code-usage"]`. Sem
+  chave em uso, não chama a API.
+- Rotas (sessão do dono, não públicas): `GET /api/command-code/usage` e `POST /api/command-code/usage/refresh`, com a
+  query `usageQuerySchema` (`from`, `to`, `apiKey`).
+- Interface: `CommandCodeSubscriptionCard` sobre as peças compartilhadas (rótulo "Uso do Command Code", plano e chaves
+  no subtítulo, notas em `CcCoverageNotes`, selo "Desatualizado" depois de 15 min, skeleton compartilhado).
+
+### Validação pendente
+
+Os formatos foram fixados pelos relatos públicos (CLI oficial, openusage, pi-commandcode-provider, cyberine) sem uma
+chave do dono. A conferência com uma chave real fica para a prévia; diferença de formato vira `unavailable` com os
+campos na mensagem e ajuste nos schemas.

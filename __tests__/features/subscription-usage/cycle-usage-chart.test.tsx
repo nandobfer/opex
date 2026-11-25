@@ -3,7 +3,7 @@ import React from 'react'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import type { GoChartDto } from '@/features/opencode-quota/go-types'
+import type { CycleChartDto as GoChartDto } from '@/features/subscription-usage/types'
 
 vi.mock('framer-motion', () => framerMotionMock())
 
@@ -40,9 +40,9 @@ vi.mock('@/components/ui/chart', async (importOriginal) => ({
   ChartContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-import { GoUsageChart } from '@/features/opencode-quota/components/go/GoUsageChart'
-import { GoChartTooltip } from '@/features/opencode-quota/components/go/GoChartTooltip'
-import * as chartStyle from '@/features/opencode-quota/components/go/chart-style'
+import { CycleUsageChart } from '@/features/subscription-usage/components/CycleUsageChart'
+import { CycleChartTooltip } from '@/features/subscription-usage/components/CycleChartTooltip'
+import * as chartStyle from '@/features/subscription-usage/components/chart-style'
 
 const NOW = Date.parse('2026-11-16T19:57:00.000Z')
 const CROSS = Date.parse('2026-12-01T09:34:56.000Z')
@@ -73,9 +73,9 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe('GoUsageChart (desenho do Console)', () => {
+describe('CycleUsageChart (desenho do Console)', () => {
   it('eixo de tempo do ciclo, eixo Y até o maior valor com folga, teto de 100% pontilhado e destacado, verticais em hoje e no cruzamento', () => {
-    render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
+    render(<CycleUsageChart subject="OpenCode Go" chart={chart()} dailyAverage={3.9} />)
     expect(of('XAxis')[0]).toMatchObject({ dataKey: 't', type: 'number', domain: [START, END] })
     // OPE-171: previsão de 115,9% → eixo até 120%, marcas de 50 em 50 mais o topo (sem o vão até 150%).
     expect(of('YAxis')[0]).toMatchObject({ domain: [0, 120], ticks: [0, 50, 100, 120] })
@@ -87,15 +87,15 @@ describe('GoUsageChart (desenho do Console)', () => {
   })
 
   it('eixo Y que cai num múltiplo de 50 não repete o topo', () => {
-    render(<GoUsageChart chart={chart({ yMax: 150 })} dailyAverage={3.9} />)
+    render(<CycleUsageChart subject="OpenCode Go" chart={chart({ yMax: 150 })} dailyAverage={3.9} />)
     expect(of('YAxis')[0]).toMatchObject({ domain: [0, 150], ticks: [0, 50, 100, 150] })
   })
 
   it('uso em área verde com gradiente, previsão em reta amarela com hachura e círculos vazados com o % previsto', () => {
-    render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
+    render(<CycleUsageChart subject="OpenCode Go" chart={chart()} dailyAverage={3.9} />)
     const areas = of('Area')
-    expect(areas.find((props) => props.dataKey === 'usage')!.fill).toMatch(/^url\(#go-usage-/)
-    expect(areas.find((props) => props.dataKey === 'forecast')!.fill).toMatch(/^url\(#go-hatch-/)
+    expect(areas.find((props) => props.dataKey === 'usage')!.fill).toMatch(/^url\(#usage-area-/)
+    expect(areas.find((props) => props.dataKey === 'forecast')!.fill).toMatch(/^url\(#usage-hatch-/)
     expect(of('Line')[0]).toMatchObject({ dataKey: 'forecast', type: 'linear' })
     const dots = of('ReferenceDot')
     expect(dots.map((props) => [props.x, props.y])).toEqual([[NOW, 44.3], [CROSS, 100], [END, 115.9]])
@@ -104,16 +104,16 @@ describe('GoUsageChart (desenho do Console)', () => {
   })
 
   it('faixa de datas em caixa alta com o cruzamento destacado; rodapé com a média em negrito e a legenda', () => {
-    const { container } = render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
-    expect([...container.querySelectorAll('[data-go-tick]')].map((node) => node.textContent)).toEqual(['5 NOV', '15 NOV', '25 NOV', '1 DEZ', '5 DEZ'])
-    expect(container.querySelector('[data-go-tick="crossing"]')!.textContent).toBe('1 DEZ')
-    expect(container.querySelector('[data-go-tick="crossing"]')!.getAttribute('font-weight')).toBe('700')
-    expect(container.querySelector('[data-go-average] strong')!.textContent).toBe('3,9%')
-    expect([...container.querySelectorAll('[data-go-legend]')].map((node) => node.textContent)).toEqual(['Uso', 'Previsão', 'Teto mensal'])
+    const { container } = render(<CycleUsageChart subject="OpenCode Go" chart={chart()} dailyAverage={3.9} />)
+    expect([...container.querySelectorAll('[data-usage-tick]')].map((node) => node.textContent)).toEqual(['5 NOV', '15 NOV', '25 NOV', '1 DEZ', '5 DEZ'])
+    expect(container.querySelector('[data-usage-tick="crossing"]')!.textContent).toBe('1 DEZ')
+    expect(container.querySelector('[data-usage-tick="crossing"]')!.getAttribute('font-weight')).toBe('700')
+    expect(container.querySelector('[data-usage-average] strong')!.textContent).toBe('3,9%')
+    expect([...container.querySelectorAll('[data-usage-legend]')].map((node) => node.textContent)).toEqual(['Uso', 'Previsão', 'Teto mensal'])
   })
 
   it('teto de 100% em cor pronta do tema, mais forte que a grade', () => {
-    render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
+    render(<CycleUsageChart subject="OpenCode Go" chart={chart()} dailyAverage={3.9} />)
     const ceiling = of('ReferenceLine').find((props) => props.y === 100)!
     const grid = of('CartesianGrid')[0]!
     expect(ceiling.stroke).toBe('var(--color-foreground)')
@@ -127,7 +127,7 @@ describe('GoUsageChart (desenho do Console)', () => {
     const ready = (value: unknown) => typeof value !== 'string' || value === 'none' || value.startsWith('url(') || /^(var\(--(color|chart)-[a-z0-9-]+\)|#[0-9a-f]{3,8})$/i.test(value)
     for (const [name, value] of Object.entries(chartStyle)) if (name.endsWith('_COLOR')) expect(ready(value), value).toBe(true)
 
-    const { container } = render(<GoUsageChart chart={chart()} dailyAverage={3.9} />)
+    const { container } = render(<CycleUsageChart subject="OpenCode Go" chart={chart()} dailyAverage={3.9} />)
     for (const { type, props } of calls) {
       for (const key of ['stroke', 'fill']) expect(ready(props[key]), `${type}.${key} = ${String(props[key])}`).toBe(true)
       const tick = props.tick as { fill?: unknown } | undefined
@@ -140,34 +140,34 @@ describe('GoUsageChart (desenho do Console)', () => {
       }
     }
     expect(container.innerHTML).not.toMatch(base)
-    const ceilingLegend = container.querySelector('[data-go-legend="ceiling"] span span') as HTMLElement
+    const ceilingLegend = container.querySelector('[data-usage-legend="ceiling"] span span') as HTMLElement
     expect(ceilingLegend.getAttribute('style')).toContain('var(--color-foreground)')
   })
 
   it('dica no trecho da previsão: data do dia, previsão do dia e acumulado previsto', () => {
     const { points } = chart()
-    const { container } = render(<GoChartTooltip active label={Date.parse('2026-11-25T00:00:00.000Z')} points={points} />)
+    const { container } = render(<CycleChartTooltip active label={Date.parse('2026-11-25T00:00:00.000Z')} points={points} />)
     expect(container.textContent).toContain('24/11/2026')
-    expect(container.querySelector('[data-go-tooltip-row="dayForecast"]')!.textContent).toBe('Previsão do dia3,92%')
-    expect(container.querySelector('[data-go-tooltip-row="forecast"]')!.textContent).toBe('Acumulado previsto75,3%')
-    expect(container.querySelector('[data-go-tooltip-row="day"]')).toBeNull()
-    expect(container.querySelector('[data-go-tooltip-row="usage"]')).toBeNull()
+    expect(container.querySelector('[data-usage-tooltip-row="dayForecast"]')!.textContent).toBe('Previsão do dia3,92%')
+    expect(container.querySelector('[data-usage-tooltip-row="forecast"]')!.textContent).toBe('Acumulado previsto75,3%')
+    expect(container.querySelector('[data-usage-tooltip-row="day"]')).toBeNull()
+    expect(container.querySelector('[data-usage-tooltip-row="usage"]')).toBeNull()
   })
 
   it('dica no trecho verde continua com uso do dia e acumulado, sem previsão', () => {
     const { points } = chart()
-    const { container } = render(<GoChartTooltip active label={NOW} points={points} />)
-    expect(container.querySelector('[data-go-tooltip-row="day"]')!.textContent).toBe('Uso do dia3,20%')
-    expect(container.querySelector('[data-go-tooltip-row="usage"]')!.textContent).toBe('Acumulado44,3%')
-    expect(container.querySelector('[data-go-tooltip-row="dayForecast"]')).toBeNull()
-    expect(container.querySelector('[data-go-tooltip-row="forecast"]')).toBeNull()
+    const { container } = render(<CycleChartTooltip active label={NOW} points={points} />)
+    expect(container.querySelector('[data-usage-tooltip-row="day"]')!.textContent).toBe('Uso do dia3,20%')
+    expect(container.querySelector('[data-usage-tooltip-row="usage"]')!.textContent).toBe('Acumulado44,3%')
+    expect(container.querySelector('[data-usage-tooltip-row="dayForecast"]')).toBeNull()
+    expect(container.querySelector('[data-usage-tooltip-row="forecast"]')).toBeNull()
   })
 
   it('sem previsão (limite atingido ou ciclo passado) não desenha cruzamento nem fim', () => {
-    const { container } = render(<GoUsageChart chart={chart({ crossing: null, forecastEnd: null, today: null, cycle: { startsAt: new Date(START).toISOString(), endsAt: new Date(END).toISOString(), current: false } })} dailyAverage={null} />)
+    const { container } = render(<CycleUsageChart subject="OpenCode Go" chart={chart({ crossing: null, forecastEnd: null, today: null, cycle: { startsAt: new Date(START).toISOString(), endsAt: new Date(END).toISOString(), current: false } })} dailyAverage={null} />)
     expect(of('ReferenceDot')).toHaveLength(0)
-    expect(container.querySelector('[data-go-tick="crossing"]')).toBeNull()
-    expect(container.querySelector('[data-go-cycle="past"]')!.textContent).toBe('Ciclo de 5 nov a 5 dez')
-    expect(container.querySelector('[data-go-average]')).toBeNull()
+    expect(container.querySelector('[data-usage-tick="crossing"]')).toBeNull()
+    expect(container.querySelector('[data-usage-cycle="past"]')!.textContent).toBe('Ciclo de 5 nov a 5 dez')
+    expect(container.querySelector('[data-usage-average]')).toBeNull()
   })
 })
