@@ -78,7 +78,8 @@ Validação: "Só os escolhidos" exige ao menos uma conversa e "Só os assuntos 
   meio, e a política "na dúvida, fica quieto" (bloqueado com sim ou incerto bloqueia; no modo "Só os liberados", só
   o sim libera; `jev-subjects.ts`). Falha do decisor vira a decisão "erro" e o agente não responde. Consumo com a
   origem/feature `secretary-decision`, que conta no orçamento diário. O tópico (ou o nome do assunto que bateu, no
-  JEV) alimenta "assuntos mais frequentes".
+   JEV) alimenta "assuntos mais frequentes".
+   O JEV pode ser selecionado em “Outro modelo ou o JEV” quando sua integração está conectada.
 - **Registro de decisões** (`secretary_decisions`, `GET /api/secretary/decisions?jid=`), uma por mensagem
   recebida: respondeu, ignorou, pausado, assunto bloqueado (também quando o assunto não é um dos liberados), limite
   atingido, só observar, perguntou ao dono, desligado, agrupada, descartada, erro.
@@ -105,6 +106,7 @@ esquerda e coluna lateral (320 px) com os dados de cada resposta.
 - Quando não responderia, o chat mostra uma linha discreta: "O Secretário não responderia: <motivo>".
 - Custo real (modelo e JEV) com a origem `secretary-simulation`, somado pelo assunto da simulação e **fora** do
   orçamento diário. Só texto (sem mídia).
+- Falhas de inferência retornam `502 SECRETARY_PROVIDER_ERROR`, com diagnóstico curto no toast e na coluna lateral.
 
 ## Turno
 
@@ -134,6 +136,9 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   `secretary_sent` e não pausam a conversa quando voltam como `fromMe`.
 - Consumo em `ai_consumption_logs` com origem `secretary-agent` (`secretary-decision` na decisão do assunto,
   `secretary-analysis` na análise e `secretary-simulation` na Simulação).
+- A inferência valida a saída da ferramenta final `entregar` com o schema do turno, sem `response_format`.
+  Falhas de IA aparecem no motivo da decisão. Diagnósticos reconhecidos do provedor viram mensagens fixas em
+  pt-BR; o texto bruto do erro, o prompt, a mídia e os cabeçalhos não são expostos.
 
 ## Perguntar ao dono e aba Avisos
 
@@ -174,7 +179,10 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   útil) e descobertas. O trabalho é feito num rascunho: concluída vira a personalidade atual (versão "Análise");
   **Cancelar** guarda o rascunho na versão "Análise cancelada" (restaurável, não aplicada). Batimento a cada 15 s;
   sem batimento por 90 s a análise vira "Interrompida". Sem teto de custo; não conta no orçamento diário.
-  Falha numa conversa (Evolution, modelo) marca só essa conversa como "Não foi lida (erro)" e a análise segue. Se a
+   Falha numa conversa (Evolution, modelo) mostra o motivo em "Não foi lida (erro)". Se as três primeiras
+   conversas com conteúdo útil falharem pelo mesmo motivo de IA e nenhuma tiver sido lida, a execução para;
+   se houver leitura bem-sucedida e falhas, a execução finalizada mostra "Concluída com N erros". A fase só é
+   exibida enquanto a análise está em andamento. Se a
   personalidade for editada durante a análise (conflito de versão) ou houver erro fatal, o que já foi aprendido fica
   na versão "Análise não aplicada" (restaurável, não aplicada) e a mensagem diz a causa. Iniciar e cancelar são
   auditados com a contagem de conversas.
