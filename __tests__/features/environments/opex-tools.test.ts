@@ -52,6 +52,8 @@ const LIST_ITEM = {
   buildOn: 'server',
   runOn: 'pc',
   limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 },
+  limitsConfigured: true,
+  deployedLimits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 },
   deployedOn: { buildOn: 'server', runOn: 'pc' },
   deployedVersion: '1.2.0',
   lastDeploy: null,
@@ -153,16 +155,19 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     expect(mocks.updateEnvironment).toHaveBeenCalledWith('e1', expect.objectContaining({ limits, ports: [8080] }), 'local')
     expect(out).toMatchObject({ limites: 'app: RAM 2 GiB · sem swap · 1,5 CPUs' })
     expect(find('update_environment').summarize!({ environment: 'loja', limits } as never)).toContain('limits')
-    // Sem `limits`, mantém os salvos (documento antigo sem o campo = sem limite).
+    // Sem `limits`, mantém os salvos: documento sem o campo continua "nunca configurado" (null).
     await run('update_environment', { environment: 'loja', ports: [9090] })
-    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ limits: { mode: 'shared', memoryGb: null, swapGb: null, cpus: null } }), 'local')
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ limits: null }), 'local')
+    mocks.envs = [{ ...mocks.envs[0]!, limits: { mode: 'shared', memoryGb: 3, swapGb: null, cpus: null } }]
+    await run('update_environment', { environment: 'loja', ports: [9090] })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ limits: { mode: 'shared', memoryGb: 3, swapGb: null, cpus: null } }), 'local')
     // Swap sem RAM é recusado como na tela.
     expect(() => find('update_environment').input.parse({ environment: 'loja', limits: { mode: 'shared', memoryGb: null, swapGb: 1, cpus: null } })).toThrow(/Defina a RAM/)
 
     await run('create_environment', { name: 'Nova', centralId: 'c1', limits: { mode: 'shared', memoryGb: 1, swapGb: null, cpus: null } })
     expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: { mode: 'shared', memoryGb: 1, swapGb: null, cpus: null } }), 'local')
     await run('create_environment', { name: 'Outra', centralId: 'c1' })
-    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null } }), 'local')
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: null }), 'local')
   })
 
   it('deploy volta na hora com o id e pede o aviso na sessão; adotado não aceita outra ref', async () => {

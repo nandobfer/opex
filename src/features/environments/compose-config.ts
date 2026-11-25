@@ -100,15 +100,19 @@ const mib = (gb: number) => `${Math.round(gb * 1024)}m`
 /**
  * Chaves dos limites de um serviço no override (só os preenchidos). RAM e CPUs seguem a forma do
  * compose (`mem_limit`/`cpus` ou `deploy.resources.limits`); o swap vai em `memswap_limit` (RAM + swap;
- * 0 = igual à RAM; vazio = sem a chave, padrão do Docker).
+ * 0 = igual à RAM; vazio = sem a chave, padrão do Docker). Swap vazio com um `memswap_limit` declarado no
+ * compose: a chave é reescrita com a nova RAM + o swap declarado (o total antigo poderia ficar abaixo da RAM
+ * nova, e o Docker recusa o container).
  */
-export function limitLines(limits: ResourceLimits, style: ComposeService["limitStyle"]): string[] {
+export function limitLines(limits: ResourceLimits, service: Pick<ComposeService, "limitStyle" | "declared">): string[] {
+    const style = service.limitStyle
     const lines: string[] = []
     const deploy: string[] = []
     if (limits.memoryGb !== null) {
         if (style.memory === "service") lines.push(`    mem_limit: ${JSON.stringify(mib(limits.memoryGb))}`)
         else deploy.push(`          memory: ${JSON.stringify(mib(limits.memoryGb))}`)
-        if (limits.swapGb !== null) lines.push(`    memswap_limit: ${JSON.stringify(mib(limits.memoryGb + limits.swapGb))}`)
+        const swapGb = limits.swapGb ?? service.declared.swapGb
+        if (swapGb !== null) lines.push(`    memswap_limit: ${JSON.stringify(mib(limits.memoryGb + swapGb))}`)
     }
     if (limits.cpus !== null) {
         if (style.cpus === "service") lines.push(`    cpus: ${limits.cpus}`)
@@ -127,7 +131,7 @@ export function overrideYaml(input: { services: ComposeService[]; images: Record
             if (image) lines.push(`    image: ${JSON.stringify(image)}`)
             if (input.withEnvFile) lines.push("    env_file:", `      - ${JSON.stringify(input.envFilePath ?? ENV_FILE)}`)
             const limits = input.limits?.[service.name]
-            if (limits) lines.push(...limitLines(limits, service.limitStyle))
+            if (limits) lines.push(...limitLines(limits, service))
             return lines.length ? [`  ${JSON.stringify(service.name)}:`, ...lines].join("\n") : null
         })
         .filter((block): block is string => block !== null)

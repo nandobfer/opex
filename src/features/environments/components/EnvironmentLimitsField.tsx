@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useReadComposeServices } from "../hooks/useEnvironments"
 import { mergeComposeServices, orphanServices, runningServiceNames, switchLimitMode } from "../limits-form"
 import { appliedLimitsText } from "../resource-limits"
-import type { EnvironmentInput, EnvironmentLimits, LimitMode } from "../schemas"
+import { composeServicesInputSchema, DEFAULT_ENVIRONMENT_LIMITS, type EnvironmentInput, type EnvironmentLimits, type LimitMode } from "../schemas"
 import type { EnvironmentDto, HostCapacityDto } from "../types"
 import { ResourceLimitsFields } from "./ResourceLimitsFields"
 
@@ -49,7 +49,10 @@ function LimitRowsSkeleton() {
  * compose" (serviços e limites declarados). Valem no próximo deploy; mostra o que está aplicado no host.
  */
 export function EnvironmentLimitsField({ form, env, host, machine }: { form: UseFormReturn<EnvironmentInput>; env: EnvironmentDto | null; host: HostCapacityDto | null; machine: string }) {
-    const limits = useWatch({ control: form.control, name: "limits" }) as EnvironmentLimits
+    const limits = (useWatch({ control: form.control, name: "limits" }) ?? DEFAULT_ENVIRONMENT_LIMITS) as EnvironmentLimits
+    const source = useWatch({ control: form.control, name: "source" })
+    // Origem incompleta (ex.: Novo sem a central) não dá para ler: nada de pedido que só voltaria erro.
+    const canRead = composeServicesInputSchema.safeParse({ source }).success
     const read = useReadComposeServices()
     const [composeNames, setComposeNames] = useState<string[] | null>(null)
     const known = composeNames ?? (env ? runningServiceNames(env) : null)
@@ -57,22 +60,25 @@ export function EnvironmentLimitsField({ form, env, host, machine }: { form: Use
     const applied = env ? appliedLimitsText(env.services) : null
     const setLimits = (next: EnvironmentLimits) => form.setValue("limits", next, { shouldValidate: true, shouldDirty: true })
 
-    const readCompose = () =>
+    const current = () => form.getValues("limits") ?? DEFAULT_ENVIRONMENT_LIMITS
+    const readCompose = () => {
+        if (!canRead) return
         read.mutate(
             { source: form.getValues("source") },
             {
                 onSuccess: (result) => {
                     setComposeNames(result.services.map((service) => service.name))
-                    const merged = mergeComposeServices(form.getValues("limits"), result)
+                    const merged = mergeComposeServices(current(), result)
                     setLimits(merged.limits)
                     if (merged.differs) toast.info("O compose declara limites diferentes por serviço: use \"Por serviço\" para vê-los.")
                     else toast.success(`Compose lido: ${result.services.length} serviço(s)${merged.filled ? "; limites declarados preenchidos" : ""}`)
                 },
             },
         )
+    }
 
     const changeMode = (mode: LimitMode) => {
-        const next = switchLimitMode(form.getValues("limits"), mode, known ?? [])
+        const next = switchLimitMode(current(), mode, known ?? [])
         setLimits(next)
         if (next.mode === "service" && !next.services.length) readCompose()
     }
@@ -86,7 +92,7 @@ export function EnvironmentLimitsField({ form, env, host, machine }: { form: Use
         <div className="space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
                 <Label>Limites de recursos</Label>
-                <Button type="button" variant="ghost" size="sm" className="gap-1" disabled={read.isPending} onClick={readCompose}>
+                <Button type="button" variant="ghost" size="sm" className="gap-1" disabled={read.isPending || !canRead} onClick={readCompose}>
                     <FileSearch className="h-4 w-4" aria-hidden /> {read.isPending ? "Lendo…" : "Ler compose"}
                 </Button>
             </div>
@@ -95,7 +101,8 @@ export function EnvironmentLimitsField({ form, env, host, machine }: { form: Use
                 Valem no próximo deploy (Reiniciar e Levantar não aplicam). Vazio = sem limite: o que o próprio compose declara continua valendo.
                 {applied ? ` No host hoje: ${applied}.` : ""}
             </p>
-            {read.isError && !read.isPending && (
+            {!canRead && <p className="text-xs text-muted-foreground">Escolha a origem para ler o compose.</p>}
+            {read.isError && !read.isPending && canRead && (
                 <div role="alert" className="flex items-center justify-between gap-3 rounded-md border border-destructive/40 px-3 py-2 text-xs text-destructive">
                     <span className="flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 shrink-0" aria-hidden /> Não foi possível ler o compose da origem.
@@ -127,7 +134,7 @@ export function EnvironmentLimitsField({ form, env, host, machine }: { form: Use
                             </motion.div>
                         ))}
                     </AnimatePresence>
-                    {!limits.services.length && (
+                    {!limits.services.length && canRead && (
                         <div className="flex items-center justify-between gap-3 rounded-md border border-dashed border-border px-3 py-2 text-xs text-muted-foreground">
                             <span className="flex items-center gap-2">
                                 <FileSearch className="h-4 w-4 shrink-0" aria-hidden /> Nenhum serviço: leia o compose para listar os serviços.

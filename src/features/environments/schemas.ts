@@ -86,7 +86,8 @@ export const environmentInputSchema = z
         healthUrl: z.union([z.url("URL de saúde inválida").max(300), z.literal("")]),
         buildOn: z.enum(MACHINES),
         runOn: z.enum(MACHINES),
-        limits: environmentLimitsSchema,
+        /** `null` = nunca configurado (o Editar mostra os aplicados no host); objeto vazio = configurado sem limite. */
+        limits: environmentLimitsSchema.nullable(),
     })
     .superRefine((value, ctx) => {
         const keys = value.env.map((item) => item.key)

@@ -330,10 +330,20 @@ describe('limites de recursos (OPE-193)', () => {
     expect(yaml).toContain('"app":\n    mem_limit: "2048m"\n    memswap_limit: "3072m"\n    cpus: 2.5')
     expect(yaml).toContain('"worker":\n    memswap_limit: "4096m"\n    deploy:\n      resources:\n        limits:\n          memory: "4096m"\n          cpus: "1.5"')
     expect(yaml).not.toContain('"db"')
-    expect(limitLines({ memoryGb: 1, swapGb: null, cpus: null }, { memory: 'deploy', cpus: 'deploy' })).toEqual(['    deploy:', '      resources:', '        limits:', '          memory: "1024m"'])
-    expect(limitLines(NO_LIMITS, { memory: 'deploy', cpus: 'deploy' })).toEqual([])
+    const plain = { limitStyle: { memory: 'deploy', cpus: 'deploy' } as const, declared: NO_LIMITS }
+    expect(limitLines({ memoryGb: 1, swapGb: null, cpus: null }, plain)).toEqual(['    deploy:', '      resources:', '        limits:', '          memory: "1024m"'])
+    expect(limitLines(NO_LIMITS, plain)).toEqual([])
     // Sem limites: o override é o de antes.
     expect(overrideYaml({ services, images: {}, withEnvFile: false, limits: { app: null, worker: null, db: null } })).toContain('services: {}')
+  })
+
+  it('regressão: RAM nova com swap vazio reescreve o memswap_limit declarado no compose (RAM nova + swap declarado)', () => {
+    // O compose declara mem_limit 1g + memswap_limit 1536m: sem reescrever, o total ficaria abaixo da RAM nova e o Docker recusaria o container.
+    const [app] = parseComposeConfig(declaredConfig)!
+    expect(limitLines({ memoryGb: 4, swapGb: null, cpus: null }, app!)).toEqual(['    mem_limit: "4096m"', '    memswap_limit: "4608m"'])
+    // Swap salvo continua valendo sobre o declarado; sem RAM no override, o declarado fica como está.
+    expect(limitLines({ memoryGb: 4, swapGb: 0, cpus: null }, app!)).toEqual(['    mem_limit: "4096m"', '    memswap_limit: "4096m"'])
+    expect(limitLines({ memoryGb: null, swapGb: null, cpus: 1 }, app!)).toEqual(['    cpus: 1'])
   })
 
   it('snapshot: limites aplicados por container (docker inspect) e a capacidade da máquina', () => {

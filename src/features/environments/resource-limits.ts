@@ -135,6 +135,16 @@ export function environmentLimitsDiffer(saved: EnvironmentLimits, services: Serv
     })
 }
 
+/** Os mesmos limites efetivos (modo por serviço: só as linhas com algum limite, em qualquer ordem)? */
+export function sameEnvironmentLimits(a: EnvironmentLimits, b: EnvironmentLimits): boolean {
+    if (a.mode !== b.mode) return !hasSavedLimits(a) && !hasSavedLimits(b)
+    if (a.mode === "shared" && b.mode === "shared") return sameLimits(a, b)
+    const rows = (limits: EnvironmentLimits) => (limits.mode === "service" ? limits.services.filter(hasAnyLimit) : [])
+    const left = rows(a)
+    const right = new Map(rows(b).map((row) => [row.service, row]))
+    return left.length === right.size && left.every((row) => right.has(row.service) && sameLimits(row, right.get(row.service)!))
+}
+
 /** "RAM 4 GiB · swap padrão · 2 CPUs" (modo único) ou "app: …; db: sem limite" (por serviço). */
 export function environmentLimitsText(limits: EnvironmentLimits): string {
     if (limits.mode === "shared") return shortLimitsText(limits)

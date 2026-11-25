@@ -321,7 +321,7 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices, envFiles)
         if (skipBuild) ctx.write(`\nBuild reaproveitado: as imagens do commit ${commit} já existem no ${machineName(target.buildOn)}.\n`)
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
-        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null }
+        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits) }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
         await runExecution(ctx, env, settings, plan, access, checkpoint)
         await completeDeploy(env, deployId, recorder, checkpoint)
@@ -350,7 +350,7 @@ type Recorder = ReturnType<typeof deployRecorder>
 
 async function completeDeploy(env: IEnvironment, deployId: string, recorder: Recorder, checkpoint: DeployCheckpoint): Promise<void> {
     const target = { buildOn: env.buildOn, runOn: env.runOn }
-    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, updatedAt: new Date() } })
+    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), updatedAt: new Date() } })
     await finishDeploy(deployId, "success", null, recorder.log(), checkpoint.commit, checkpoint.tag)
     envLog.info({ id: String(env._id), deployId, ...target }, "[environments] Deploy concluído")
 }

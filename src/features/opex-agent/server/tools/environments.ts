@@ -8,7 +8,6 @@ import {
     environmentsSettingsSchema,
     envVarInputSchema,
     environmentLimitsSchema,
-    DEFAULT_ENVIRONMENT_LIMITS,
     MACHINE_LABELS,
     MACHINES,
     projectNameSchema,
@@ -75,7 +74,7 @@ const DEPLOY_LOG_LINES_DEFAULT = 80
 
 /** Valores do formulário a partir do ambiente salvo (variáveis com valor vazio = mantém o salvo). */
 function inputOf(env: IEnvironment): EnvironmentInput {
-    return { name: env.name, slug: env.slug, source: env.source, env: env.env.map((item) => ({ key: item.key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn, limits: environmentLimitsOf(env.limits) }
+    return { name: env.name, slug: env.slug, source: env.source, env: env.env.map((item) => ({ key: item.key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn, limits: env.limits ?? null }
 }
 
 const tool = <I>(def: Omit<Parameters<typeof defineTool<I>>[0], "group">) => defineTool<I>({ ...def, group: "environments" })
@@ -172,7 +171,7 @@ export const environmentTools = [
                 healthUrl: input.healthUrl ?? "",
                 buildOn: input.buildOn ?? "server",
                 runOn: input.runOn ?? "server",
-                limits: input.limits ?? DEFAULT_ENVIRONMENT_LIMITS,
+                limits: input.limits ?? null,
             })
             const env = await (await service()).createEnvironment(parsed, context.actorId)
             return { id: String(env._id), slug: env.slug, nome: env.name, criado: true, proximoPasso: "Implante com deploy_environment quando o usuário pedir." }

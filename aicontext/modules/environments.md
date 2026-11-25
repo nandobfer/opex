@@ -138,27 +138,37 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   não está no compose ganha o selo "não está no compose" e pode ser removida. No modo único, os campos vazios
   recebem os limites do compose quando são iguais em todos os serviços (diferentes: toast sugerindo "Por serviço").
   Falha: 502 `ENVIRONMENT_COMPOSE_READ_FAILED` com a última linha do erro (nunca o JSON), aviso com "Tentar
-  novamente" no campo; skeleton das linhas durante a leitura.
-- **Editar abre com o que vale**: os limites salvos; sem nenhum salvo, os **aplicados** hoje nos containers
-  (`docker inspect` no snapshot: `HostConfig.Memory`/`MemorySwap`/`NanoCpus`/`CpuQuota`, `appliedEnvironmentLimits`:
-  modo único quando todos os serviços têm os mesmos, por serviço quando diferem); sem nenhum, vazio ("Sem limite").
-  O campo mostra "No host hoje: …".
+  novamente" no campo; skeleton das linhas durante a leitura. Com a origem incompleta (ex.: Novo sem a central), o
+  botão fica desabilitado, a troca para "Por serviço" não lê nada e o campo diz "Escolha a origem para ler o
+  compose." (`composeServicesInputSchema`).
+- **Editar abre com o que vale**: os limites **configurados**, mesmo vazios ("sem limite" salvo reabre vazio); nunca
+  configurados (`limits` ausente/`null`: ambiente antigo, adotado, criado pela ferramenta sem `limits`), os
+  **aplicados** hoje nos containers (`docker inspect` no snapshot: `HostConfig.Memory`/`MemorySwap`/`NanoCpus`/
+  `CpuQuota`, `appliedEnvironmentLimits`: modo único quando todos os serviços têm os mesmos, por serviço quando
+  diferem); sem nenhum, vazio ("Sem limite"). O campo mostra "No host hoje: …".
 - **Aplicação: só no deploy** (inclui Mover): o override `docker-compose.opex.yml` ganha os limites de cada serviço
   (`limitLines`) e o `up -d` recria os containers cuja configuração mudou. Reiniciar (`compose restart`) e Levantar
   (o override do último deploy) **não** aplicam limites novos. Chaves: RAM em `deploy.resources.limits.memory` (ou
   `mem_limit` quando o compose do projeto usa `mem_limit`), CPUs em `deploy.resources.limits.cpus` (ou `cpus` no
   serviço, idem) — o compose recusa as duas formas com valores diferentes no mesmo serviço ("can't set distinct
   values on 'cpus' and 'deploy.resources.limits.cpus'"), então o override segue a forma do compose base; swap em
-  `memswap_limit` = RAM + swap (0 = igual à RAM; vazio = sem a chave). Valor vazio não escreve chave. O log do deploy
-  diz "Limites: app RAM 4 GiB · swap padrão · 2 CPUs; db sem limite" e, por serviço, "Limite do serviço X ignorado: o
-  serviço não está no compose." (não bloqueia).
-- **Divergência** (`environmentLimitsDiffer`/`limitsPendingDeploy`): ambiente implantado em que algum serviço **com
-  limite salvo** tem limites aplicados diferentes (mesma regra do builder para o swap padrão) — selo na linha e
-  `limites.diferem` em `get_environment`. Serviço sem limite salvo não conta (o que o próprio compose declara segue
-  valendo).
-- **Dados**: `environments.limits` (`Mixed`; documento antigo sem o campo = sem limite, `environmentLimitsOf`, sem
-  migração), `EnvironmentDto.limits` (salvos), `ServiceStatusDto.limits` (aplicados no container). O portal do
-  cliente não recebe limites. Auditoria: `limites` (texto) no antes/depois.
+  `memswap_limit` = RAM + swap (0 = igual à RAM; vazio = sem a chave). Com swap vazio e um `memswap_limit` declarado
+  no compose, a chave é reescrita como RAM nova + o swap declarado (o total antigo poderia ficar abaixo da RAM nova e
+  o Docker recusaria o container). Valor vazio não escreve chave. O log do deploy diz "Limites: app RAM 4 GiB · swap
+  padrão · 2 CPUs; db sem limite" e, por serviço, "Limite do serviço X ignorado: o serviço não está no compose."
+  (não bloqueia). O deploy com sucesso grava em `environments.deployedLimits` os limites que aplicou (vindos do ponto
+  de retomada, `checkpoint.limits`).
+- **Divergência** (`limitsPendingDeploy`): selo "Limites salvos diferem dos aplicados: faça Deploy" na linha e
+  `limites.diferem` em `get_environment`, só em ambiente implantado, quando (a) os limites configurados diferem dos
+  do último deploy (`sameEnvironmentLimits` com `deployedLimits`; inclui tirar um limite: salvo vazio × deploy com
+  limite) ou (b) algum serviço **com limite salvo** tem outro aplicado no container (`environmentLimitsDiffer`, mesma
+  regra do builder para o swap padrão). Serviço sem limite salvo não conta no (b): o que o próprio compose declara
+  segue valendo.
+- **Dados**: `environments.limits` (`Mixed`; `null`/ausente = nunca configurado, lido como sem limite por
+  `environmentLimitsOf`, sem migração) e `environments.deployedLimits`; `EnvironmentDto.limits` (salvos),
+  `limitsConfigured`, `deployedLimits` e `ServiceStatusDto.limits` (aplicados no container). `environmentInputSchema`
+  aceita `limits: null` (as ferramentas sem `limits` mantêm o que está salvo, inclusive o `null`); a tela sempre
+  envia o objeto. O portal do cliente não recebe limites. Auditoria: `limites` (texto) no antes/depois.
 
 ### Builder do servidor (OPE-186)
 
@@ -331,9 +341,8 @@ mesma validação, auditoria, Pusher e erros.
 ### Limitações
 
 - Limites dos ambientes: campo vazio não escreve chave no override, então um limite declarado no próprio compose do
-  projeto continua valendo (e reaparece como "aplicado" no Editar); tirá-lo exige editar o compose. Limites novos só
-  entram com Deploy (Reiniciar/Levantar não). Tirar um limite salvo não acende o selo de divergência. "Ler compose"
-  de uma central só traz os YAML da ref: `include`/`extends` de arquivos com outra extensão falham.
+  projeto continua valendo (aparece em "No host hoje" no Editar); tirá-lo exige editar o compose. Limites novos só
+  entram com Deploy (Reiniciar/Levantar não). "Ler compose" de uma central só traz os YAML da ref: `include`/`extends` de arquivos com outra extensão falham.
 
 - Builder do servidor: só os builds conhecidos pela fila global do build deste processo contam como "build
   em andamento"; um `docker build` manual no host não é detectado (recriar/derrubar/apagar o derrubaria).

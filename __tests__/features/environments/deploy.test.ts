@@ -216,6 +216,17 @@ describe('limites de recursos no deploy (OPE-193)', () => {
     expect(String(deploys.docs[0]!.log)).not.toContain('Limites:')
   })
 
+  it('o deploy com sucesso grava os limites que aplicou (o selo compara com eles); a falha não', async () => {
+    const env = await createEnvironment(input({ limits: { mode: 'shared', memoryGb: 4, swapGb: null, cpus: null } }), 'local')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host().run, wait: true })
+    expect(envs.docs[0]!.deployedLimits).toEqual({ mode: 'shared', memoryGb: 4, swapGb: null, cpus: null })
+    await updateEnvironment(String(env._id), input({ limits: { mode: 'shared', memoryGb: null, swapGb: null, cpus: null } }), 'local')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host({ fail: 'up -d' }).run, wait: true })
+    expect(envs.docs[0]!.deployedLimits).toEqual({ mode: 'shared', memoryGb: 4, swapGb: null, cpus: null })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host().run, wait: true })
+    expect(envs.docs[0]!.deployedLimits).toEqual({ mode: 'shared', memoryGb: null, swapGb: null, cpus: null })
+  })
+
   it('salvar grava os limites e audita o texto (antes e depois)', async () => {
     const env = await createEnvironment(input(), 'local')
     await updateEnvironment(String(env._id), input({ limits: { mode: 'shared', memoryGb: 4, swapGb: null, cpus: 2 } }), 'local')

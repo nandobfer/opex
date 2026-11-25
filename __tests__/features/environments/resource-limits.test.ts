@@ -8,6 +8,7 @@ import {
   environmentLimitsOf,
   limitsForService,
   NO_LIMITS,
+  sameEnvironmentLimits,
   unknownLimitServices,
   type ResourceLimits,
 } from '@/features/environments/resource-limits'
@@ -59,18 +60,39 @@ describe('salvos x aplicados', () => {
   })
 
   it('a linha só avisa em ambiente implantado', () => {
-    const env = { limits: shared(L(8)), services: [{ service: 'app', limits: L(4) }] }
+    const env = { limits: shared(L(8)), limitsConfigured: true, deployedLimits: shared(L(8)), services: [{ service: 'app', limits: L(4) }] }
     expect(limitsPendingDeploy({ ...env, deployedOn: { buildOn: 'server', runOn: 'server' } })).toBe(true)
     expect(limitsPendingDeploy({ ...env, deployedOn: null })).toBe(false)
+  })
+
+  it('regressão: tirar os limites salvos (vazio configurado) pede Deploy até o deploy gravar o vazio', () => {
+    const deployedOn = { buildOn: 'server', runOn: 'server' } as const
+    // O compose do projeto declara RAM 4 GiB: o aplicado continua 4 depois do deploy, sem divergir.
+    const base = { limits: shared(NO_LIMITS), limitsConfigured: true, services: [{ service: 'app', limits: L(4) }], deployedOn }
+    expect(limitsPendingDeploy({ ...base, deployedLimits: shared(L(4)) })).toBe(true)
+    expect(limitsPendingDeploy({ ...base, deployedLimits: shared(NO_LIMITS) })).toBe(false)
+    // Nunca configurado (ambiente antigo ou adotado): o que o host tem não é pendência.
+    expect(limitsPendingDeploy({ ...base, limitsConfigured: false, deployedLimits: null })).toBe(false)
+    // Configurado com limite e nenhum deploy desde então: pendente.
+    expect(limitsPendingDeploy({ ...base, limits: shared(L(4)), deployedLimits: null, services: [] })).toBe(true)
+  })
+
+  it('mesmos limites efetivos: modo e linhas sem limite não contam', () => {
+    expect(sameEnvironmentLimits(shared(NO_LIMITS), { mode: 'service', services: [{ service: 'app', ...NO_LIMITS }] })).toBe(true)
+    expect(sameEnvironmentLimits({ mode: 'service', services: [{ service: 'a', ...L(1) }, { service: 'b', ...L(2) }] }, { mode: 'service', services: [{ service: 'b', ...L(2) }, { service: 'a', ...L(1) }, { service: 'c', ...NO_LIMITS }] })).toBe(true)
+    expect(sameEnvironmentLimits(shared(L(1)), { mode: 'service', services: [{ service: 'a', ...L(1) }] })).toBe(false)
+    expect(sameEnvironmentLimits(shared(L(1)), shared(L(2)))).toBe(false)
   })
 })
 
 describe('formulário', () => {
-  it('Editar: salvos > aplicados no host > vazio', () => {
+  it('Editar: configurados (mesmo vazios) > aplicados no host (só quando nunca configurado) > vazio', () => {
     expect(initialLimits(null)).toEqual(shared(NO_LIMITS))
-    expect(initialLimits({ limits: shared(L(8)), services: [{ service: 'app', limits: L(4) }] })).toEqual(shared(L(8)))
-    expect(initialLimits({ limits: shared(NO_LIMITS), services: [{ service: 'app', limits: L(4) }] })).toEqual(shared(L(4)))
-    expect(initialLimits({ limits: shared(NO_LIMITS), services: [] })).toEqual(shared(NO_LIMITS))
+    expect(initialLimits({ limits: shared(L(8)), limitsConfigured: true, services: [{ service: 'app', limits: L(4) }] })).toEqual(shared(L(8)))
+    expect(initialLimits({ limits: shared(NO_LIMITS), limitsConfigured: false, services: [{ service: 'app', limits: L(4) }] })).toEqual(shared(L(4)))
+    // Regressão: "sem limite" salvo não volta preenchido com o que o host ainda tem.
+    expect(initialLimits({ limits: shared(NO_LIMITS), limitsConfigured: true, services: [{ service: 'app', limits: L(4) }] })).toEqual(shared(NO_LIMITS))
+    expect(initialLimits({ limits: shared(NO_LIMITS), limitsConfigured: false, services: [] })).toEqual(shared(NO_LIMITS))
   })
 
   it('troca de modo: copia os valores para os serviços; volta com os valores quando iguais', () => {

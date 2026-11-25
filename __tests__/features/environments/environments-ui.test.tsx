@@ -39,6 +39,8 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   buildOn: 'server',
   runOn: 'server',
   limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  limitsConfigured: false,
+  deployedLimits: null,
   deployedOn: { buildOn: 'server', runOn: 'server' },
   deployedVersion: '1.43.0',
   lastDeploy: null,
@@ -94,15 +96,15 @@ describe('linha do ambiente', () => {
   it('limites aplicados na linha; salvos diferentes dos aplicados pedem Deploy (OPE-193)', () => {
     const applied = { memoryGb: 4, swapGb: null, cpus: 2 }
     const services = [{ ...env().services[0]!, limits: applied }]
-    render(<EnvironmentRow env={env({ services, limits: { mode: 'shared', ...applied } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', ...applied } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
     expect(screen.getByText(/limites: RAM 4 GiB · swap padrão · 2 CPUs/)).toBeTruthy()
     expect(screen.queryByText(/faça Deploy/)).toBeNull()
     cleanup()
-    render(<EnvironmentRow env={env({ services, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
     expect(screen.getByText('Limites salvos diferem dos aplicados: faça Deploy')).toBeTruthy()
     cleanup()
     // Nunca implantado: não há o que comparar.
-    render(<EnvironmentRow env={env({ services, deployedOn: null, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ services, deployedOn: null, limitsConfigured: true, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
     expect(screen.queryByText(/faça Deploy/)).toBeNull()
   })
 

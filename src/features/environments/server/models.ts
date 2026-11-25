@@ -20,6 +20,8 @@ export interface IEnvironment {
     runOn: Machine
     /** Limites de recursos (OPE-193; ausente/`null` = sem limite, `environmentLimitsOf`). */
     limits?: EnvironmentLimits | null
+    /** Limites gravados no override do último deploy com sucesso (o selo "faça Deploy" compara com eles). */
+    deployedLimits?: EnvironmentLimits | null
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     deployedRef: string | null
     deployedCommit: string | null
@@ -75,6 +77,8 @@ export interface DeployCheckpoint {
     buildServices: string[]
     skipBuild: boolean
     from: Machine | null
+    /** Limites gravados no override deste deploy (ausente nos deploys anteriores à OPE-193). */
+    limits?: EnvironmentLimits
 }
 
 export interface IEnvironmentsState {
@@ -100,6 +104,7 @@ const environmentSchema = new Schema<IEnvironment>(
         buildOn: { type: String, required: true },
         runOn: { type: String, required: true },
         limits: { type: Schema.Types.Mixed, default: null },
+        deployedLimits: { type: Schema.Types.Mixed, default: null },
         deployedOn: { type: Schema.Types.Mixed, default: null },
         deployedRef: { type: String, default: null },
         deployedCommit: { type: String, default: null },

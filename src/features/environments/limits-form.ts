@@ -1,4 +1,4 @@
-import { appliedEnvironmentLimits, environmentLimitsDiffer, hasAnyLimit, hasSavedLimits, NO_LIMITS, sameLimits, type ResourceLimits } from "./resource-limits"
+import { appliedEnvironmentLimits, environmentLimitsDiffer, hasAnyLimit, NO_LIMITS, sameEnvironmentLimits, sameLimits, type ResourceLimits } from "./resource-limits"
 import { DEFAULT_ENVIRONMENT_LIMITS, type EnvironmentLimits, type LimitMode, type ServiceLimits } from "./schemas"
 import type { ComposeServicesDto, EnvironmentDto } from "./types"
 
@@ -9,11 +9,14 @@ const only = (limits: ResourceLimits): ResourceLimits => ({ memoryGb: limits.mem
 /** Serviços do ambiente vistos no host (sem repetição, na ordem do snapshot). */
 export const runningServiceNames = (env: Pick<EnvironmentDto, "services">) => [...new Set(env.services.map((service) => service.service))]
 
-/** Editar: os limites salvos; sem eles, os aplicados hoje no host; sem nenhum, o padrão vazio. */
-export function initialLimits(env: Pick<EnvironmentDto, "limits" | "services"> | null): EnvironmentLimits {
+/**
+ * Editar: os limites configurados (mesmo vazios: "sem limite" salvo continua vazio); nunca configurados, os
+ * aplicados hoje no host; sem nenhum, o padrão vazio.
+ */
+export function initialLimits(env: Pick<EnvironmentDto, "limits" | "limitsConfigured" | "services"> | null): EnvironmentLimits {
     if (!env) return DEFAULT_ENVIRONMENT_LIMITS
-    if (hasSavedLimits(env.limits)) return env.limits
-    return appliedEnvironmentLimits(env.services) ?? (env.limits.mode === "service" ? env.limits : DEFAULT_ENVIRONMENT_LIMITS)
+    if (env.limitsConfigured) return env.limits
+    return appliedEnvironmentLimits(env.services) ?? DEFAULT_ENVIRONMENT_LIMITS
 }
 
 /**
@@ -67,7 +70,13 @@ export function orphanServices(limits: EnvironmentLimits, known: string[] | null
     return limits.services.map((row) => row.service).filter((service) => !known.includes(service))
 }
 
-/** Os salvos diferem dos aplicados (ambiente implantado, com containers lidos)? */
-export function limitsPendingDeploy(env: Pick<EnvironmentDto, "limits" | "services" | "deployedOn">): boolean {
-    return Boolean(env.deployedOn) && environmentLimitsDiffer(env.limits, env.services)
+/**
+ * Falta um Deploy para os limites valerem (ambiente implantado)? Os configurados diferem dos gravados no
+ * último deploy (inclusive tirar um limite: salvo vazio x deploy com limite) ou um serviço com limite salvo
+ * está com outro aplicado no container.
+ */
+export function limitsPendingDeploy(env: Pick<EnvironmentDto, "limits" | "limitsConfigured" | "deployedLimits" | "services" | "deployedOn">): boolean {
+    if (!env.deployedOn) return false
+    if (env.limitsConfigured && !sameEnvironmentLimits(env.limits, env.deployedLimits ?? DEFAULT_ENVIRONMENT_LIMITS)) return true
+    return environmentLimitsDiffer(env.limits, env.services)
 }

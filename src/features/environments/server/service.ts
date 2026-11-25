@@ -7,7 +7,7 @@ import { quote } from "@/features/local-docker/commands"
 import { LocalDockerPreview } from "@/features/local-docker/server/models"
 import { containerVersionsCommand, envDir, gitDirsCommand, parseContainerVersions, parseGitDirs, parseSnapshot, parseSnapshotHost, snapshotCommand, type ComposeContainer, type ComposePlan } from "../commands"
 import { ENVIRONMENTS_AUDIT_ENTITY, REGISTRY_CONTAINER } from "../constants"
-import { DEFAULT_ENVIRONMENT_LIMITS, type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
+import { type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
 import { environmentLimitsOf, environmentLimitsText } from "../resource-limits"
 import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, HostCapacityDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
@@ -53,6 +53,8 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
         buildOn: env.buildOn,
         runOn: env.runOn,
         limits: environmentLimitsOf(env.limits),
+        limitsConfigured: Boolean(env.limits),
+        deployedLimits: env.deployedLimits ?? null,
         deployedOn: env.deployedOn,
         deployedVersion: env.deployedVersion ?? null,
         lastDeploy: lastDeploy ? deploySummary(lastDeploy) : null,
@@ -280,7 +282,7 @@ export async function adoptProject(input: AdoptInput, actorId: string, run: Host
     if (!project) throw new DomainError(404, "Projeto não encontrado entre os não gerenciados (ele ainda está em execução?)", "ENVIRONMENT_PROJECT_NOT_FOUND")
     if (!project.workingDir || !project.configFiles.length) throw new DomainError(422, "O projeto não informa a pasta nem os arquivos do compose (labels do Docker Compose ausentes)", "ENVIRONMENT_PROJECT_INCOMPLETE")
     const source = { kind: "adopted" as const, machine: project.machine, workingDir: project.workingDir, configFiles: project.configFiles, projectName: project.projectName, git: project.git, pullOnRedeploy: false }
-    const env = await createEnvironment({ name: input.name, slug: input.slug, source, env: [], ports: [], healthUrl: "", buildOn: project.machine, runOn: project.machine, limits: DEFAULT_ENVIRONMENT_LIMITS }, actorId)
+    const env = await createEnvironment({ name: input.name, slug: input.slug, source, env: [], ports: [], healthUrl: "", buildOn: project.machine, runOn: project.machine, limits: null }, actorId)
     await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: { buildOn: project.machine, runOn: project.machine } } })
     return { ...env, deployedOn: { buildOn: project.machine, runOn: project.machine } }
 }

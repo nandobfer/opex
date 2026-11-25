@@ -39,6 +39,8 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   buildOn: 'server',
   runOn: 'server',
   limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  limitsConfigured: false,
+  deployedLimits: null,
   deployedOn: null,
   deployedVersion: null,
   lastDeploy: null,
@@ -181,7 +183,7 @@ describe('limites de recursos (OPE-193)', () => {
     expect(input('environment-limits-cpus').value).toBe('2')
     expect(document.body.textContent).toContain('No host hoje: RAM 4 GiB · swap padrão · 2 CPUs.')
     cleanup()
-    open(env({ limits: { mode: 'shared', memoryGb: 8, swapGb: 0, cpus: null }, services: [service('app', { memoryGb: 4, swapGb: null, cpus: 2 })] }))
+    open(env({ limitsConfigured: true, limits: { mode: 'shared', memoryGb: 8, swapGb: 0, cpus: null }, services: [service('app', { memoryGb: 4, swapGb: null, cpus: 2 })] }))
     await waitFor(() => expect(input('environment-limits-memory').value).toBe('8'))
     expect(input('environment-limits-swap').value).toBe('0')
     expect(input('environment-limits-cpus').value).toBe('')
@@ -209,7 +211,7 @@ describe('limites de recursos (OPE-193)', () => {
   })
 
   it('"Por serviço" copia os valores para os serviços do host; "Ler compose" acrescenta os do compose e marca a linha órfã', async () => {
-    open(env({ limits: { mode: 'shared', memoryGb: 2, swapGb: null, cpus: null }, services: [service('app', NO_SERVICE_LIMITS)] }))
+    open(env({ limitsConfigured: true, limits: { mode: 'shared', memoryGb: 2, swapGb: null, cpus: null }, services: [service('app', NO_SERVICE_LIMITS)] }))
     await waitFor(() => expect(valueInput(1).value).toBe('segredo'))
     fireEvent.click(screen.getByRole('radio', { name: 'Por serviço' }))
     await waitFor(() => expect(input('environment-limits-app-memory').value).toBe('2'))
@@ -244,3 +246,29 @@ describe('limites de recursos (OPE-193)', () => {
 })
 
 const NO_SERVICE_LIMITS = { memoryGb: null, swapGb: null, cpus: null }
+
+describe('limites de recursos: revisão (OPE-193)', () => {
+  const input = (id: string) => document.getElementById(id) as HTMLInputElement
+  const applied4 = { service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '', cpu: null, memory: null, version: null, limits: { memoryGb: 4, swapGb: null, cpus: 2 } }
+
+  it('regressão: "sem limite" salvo reabre vazio, mesmo com o host ainda limitado', async () => {
+    open(env({ limitsConfigured: true, deployedOn: { buildOn: 'server', runOn: 'server' }, services: [applied4] }))
+    await waitFor(() => expect(valueInput(1).value).toBe('segredo'))
+    expect(input('environment-limits-memory').value).toBe('')
+    expect(input('environment-limits-cpus').value).toBe('')
+    expect(document.body.textContent).toContain('No host hoje: RAM 4 GiB · swap padrão · 2 CPUs.')
+    await act(async () => fireEvent.click(saveButton()))
+    await waitFor(() => expect(mocks.save).toHaveBeenCalled())
+    expect(mocks.save.mock.calls[0]![0].limits).toEqual({ mode: 'shared', memoryGb: null, cpus: null, swapGb: null })
+  })
+
+  it('regressão: Novo sem a origem escolhida não lê o compose (nem ao trocar para "Por serviço") e diz o que falta', () => {
+    mocks.values = { data: undefined, isError: false, isFetching: false }
+    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} hosts={HOSTS} onClose={vi.fn()} />)
+    expect(screen.getByRole('button', { name: /Ler compose/ }).hasAttribute('disabled')).toBe(true)
+    fireEvent.click(screen.getByRole('radio', { name: 'Por serviço' }))
+    expect(mocks.read).not.toHaveBeenCalled()
+    expect(screen.getByText('Escolha a origem para ler o compose.')).toBeTruthy()
+    expect(screen.queryByText(/Não foi possível ler o compose/)).toBeNull()
+  })
+})

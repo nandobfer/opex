@@ -53,8 +53,12 @@ export interface EnvironmentDto {
     healthUrl: string | null
     buildOn: Machine
     runOn: Machine
-    /** Limites de recursos salvos (valem no próximo deploy). */
+    /** Limites de recursos salvos (valem no próximo deploy; sem configuração = sem limite). */
     limits: EnvironmentLimits
+    /** Os limites já foram configurados (mesmo vazios); `false` = o Editar mostra os aplicados no host. */
+    limitsConfigured: boolean
+    /** Limites do último deploy com sucesso (`null` = nenhum deploy desde a OPE-193). */
+    deployedLimits: EnvironmentLimits | null
     /** Onde está no ar (último deploy com sucesso); `null` = nunca implantado. */
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     /** Versão do código do último deploy com sucesso. */
