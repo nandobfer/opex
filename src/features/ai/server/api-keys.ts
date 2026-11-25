@@ -136,6 +136,7 @@ async function afterKeyRingChange(provider: AiApiKeyProviderId, effects: KeyRing
         clearAiCatalogCache()
         resetAiConnectionProbes()
         if (provider === "opencode-go") (await import("@/lib/ai/opencode-go")).clearOpencodeGoCatalogCache()
+        if (provider === "command-code") (await import("@/lib/ai/command-code")).clearCommandCodeCatalogCache()
     }
     runAfterResponse("ai-api-key-effects", async () => {
         if (effects.hasPrimary) {

@@ -275,7 +275,10 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   `modules/agent-metrics.md`), `opencode-quota-refresh` (5 min — relê a quota do plugin `opencode-quota` no
   host do OpenCode e publica `opencode-quota-updated` só quando muda; ver `modules/opencode-quota.md`),
   `opencode-go-usage-refresh` (5 min, ligada — relê o status da assinatura OpenCode Go no Console e publica
-  `opencode-go-usage-updated` só quando os percentuais ou os resets mudam; ver `modules/opencode-quota.md`) e
+  `opencode-go-usage-updated` só quando os percentuais ou os resets mudam; ver `modules/opencode-quota.md`),
+  `command-code-usage-refresh` (5 min, ligada, OPE-190 — relê pela API da CLI do Command Code a conta de cada chave
+  em uso e publica `command-code-usage-updated` só quando os percentuais ou os resets mudam; sem chave em uso, não
+  chama a API; ver `modules/opencode-quota.md`, "Assinatura Command Code") e
   `builder-machine-cleanup` (diária às 03:00, **nasce desligada**; ligada
   ao ativar a Builder Machine — ver `modules/builder-machine.md`) e `environments-registry-cleanup`
   (diária às 04:00, **nasce desligada** — mantém as últimas tags de cada ambiente no registry; ver

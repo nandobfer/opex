@@ -14,6 +14,7 @@ e opções na própria aba da página "Inteligência Artificial".
 | OpenAI | `ai_openai` | `@ai-sdk/openai` (API Responses) | Chaves de API da plataforma OpenAI (chaveiro, várias em uso com rodízio e uma principal) |
 | DeepSeek | `ai_deepseek` | `@ai-sdk/deepseek` | Chaves de API da plataforma DeepSeek (chaveiro, várias em uso com rodízio e uma principal) |
 | OpenCode Go | `ai_opencode_go` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai`, `@ai-sdk/anthropic`, `@ai-sdk/google`, conforme o modelo) | Chaves `oc_sk_…` da assinatura Go (chaveiro, várias em uso com rodízio e uma principal; OPE-156); gateway fixo `https://opencode.ai/inference/go` |
+| Command Code | `ai_command_code` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai` Responses e `@ai-sdk/anthropic`, conforme o modelo) | Chaves do Studio do Command Code (a mesma da CLI; chaveiro, várias em uso com rodízio e uma principal); Provider API fixa `https://api.commandcode.ai/provider/v1` (OPE-190) |
 | JEV | `ai_jev` | — (HTTP TypeSafe) | Chaves de API da TypeSafe (chaveiro, várias em uso com rodízio e uma principal); URL fixa `https://api.typesafe.ai` |
 
 - Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
@@ -43,6 +44,9 @@ e opções na própria aba da página "Inteligência Artificial".
 - **OpenCode Go** (`src/lib/ai/opencode-go.ts`, OPE-154): inferência pela API do gateway do plano
   Go com a chave da assinatura, **sem sessão do OpenCode no host** e sem agente (provedor `opencode-go`,
   separado do `opencode` de sessão). Detalhes na seção "OpenCode Go" abaixo.
+- **Command Code** (`src/lib/ai/command-code.ts`, OPE-190): inferência pela Provider API do Command Code com a
+  chave do Studio, sem sessão no host e sem agente (provedor `command-code`). Detalhes na seção "Command Code"
+  abaixo.
 - Configuração só pela tela (chaves de API do chaveiro nos provedores diretos, cifradas, sem `env`;
   seção "Chaves de API").
 - **JEV** (`src/lib/ai/jev.ts`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
@@ -91,7 +95,7 @@ e opções na própria aba da página "Inteligência Artificial".
 
 ## Chaves de API (chaveiro dos provedores, OPE-155; várias em uso, OPE-179)
 
-Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go (desde a OPE-156) e JEV têm **várias chaves de API
+Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go (desde a OPE-156), Command Code (desde a OPE-190) e JEV têm **várias chaves de API
 nomeadas**, **várias em uso** (rodízio, OPE-179) e **uma principal** por provedor. Nenhum desses provedores
 ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chaveiro: ele usa a senha do
 `opencode serve`, não uma chave de API.
@@ -167,7 +171,7 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
     limpa o cache do catálogo e os testes de conexão em memória (no OpenCode Go, também o catálogo
     próprio do Go, `clearOpencodeGoCatalogCache`); depois da resposta, testa o provedor de novo
     (`runIntegrationTest`, só quando ainda há principal) e reenvia ao Engramind
-    (`syncEngramindProviderKey`). O reenvio não vale para o JEV nem para o OpenCode Go
+    (`syncEngramindProviderKey`). O reenvio não vale para o JEV, o OpenCode Go nem o Command Code
     (`AI_API_KEY_ENGRAMIND_PROVIDERS`/`feedsEngramind` no módulo puro `src/features/ai/api-keys.ts`):
     nenhum dos dois é fonte do Redator ou do embedding;
   - **só o rodízio mudou** (pôr/tirar de uso, substituir o segredo ou remover uma chave em uso que não
@@ -340,6 +344,41 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
 - **Fora do Engramind**: o Go não é fonte do Redator nem do Curador do Engramind — o Engramind chamaria
   a API sem o `x-opencode-session` e o Go recusaria.
 
+## Command Code (`command-code`, OPE-190)
+
+- **O que é**: a Provider API do Command Code (Claude, GPT, Gemini e modelos abertos numa API só). A chave é a do
+  Studio do Command Code, a mesma que autentica a CLI; todos os planos têm acesso, **menos o Go ($1)**, que recebe
+  `403 upgrade_required`. Gera texto e serve de modelo ao Agente Opex e ao motor Opex dos rotineiros (aceita as
+  ferramentas do app); **não** é sessão de agente (`supportsAgent: false`).
+- **Fora da mesa do desenvolvimento agêntico** (decisão do dono no planejamento de 24/11/2026): planejador,
+  implementação, build, PR e fork rodam só em sessão do OpenCode no host. Para a mesa usar o Command Code, ele teria
+  de ser configurado como provedor dentro do OpenCode do host (a chave sairia do Opex); fica para outra tarefa.
+- **Integração** `ai_command_code` (filha de `ai`, `/integracoes/ia/command-code`): só o segredo `apiKey` no
+  chaveiro (`keyRing: true`, sem `env`); abas Configuração, Modelos e Consumo. Fora do Engramind
+  (`AI_API_KEY_ENGRAMIND_PROVIDERS`).
+- **Endpoints** (`src/lib/ai/endpoints.ts`): base `https://api.commandcode.ai/provider/v1` com `POST
+  /chat/completions`, `/responses` e `/messages`; toda chamada leva `Authorization: Bearer <chave>` e o
+  `User-Agent` `COMMAND_CODE_USER_AGENT`. Mandar um modelo para o endpoint errado dá 400.
+- **Catálogo** (`command-code-models.ts`, puro): `GET /models` (rotas por modelo, `supported_endpoints`) e `GET
+  /models?view=client` (grupo, `inputModalities`, `reasoningEfforts`, preços), **públicos**, unidos pelo id, com
+  cache de 2 min. Sem a visão de cliente, lista só pelas rotas (aviso no log). Rota de cada modelo pela preferência
+  Chat Completions → Responses → Messages (`@ai-sdk/openai-compatible`, `@ai-sdk/openai` Responses, `@ai-sdk/anthropic`);
+  a base é **sempre** a oficial (a chave nunca vai a outro host). Sem catálogo (nem cópia anterior), o prefixo
+  `claude-` vai por Messages e o resto por Chat Completions, com aviso. Modelo que não atende nenhuma das três APIs
+  (o `typesafe/jev`, só em `/systemone`) fica fora; nenhum outro é excluído. DTO: variantes = esforços do modelo
+  aceitos pela AI SDK (`AI_SDK_REASONING_LEVELS`, `src/lib/ai/reasoning-levels.ts`, compartilhado com o Go), `group`,
+  contexto, tipos de entrada (arquivos do Agente Opex por modelo, `modelFileKinds`) e `free` (preço 0).
+- **Conferência da chave** (`verifyCommandCodeKey`): o catálogo é público, então o teste e a conexão na hora fazem
+  `POST /chat/completions` com o modelo inexistente `__opex_probe__` — 401 = chave recusada; 403 com
+  `upgrade_required` = plano sem API; 5xx = falha; outra resposta = chave aceita, sem gerar nada.
+- **Erros** (`command-code-errors.ts`, pelo `statusCode`): 401 chave recusada, 402 sem créditos, 403 plano sem API
+  (`upgrade_required`) ou modelo acima do plano, 429 limite da janela de 5h ou semanal (créditos extras liberam).
+- **Custo `null`** (decisão do dono): as respostas não trazem custo nem cabeçalho de custo, então a aba Consumo do
+  Opex mostra só tokens (sem a coluna Custo). O valor do ciclo vem da assinatura (`modules/opencode-quota.md`,
+  "Assinatura Command Code").
+- **Rodízio**: como os demais (`requireAiProviderKeyOrder`, `createKeyFailoverFetch` com `applyKey` forçando o
+  Bearer); `PreparedModel.apiKeyId` = a chave que respondeu.
+
 ## Página `/integracoes/ia`
 
 - `ai` é o hub do catálogo ("Inteligência Artificial"); `ai_opencode`, `ai_gemini`, `ai_anthropic`,
@@ -389,10 +428,10 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   virtualizada, Atualizar ignora o cache; com alterações não salvas, pede para salvar), **Contas**
   (só OpenCode; seção abaixo), **Skills**, **Agentes**, **Comandos**, **Plugins** e **MCPs** (só
   OpenCode — `modules/opencode-resources.md`) e **Consumo** (todos os provedores: OpenCode por
-  origem, JEV por feature e Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go por recurso). Trocar de aba com
+  origem, JEV por feature e Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e Command Code por recurso). Trocar de aba com
   alterações pede descarte.
 - **Seletor de provedor** das features de texto (`ProviderModelCard`, `OptionTabs` que quebra linha):
-  OpenCode, Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go (mais o JEV em Tags e Estimar prazos); só os
+  OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e Command Code (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Agente Desenvolvedor são
   exclusivos do OpenCode.
 - **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
@@ -439,10 +478,15 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   — ver `modules/opencode-quota.md`, "Assinatura OpenCode Go"; em "Todas as chaves" é a **soma das
   assinaturas das chaves em uso**, num gráfico único com um teto de 100%, OPE-180) e **Consumo do OpenCode Go pelo Opex** (o
   `ProviderUsageCard` com `hideFilters`). Os demais provedores continuam com o filtro dentro do próprio card.
+- **Aba Consumo do Command Code** (OPE-190, `CommandCodeUsageTab`): o mesmo desenho, pelo componente compartilhado
+  **`SubscriptionUsageTab`** (`src/features/ai/components/`, extraído do `OpencodeGoUsageTab`, que também o usa):
+  filtros uma vez no topo, **Assinatura Command Code** (`CommandCodeSubscriptionCard`, lido da API da CLI — ver
+  `modules/opencode-quota.md`, "Assinatura Command Code") e **Consumo do Command Code pelo Opex** (só tokens, sem a
+  coluna Custo). Se a assinatura não for legível, o card avisa e o consumo do Opex continua abaixo.
 - **Chave por id** (`getAiProviderKeyById`, `src/lib/ai/api-keys.ts`): lê e decifra no servidor uma chave
   do chaveiro em uso ou não (filtro de chave da assinatura do Go); `null` se não existe ou não decifra.
 - **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek,
-  OpenCode Go (OPE-156) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
+  OpenCode Go (OPE-156), Command Code (OPE-190) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
   recebe o parâmetro `apiKey`. Opções:
   - **Todas as chaves** (padrão, não vai na query);
   - cada chave atual (a em uso marcada "(em uso)");
@@ -838,7 +882,7 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 | `GET /api/ai/providers/[provider]/models` | Modelos do provedor (`?refresh=1`; `?kind=embedding` só Gemini/OpenAI, senão 422); 502 com a mensagem do provedor |
 | `GET /api/ai/providers/jev/usage` | Consumo agregado JEV por `from`/`to` ISO opcionais e o filtro `apiKey` (sessão interna), com `features` (uma linha por recurso: `feature`, `label`, chamadas, tokens e custo); intervalo inválido → 400; sem limites → logs retidos |
 | `GET /api/ai/providers/opencode/usage` | Consumo do OpenCode por origem (`from`/`to` ISO opcionais, sessão interna) no mesmo contrato dos provedores diretos: `rows` por origem (`key`), `total`, `coverageFrom` e as contagens de métricas ausentes; métricas ausentes ficam `null` |
-| `GET/POST /api/ai/providers/[provider]/keys` | Chaves de API do provedor (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e JEV; outro → 404), sem segredo / nova chave `{ name, secret }` (a primeira já entra como principal e em uso). Devolve a lista |
+| `GET/POST /api/ai/providers/[provider]/keys` | Chaves de API do provedor (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go, Command Code e JEV; outro → 404), sem segredo / nova chave `{ name, secret }` (a primeira já entra como principal e em uso). Devolve a lista |
 | `PATCH/DELETE /api/ai/providers/[provider]/keys/[keyId]` | Renomeia `{ name }` e/ou substitui o segredo `{ secret }` / remove (a principal só quando é a única: senão 409 `AI_API_KEY_PRIMARY`) |
 | `PATCH /api/ai/providers/[provider]/keys/[keyId]/selection` | Põe `{ selected: true }` ou tira `{ selected: false }` a chave do rodízio (OPE-179); a principal não sai (409 `AI_API_KEY_PRIMARY`); sem principal, a chave posta em uso vira a principal |
 | `POST /api/ai/providers/[provider]/keys/[keyId]/primary` | Torna esta a chave principal (Engramind, teste, "Todas" do Go) e a põe em uso |

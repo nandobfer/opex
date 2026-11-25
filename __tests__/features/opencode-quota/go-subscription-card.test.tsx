@@ -86,18 +86,18 @@ describe('OpencodeGoSubscriptionCard', () => {
     const renewal = screen.getByText('Renova em 5 dez')
     expect(renewal.getAttribute('title')).toBe('Renova em 05/12 às 09:15')
     expect(renewal.parentElement!.textContent).toBe('Uso do Go·Renova em 5 dez·No ritmo atual, atinge o limite em 1 dez')
-    const status = document.querySelector('[data-go-status]')!
+    const status = document.querySelector('[data-usage-status]')!
     expect(status.textContent).toBe('No ritmo atual, atinge o limite em 1 dez')
-    expect(status.getAttribute('data-go-status')).toBe('warning')
-    expect([...document.querySelectorAll('[data-go-window]')].map((node) => node.getAttribute('data-go-window'))).toEqual(['fiveHour', 'week', 'month'])
-    expect(document.querySelector('[data-go-window="week"]')!.textContent).toContain('5,6%')
+    expect(status.getAttribute('data-usage-status')).toBe('warning')
+    expect([...document.querySelectorAll('[data-usage-window]')].map((node) => node.getAttribute('data-usage-window'))).toEqual(['fiveHour', 'week', 'month'])
+    expect(document.querySelector('[data-usage-window="week"]')!.textContent).toContain('5,6%')
     expect(screen.getByText('Gasto real no ciclo: US$ 42,85')).toBeTruthy()
     // Nenhum "US$ x de US$ 60" do medidor.
     expect(document.body.textContent).not.toMatch(/US\$ [\d,]+ de US\$/)
-    expect([...document.querySelectorAll('[data-go-legend]')].map((node) => node.textContent)).toEqual(['Uso', 'Previsão', 'Teto mensal'])
-    expect(document.querySelector('[data-go-average]')!.textContent).toBe('Média de 3,9% por dia')
-    expect(document.querySelector('[data-go-average] strong')!.textContent).toBe('3,9%')
-    expect(document.querySelector('[data-go-cycle="past"]')).toBeNull()
+    expect([...document.querySelectorAll('[data-usage-legend]')].map((node) => node.textContent)).toEqual(['Uso', 'Previsão', 'Teto mensal'])
+    expect(document.querySelector('[data-usage-average]')!.textContent).toBe('Média de 3,9% por dia')
+    expect(document.querySelector('[data-usage-average] strong')!.textContent).toBe('3,9%')
+    expect(document.querySelector('[data-usage-cycle="past"]')).toBeNull()
     const table = screen.getByRole('group', { name: 'Uso acumulado do ciclo atual da assinatura OpenCode Go' })
     expect(table.querySelectorAll('tbody tr')).toHaveLength(4)
     expect(table.textContent).toContain('116,2%')
@@ -131,7 +131,7 @@ describe('OpencodeGoSubscriptionCard', () => {
     expect(label.getAttribute('title')).toBe('Pessoal, Pessoal 2, Trabalho')
     expect(screen.getByText('Cobertura parcial')).toBeTruthy()
     expect(screen.getByText(/Fora da soma: Antiga \(O OpenCode Go recusou a chave \(HTTP 401\)\.\)/)).toBeTruthy()
-    expect(document.querySelector('[data-go-renewal]')!.getAttribute('title')).toContain('chave Trabalho')
+    expect(document.querySelector('[data-usage-renewal]')!.getAttribute('title')).toContain('chave Trabalho')
     expect(document.querySelector('[data-go-cost-partial]')).toBeTruthy()
     expect(document.querySelector('[data-go-note="incomplete"]')!.textContent).toContain('3 dias sem dados de alguma assinatura')
     expect(document.querySelector('[data-go-note="shared"]')!.textContent).toBe('As chaves Pessoal e Pessoal 2 leem a mesma assinatura: contadas uma vez na soma.')
@@ -152,7 +152,7 @@ describe('OpencodeGoSubscriptionCard', () => {
       forecastEnd: null,
     }
     renderCard({ ...data, chart: past })
-    expect((await screen.findByText('Ciclo de 5 out a 5 nov')).getAttribute('data-go-cycle')).toBe('past')
+    expect((await screen.findByText('Ciclo de 5 out a 5 nov')).getAttribute('data-usage-cycle')).toBe('past')
     const table = screen.getByRole('group', { name: 'Uso acumulado do ciclo da assinatura OpenCode Go' })
     expect(table.textContent).not.toContain('116,2%')
   })
@@ -166,7 +166,7 @@ describe('OpencodeGoSubscriptionCard', () => {
     const data = usage({ monthPercent: 100, limitReached: true, forecast: { dailyAverage: 9, projectedPercent: null, crossesAt: null } })
     renderCard({ ...data, chart: { ...data.chart!, crossing: null, forecastEnd: null, points: data.chart!.points.map((point) => ({ ...point, forecast: null, dayForecast: null })) } })
     const status = await screen.findByText('Limite mensal atingido')
-    expect(status.getAttribute('data-go-status')).toBe('destructive')
+    expect(status.getAttribute('data-usage-status')).toBe('destructive')
     expect(screen.queryByText(/Previsão de/)).toBeNull()
     expect(screen.queryByText(/atinge o limite/)).toBeNull()
   })
@@ -192,7 +192,7 @@ describe('OpencodeGoSubscriptionCard', () => {
   it('catálogo indisponível: medidores sem o gráfico, com aviso', async () => {
     renderCard(usage({ chart: null, chartMessage: 'Não foi possível ler o catálogo de modelos do OpenCode Go.' }))
     expect(await screen.findByText('Gráfico indisponível')).toBeTruthy()
-    expect(document.querySelectorAll('[data-go-window]')).toHaveLength(3)
+    expect(document.querySelectorAll('[data-usage-window]')).toHaveLength(3)
   })
 
   it('carregando mostra o skeleton; falha da rota mostra erro', async () => {

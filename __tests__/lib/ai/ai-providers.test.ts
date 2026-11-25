@@ -279,6 +279,23 @@ describe('capacidade dos provedores', () => {
     })
   })
 
+  it('Command Code (OPE-190): provedor de texto por API, com chaveiro, Agente Opex e consumo, fora do Engramind e sem agente', async () => {
+    const { AI_API_KEY_PROVIDER_IDS, feedsEngramind } = await import('@/features/ai/api-keys')
+    const { OPEX_PROVIDER_IDS } = await import('@/features/opex-agent/constants')
+    const { ROUTINE_OPEX_PROVIDER_IDS } = await import('@/features/routine-agents/schemas')
+    const { USAGE_PROVIDER_IDS, usageProviderReportsCost } = await import('@/features/ai/provider-usage')
+    const { AI_PROVIDER_TAB_IDS } = await import('@/features/ai/constants')
+    expect(AI_TEXT_PROVIDER_IDS).toContain('command-code')
+    expect(AI_PROVIDERS.find((provider) => provider.id === 'command-code')).toMatchObject({ integrationId: 'ai_command_code', name: 'Command Code', supportsTextGeneration: true, supportsSampling: true, supportsAgent: false })
+    expect(AI_API_KEY_PROVIDER_IDS).toContain('command-code')
+    expect(feedsEngramind('command-code')).toBe(false)
+    expect(OPEX_PROVIDER_IDS).toContain('command-code')
+    expect(ROUTINE_OPEX_PROVIDER_IDS).toContain('command-code')
+    expect(USAGE_PROVIDER_IDS).toContain('command-code')
+    expect(usageProviderReportsCost('command-code')).toBe(false)
+    expect(AI_PROVIDER_TAB_IDS['command-code']).toEqual(['configuracao', 'modelos', 'consumo'])
+  })
+
   it('Anthropic, OpenAI e DeepSeek são provedores de texto com amostragem e sem agente', () => {
     for (const id of ['anthropic', 'openai', 'deepseek'] as const) {
       expect(AI_TEXT_PROVIDER_IDS).toContain(id)

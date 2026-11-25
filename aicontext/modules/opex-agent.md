@@ -259,10 +259,11 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   na leitura (`withDefaults` + `migrateLegacyToolSettings` de `tool-tree.ts`): grupo desligado vira
   todas as ferramentas dele desligadas e a política "Toda alteração" vira confirmação ligada em cada
   ferramenta `write`.
-- Provedores: **Gemini, Anthropic, OpenAI, DeepSeek e OpenCode Go** (o OpenCode de sessão não executa
-  ferramentas do app; o OpenCode Go é só inferência por API e executa — `modules/ai.md`, "OpenCode Go").
-  No Go, o turno usa o `x-opencode-session` `opex-agent-<sessão>` (estável na conversa) e grava no
-  consumo o custo informado pelo Go (cota + Extra Usage).
+- Provedores: **Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e Command Code** (o OpenCode de sessão não executa
+  ferramentas do app; o OpenCode Go e o Command Code são só inferência por API e executam — `modules/ai.md`,
+  "OpenCode Go" e "Command Code"). No Go, o turno usa o `x-opencode-session` `opex-agent-<sessão>` (estável na
+  conversa) e grava no consumo o custo informado pelo Go (cota + Extra Usage); o Command Code (OPE-190) não informa
+  custo (`null`). Nos dois, os tipos de arquivo lidos como conteúdo vêm do catálogo, por modelo (`modelFileKinds`).
   Ativar exige provedor conectado; modelo e variante conferidos no catálogo (`assertCatalog`).
 
 ## Ferramentas (`server/tools/`)

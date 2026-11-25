@@ -5,7 +5,7 @@ import { USAGE_KEY_ALL, USAGE_KEY_PATTERN } from "./usage-key-filter"
 /**
  * Consumo medido dos provedores de IA que não têm painel próprio (`ai_consumption_logs`).
  * O OpenCode e o JEV têm rotas e cards próprios; aqui ficam os provedores diretos
- * (Gemini, Anthropic, OpenAI e DeepSeek), que informam tokens mas não custo, e o OpenCode Go, que
+ * (Gemini, Anthropic, OpenAI, DeepSeek e Command Code), que informam tokens mas não custo, e o OpenCode Go, que
  * informa o custo de cada resposta (cobrado + cota da assinatura).
  */
 
@@ -43,7 +43,7 @@ export function withUsageKey(query: UsageQuery | null, apiKey: string): UsageQue
 }
 
 /** Provedores diretos com aba Consumo (o OpenCode e o JEV têm rotas fixas). */
-export const USAGE_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go"] as const
+export const USAGE_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code"] as const
 
 export type UsageProviderId = (typeof USAGE_PROVIDER_IDS)[number]
 

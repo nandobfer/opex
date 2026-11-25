@@ -23,15 +23,16 @@ const PROVIDER_KINDS: Record<OpexProviderId, ReadonlySet<OpexFileKind>> = {
     anthropic: new Set(["image", "pdf"]),
     openai: new Set(["image", "pdf"]),
     deepseek: new Set(),
-    // Por modelo: os tipos aceitos vêm do catálogo do Go (`opencodeGoFileKinds`); sem catálogo, só texto.
+    // Por modelo: os tipos aceitos vêm do catálogo do gateway (`modelFileKinds`); sem catálogo, só texto.
     "opencode-go": new Set(),
+    "command-code": new Set(),
 }
 
 /**
- * Tipos que um modelo do OpenCode Go lê como conteúdo, pelos tipos de entrada do catálogo
+ * Tipos que um modelo do OpenCode Go ou do Command Code lê como conteúdo, pelos tipos de entrada do catálogo
  * (`image/png`, `application/pdf`, `audio/*`, `video/*` ou só a família). Texto vai sempre inline.
  */
-export function opencodeGoFileKinds(inputModalities: readonly string[] | null | undefined): ReadonlySet<OpexFileKind> {
+export function modelFileKinds(inputModalities: readonly string[] | null | undefined): ReadonlySet<OpexFileKind> {
     const kinds = new Set<OpexFileKind>()
     for (const raw of inputModalities ?? []) {
         const modality = raw.trim().toLowerCase()
@@ -42,6 +43,9 @@ export function opencodeGoFileKinds(inputModalities: readonly string[] | null | 
     }
     return kinds
 }
+
+/** Nome antigo (OpenCode Go). */
+export const opencodeGoFileKinds = modelFileKinds
 
 /**
  * Entrega do arquivo ao modelo (`accepted` troca os tipos do provedor pelos do modelo, no OpenCode Go). Arquivos acima do teto (`OPEX_FILE_CONTENT_MAX_BYTES` para conteúdo,

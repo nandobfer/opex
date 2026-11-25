@@ -4,13 +4,15 @@ import { loggerFor } from "@/lib/logger"
 import { getAiProvider, isAiReasoningLevel, type AiProviderId } from "./providers"
 import { AiProviderError } from "./errors"
 import { opencodeGoStatusMessage } from "./opencode-go-errors"
+import { commandCodeStatusMessage } from "./command-code-errors"
+import { isAiSdkReasoningLevel } from "./reasoning-levels"
 import { recordAiConsumption } from "./consumption"
 import { addStepCost, opencodeSessionStepCost, type AiStepCost } from "./provider-cost"
 import { isOpencodeGoReasoningLevel } from "./opencode-go-models"
 
 /**
  * Geração em streaming pela Vercel AI SDK — SOMENTE servidor. Ponto único das features: nenhuma
- * feature fala com OpenCode, Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go diretamente.
+ * feature fala com OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go ou Command Code diretamente.
  */
 
 export interface AiStreamRequest {
@@ -128,6 +130,20 @@ export async function prepareModel(request: Pick<AiStreamRequest, "provider" | "
             dispose: noDispose,
         }
     }
+    if (request.provider === "command-code") {
+        const { createCommandCodeModel } = await import("./command-code")
+        const { model, currentKeyId } = await createCommandCodeModel(request.model, { signal: request.signal })
+        return {
+            model,
+            get apiKeyId() {
+                return currentKeyId()
+            },
+            // Esforços da lista do próprio modelo (catálogo); as respostas não informam custo.
+            reasoning: request.variant && isAiSdkReasoningLevel(request.variant) ? request.variant : undefined,
+            takeStepCost: noCost,
+            dispose: noDispose,
+        }
+    }
     if (request.provider === "jev") throw new AiProviderError("O JEV decide de forma estruturada e não gera texto")
     const { provider, currentKeyId } = await DIRECT_PROVIDERS[request.provider]()
     return {
@@ -167,6 +183,12 @@ export function describeAiError(error: unknown, provider?: AiProviderId, model?:
     if (provider === "opencode-go") {
         const status = statusCodeOf(error)
         const known = status === null ? null : opencodeGoStatusMessage(status, model)
+        if (known) return known
+    }
+    if (provider === "command-code") {
+        const status = statusCodeOf(error)
+        const body = (error as { responseBody?: unknown } | null)?.responseBody
+        const known = status === null ? null : commandCodeStatusMessage(status, { upgradeRequired: typeof body === "string" && /upgrade_required/i.test(body) })
         if (known) return known
     }
     const message = error instanceof Error ? error.message : String(error)
