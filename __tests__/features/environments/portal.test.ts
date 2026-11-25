@@ -70,6 +70,7 @@ beforeEach(async () => {
   loja = await envs.create({ name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: String(central._id), ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } })
   await envs.create({ name: 'Outro', slug: 'outro', source: { kind: 'central', centralId: String(other._id), ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'outro' } })
   await envs.create({ name: 'CRM', slug: 'crm', source: { kind: 'adopted', machine: 'server', workingDir: '/srv/crm', configFiles: [], projectName: 'crm', git: true, pullOnRedeploy: false } })
+  await envs.create({ name: 'MinIO', slug: 'minio', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 2 } })
   mocks.items.mockImplementation(async (list: Record<string, unknown>[]) => ({ items: list.map((env) => dto(env)) }))
 })
 
@@ -117,6 +118,14 @@ describe('ambientes no portal do cliente', () => {
     await expect(runPortalEnvironmentAction(actor(true), String(crm._id), 'up')).rejects.toMatchObject({ status: 404 })
     await expect(resolvePortalEnvironment(client, 'outro')).rejects.toMatchObject({ status: 404 })
     expect((await resolvePortalEnvironment(client, 'loja')).slug).toBe('loja')
+    expect(mocks.runAction).not.toHaveBeenCalled()
+  })
+
+  it('compose gerenciado (OPE-191) não aparece no portal nem aceita ações; o de central segue aparecendo', async () => {
+    expect((await listPortalEnvironments(client)).map((env) => env.slug)).toEqual(['loja'])
+    const minio = envs.docs.find((env) => env.slug === 'minio')!
+    await expect(runPortalEnvironmentAction(actor(true), String(minio._id), 'deploy')).rejects.toMatchObject({ status: 404 })
+    await expect(resolvePortalEnvironment(client, 'minio')).rejects.toMatchObject({ status: 404 })
     expect(mocks.runAction).not.toHaveBeenCalled()
   })
 

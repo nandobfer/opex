@@ -8,8 +8,8 @@ import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
 import { ENVIRONMENTS_EVENT, ENVIRONMENTS_QUERY_KEY } from "../constants"
-import type { AdoptInput, EnvironmentActionInput, EnvironmentInput, EnvironmentsSettings } from "../schemas"
-import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, EnvironmentsSettingsDto, RegistryStatusDto } from "../types"
+import type { AdoptInput, ComposeServicesInput, EnvironmentActionInput, EnvironmentInput, EnvironmentsSettings } from "../schemas"
+import type { ComposeServicesDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, EnvironmentsSettingsDto, RegistryStatusDto } from "../types"
 
 const base = "/environments"
 export const environmentsKey = [ENVIRONMENTS_QUERY_KEY, "list"] as const
@@ -64,6 +64,13 @@ export function useSaveEnvironment(id: string | null) {
         onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível salvar o ambiente")),
     })
 }
+
+/** "Ler compose" do formulário: serviços e limites declarados no compose da origem (sob demanda). */
+export const useReadComposeServices = () =>
+    useMutation({
+        mutationFn: async (input: ComposeServicesInput) => unwrapApi((await api.post<ApiResponse<ComposeServicesDto>>(`${base}/compose-services`, input)).data),
+        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível ler o compose")),
+    })
 
 export function useAdoptProject() {
     const queryClient = useQueryClient()

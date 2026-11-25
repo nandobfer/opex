@@ -10,7 +10,7 @@ export async function listEnvironmentOptions(): Promise<EnvironmentOptionDto[]> 
         id: String(env._id),
         name: env.name,
         slug: env.slug,
-        location: env.source.kind === "adopted" ? env.source.workingDir : `central (${env.source.composeFile})`,
+        location: env.source.kind === "adopted" ? env.source.workingDir : env.source.kind === "managed" ? `compose gerenciado (v${env.source.composeVersion})` : `central (${env.source.composeFile})`,
         machine: env.source.kind === "adopted" ? env.source.machine : "server",
     }))
 }

@@ -16,7 +16,7 @@ vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => 
 vi.mock('@/lib/crypto/secretBox', () => ({ encryptSecret: (plain: string) => ({ v: 1, c: plain }), decryptSecret: (box: { c: string }) => box.c }))
 vi.mock('@/features/environments/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
-  return { Environment: memoryModel(), EnvironmentDeploy: memoryModel(), EnvironmentsState: memoryModel(), environmentsDb: async () => {} }
+  return { Environment: memoryModel(), EnvironmentDeploy: memoryModel(), EnvironmentComposeVersion: memoryModel(), EnvironmentsState: memoryModel(), environmentsDb: async () => {} }
 })
 vi.mock('@/features/environments/server/settings', async () => {
   const { DEFAULT_ENVIRONMENTS_SETTINGS } = await import('@/features/environments/schemas')
@@ -34,7 +34,7 @@ vi.mock('@/features/agentic/server/build-queue', () => ({ runExclusiveBuild: asy
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: {} }))
 vi.mock('@/features/local-docker/server/models', () => ({ LocalDockerPreview: {} }))
 
-import { Environment, EnvironmentDeploy } from '@/features/environments/server/models'
+import { Environment, EnvironmentComposeVersion, EnvironmentDeploy } from '@/features/environments/server/models'
 import { INTERRUPTED_BEFORE_EXECUTION } from '@/features/environments/server/deploy'
 import { resumeInterruptedDeploys, settleResumes } from '@/features/environments/server/resume'
 import { openDeployStream } from '@/features/environments/server/stream'
@@ -42,6 +42,7 @@ import { createEnvironment } from '@/features/environments/server/service'
 
 const envs = Environment as unknown as { docs: Record<string, unknown>[] }
 const deploys = EnvironmentDeploy as unknown as { docs: Record<string, unknown>[] }
+const revisions = EnvironmentComposeVersion as unknown as { docs: Record<string, unknown>[] }
 
 type RunOptions = { onOutput?: (chunk: string) => void; jobId?: string }
 
@@ -109,10 +110,28 @@ beforeEach(async () => {
   await settleResumes()
   envs.docs.length = 0
   deploys.docs.length = 0
+  revisions.docs.length = 0
   mocks.pcAvailable = true
 })
 
 describe('retomada do deploy depois de o app reiniciar', () => {
+  it('compose gerenciado: a retomada termina gravando a mesma revisão do ponto de retomada (mesmo com uma mais nova salva)', async () => {
+    const env = await createEnvironment(
+      { name: 'MinIO', slug: 'minio', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: 'services:\n  minio:\n    image: minio/minio\n', env: [], ports: [], healthUrl: '', buildOn: 'server', runOn: 'server' },
+      'local',
+    )
+    const envId = String(env._id)
+    for (const version of [2, 3, 4]) revisions.docs.push({ _id: `r${version}`, environmentId: envId, version, content: `# v${version}`, authorId: 'local', note: null, createdAt: new Date(), deployedAt: null })
+    orphan(envId, { checkpoint: { step: 0, failure: null, ref: null, commit: null, tag: 't1', version: null, buildServices: [], skipBuild: false, from: null, composeVersion: 3 } })
+    host()
+    await resumeInterruptedDeploys()
+    await settleResumes()
+    expect(deploys.docs[0]).toMatchObject({ status: 'success', resumed: true })
+    expect(envs.docs[0]!.deployedComposeVersion).toBe(3)
+    expect(revisions.docs.find((item) => item.version === 3)!.deployedAt).toBeInstanceOf(Date)
+    expect(revisions.docs.find((item) => item.version === 4)!.deployedAt).toBeNull()
+  })
+
   it('regressão: redeploy do próprio app termina como sucesso (não fica em Implantando)', async () => {
     const envId = await adopted()
     const id = orphan(envId)

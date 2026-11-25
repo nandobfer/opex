@@ -15,11 +15,12 @@ import type { Machine } from "../schemas"
 import type { EnvironmentDto, UnmanagedProjectDto } from "../types"
 import { groupByMachine } from "../view"
 import { AdoptDialog } from "./AdoptDialog"
+import { ComposeDialog } from "./ComposeDialog"
 import { BuilderCard } from "./builder/BuilderCard"
 import { DeleteEnvironmentDialog } from "./DeleteEnvironmentDialog"
 import { DeployHistoryDialog } from "./DeployHistoryDialog"
 import { DeployDrawer } from "./DeployDrawer"
-import { EnvironmentFormDialog } from "./EnvironmentFormDialog"
+import { EnvironmentFormDialog, NO_HOSTS } from "./EnvironmentFormDialog"
 import { EnvironmentRow, type RowIntent } from "./EnvironmentRow"
 import { MoveDialog } from "./MoveDialog"
 import { SettingsDialog } from "./SettingsDialog"
@@ -30,7 +31,7 @@ const GROUPS: { machine: Machine; title: string; icon: typeof Server }[] = [
     { machine: "pc", title: "PC", icon: Monitor },
 ]
 
-type Dialog = { kind: "form"; env: EnvironmentDto | null } | { kind: "delete" | "move" | "history"; env: EnvironmentDto } | { kind: "adopt"; project: UnmanagedProjectDto } | { kind: "settings" } | null
+type Dialog = { kind: "form"; env: EnvironmentDto | null } | { kind: "delete" | "move" | "history" | "compose"; env: EnvironmentDto } | { kind: "adopt"; project: UnmanagedProjectDto } | { kind: "settings" } | null
 
 function EnvironmentsContent() {
     useEnvironmentsRealtime()
@@ -63,7 +64,7 @@ function EnvironmentsContent() {
                 <ErrorState title="Não foi possível carregar os ambientes" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
             ) : (
                 <>
-                    {!data.items.length && <EmptyState icon={Server} title="Nenhum ambiente ainda" description="Crie um a partir do repositório de uma central ou adote um projeto do compose em execução." actionLabel="Novo ambiente" onAction={() => setDialog({ kind: "form", env: null })} />}
+                    {!data.items.length && <EmptyState icon={Server} title="Nenhum ambiente ainda" description="Crie um a partir do repositório de uma central ou com um compose gerenciado (escrito aqui), ou adote um projeto do compose em execução." actionLabel="Novo ambiente" onAction={() => setDialog({ kind: "form", env: null })} />}
                     {GROUPS.filter((group) => groups[group.machine].length).map(({ machine, title, icon: Icon }) => (
                         <CadastroTableCard key={machine}>
                             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -83,7 +84,7 @@ function EnvironmentsContent() {
                     <UnmanagedList projects={data.unmanaged} onAdopt={(project) => setDialog({ kind: "adopt", project })} />
                 </>
             )}
-            <EnvironmentFormDialog open={dialog?.kind === "form"} env={dialog?.kind === "form" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} />
+            <EnvironmentFormDialog open={dialog?.kind === "form"} env={dialog?.kind === "form" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} hosts={data?.hosts ?? NO_HOSTS} onClose={() => setDialog(null)} />
             <DeleteEnvironmentDialog env={dialog?.kind === "delete" ? dialog.env : null} onClose={() => setDialog(null)} />
             <MoveDialog env={dialog?.kind === "move" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} onStarted={(id, title) => setDeploy({ id, title })} />
             <DeployHistoryDialog
@@ -94,6 +95,7 @@ function EnvironmentsContent() {
                     setDialog(null)
                 }}
             />
+            <ComposeDialog env={dialog?.kind === "compose" ? (data?.items.find((item) => item.id === dialog.env.id) ?? dialog.env) : null} onClose={() => setDialog(null)} />
             <AdoptDialog project={dialog?.kind === "adopt" ? dialog.project : null} onClose={() => setDialog(null)} />
             <SettingsDialog open={dialog?.kind === "settings"} onClose={() => setDialog(null)} />
             <DeployDrawer deployId={deploy?.id ?? null} title={deploy?.title ?? ""} onClose={() => setDeploy(null)} />

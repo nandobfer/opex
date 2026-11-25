@@ -28,6 +28,12 @@ export const REGISTRY_NAMESPACE = "opex-env"
 /** Arquivos gerados na pasta do ambiente. */
 export const OVERRIDE_FILE = "docker-compose.opex.yml"
 export const ENV_FILE = ".env.opex"
+/** Compose gerenciado (OPE-191): a revisão vigente é gravada com este nome na pasta do ambiente a cada deploy. */
+export const MANAGED_COMPOSE_FILE = "docker-compose.yml"
+/** Tamanho máximo de uma revisão do compose gerenciado (bytes em UTF-8). */
+export const MANAGED_COMPOSE_MAX_BYTES = 256 * 1024
+/** Revisões do compose gerenciado devolvidas na lista (as mais novas). */
+export const COMPOSE_REVISIONS_LIMIT = 50
 
 /** Deploys ficam 90 dias (TTL em `environment_deploys`). */
 export const DEPLOY_TTL_SECONDS = 90 * 24 * 60 * 60

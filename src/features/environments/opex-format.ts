@@ -1,6 +1,9 @@
-import { BUILDER_STATUS_LABELS, builderNotices, limitsText } from "./builder-view"
+import { BUILDER_STATUS_LABELS, builderNotices } from "./builder-view"
+import { limitsPendingDeploy } from "./limits-form"
+import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource-limits"
 import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
+import { composeNotDeployed } from "./managed-compose"
 import { DEPLOY_KIND_LABELS, formatDuration, groupByMachine, healthOf, HEALTH_LABELS, placementLabel, versionLabel } from "./view"
 
 /** Formatação das respostas das ferramentas do Agente Opex para os ambientes (módulo puro). */
@@ -30,6 +33,7 @@ export function deployView(deploy: EnvironmentDeploySummaryDto) {
         status: deploy.status,
         refCommit: [deploy.ref, deploy.commit ? deploy.commit.slice(0, 12) : null].filter(Boolean).join(" @ ") || null,
         versao: deploy.version ? `v${deploy.version}` : null,
+        ...(deploy.composeVersion ? { compose: `v${deploy.composeVersion}` } : {}),
         maquinas: placementLabel(deploy.buildOn, deploy.runOn),
         inicio: deploy.startedAt,
         fim: deploy.finishedAt,
@@ -45,6 +49,13 @@ function stateOf(env: EnvironmentDto): string {
     return HEALTH_LABELS[healthOf(env)]
 }
 
+/** "central (ref main)", "gerenciado (v3)" ou "adotado (PC)". */
+export function sourceLabel(source: EnvironmentDto["source"]): string {
+    if (source.kind === "central") return `central (ref ${source.ref})`
+    if (source.kind === "managed") return `gerenciado (v${source.composeVersion})`
+    return `adotado (${MACHINE_LABELS[source.machine]})`
+}
+
 export function environmentRow(env: EnvironmentDto) {
     const running = env.services.filter((service) => service.state === "running").length
     const version = versionLabel(env)
@@ -56,8 +67,11 @@ export function environmentRow(env: EnvironmentDto) {
         portas: env.ports,
         servicosNoAr: `${running}/${env.services.length}`,
         versao: version ? `${version.text}${version.live ? "" : " (implantada)"}` : null,
-        origem: env.source.kind === "central" ? `central (ref ${env.source.ref})` : `adotado (${MACHINE_LABELS[env.source.machine]})`,
+        origem: sourceLabel(env.source),
+        ...(env.source.kind === "managed" && env.deployedOn ? { composeImplantado: env.deployedComposeVersion ? `v${env.deployedComposeVersion}` : null } : {}),
+        ...(composeNotDeployed(env) ? { composeNaoImplantado: true } : {}),
         build: placementLabel(env.deployedOn?.buildOn ?? env.buildOn, env.deployedOn?.runOn ?? env.runOn),
+        limites: appliedLimitsText(env.services),
         ultimoDeploy: env.lastDeploy ? deployView(env.lastDeploy) : null,
     }
 }
@@ -85,7 +99,18 @@ export function environmentDetailView(env: EnvironmentDto) {
         noArEm: env.deployedOn ? placementLabel(env.deployedOn.buildOn, env.deployedOn.runOn) : null,
         variaveis: env.envKeys,
         urlSaude: env.healthUrl,
-        servicos: env.services.map((service) => ({ servico: service.service, container: service.container, estado: service.state, status: service.status, portas: service.ports, cpu: service.cpu, memoria: service.memory, versao: service.version })),
+        limites: { salvos: environmentLimitsText(env.limits), configuracao: env.limits, aplicados: appliedLimitsText(env.services), diferem: limitsPendingDeploy(env) },
+        servicos: env.services.map((service) => ({
+            servico: service.service,
+            container: service.container,
+            estado: service.state,
+            status: service.status,
+            portas: service.ports,
+            cpu: service.cpu,
+            memoria: service.memory,
+            versao: service.version,
+            limites: service.limits ? limitsText(service.limits) : null,
+        })),
         criadoEm: env.createdAt,
         atualizadoEm: env.updatedAt,
     }
@@ -107,6 +132,8 @@ export interface EnvironmentPatch {
     healthUrl?: string
     buildOn?: EnvironmentInput["buildOn"]
     runOn?: EnvironmentInput["runOn"]
+    /** Substitui os limites salvos. */
+    limits?: EnvironmentInput["limits"]
 }
 
 /** Valores do ambiente salvo com os campos enviados por cima (variáveis com valor vazio = mantém). */
@@ -120,6 +147,7 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
         healthUrl: patch.healthUrl ?? current.healthUrl,
         buildOn: patch.buildOn ?? current.buildOn,
         runOn: patch.runOn ?? current.runOn,
+        limits: patch.limits ?? current.limits,
     }
 }
 
@@ -165,6 +193,7 @@ interface FinishedDeploy {
     startedAt: Date | string
     finishedAt: Date | string | null
     version?: string | null
+    composeVersion?: number | null
 }
 
 /** Aviso do fim do deploy para a sessão do agente (texto ao modelo + selo no chat). */
@@ -179,6 +208,7 @@ export function deployNoticeText(deploy: FinishedDeploy, env: { name: string; sl
         duration ? `duração: ${duration}` : null,
         ref ? `ref: ${ref}` : null,
         deploy.version ? `versão: v${deploy.version}` : null,
+        deploy.composeVersion ? `compose: v${deploy.composeVersion}` : null,
         placementLabel(deploy.buildOn, deploy.runOn).toLowerCase(),
         !ok && deploy.error ? `erro: ${deploy.error.slice(0, 500)}` : null,
     ].filter(Boolean)

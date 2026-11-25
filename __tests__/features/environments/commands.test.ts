@@ -3,10 +3,11 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'no
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { centralCheckoutCommand, cleanTreeCommand, composeCommand, ensureEnvFilesCommand, envFilesConfigCommand, parseCreatedEnvFiles, parseEnvFiles, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, registryImage, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
-import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices } from '@/features/environments/compose-config'
+import { centralCheckoutCommand, cleanTreeCommand, composeCommand, ensureEnvFilesCommand, envFilesConfigCommand, parseCreatedEnvFiles, parseEnvFiles, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, parseSnapshotHost, registryImage, snapshotCommand, centralComposeConfigCommand, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
+import { composeBytes, limitLines, overrideYaml, parseComposeConfig, runOnPcProblem, selectServices } from '@/features/environments/compose-config'
 import { deploySteps, executionSteps, moveOrder } from '@/features/environments/pipeline'
-import { DEFAULT_ENVIRONMENTS_SETTINGS, environmentInputSchema, placementProblem, type Machine } from '@/features/environments/schemas'
+import { DEFAULT_ENVIRONMENT_LIMITS, DEFAULT_ENVIRONMENTS_SETTINGS, environmentInputSchema, environmentLimitsSchema, placementProblem, type Machine } from '@/features/environments/schemas'
+import { NO_LIMITS } from '@/features/environments/resource-limits'
 import { groupUnmanaged } from '@/features/environments/server/service'
 import { repositoryOwner, tagsToDelete } from '@/features/environments/server/registry'
 import { pcPortsOf } from '@/features/environments/server/forwards'
@@ -66,8 +67,8 @@ describe('compose', () => {
   it('lê o config, bloqueia bind mount e develop.watch para executar no PC', () => {
     const services = parseComposeConfig(`aviso\n${config}`)!
     expect(services).toEqual([
-      { name: 'app', hasBuild: true, bindMounts: ['/srv/app:/app'], hasWatch: true },
-      { name: 'db', hasBuild: false, bindMounts: [], hasWatch: false },
+      { name: 'app', hasBuild: true, bindMounts: ['/srv/app:/app'], hasWatch: true, declared: NO_LIMITS, limitStyle: { memory: 'deploy', cpus: 'deploy' } },
+      { name: 'db', hasBuild: false, bindMounts: [], hasWatch: false, declared: NO_LIMITS, limitStyle: { memory: 'deploy', cpus: 'deploy' } },
     ])
     expect(runOnPcProblem(services)).toContain('bind mount em app (/srv/app:/app) e develop.watch em app')
     expect(runOnPcProblem(selectServices(services, ['db']))).toBeNull()
@@ -194,7 +195,7 @@ describe('regras', () => {
   })
 
   it('schema: slug, portas e variáveis repetidas, ref e caminho do compose', () => {
-    const input = { name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, env: [], ports: [4100], healthUrl: '', buildOn: 'server', runOn: 'server' }
+    const input = { name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, env: [], ports: [4100], healthUrl: '', buildOn: 'server', runOn: 'server', limits: DEFAULT_ENVIRONMENT_LIMITS }
     expect(environmentInputSchema.safeParse(input).success).toBe(true)
     expect(environmentInputSchema.safeParse({ ...input, slug: 'Loja!' }).success).toBe(false)
     expect(environmentInputSchema.safeParse({ ...input, ports: [4100, 4100] }).success).toBe(false)
@@ -295,5 +296,116 @@ describe('arquivos de variáveis do compose (OPE-175)', () => {
     expect(command).toContain('[ ! -s "$f" ]')
     expect(command).toContain('git ls-files --error-unmatch')
     expect(command).toContain('"$PWD"/*)')
+  })
+})
+
+describe('limites de recursos (OPE-193)', () => {
+  const declaredConfig = JSON.stringify({
+    services: {
+      app: { image: 'app', mem_limit: '1g', memswap_limit: '1536m', cpus: 1 },
+      worker: { image: 'w', deploy: { resources: { limits: { memory: '536870912', cpus: '0.5' } } } },
+      db: { image: 'mongo:7', mem_limit: '${DB_MEM}' },
+    },
+  })
+
+  it('lê os limites declarados no compose (bytes ou unidades) e a forma usada', () => {
+    const [app, worker, db] = parseComposeConfig(declaredConfig)!
+    expect(app).toMatchObject({ declared: { memoryGb: 1, swapGb: 0.5, cpus: 1 }, limitStyle: { memory: 'service', cpus: 'service' } })
+    expect(worker).toMatchObject({ declared: { memoryGb: 0.5, swapGb: null, cpus: 0.5 }, limitStyle: { memory: 'deploy', cpus: 'deploy' } })
+    // Sem interpolação, `${VAR}` não é um valor: fica vazio (a forma continua a do serviço).
+    expect(db).toMatchObject({ declared: NO_LIMITS, limitStyle: { memory: 'service', cpus: 'deploy' } })
+    expect(composeBytes('2gb')).toBe(2 * 1024 ** 3)
+    expect(composeBytes(1024)).toBe(1024)
+    expect(composeBytes('abc')).toBeNull()
+  })
+
+  it('override: só chaves dos valores preenchidos, na forma do compose; swap = RAM + swap (0 = igual à RAM)', () => {
+    const services = parseComposeConfig(declaredConfig)!
+    const yaml = overrideYaml({
+      services,
+      images: {},
+      withEnvFile: false,
+      limits: { app: { memoryGb: 2, swapGb: 1, cpus: 2.5 }, worker: { memoryGb: 4, swapGb: 0, cpus: 1.5 }, db: null },
+    })
+    expect(yaml).toContain('"app":\n    mem_limit: "2048m"\n    memswap_limit: "3072m"\n    cpus: 2.5')
+    expect(yaml).toContain('"worker":\n    memswap_limit: "4096m"\n    deploy:\n      resources:\n        limits:\n          memory: "4096m"\n          cpus: "1.5"')
+    expect(yaml).not.toContain('"db"')
+    const plain = { limitStyle: { memory: 'deploy', cpus: 'deploy' } as const, declared: NO_LIMITS }
+    expect(limitLines({ memoryGb: 1, swapGb: null, cpus: null }, plain)).toEqual(['    deploy:', '      resources:', '        limits:', '          memory: "1024m"'])
+    expect(limitLines(NO_LIMITS, plain)).toEqual([])
+    // Sem limites: o override é o de antes.
+    expect(overrideYaml({ services, images: {}, withEnvFile: false, limits: { app: null, worker: null, db: null } })).toContain('services: {}')
+  })
+
+  it('regressão: RAM nova com swap vazio reescreve o memswap_limit declarado no compose (RAM nova + swap declarado)', () => {
+    // O compose declara mem_limit 1g + memswap_limit 1536m: sem reescrever, o total ficaria abaixo da RAM nova e o Docker recusaria o container.
+    const [app] = parseComposeConfig(declaredConfig)!
+    expect(limitLines({ memoryGb: 4, swapGb: null, cpus: null }, app!)).toEqual(['    mem_limit: "4096m"', '    memswap_limit: "4608m"'])
+    // Swap salvo continua valendo sobre o declarado; sem RAM no override, o declarado fica como está.
+    expect(limitLines({ memoryGb: 4, swapGb: 0, cpus: null }, app!)).toEqual(['    mem_limit: "4096m"', '    memswap_limit: "4096m"'])
+    expect(limitLines({ memoryGb: null, swapGb: null, cpus: 1 }, app!)).toEqual(['    cpus: 1'])
+  })
+
+  it('snapshot: limites aplicados por container (docker inspect) e a capacidade da máquina', () => {
+    const output = [
+      ['loja', 'app', 'loja-app-1', 'running', 'Up', '', '/home/u/loja', '/home/u/loja/docker-compose.yml', 'abc123'].join('\t'),
+      ['loja', 'db', 'loja-db-1', 'running', 'Up', '', '/home/u/loja', '/home/u/loja/docker-compose.yml', 'def456'].join('\t'),
+      '---',
+      ['loja-app-1', '1.00%', '100MiB / 4GiB'].join('\t'),
+      '---',
+      ['/loja-app-1', String(4 * 1024 ** 3), String(6 * 1024 ** 3), '2000000000', '0', '0'].join('\t'),
+      ['/loja-db-1', '0', '0', '0', '0', '0'].join('\t'),
+      '---',
+      `8|${16 * 1024 ** 3}`,
+    ].join('\n')
+    const [app, db] = parseSnapshot(output)
+    expect(app!.limits).toEqual({ memoryGb: 4, swapGb: 2, cpus: 2 })
+    expect(db!.limits).toEqual(NO_LIMITS)
+    expect(parseSnapshotHost(output)).toEqual({ cpus: 8, memoryGb: 16 })
+    expect(parseSnapshotHost('a\n---\nb')).toBeNull()
+    const command = snapshotCommand('pc', 'opex-local')
+    expect(command).toContain("docker --context opex-local ps -aq --filter label=com.docker.compose.project | xargs -r docker --context opex-local inspect -f '{{.Name}}")
+    expect(command).toContain("docker --context opex-local info --format '{{.NCPU}}|{{.MemTotal}}'")
+  })
+
+  it('schema: swap sem RAM, serviços repetidos e os dois modos', () => {
+    expect(environmentLimitsSchema.safeParse({ mode: 'shared', memoryGb: 4, swapGb: 0, cpus: 2.5 }).success).toBe(true)
+    const noRam = environmentLimitsSchema.safeParse({ mode: 'shared', memoryGb: null, swapGb: 1, cpus: null })
+    expect(noRam.success).toBe(false)
+    expect(noRam.error?.issues[0]).toMatchObject({ path: ['swapGb'], message: 'Defina a RAM para limitar o swap' })
+    const row = { service: 'app', memoryGb: null, swapGb: 2, cpus: null }
+    expect(environmentLimitsSchema.safeParse({ mode: 'service', services: [row] }).error?.issues[0]?.path).toEqual(['services', 0, 'swapGb'])
+    const ok = { service: 'app', memoryGb: 1, swapGb: null, cpus: null }
+    expect(environmentLimitsSchema.safeParse({ mode: 'service', services: [ok, ok] }).error?.issues[0]?.message).toBe('Serviços repetidos')
+    expect(environmentLimitsSchema.safeParse({ mode: 'shared', memoryGb: 0.1, swapGb: null, cpus: null }).success).toBe(false)
+  })
+
+  it('"Ler compose" da central: só os YAML da ref numa pasta temporária, apagada no fim', () => {
+    const command = centralComposeConfigCommand('/home/u/loja', 'main', 'deploy/compose.yml')
+    expect(command).toContain("git -C '/home/u/loja' fetch origin --prune --tags")
+    expect(command).toContain(`archive "$sha" -- 'deploy/compose.yml' ':(glob)**/*.y*ml' | tar -x -C "$tmp"`)
+    expect(command).toContain("docker compose -p opex-read -f 'deploy/compose.yml' config --no-env-resolution --no-interpolate --format json")
+    expect(command).toContain('rm -rf "$tmp"; exit $rc')
+  })
+
+  it('"Ler compose" da central no shell (repositório git real, docker de mentira): lê o compose da ref e apaga a pasta', () => {
+    const root = mkdtempSync(join(tmpdir(), 'ope193-'))
+    try {
+      const repo = join(root, 'repo')
+      const bin = join(root, 'bin')
+      execSync(`mkdir -p ${repo}/deploy ${bin} && git -C ${repo} init -q -b main && git -C ${repo} remote add origin ${repo}`)
+      writeFileSync(join(repo, 'deploy/compose.yml'), 'services:\n  app:\n    image: alpine\n')
+      writeFileSync(join(repo, 'README.md'), 'fora do archive')
+      execSync(`git -C ${repo} add -A && git -C ${repo} -c user.email=t@t -c user.name=t commit -qm init`)
+      // O docker de mentira grava a pasta onde rodou e o que havia nela, e imprime um JSON.
+      writeFileSync(join(bin, 'docker'), `#!/bin/sh\npwd > ${root}/cwd\nfind . -type f | sort > ${root}/files\necho '{"services":{"app":{"image":"alpine"}}}'\n`, { mode: 0o755 })
+      const output = execSync(centralComposeConfigCommand(repo, 'main', 'deploy/compose.yml'), { shell: '/bin/bash', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }).toString()
+      expect(parseComposeConfig(output)!.map((service) => service.name)).toEqual(['app'])
+      const cwd = readFileSync(join(root, 'cwd'), 'utf8').trim()
+      expect(readFileSync(join(root, 'files'), 'utf8').trim()).toBe('./deploy/compose.yml')
+      expect(existsSync(cwd)).toBe(false)
+    } finally {
+      rmSync(root, { recursive: true, force: true })
+    }
   })
 })
