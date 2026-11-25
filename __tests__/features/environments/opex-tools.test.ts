@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   envs: [] as Record<string, unknown>[],
   createEnvironment: vi.fn(async (input: Record<string, unknown>) => ({ _id: 'e9', ...input })),
-  updateEnvironment: vi.fn(async (id: string, input: { env: { key: string }[] }) => ({ _id: id, slug: 'loja', env: input.env })),
+  updateEnvironment: vi.fn(async (id: string, input: { env: { key: string }[]; limits?: unknown }) => ({ _id: id, slug: 'loja', env: input.env, limits: input.limits })),
   runEnvironmentAction: vi.fn(async (_id: string, input: { action: string }) => ({ deployId: input.action === 'deploy' || input.action === 'move' ? 'd1' : null, output: input.action === 'logs' ? '\u001b[32mapp | ok\u001b[0m\napp | linha 2\n' : null })),
   deleteEnvironment: vi.fn(async () => undefined),
   getDeploy: vi.fn(),
@@ -32,16 +32,33 @@ vi.mock('@/features/environments/server/service', () => ({
   createEnvironment: mocks.createEnvironment,
   updateEnvironment: mocks.updateEnvironment,
   getDeploy: mocks.getDeploy,
+  getEnvironment: async () => LIST_ITEM,
   listEnvironments: async () => ({
-    items: [
-      { id: 'e1', name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, envKeys: ['TOKEN'], ports: [8080], healthUrl: null, buildOn: 'server', runOn: 'pc', deployedOn: { buildOn: 'server', runOn: 'pc' }, deployedVersion: '1.2.0', lastDeploy: null, services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '8080', cpu: null, memory: null, version: '1.3.0' }], createdAt: '', updatedAt: '' },
-    ],
+    items: [LIST_ITEM],
     unmanaged: [{ machine: 'server', projectName: 'crm', workingDir: '/srv/crm', configFiles: ['/srv/crm/docker-compose.yml'], git: true, containers: 2, running: 2 }],
     pcAvailable: true,
     pcReason: null,
     checkedAt: '2026-10-28T12:00:00.000Z',
   }),
 }))
+const LIST_ITEM = {
+  id: 'e1',
+  name: 'Loja',
+  slug: 'loja',
+  source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' },
+  envKeys: ['TOKEN'],
+  ports: [8080],
+  healthUrl: null,
+  buildOn: 'server',
+  runOn: 'pc',
+  limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 },
+  deployedOn: { buildOn: 'server', runOn: 'pc' },
+  deployedVersion: '1.2.0',
+  lastDeploy: null,
+  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '8080', cpu: null, memory: null, version: '1.3.0', limits: { memoryGb: 4, swapGb: null, cpus: 2 } }],
+  createdAt: '',
+  updatedAt: '',
+}
 vi.mock('@/features/environments/server/deploy', () => ({ runEnvironmentAction: mocks.runEnvironmentAction, deleteEnvironment: mocks.deleteEnvironment }))
 vi.mock('@/features/environments/server/registry', () => ({ runRegistryCleanup: mocks.runRegistryCleanup, getRegistryStatus: async () => ({ running: true, port: 5050, detail: 'No ar' }) }))
 vi.mock('@/features/environments/server/opex-notice', () => ({ notifyOpexRegistryCleanup: mocks.notifyRegistry }))
@@ -108,7 +125,7 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
   it('lista agrupada por máquina com estado, versão e serviços no ar', async () => {
     const out = (await run('list_environments', {})) as { servidor: unknown[]; pc: Record<string, unknown>[]; naoGerenciados: number }
     expect(out.servidor).toHaveLength(0)
-    expect(out.pc[0]).toMatchObject({ slug: 'loja', estado: 'No ar', servicosNoAr: '1/1', versao: 'v1.3.0' })
+    expect(out.pc[0]).toMatchObject({ slug: 'loja', estado: 'No ar', servicosNoAr: '1/1', versao: 'v1.3.0', limites: 'RAM 4 GiB · swap padrão · 2 CPUs' })
     expect(out.naoGerenciados).toBe(1)
   })
 
@@ -124,6 +141,28 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
   it('edita só os campos enviados; variável sem valor mantém o salvo', async () => {
     await run('update_environment', { environment: 'loja', ref: 'release', env: [{ key: 'TOKEN' }, { key: 'NOVA', value: 'x' }] })
     expect(mocks.updateEnvironment).toHaveBeenCalledWith('e1', expect.objectContaining({ name: 'Loja', ports: [8080], source: expect.objectContaining({ ref: 'release' }), env: [{ key: 'TOKEN', value: '' }, { key: 'NOVA', value: 'x' }] }), 'local')
+  })
+
+  it('limites (OPE-193): detalhe com salvos, aplicados e divergência; criar e editar aceitam `limits` (substitui)', async () => {
+    const detail = (await run('get_environment', { environment: 'loja' })) as { limites: Record<string, unknown>; servicos: Record<string, unknown>[] }
+    expect(detail.limites).toMatchObject({ salvos: 'RAM 8 GiB · swap padrão · 2 CPUs', aplicados: 'RAM 4 GiB · swap padrão · 2 CPUs', diferem: true })
+    expect(detail.servicos[0]).toMatchObject({ servico: 'app', limites: 'RAM 4 GiB · swap padrão · 2 CPUs' })
+
+    const limits = { mode: 'service', services: [{ service: 'app', memoryGb: 2, swapGb: 0, cpus: 1.5 }] }
+    const out = await run('update_environment', { environment: 'loja', limits })
+    expect(mocks.updateEnvironment).toHaveBeenCalledWith('e1', expect.objectContaining({ limits, ports: [8080] }), 'local')
+    expect(out).toMatchObject({ limites: 'app: RAM 2 GiB · sem swap · 1,5 CPUs' })
+    expect(find('update_environment').summarize!({ environment: 'loja', limits } as never)).toContain('limits')
+    // Sem `limits`, mantém os salvos (documento antigo sem o campo = sem limite).
+    await run('update_environment', { environment: 'loja', ports: [9090] })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ limits: { mode: 'shared', memoryGb: null, swapGb: null, cpus: null } }), 'local')
+    // Swap sem RAM é recusado como na tela.
+    expect(() => find('update_environment').input.parse({ environment: 'loja', limits: { mode: 'shared', memoryGb: null, swapGb: 1, cpus: null } })).toThrow(/Defina a RAM/)
+
+    await run('create_environment', { name: 'Nova', centralId: 'c1', limits: { mode: 'shared', memoryGb: 1, swapGb: null, cpus: null } })
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: { mode: 'shared', memoryGb: 1, swapGb: null, cpus: null } }), 'local')
+    await run('create_environment', { name: 'Outra', centralId: 'c1' })
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null } }), 'local')
   })
 
   it('deploy volta na hora com o id e pede o aviso na sessão; adotado não aceita outra ref', async () => {

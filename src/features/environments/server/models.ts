@@ -2,7 +2,7 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
 import { dbConnect } from "@/lib/db"
 import type { EncryptedSecret } from "@/lib/crypto/secretBox"
 import { DEPLOY_TTL_SECONDS } from "../constants"
-import type { EnvironmentSource, Machine } from "../schemas"
+import type { EnvironmentLimits, EnvironmentSource, Machine } from "../schemas"
 import type { DeployKind, DeployStatus } from "../types"
 
 /** Coleções do módulo Ambientes (índices garantidos no primeiro uso). Ver `aicontext/modules/environments.md`. */
@@ -18,6 +18,8 @@ export interface IEnvironment {
     healthUrl: string | null
     buildOn: Machine
     runOn: Machine
+    /** Limites de recursos (OPE-193; ausente/`null` = sem limite, `environmentLimitsOf`). */
+    limits?: EnvironmentLimits | null
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     deployedRef: string | null
     deployedCommit: string | null
@@ -97,6 +99,7 @@ const environmentSchema = new Schema<IEnvironment>(
         healthUrl: { type: String, default: null },
         buildOn: { type: String, required: true },
         runOn: { type: String, required: true },
+        limits: { type: Schema.Types.Mixed, default: null },
         deployedOn: { type: Schema.Types.Mixed, default: null },
         deployedRef: { type: String, default: null },
         deployedCommit: { type: String, default: null },

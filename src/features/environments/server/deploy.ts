@@ -32,7 +32,8 @@ import {
 import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices, type ComposeService } from "../compose-config"
 import { DEPLOY_HEARTBEAT_MS, DEPLOY_LOG_MAX, ENVIRONMENTS_AUDIT_ENTITY, ENV_FILE, OVERRIDE_FILE } from "../constants"
 import { executionSteps, type DeployStep } from "../pipeline"
-import type { EnvironmentActionInput, EnvironmentsSettings, Machine } from "../schemas"
+import { environmentLimitsOf, limitsForService, limitsText, unknownLimitServices, type ResourceLimits } from "../resource-limits"
+import type { EnvironmentActionInput, EnvironmentLimits, EnvironmentsSettings, Machine } from "../schemas"
 import type { DeployKind } from "../types"
 import { emitDeploy, openDeployChannel } from "./hub"
 import { Environment, EnvironmentDeploy, type DeployCheckpoint, type IEnvironment, type IEnvironmentDeploy } from "./models"
@@ -209,8 +210,21 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     }
     const cross = target.buildOn !== target.runOn
     const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
-    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan) })), timeoutMs: 30_000 })
+    const limits = deployLimits(ctx, environmentLimitsOf(env.limits), services)
+    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits })), timeoutMs: 30_000 })
     return { services, envFiles }
+}
+
+/**
+ * Limites de cada serviço para o override e as linhas do log: os limites (ou "sem limite") e as linhas do
+ * modo por serviço que não existem no compose (ignoradas, sem bloquear o deploy).
+ */
+export function deployLimits(ctx: Pick<DeployContext, "write">, limits: EnvironmentLimits, services: ComposeService[]): Record<string, ResourceLimits | null> {
+    const byService = Object.fromEntries(services.map((service) => [service.name, limitsForService(limits, service.name)]))
+    const configured = Object.values(byService).some(Boolean)
+    for (const service of unknownLimitServices(limits, services.map((item) => item.name))) ctx.write(`\u001b[33mLimite do serviço ${service} ignorado: o serviço não está no compose.\u001b[0m\n`)
+    if (configured) ctx.write(`Limites: ${services.map((service) => `${service.name} ${byService[service.name] ? limitsText(byService[service.name]!) : "sem limite"}`).join("; ")}\n`)
+    return byService
 }
 
 /** Fim da saída de erro do `config` (sem JSON: nunca as variáveis resolvidas). */

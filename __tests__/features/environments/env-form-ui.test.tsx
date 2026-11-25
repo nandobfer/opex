@@ -5,13 +5,15 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { framerMotionMock } from '../../helpers/framer-motion'
 import type { EnvironmentDto, EnvironmentEnvValuesDto } from '@/features/environments/types'
 
-/** Ambientes: formulário com os valores das variáveis à vista e o Importar (.env/texto) — OPE-175. */
+/** Ambientes: formulário com os valores das variáveis à vista e o Importar (.env/texto) — OPE-175; limites de recursos — OPE-193. */
 
 const mocks = vi.hoisted(() => ({
   save: vi.fn(),
   refetch: vi.fn(),
   values: { data: undefined as EnvironmentEnvValuesDto | undefined, isError: false, isFetching: false },
-  toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() },
+  toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn(), info: vi.fn() },
+  read: vi.fn(),
+  readState: { isPending: false, isError: false },
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -20,6 +22,7 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ da
 vi.mock('@/features/environments/hooks/useEnvironments', () => ({
   useSaveEnvironment: () => ({ mutate: mocks.save, isPending: false }),
   useEnvironmentEnvValues: () => ({ ...mocks.values, refetch: mocks.refetch }),
+  useReadComposeServices: () => ({ mutate: mocks.read, ...mocks.readState }),
 }))
 
 import { EnvironmentFormDialog } from '@/features/environments/components/EnvironmentFormDialog'
@@ -35,6 +38,7 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   healthUrl: null,
   buildOn: 'server',
   runOn: 'server',
+  limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
   deployedOn: null,
   deployedVersion: null,
   lastDeploy: null,
@@ -44,7 +48,8 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   ...overrides,
 })
 
-const open = (value: EnvironmentDto | null = env()) => render(<EnvironmentFormDialog open env={value} pcAvailable pcReason={null} onClose={vi.fn()} />)
+const HOSTS = { server: { cpus: 8, memoryGb: 31.2 }, pc: null }
+const open = (value: EnvironmentDto | null = env()) => render(<EnvironmentFormDialog open env={value} pcAvailable pcReason={null} hosts={HOSTS} onClose={vi.fn()} />)
 const valueInput = (index: number) => screen.getByLabelText(`Valor da variável ${index}`) as HTMLInputElement
 const nameInput = (index: number) => screen.getByLabelText(`Nome da variável ${index}`) as HTMLInputElement
 const saveButton = () => screen.getByRole('button', { name: 'Salvar' })
@@ -57,6 +62,7 @@ async function openImportMenu() {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  mocks.readState = { isPending: false, isError: false }
   mocks.values = { data: { items: [{ key: 'TOKEN', value: 'segredo' }, { key: 'URL', value: 'http://a#b' }] }, isError: false, isFetching: false }
 })
 afterEach(cleanup)
@@ -105,7 +111,7 @@ describe('valores das variáveis', () => {
 
   it('Novo ambiente começa sem variáveis e sem ler valores', () => {
     mocks.values = { data: undefined, isError: false, isFetching: false }
-    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} onClose={vi.fn()} />)
+    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} hosts={HOSTS} onClose={vi.fn()} />)
     expect(screen.queryByLabelText('Valor da variável 1')).toBeNull()
     expect(screen.getByRole('button', { name: 'Criar ambiente' }).hasAttribute('disabled')).toBe(false)
   })
@@ -150,3 +156,91 @@ describe('Importar', () => {
     expect(screen.queryByLabelText('Valor da variável 4')).toBeNull()
   })
 })
+
+describe('limites de recursos (OPE-193)', () => {
+  const service = (name: string, limits: EnvironmentDto['services'][number]['limits']): EnvironmentDto['services'][number] => ({ service: name, container: `loja-${name}-1`, state: 'running', status: 'Up', ports: '', cpu: null, memory: null, version: null, limits })
+  const input = (id: string) => document.getElementById(id) as HTMLInputElement
+  const submit = async () => {
+    await act(async () => fireEvent.click(saveButton()))
+  }
+
+  it('Novo: RAM, swap e CPUs vazios ("Sem limite"), com a capacidade da máquina e o modo único', async () => {
+    mocks.values = { data: undefined, isError: false, isFetching: false }
+    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} hosts={HOSTS} onClose={vi.fn()} />)
+    expect(input('environment-limits-memory').value).toBe('')
+    expect(input('environment-limits-memory').getAttribute('placeholder')).toBe('Sem limite')
+    expect(input('environment-limits-swap').getAttribute('placeholder')).toBe('Padrão do Docker')
+    expect(input('environment-limits-cpus').getAttribute('placeholder')).toBe('Sem limite')
+    expect(document.body.textContent).toContain('o servidor tem 31,2 GiB')
+    expect(screen.getByRole('radio', { name: 'Mesmos para cada serviço' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('Editar sem limites salvos vem com os aplicados no host; com salvos, os salvos', async () => {
+    open(env({ services: [service('app', { memoryGb: 4, swapGb: null, cpus: 2 }), service('db', { memoryGb: 4, swapGb: null, cpus: 2 })] }))
+    await waitFor(() => expect(input('environment-limits-memory').value).toBe('4'))
+    expect(input('environment-limits-cpus').value).toBe('2')
+    expect(document.body.textContent).toContain('No host hoje: RAM 4 GiB · swap padrão · 2 CPUs.')
+    cleanup()
+    open(env({ limits: { mode: 'shared', memoryGb: 8, swapGb: 0, cpus: null }, services: [service('app', { memoryGb: 4, swapGb: null, cpus: 2 })] }))
+    await waitFor(() => expect(input('environment-limits-memory').value).toBe('8'))
+    expect(input('environment-limits-swap').value).toBe('0')
+    expect(input('environment-limits-cpus').value).toBe('')
+  })
+
+  it('aplicados diferentes por serviço abrem no modo "Por serviço"', async () => {
+    open(env({ services: [service('app', { memoryGb: 4, swapGb: null, cpus: null }), service('db', { memoryGb: 1, swapGb: null, cpus: null })] }))
+    await waitFor(() => expect(input('environment-limits-app-memory').value).toBe('4'))
+    expect(input('environment-limits-db-memory').value).toBe('1')
+    expect(screen.getByRole('radio', { name: 'Por serviço' }).getAttribute('aria-checked')).toBe('true')
+  })
+
+  it('swap sem RAM mostra o erro e não salva; com a RAM, envia os limites', async () => {
+    open()
+    await waitFor(() => expect(valueInput(1).value).toBe('segredo'))
+    fireEvent.change(input('environment-limits-swap'), { target: { value: '2' } })
+    await waitFor(() => expect(document.body.textContent).toContain('Defina a RAM para limitar o swap'))
+    await submit()
+    expect(mocks.save).not.toHaveBeenCalled()
+    fireEvent.change(input('environment-limits-memory'), { target: { value: '4' } })
+    fireEvent.change(input('environment-limits-cpus'), { target: { value: '2.5' } })
+    await submit()
+    await waitFor(() => expect(mocks.save).toHaveBeenCalled())
+    expect(mocks.save.mock.calls[0]![0].limits).toEqual({ mode: 'shared', memoryGb: 4, swapGb: 2, cpus: 2.5 })
+  })
+
+  it('"Por serviço" copia os valores para os serviços do host; "Ler compose" acrescenta os do compose e marca a linha órfã', async () => {
+    open(env({ limits: { mode: 'shared', memoryGb: 2, swapGb: null, cpus: null }, services: [service('app', NO_SERVICE_LIMITS)] }))
+    await waitFor(() => expect(valueInput(1).value).toBe('segredo'))
+    fireEvent.click(screen.getByRole('radio', { name: 'Por serviço' }))
+    await waitFor(() => expect(input('environment-limits-app-memory').value).toBe('2'))
+    expect(mocks.read).not.toHaveBeenCalled()
+    mocks.read.mockImplementation((_input, options: { onSuccess: (result: unknown) => void }) =>
+      options.onSuccess({ services: [{ name: 'web', hasBuild: true, declared: { memoryGb: 1, swapGb: null, cpus: 0.5 } }, { name: 'db', hasBuild: false, declared: NO_SERVICE_LIMITS }] }),
+    )
+    await act(async () => fireEvent.click(screen.getAllByRole('button', { name: /Ler compose/ })[0]!))
+    expect(mocks.read.mock.calls[0]![0]).toEqual({ source: env().source })
+    await waitFor(() => expect(input('environment-limits-web-memory').value).toBe('1'))
+    expect(input('environment-limits-web-cpus').value).toBe('0.5')
+    expect(input('environment-limits-db-memory').value).toBe('')
+    // `app` (do host) não está no compose lido.
+    expect(screen.getByText('não está no compose')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Remover os limites de app' }))
+    await waitFor(() => expect(document.getElementById('environment-limits-app-memory')).toBeNull())
+    await submit()
+    await waitFor(() => expect(mocks.save).toHaveBeenCalled())
+    expect(mocks.save.mock.calls[0]![0].limits).toEqual({ mode: 'service', services: [{ service: 'web', memoryGb: 1, swapGb: null, cpus: 0.5 }, { service: 'db', ...NO_SERVICE_LIMITS }] })
+  })
+
+  it('"Por serviço" sem serviços conhecidos lê o compose sozinho; o erro da leitura oferece Tentar novamente', async () => {
+    mocks.readState = { isPending: false, isError: true }
+    open()
+    await waitFor(() => expect(valueInput(1).value).toBe('segredo'))
+    fireEvent.click(screen.getByRole('radio', { name: 'Por serviço' }))
+    expect(mocks.read).toHaveBeenCalledTimes(1)
+    expect(screen.getByText(/Não foi possível ler o compose da origem/)).toBeTruthy()
+    fireEvent.click(screen.getAllByRole('button', { name: /Tentar novamente/ }).at(-1)!)
+    expect(mocks.read).toHaveBeenCalledTimes(2)
+  })
+})
+
+const NO_SERVICE_LIMITS = { memoryGb: null, swapGb: null, cpus: null }

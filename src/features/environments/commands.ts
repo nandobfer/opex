@@ -1,6 +1,7 @@
 import { posix } from "node:path"
 import { cancelForwardCommand, cancelReverseForwardCommand, forwardPortCommand, muxCommand, quote, reverseForwardCommand } from "@/features/local-docker/commands"
 import { COMPOSE_LABELS, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
+import { appliedLimits, round2, type ResourceLimits } from "./resource-limits"
 import type { EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 /**
@@ -175,6 +176,20 @@ export function centralCheckoutCommand(settings: EnvironmentsSettings, repo: str
     ].join(" && ")
 }
 
+/**
+ * "Ler compose" de uma central (OPE-193): o `config` sem interpolação nem variáveis do compose da ref,
+ * numa pasta temporária com só os YAML da ref (`git archive`), apagada no fim. O worktree do ambiente
+ * no ar não é tocado.
+ */
+export function centralComposeConfigCommand(repo: string, ref: string, composeFile: string): string {
+    const read = [
+        `git -C ${quote(repo)} archive "$sha" -- ${quote(composeFile)} ${quote(":(glob)**/*.y*ml")} | tar -x -C "$tmp"`,
+        `cd "$tmp"`,
+        `docker compose -p opex-read -f ${quote(composeFile)} config --no-env-resolution --no-interpolate --format json`,
+    ].join(" && ")
+    return [`git -C ${quote(repo)} fetch origin --prune --tags`, resolveRefCommand(repo, ref), `tmp=$(mktemp -d)`, `{ ${read}; }; rc=$?; cd / && rm -rf "$tmp"; exit $rc`].join(" && ")
+}
+
 /** Adotado com git: `pull` opcional e o commit; sem git: nada (o redeploy só refaz o build). */
 export function adoptedRevisionCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, pull: boolean): string {
     const command = `${pull ? `git -C ${plan.dir} pull --ff-only && ` : ""}git -C ${plan.dir} rev-parse --short=12 HEAD`
@@ -331,9 +346,24 @@ const PS_FORMAT = [`{{.Label "${COMPOSE_LABELS.project}"}}`, `{{.Label "${COMPOS
 
 const docker = (machine: Machine, context: string) => (machine === "pc" ? `docker --context ${context}` : "docker")
 
-/** Containers de projetos do compose e o uso de CPU/RAM (separados por uma linha `---`). */
+const LIMITS_FORMAT = ["{{.Name}}", "{{.HostConfig.Memory}}", "{{.HostConfig.MemorySwap}}", "{{.HostConfig.NanoCpus}}", "{{.HostConfig.CpuPeriod}}", "{{.HostConfig.CpuQuota}}"].join(SEP)
+
+/**
+ * Containers de projetos do compose, o uso de CPU/RAM, os limites aplicados (`docker inspect`) e a
+ * capacidade da máquina (`docker info`), em blocos separados por uma linha `---`.
+ */
 export function snapshotCommand(machine: Machine, context: string): string {
-    return `${docker(machine, context)} ps -a --filter label=${COMPOSE_LABELS.project} --format ${quote(PS_FORMAT)}; echo ---; ${docker(machine, context)} stats --no-stream --format ${quote(`{{.Name}}${SEP}{{.CPUPerc}}${SEP}{{.MemUsage}}`)} 2>/dev/null; true`
+    const cli = docker(machine, context)
+    return [
+        `${cli} ps -a --filter label=${COMPOSE_LABELS.project} --format ${quote(PS_FORMAT)}`,
+        "echo ---",
+        `${cli} stats --no-stream --format ${quote(`{{.Name}}${SEP}{{.CPUPerc}}${SEP}{{.MemUsage}}`)} 2>/dev/null`,
+        "echo ---",
+        `${cli} ps -aq --filter label=${COMPOSE_LABELS.project} | xargs -r ${cli} inspect -f ${quote(LIMITS_FORMAT)} 2>/dev/null`,
+        "echo ---",
+        `${cli} info --format ${quote("{{.NCPU}}|{{.MemTotal}}")} 2>/dev/null`,
+        "true",
+    ].join("; ")
 }
 
 export interface ComposeContainer {
@@ -349,14 +379,26 @@ export interface ComposeContainer {
     configFiles: string[]
     cpu: string | null
     memory: string | null
+    /** Limites aplicados (`null` = não lidos). */
+    limits: ResourceLimits | null
+}
+
+const integer = (value: string | undefined) => {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) ? parsed : 0
 }
 
 export function parseSnapshot(output: string): ComposeContainer[] {
-    const [ps = "", stats = ""] = output.split(/^---$/m)
+    const [ps = "", stats = "", inspect = ""] = output.split(/^---$/m)
     const usage = new Map<string, { cpu: string; memory: string }>()
     for (const line of stats.split("\n")) {
         const [name, cpu, memory] = line.trim().split(SEP)
         if (name && cpu) usage.set(name, { cpu, memory: memory ?? "" })
+    }
+    const limits = new Map<string, ResourceLimits>()
+    for (const line of inspect.split("\n")) {
+        const [name = "", memory, swap, nano, period, quota] = line.trim().split(SEP)
+        if (name && memory !== undefined) limits.set(name.replace(/^\//, ""), appliedLimits({ memoryBytes: integer(memory), memorySwapBytes: integer(swap), nanoCpus: integer(nano), cpuPeriod: integer(period), cpuQuota: integer(quota) }))
     }
     return ps
         .split("\n")
@@ -365,7 +407,15 @@ export function parseSnapshot(output: string): ComposeContainer[] {
         .map((line) => {
             const [project = "", service = "", name = "", state = "", status = "", ports = "", workingDir = "", configFiles = "", id = ""] = line.split(SEP)
             const stat = usage.get(name)
-            return { id: id.trim(), project, service, name, state, status, ports, workingDir, configFiles: configFiles ? configFiles.split(",").filter(Boolean) : [], cpu: stat?.cpu ?? null, memory: stat?.memory ?? null }
+            return { id: id.trim(), project, service, name, state, status, ports, workingDir, configFiles: configFiles ? configFiles.split(",").filter(Boolean) : [], cpu: stat?.cpu ?? null, memory: stat?.memory ?? null, limits: limits.get(name) ?? null }
         })
         .filter((item) => item.project)
+}
+
+/** CPUs e memória da máquina (último bloco do snapshot; `null` = não lidos). */
+export function parseSnapshotHost(output: string): { cpus: number; memoryGb: number } | null {
+    const block = output.split(/^---$/m)[3] ?? ""
+    const line = block.split("\n").find((item) => item.includes("|"))
+    const [ncpu, total] = line?.trim().split("|") ?? []
+    return integer(ncpu) > 0 ? { cpus: integer(ncpu), memoryGb: round2(integer(total) / 1024 ** 3) } : null
 }

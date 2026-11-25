@@ -1,4 +1,6 @@
-import { BUILDER_STATUS_LABELS, builderNotices, limitsText } from "./builder-view"
+import { BUILDER_STATUS_LABELS, builderNotices } from "./builder-view"
+import { limitsPendingDeploy } from "./limits-form"
+import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource-limits"
 import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
 import { DEPLOY_KIND_LABELS, formatDuration, groupByMachine, healthOf, HEALTH_LABELS, placementLabel, versionLabel } from "./view"
@@ -58,6 +60,7 @@ export function environmentRow(env: EnvironmentDto) {
         versao: version ? `${version.text}${version.live ? "" : " (implantada)"}` : null,
         origem: env.source.kind === "central" ? `central (ref ${env.source.ref})` : `adotado (${MACHINE_LABELS[env.source.machine]})`,
         build: placementLabel(env.deployedOn?.buildOn ?? env.buildOn, env.deployedOn?.runOn ?? env.runOn),
+        limites: appliedLimitsText(env.services),
         ultimoDeploy: env.lastDeploy ? deployView(env.lastDeploy) : null,
     }
 }
@@ -85,7 +88,18 @@ export function environmentDetailView(env: EnvironmentDto) {
         noArEm: env.deployedOn ? placementLabel(env.deployedOn.buildOn, env.deployedOn.runOn) : null,
         variaveis: env.envKeys,
         urlSaude: env.healthUrl,
-        servicos: env.services.map((service) => ({ servico: service.service, container: service.container, estado: service.state, status: service.status, portas: service.ports, cpu: service.cpu, memoria: service.memory, versao: service.version })),
+        limites: { salvos: environmentLimitsText(env.limits), configuracao: env.limits, aplicados: appliedLimitsText(env.services), diferem: limitsPendingDeploy(env) },
+        servicos: env.services.map((service) => ({
+            servico: service.service,
+            container: service.container,
+            estado: service.state,
+            status: service.status,
+            portas: service.ports,
+            cpu: service.cpu,
+            memoria: service.memory,
+            versao: service.version,
+            limites: service.limits ? limitsText(service.limits) : null,
+        })),
         criadoEm: env.createdAt,
         atualizadoEm: env.updatedAt,
     }
@@ -107,6 +121,8 @@ export interface EnvironmentPatch {
     healthUrl?: string
     buildOn?: EnvironmentInput["buildOn"]
     runOn?: EnvironmentInput["runOn"]
+    /** Substitui os limites salvos. */
+    limits?: EnvironmentInput["limits"]
 }
 
 /** Valores do ambiente salvo com os campos enviados por cima (variáveis com valor vazio = mantém). */
@@ -120,6 +136,7 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
         healthUrl: patch.healthUrl ?? current.healthUrl,
         buildOn: patch.buildOn ?? current.buildOn,
         runOn: patch.runOn ?? current.runOn,
+        limits: patch.limits ?? current.limits,
     }
 }
 
