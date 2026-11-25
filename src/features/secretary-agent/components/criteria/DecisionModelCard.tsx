@@ -12,7 +12,7 @@ import { SecretaryModelCard } from "../SecretaryModelCard"
  * Só é chamado quando há assunto bloqueado ou "Só os assuntos liberados", e quem enviou passou na etapa 1.
  */
 export function DecisionModelCard({ form }: { form: SecretaryForm }) {
-    const providers = useAiProviderStatuses().providers.filter((item) => (DECISION_PROVIDER_IDS as readonly string[]).includes(item.id))
+    const providers = useAiProviderStatuses(true).providers.filter((item) => (DECISION_PROVIDER_IDS as readonly string[]).includes(item.id))
     const same = form.watch("decision.model.sameAsAgent")
     const provider = form.watch("decision.model.provider")
     return <Card>
