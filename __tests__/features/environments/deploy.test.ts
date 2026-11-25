@@ -17,7 +17,7 @@ vi.mock('@/lib/crypto/secretBox', () => ({ encryptSecret: (plain: string) => ({ 
 } }))
 vi.mock('@/features/environments/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
-  return { Environment: memoryModel(), EnvironmentDeploy: memoryModel(), EnvironmentsState: memoryModel(), environmentsDb: async () => {} }
+  return { Environment: memoryModel(), EnvironmentDeploy: memoryModel(), EnvironmentComposeVersion: memoryModel(), EnvironmentsState: memoryModel(), environmentsDb: async () => {} }
 })
 vi.mock('@/features/environments/server/settings', async () => {
   const { DEFAULT_ENVIRONMENTS_SETTINGS } = await import('@/features/environments/schemas')
@@ -36,19 +36,20 @@ vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: {} }))
 vi.mock('@/features/local-docker/server/models', () => ({ LocalDockerPreview: {} }))
 vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.queueFollowUp }))
 
-import { Environment, EnvironmentDeploy } from '@/features/environments/server/models'
+import { Environment, EnvironmentComposeVersion, EnvironmentDeploy } from '@/features/environments/server/models'
 import { deleteEnvironment, runEnvironmentAction, startDeploy } from '@/features/environments/server/deploy'
 import { createEnvironment, readEnvValues, updateEnvironment } from '@/features/environments/server/service'
 import type { EnvironmentInput } from '@/features/environments/schemas'
 
 const envs = Environment as unknown as { docs: Record<string, unknown>[] }
 const deploys = EnvironmentDeploy as unknown as { docs: Record<string, unknown>[] }
+const revisions = EnvironmentComposeVersion as unknown as { docs: Record<string, unknown>[] }
 
 const CONFIG = (bind: boolean) =>
   JSON.stringify({ services: { app: { build: { context: '.' }, environment: { CLERK_SECRET_KEY: 'sk_test_vazado' }, volumes: bind ? [{ type: 'bind', source: '/srv/app', target: '/app' }] : [] }, db: { image: 'mongo:7' } } })
 
 /** `envFiles`: arquivos de variáveis que o compose declara; `existing`: os que já existem na pasta. */
-function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string } = {}) {
+function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string; config?: string } = {}) {
   const calls: string[] = []
   const run = vi.fn(async (command: string, _timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
     calls.push(command)
@@ -64,7 +65,7 @@ function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'mi
     }
     if (options.configOutput && command.includes('config --format json')) return { exitCode: 1, output: options.configOutput }
     if (command.includes('rev-parse --short=12')) return { exitCode: 0, output: 'abc123def456' }
-    if (command.includes('config --format json')) return { exitCode: 0, output: CONFIG(options.bind ?? false) }
+    if (command.includes('config --format json')) return { exitCode: 0, output: options.config ?? CONFIG(options.bind ?? false) }
     if (command.includes('docker image inspect')) return { exitCode: 0, output: options.images ?? 'missing' }
     if (command.includes('status --porcelain')) return { exitCode: 0, output: options.tree ?? 'clean' }
     if (command.includes('package.json')) return { exitCode: 0, output: '{"name":"loja","version":"2.3.4"}' }
@@ -91,6 +92,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   envs.docs.length = 0
   deploys.docs.length = 0
+  revisions.docs.length = 0
   mocks.pcAvailable = true
 })
 
@@ -420,5 +422,78 @@ describe('edição e ações', () => {
     expect(down).toContain('-O cancel -L')
     expect(mocks.publish).toHaveBeenCalledWith(String(env._id), 'status')
     expect((await runEnvironmentAction(String(env._id), { action: 'logs' }, 'local', run)).output).toBe('')
+  })
+})
+
+describe('compose gerenciado (OPE-191)', () => {
+  const MINIO_YAML = 'services:\n  minio:\n    image: minio/minio\n    environment:\n      MINIO_ROOT_PASSWORD: senha-no-yaml\n'
+  const IMAGE_ONLY = JSON.stringify({ services: { minio: { image: 'minio/minio', environment: { MINIO_ROOT_USER: 'resolvido' } } } })
+  const WITH_BUILD = JSON.stringify({ services: { app: { build: { context: '.' } }, minio: { image: 'minio/minio' } } })
+  const managed = (overrides: Partial<EnvironmentInput> = {}) =>
+    input({ slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: MINIO_YAML, ports: [], ...overrides })
+
+  async function withRevisions(count: number) {
+    const env = await createEnvironment(managed(), 'local')
+    const { saveComposeRevision } = await import('@/features/environments/server/compose-revisions')
+    for (let version = 2; version <= count; version++) await saveComposeRevision(String(env._id), { content: `${MINIO_YAML}# v${version}\n` }, 'local')
+    return env
+  }
+
+  it('sobe com image: — cria a pasta, sem git, grava a revisão vigente sem expor o YAML e registra a versão implantada', async () => {
+    const env = await withRevisions(3)
+    const { run, calls } = host({ config: IMAGE_ONLY })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const deploy = deploys.docs[0]!
+    expect(deploy.status).toBe('success')
+    expect(calls[0]).toBe('mkdir -p "$HOME/opex-envs/minio"')
+    expect(calls.some((command) => command.includes('rev-parse') || command.includes('git '))).toBe(false)
+    const write = run.mock.calls.find(([command]) => String(command).includes('> "$HOME/opex-envs/minio"/docker-compose.yml'))!
+    expect(write[2]).toMatchObject({ redactedAs: 'gravar docker-compose.yml (compose gerenciado v3, conteúdo omitido)' })
+    expect(Buffer.from(String(write[0]).match(/printf %s '([^']+)'/)![1]!, 'base64').toString()).toContain('# v3')
+    const log = String(deploy.log)
+    expect(log).toContain('▸ Compose gerenciado v3')
+    expect(log).toContain('Compose gerenciado v3 (1 serviço(s)): minio')
+    expect(log).not.toContain('senha-no-yaml')
+    expect(log).not.toContain('resolvido')
+    expect(deploy.composeVersion).toBe(3)
+    expect(deploy.ref).toBeNull()
+    const saved = envs.docs[0]!
+    expect(saved.deployedComposeVersion).toBe(3)
+    expect(revisions.docs.find((item) => item.version === 3)!.deployedAt).toBeInstanceOf(Date)
+    expect(revisions.docs.find((item) => item.version === 2)!.deployedAt).toBeNull()
+    // `.env.opex` e o override continuam iguais (regras atuais).
+    expect(calls.some((command) => command.includes('/.env.opex'))).toBe(true)
+    expect(calls.some((command) => command.includes(' up -d --no-build'))).toBe(true)
+  })
+
+  it('compose com build falha antes de qualquer build, com a mensagem clara', async () => {
+    const env = await withRevisions(1)
+    const { run, calls } = host({ config: WITH_BUILD })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const deploy = deploys.docs[0]!
+    expect(deploy.status).toBe('failed')
+    expect(deploy.error).toBe('Compose gerenciado não tem código-fonte: use `image:` nos serviços ou a origem central')
+    expect(calls.some((command) => / build( |$)/.test(command) || command.includes('up -d'))).toBe(false)
+    expect(String(deploy.log)).not.toContain('Override do opex')
+    // Falha não registra a revisão como implantada.
+    expect(envs.docs[0]!.deployedComposeVersion ?? null).toBeNull()
+    expect(revisions.docs[0]!.deployedAt).toBeNull()
+  })
+
+  it('sem revisão vigente (proteção): falha pedindo o compose', async () => {
+    const env = await withRevisions(1)
+    revisions.docs.length = 0
+    const { run } = host({ config: IMAGE_ONLY })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.error).toBe('O ambiente não tem compose: escreva-o em Compose e implante de novo')
+  })
+
+  it('apagar remove a pasta do ambiente e todas as revisões', async () => {
+    const env = await withRevisions(2)
+    const { run, calls } = host()
+    await deleteEnvironment(String(env._id), { volumes: false }, 'local', run)
+    expect(calls).toContain('rm -rf "$HOME/opex-envs/minio"')
+    expect(revisions.docs).toHaveLength(0)
+    expect(envs.docs).toHaveLength(0)
   })
 })
