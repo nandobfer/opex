@@ -6,7 +6,7 @@ import { selfMemoryEnabled } from "@/features/ai/server/self-memory/settings"
 import { selfMemoryTools } from "@/features/ai/server/self-memory/tools"
 import { evolution } from "@/features/evolution-api/server/client"
 import { mentionsOwner, messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "@/features/evolution-api/message"
-import { isBlocked } from "../criteria"
+import { evaluateAudience } from "../criteria"
 import { checkLimits, lastHourSince } from "../limits"
 import { SECRETARY_CONSUMPTION_ORIGIN, SECRETARY_DECISION_CONSUMPTION_ORIGIN, SECRETARY_HISTORY_LIMIT } from "../constants"
 import { randomDelayMs, typingMs } from "../split"
@@ -56,7 +56,10 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
     try {
         const { settings } = await loadSecretarySettings()
         if (!settings.enabled || !settings.main.provider || !settings.main.model || settings.instance !== instance) return await decide("disabled", "Agente desligado ou instância alterada.")
-        if (isBlocked(settings.criteria, message.chatJid)) return await decide("ignored", "A conversa está em \"Nunca responder a\".")
+        // Etapa 1 dos critérios antes de qualquer custo: quem não pode ser respondido não tem a mídia baixada nem lida.
+        const mentioned = messages.some((item) => mentionsOwner(item, ownerJid, ownerLid))
+        const audience = evaluateAudience(settings.criteria, { jid: message.chatJid, isGroup: message.isGroup, mentioned })
+        if (audience.failure) return await decide("ignored", audience.failure.reason)
         if (state.pausedUntil && state.pausedUntil > new Date()) return await decide("paused", "Pausa ativa nesta conversa.")
         const now = new Date()
         const [repliesLastHour, spent] = await Promise.all([
@@ -81,7 +84,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         let historyCache: Promise<{ owner: boolean; text: string }[]> | null = null
         const writeMemory = selfMemoryEnabled("secretario")
         const plan = await planSecretaryReply({
-            settings, chatJid: message.chatJid, isGroup: message.isGroup, mentioned: messages.some((item) => mentionsOwner(item, ownerJid, ownerLid)),
+            settings, chatJid: message.chatJid, isGroup: message.isGroup, mentioned,
             text, ownerAnswer, id: token, origins: { reply: SECRETARY_CONSUMPTION_ORIGIN, decision: SECRETARY_DECISION_CONSUMPTION_ORIGIN }, observing,
         }, {
             history: () => (historyCache ??= evolution.findMessages(instance, { remoteJid: message.chatJid, pageSize: SECRETARY_HISTORY_LIMIT })

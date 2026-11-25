@@ -54,6 +54,15 @@ export const SECRETARY_HISTORY_LIMIT = 30
 export const SECRETARY_MAX_PARTS = 4
 /** Atraso para tratar uma mensagem `fromMe` (dá tempo de o envio do próprio agente ser registrado). */
 export const FROM_ME_SETTLE_MS = 3_000
+/**
+ * Mensagem mais velha que isto (pela hora dela no WhatsApp) chegou atrasada, por exemplo entregue pela Evolution
+ * depois de uma reconexão: o Secretário não responde, e a de `fromMe` só pausa pelo tempo que ainda faltaria.
+ */
+export const SECRETARY_STALE_MESSAGE_MS = 10 * 60_000
+
+export function isStaleMessage(timestamp: Date, now: Date = new Date()): boolean {
+    return now.getTime() - timestamp.getTime() > SECRETARY_STALE_MESSAGE_MS
+}
 
 /** Decisões do registro (uma por mensagem recebida). */
 export const SECRETARY_DECISIONS = [

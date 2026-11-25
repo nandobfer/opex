@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     spent: 0,
     subject: null as unknown,
     decideSubject: vi.fn(),
+    readMedia: vi.fn(async (_settings: unknown, _instance: string, message: ParsedMessage) => ({ text: message.text || "[áudio]", understood: false })),
     inference: vi.fn(),
     decide: vi.fn(),
     send: vi.fn(async () => "S1"),
@@ -40,7 +41,7 @@ vi.mock("@/features/secretary-agent/server/settings", () => ({ loadSecretarySett
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
 vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
-vi.mock("@/features/secretary-agent/server/media", () => ({ readTurnMedia: async (_s: unknown, _i: string, message: ParsedMessage) => ({ text: message.text || "[áudio]", understood: false }) }))
+vi.mock("@/features/secretary-agent/server/media", () => ({ readTurnMedia: mocks.readMedia }))
 vi.mock("@/features/secretary-agent/server/personality", () => ({ loadPersonality: async () => ({ snapshot: { base: { blocks: [] }, variants: [] } }) }))
 vi.mock("@/features/secretary-agent/server/owner-questions", () => ({ askOwner: mocks.askOwner, publishNotices: vi.fn(), sendSecretaryText: mocks.send }))
 vi.mock("@/features/secretary-agent/server/models", () => ({
@@ -191,7 +192,18 @@ describe("runSecretaryTurn", () => {
         mocks.subject = { blocked: [], allowed: ["dinheiro"], topic: "Dinheiro", reason: null }
         await turn()
         expect(decisions()).toEqual(["ignored"])
+        expect(mocks.readMedia).not.toHaveBeenCalled()
         expect(mocks.decideSubject).not.toHaveBeenCalled()
+    })
+
+    it("não baixa nem transcreve áudio de grupo sem menção", async () => {
+        const message = msg({ chatJid: "120363000000000001@g.us", isGroup: true, text: "", media: { kind: "audio", mimetype: "audio/ogg", fileName: null } })
+        mocks.state = { pending: [message], lastOwnerMessageAt: null, pausedUntil: null }
+        mocks.settings = { ...mocks.settings, media: { ...DEFAULT_SECRETARY_SETTINGS.media, transcribeAudio: true } }
+        withCriteria({ audience: { groups: true, groupReply: "mention" } })
+        await runSecretaryTurn({ id: "opex:g-120363000000000001", instance: "opex", chatId: "g-120363000000000001", ownerJid: "5531988887777@s.whatsapp.net", token: "T", message })
+        expect(decisions()).toEqual(["ignored"])
+        expect(mocks.readMedia).not.toHaveBeenCalled()
     })
 
     it("com \"Só os assuntos liberados\", responde ao assunto liberado e ignora o resto", async () => {

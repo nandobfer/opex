@@ -56,6 +56,26 @@ describe("handleIncomingMessage", () => {
         expect(decisions()).toEqual([])
     })
 
+    it("ignora mensagem de ontem sem iniciar turno nem alterar a conversa", async () => {
+        const timestamp = new Date(Date.now() - 24 * 60 * 60_000)
+        await handleIncomingMessage("opex", msg({ timestamp }))
+        await handleIncomingMessage("opex", msg({ timestamp, fromMe: true, id: "M2" }))
+        await handleIncomingMessage("opex", msg({ timestamp, fromMe: true, id: "M3", chatJid: OWNER }))
+        expect(decisions()).toEqual(["ignored", "ignored", "ignored"])
+        expect(mocks.turn).not.toHaveBeenCalled()
+        expect(mocks.ownerReply).not.toHaveBeenCalled()
+        expect(mocks.conversationUpdate).not.toHaveBeenCalled()
+    })
+
+    it("conta a pausa restante a partir do envio pelo dono", async () => {
+        const timestamp = new Date(Date.now() - 15 * 60_000)
+        await handleIncomingMessage("opex", msg({ timestamp, fromMe: true }))
+        expect(decisions()).toEqual(["paused"])
+        expect(mocks.conversationUpdate).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({
+            $max: { lastOwnerMessageAt: timestamp, pausedUntil: new Date(timestamp.getTime() + 30 * 60_000) },
+        }), { upsert: true })
+    })
+
     it("conversa consigo mesmo nunca vira turno e só é lida como resposta do dono", async () => {
         await handleIncomingMessage("opex", msg({ chatJid: OWNER, fromMe: true }))
         expect(mocks.ownerReply).toHaveBeenCalledTimes(1)

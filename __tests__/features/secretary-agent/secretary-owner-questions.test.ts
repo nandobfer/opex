@@ -21,7 +21,7 @@ vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" }, recordAu
 vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, job: () => Promise<void>) => mocks.jobs.push(job) }))
 vi.mock("@/features/ai/server/agent-memory-service", () => ({ createAgentMemory: mocks.createMemory }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: { sendText: mocks.sendText } }))
-vi.mock("@/features/evolution-api/server/models", () => ({ EvolutionInstanceState: { findById: () => ({ lean: async () => ({ ownerJid: OWNER }) }) } }))
+vi.mock("@/features/evolution-api/server/models", () => ({ EvolutionInstanceState: { findById: () => ({ lean: async () => ({ ownerJid: OWNER, ownerLid: "999@lid" }) }) } }))
 vi.mock("@/features/secretary-agent/server/settings", () => ({
     loadSecretarySettings: async () => ({ settings: { ...DEFAULT_SECRETARY_SETTINGS, enabled: true, mode: "reply", main: { ...DEFAULT_SECRETARY_SETTINGS.main, provider: "opencode-go", model: "m" } } }),
 }))
@@ -98,6 +98,14 @@ describe("perguntar ao dono", () => {
         mocks.notices = [question("q1", "m1")]
         await handleOwnerReply("opex", OWNER, reply({}))
         expect(mocks.notices[0]).toMatchObject({ status: "answered" })
+    })
+
+    it("retoma pergunta de grupo com a menção e o LID do dono", async () => {
+        const groupTrigger = { ...trigger, chatJid: "120363000000000001@g.us", isGroup: true, mentioned: ["999@lid"] }
+        mocks.notices = [{ ...question("q1", "m1"), chatId: "g-120363000000000001", trigger: groupTrigger }]
+        await answerNotice("q1", "sim", "local")
+        await runJobs()
+        expect(mocks.turn).toHaveBeenCalledWith(expect.objectContaining({ ownerJid: OWNER, ownerLid: "999@lid", message: groupTrigger, ownerAnswer: "sim" }))
     })
 
     it("sem citação e várias pendentes, pede que o dono cite", async () => {

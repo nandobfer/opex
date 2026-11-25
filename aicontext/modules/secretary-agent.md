@@ -6,6 +6,7 @@ Tem memórias próprias no Engramind, aprende sozinho e pergunta ao dono o que n
 
 Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|simulacao|personalidade|memorias|conversas|avisos>`.
 Página de métricas: `/agente-secretario` (Visão geral, Histórico e Memórias).
+O custo da Visão geral inclui turno, análise e decisões de assunto (modelo de texto ou JEV), mas não Simulação.
 
 Código: `src/features/secretary-agent/` — puros: `constants.ts`, `schemas.ts`, `criteria.ts`, `personality.ts`,
 `criteria-describe.ts`, `jev-subjects.ts`, `conversation-id.ts`, `split.ts`, `cost.ts`, `limits.ts`, `owner-reply.ts`;
@@ -62,7 +63,7 @@ Validação: "Só os escolhidos" exige ao menos uma conversa e "Só os assuntos 
 
 - `evaluateCriteria(criteria, conversa, decisãoDoAssunto)` (pura) devolve `{ decision, rule, reason, steps }`; cada
   passo (`blocked`, `audience`, `mention`, `subject-blocked`, `subject-allowed`) vem como `pass`, `fail` ou `skipped`.
-  `evaluateAudience` roda a etapa 1 antes de chamar quem decide o assunto (quem não passa não gasta decisão).
+  `evaluateAudience` roda a etapa 1 antes de baixar ou interpretar mídia e antes de chamar quem decide o assunto.
 - Tela: resumo em frases (`describeCriteria`) e **Fluxo da decisão** (`criteriaSteps` + `CriteriaFlow`), atualizados
   enquanto o dono edita, e um link "Simular uma mensagem" para a aba Simulação.
 - **Configuração salva no formato da v1** é convertida na leitura (`migrateLegacyCriteria` em `withSecretaryDefaults`):
@@ -111,11 +112,13 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 
 - Conversa consigo mesmo: nunca é respondida; `fromMe` nela só vale como resposta a pergunta pendente.
 - `fromMe` numa conversa comum (com ~3 s de espera e ignorando os ids enviados pelo próprio agente,
-  `secretary_sent`) **pausa** a conversa (`pausedUntil`, `lastOwnerMessageAt`).
+   `secretary_sent`) **pausa** a conversa pelo tempo que resta a partir da hora da mensagem, não da entrega pelo
+   webhook. Se a pausa já expirou, registra "ignorou" sem alterar a conversa.
+- Entradas com mais de 10 min não iniciam turno nem resolvem pergunta na conversa consigo mesmo: registra "ignorou".
 - Agente desligado ou sem modelo: decisão "desligado".
 - Cada mensagem recebida grava um **token novo** e entra na lista pendente; depois da janela, só o turno cujo token
   ainda é o atual responde (os outros ficam como "agrupada").
-- Ordem: "Nunca responder a" → pausado → limites (o orçamento esgotado barra também o modo Só observar) → mídia → mensagem
+- Ordem: critérios de público → pausado → limites (o orçamento esgotado barra também o modo Só observar) → mídia → mensagem
   só de mídia não lida vira "ignorou" → critérios ("assunto bloqueado" fica quieto, não avisa e não marca como
   lida) → contexto (histórico de ~30 mensagens, personalidade base + variante, memórias) → geração. Do critério à
   geração é o núcleo `planSecretaryReply` (o mesmo da Simulação); o turno real cuida dos limites, da mídia, do envio

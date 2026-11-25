@@ -102,12 +102,15 @@ async function resumeConversation(notice: Notice, answer: string, settings: Secr
         const conversation = await SecretaryConversation.findById(key).lean()
         const current = conversation?.lastOwnerMessageAt?.getTime() ?? 0
         if (current > (notice.ownerRevision?.getTime() ?? 0)) return
-        const ownerJid = (await EvolutionInstanceState.findById(notice.instance).lean())?.ownerJid
+        const owner = await EvolutionInstanceState.findById(notice.instance).lean()
+        const ownerJid = owner?.ownerJid
         if (!ownerJid) return
+        // O LID do dono conta como menção em grupos com "Só quando me mencionam" (igual ao turno normal).
+        const ownerLid = owner?.ownerLid ?? null
         const { runSecretaryTurn } = await import("./turn")
         const token = randomUUID()
         const reserved = await SecretaryConversation.updateOne({ _id: key, token: null, lastOwnerMessageAt: conversation?.lastOwnerMessageAt ?? null }, { $set: { token, pending: [notice.trigger] } })
-        if (reserved.modifiedCount) await runSecretaryTurn({ id: key, chatId: notice.chatId, instance: notice.instance, token, ownerJid, message: notice.trigger, ownerAnswer: answer })
+        if (reserved.modifiedCount) await runSecretaryTurn({ id: key, chatId: notice.chatId, instance: notice.instance, token, ownerJid, ownerLid, message: notice.trigger, ownerAnswer: answer })
     } catch (error) {
         secretaryLog.error({ ...safeErr(error), noticeId: notice._id, chatId: notice.chatId }, "[secretario] Falha ao retomar a conversa depois da resposta do dono")
     }

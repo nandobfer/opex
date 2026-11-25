@@ -4,6 +4,7 @@ import { emptyPersonality } from "@/features/secretary-agent/personality"
 const mocks = vi.hoisted(() => ({
     current: { versionId: "v2" as string | null },
     versions: [] as Record<string, unknown>[],
+    historical: vi.fn(),
 }))
 
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" }, recordAudit: vi.fn() }))
@@ -18,16 +19,25 @@ vi.mock("@/features/secretary-agent/server/models", () => ({
             return { matchedCount: 1, upsertedCount: 0 }
         },
     },
-    SecretaryVersion: { create: async (row: Record<string, unknown>) => mocks.versions.push(row), deleteOne: vi.fn() },
+    SecretaryVersion: { findById: (id: string) => ({ lean: () => mocks.historical(id) }), create: async (row: Record<string, unknown>) => mocks.versions.push(row), deleteOne: vi.fn() },
 }))
 
-import { saveBasePersonality } from "@/features/secretary-agent/server/personality"
+import { restoreVersion, saveBasePersonality } from "@/features/secretary-agent/server/personality"
 
 const blocks = [{ key: "tom", title: "Tom e formalidade", content: "Informal" }]
 
 beforeEach(() => {
     mocks.current.versionId = "v2"
     mocks.versions = []
+})
+
+it("restaurar aplica o instantâneo histórico em uma nova versão", async () => {
+    const snapshot = { base: { blocks }, variants: [] }
+    mocks.historical.mockResolvedValueOnce({ snapshot })
+    const id = await restoreVersion("v1", "local")
+    expect(id).not.toBe("v1")
+    expect(mocks.current.versionId).toBe(id)
+    expect(mocks.versions).toEqual([expect.objectContaining({ _id: id, origin: "restore", snapshot: expect.objectContaining({ base: { blocks: expect.arrayContaining(blocks) } }) })])
 })
 
 describe("saveBasePersonality", () => {

@@ -4,7 +4,7 @@ import { normalizeJid } from "@/features/evolution-api/constants"
 import type { ParsedMessage } from "@/features/evolution-api/message"
 import { EvolutionInstanceState } from "@/features/evolution-api/server/models"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import { FROM_ME_SETTLE_MS, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, type SecretaryDecision } from "../constants"
+import { FROM_ME_SETTLE_MS, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, isStaleMessage, type SecretaryDecision } from "../constants"
 import { conversationIdOfJid } from "../conversation-id"
 import { SecretaryConversation, SecretaryDecisionRecord, SecretarySent, secretaryDb } from "./models"
 import { loadSecretarySettings } from "./settings"
@@ -34,16 +34,31 @@ export async function handleIncomingMessage(instance: string, message: ParsedMes
         await sleep(FROM_ME_SETTLE_MS)
         if (await SecretarySent.exists({ _id: `${instance}:${message.id}` })) return
         if (message.chatJid === normalizeJid(ownerJid)) {
+            if (isStaleMessage(message.timestamp)) {
+                await recordDecision(instance, chatId, message, "ignored", "Mensagem antiga: não resolve uma pergunta pendente.")
+                return
+            }
             if (settings.enabled) await handleOwnerReply(instance, ownerJid, message)
             return
         }
+        // A pausa conta da hora da mensagem do dono (uma antiga, entregue depois de uma reconexão, não pausa de novo).
+        const sentAt = message.timestamp.getTime() > Date.now() ? new Date() : message.timestamp
+        const pausedUntil = new Date(sentAt.getTime() + settings.pauseMinutes * 60_000)
+        if (pausedUntil.getTime() <= Date.now()) {
+            await recordDecision(instance, chatId, message, "ignored", "Mensagem antiga do dono (entregue depois de uma reconexão): a pausa já teria acabado.")
+            return
+        }
         await SecretaryConversation.updateOne({ _id: id }, { $setOnInsert: { instance, jid: message.chatJid },
-            $max: { lastOwnerMessageAt: new Date(), pausedUntil: new Date(Date.now() + settings.pauseMinutes * 60_000) } }, { upsert: true })
+            $max: { lastOwnerMessageAt: sentAt, pausedUntil } }, { upsert: true })
         await recordDecision(instance, chatId, message, "paused", "O dono assumiu a conversa pelo WhatsApp.")
         await publishAppEvent(SECRETARY_CONVERSATION_EVENT, { chatId })
         return
     }
     if (message.chatJid === normalizeJid(ownerJid)) return
+    if (isStaleMessage(message.timestamp)) {
+        await recordDecision(instance, chatId, message, "ignored", "Mensagem antiga (entregue depois de uma reconexão): não é respondida.")
+        return
+    }
     if (!settings.enabled || !settings.main.provider || !settings.main.model) {
         await recordDecision(instance, chatId, message, "disabled", "Agente desligado ou sem modelo configurado.")
         return

@@ -41,7 +41,7 @@ export const tokenPriceSchema = z.object({
     outputPerMTok: z.number({ error: "Informe o preço" }).min(0, "Mínimo 0").max(1000, "Máximo US$ 1000"),
 })
 
-const jidSchema = z.string().trim().min(5).max(120).regex(/^[^@\s]+@[a-z.]+$/, "Conversa inválida")
+export const jidSchema = z.string().trim().min(5).max(120).regex(/^[^@\s]+@[a-z.]+$/, "Conversa inválida")
 
 /** Um assunto (bloqueado ou liberado): nome curto, descrição e exemplos. */
 export const subjectRuleSchema = z.object({
