@@ -31,6 +31,7 @@ import { CriteriaTab } from "./CriteriaTab"
 import { SimulationTab } from "./simulation/SimulationTab"
 import { ConversationsTab, NoticesTab } from "./ConversationTabs"
 import { PersonalityTab } from "./PersonalityTab"
+import { personalityTabLabel, useSecretaryAnalyses } from "../hooks/useSecretaryAnalyses"
 
 export type SecretaryForm = UseFormReturn<SecretarySettings>
 const endpoint = "/ai/features/secretary-agent"
@@ -50,6 +51,7 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     const config = useEvolution<{ settings: SecretarySettings }>(endpoint)
     const contacts = useEvolution<EvolutionContactDto[]>("/evolution/contacts?kind=chats")
     const notices = useEvolution<{ pending: number }>("/secretary/notices")
+    const { active: analysis } = useSecretaryAnalyses()
     const save = useEvolutionAction<{ settings: SecretarySettings }, SecretarySettings>(endpoint, "put", "Configuração salva")
     const form = useForm({ resolver: zodResolver(secretarySettingsSchema), defaultValues: DEFAULT_SECRETARY_SETTINGS, values: config.data?.settings, mode: "onChange", resetOptions: { keepDirtyValues: true } })
     const dirty = form.formState.isDirty
@@ -58,7 +60,7 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     if (config.isError) return <Button variant="outline" onClick={() => void config.refetch()}>Tentar novamente</Button>
     return <AgentSettingsTabs fallback="geral" label="Agente Secretário" tabs={[
         { id: "geral", label: "Geral", icon: Settings2 }, { id: "criterios", label: "Critérios", icon: ListFilter }, { id: "simulacao", label: "Simulação", icon: FlaskConical },
-        { id: "personalidade", label: "Personalidade", icon: Sparkles }, { id: "memorias", label: "Memórias", icon: Brain },
+        { id: "personalidade", label: personalityTabLabel(analysis), icon: Sparkles }, { id: "memorias", label: "Memórias", icon: Brain },
         { id: "conversas", label: "Conversas", icon: MessagesSquare }, { id: "avisos", label: "Avisos", icon: Bell, badge: notices.data?.pending || null },
     ]}>{(section) => {
         const contactItems = contacts.data ?? []
