@@ -53,14 +53,16 @@ export interface Notice {
     at: Date
     trigger: ParsedMessage | null
     ownerRevision: Date | null
+    /** Início da resposta em andamento (`status: answering`). */
+    answeringAt: Date | null
 }
 const noticeSchema = new Schema<Notice>({ _id: String, instance: String, chatId: String, jid: String, kind: String, status: String, text: String,
-    sentMessageId: String, answer: String, memoryChannel: String, at: Date, trigger: Schema.Types.Mixed, ownerRevision: Date,
+    sentMessageId: String, answer: String, memoryChannel: String, at: Date, trigger: Schema.Types.Mixed, ownerRevision: Date, answeringAt: Date,
 }, { collection: "secretary_notices", versionKey: false })
 noticeSchema.index({ instance: 1, status: 1, at: -1 })
 export const SecretaryNotice = (models.SecretaryNotice as Model<Notice> | undefined) ?? model<Notice>("SecretaryNotice", noticeSchema)
 
-export interface Version { _id: string; origin: "edit" | "analysis" | "analysis-cancelled" | "restore"; snapshot: PersonalitySnapshot; changes: BlockChange[]; at: Date }
+export interface Version { _id: string; origin: "edit" | "analysis" | "analysis-cancelled" | "analysis-unapplied" | "restore"; snapshot: PersonalitySnapshot; changes: BlockChange[]; at: Date }
 const versionSchema = new Schema<Version>({ _id: String, origin: String, snapshot: Schema.Types.Mixed, changes: [Schema.Types.Mixed], at: Date }, { collection: "secretary_personality_versions", versionKey: false })
 versionSchema.index({ at: -1 })
 export const SecretaryVersion = (models.SecretaryVersion as Model<Version> | undefined) ?? model<Version>("SecretaryVersion", versionSchema)

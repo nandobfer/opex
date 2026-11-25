@@ -1,5 +1,4 @@
 
-import { randomBytes } from "node:crypto"
 import { DomainError } from "@/lib/api/route"
 import { getIntegrationConfig } from "@/lib/integrations/config"
 import {
@@ -15,6 +14,7 @@ import { defaultWebhookUrl } from "../prefill"
 import type { ConnectInstanceInput, InstanceOptionsInput } from "../schemas"
 import type { EvolutionInstanceDto, EvolutionInstanceOptionsDto, EvolutionInstancesDto, EvolutionLastEventDto, EvolutionWebhookDto } from "../types"
 import { evolution, EvolutionError, toDomainError } from "./client"
+import { ensureWebhookSecret } from "./webhook-secret"
 import { EvolutionInstanceState, evolutionDb, type IEvolutionInstanceState, type IEvolutionLastEvent } from "./models"
 import { AcaoAuditoria, auditEvolution, evolutionLog, publishEvolution, saveEvolutionFields } from "./shared"
 
@@ -146,14 +146,7 @@ export async function getInstance(name: string): Promise<EvolutionInstanceDto> {
     return toDto(name, await loadState(name), managerUrl, error)
 }
 
-/** Garante o segredo do webhook (gerado no servidor, cifrado; nunca exibido). */
-export async function ensureWebhookSecret(actorId: string): Promise<string> {
-    const config = await evolutionConfig()
-    if (config.webhookSecret) return config.webhookSecret
-    const secret = randomBytes(32).toString("base64url")
-    await saveEvolutionFields({ secrets: { webhookSecret: { action: "set", value: secret } } }, actorId)
-    return secret
-}
+export { ensureWebhookSecret }
 
 export async function webhookUrl(): Promise<string> {
     const config = await evolutionConfig()

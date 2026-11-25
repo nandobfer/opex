@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
     markAsRead: vi.fn(),
     presence: vi.fn(),
     noticeUpsert: vi.fn(async () => ({ upsertedCount: 1 })),
+    memoryTools: [] as unknown[],
+    enqueue: vi.fn(async () => "pendente:x"),
 }))
 
 vi.mock("node:timers/promises", () => ({ setTimeout: vi.fn(async () => undefined) }))
@@ -27,7 +29,8 @@ vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
 vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ total: mocks.spent }] } }))
 vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: async () => ({ block: "" }) }))
 vi.mock("@/features/ai/server/self-memory/settings", () => ({ selfMemoryEnabled: async () => true }))
-vi.mock("@/features/ai/server/self-memory/tools", () => ({ selfMemoryTools: () => [] }))
+vi.mock("@/features/ai/server/self-memory/tools", () => ({ selfMemoryTools: () => mocks.memoryTools }))
+vi.mock("@/features/engramind/server/pending-writes", () => ({ enqueuePendingWrite: mocks.enqueue, isEngramindUnavailable: (error: { code?: string }) => error?.code === "ENGRAMIND_UNREACHABLE" }))
 vi.mock("@/features/evolution-api/server/client", () => ({
     evolution: { findMessages: async () => ({ records: [] }), markAsRead: mocks.markAsRead, sendPresence: mocks.presence },
 }))
@@ -48,6 +51,8 @@ vi.mock("@/features/secretary-agent/server/models", () => ({
     SecretaryNotice: { updateOne: mocks.noticeUpsert },
 }))
 
+import { z } from "zod"
+import { DomainError } from "@/lib/api/route"
 import { runSecretaryTurn } from "@/features/secretary-agent/server/turn"
 
 function msg(patch: Partial<ParsedMessage> = {}): ParsedMessage {
@@ -67,6 +72,7 @@ beforeEach(() => {
         criteria: { ...DEFAULT_SECRETARY_SETTINGS.criteria, baseScope: "all" },
     }
     mocks.inference.mockResolvedValue({ text: "oi!\n\ntudo sim", question: null })
+    mocks.memoryTools = []
 })
 
 describe("runSecretaryTurn", () => {
@@ -142,5 +148,32 @@ describe("runSecretaryTurn", () => {
         await turn()
         expect(mocks.askOwner).toHaveBeenCalledWith(expect.objectContaining({ question: "Ana pergunta se você vai na festa?" }))
         expect(decisions()).toEqual(["asked-owner"])
+    })
+
+    it("expõe as ferramentas de memória sem forget_my_memory, recusa lista inválida e enfileira com o Engramind fora", async () => {
+        const lista = z.enum(["secretary-global", "secretary-conversation"])
+        const execute = vi.fn(async () => ({ ok: true }))
+        const tool = (name: string) => ({ name, description: name, input: z.object({ lista, texto: z.string().optional(), memoryId: z.string().optional() }), execute })
+        mocks.memoryTools = ["list_my_memories", "remember", "update_my_memory", "set_my_memory_active", "forget_my_memory"].map(tool)
+        let tools: Record<string, { execute: (raw: unknown) => Promise<unknown> }> = {}
+        mocks.inference.mockImplementation(async (input: { tools?: typeof tools }) => {
+            tools = input.tools ?? tools
+            return { text: "oi", question: null }
+        })
+        await turn()
+        expect(Object.keys(tools).sort()).toEqual(["list_my_memories", "remember", "set_my_memory_active", "update_my_memory"])
+        await expect(tools.remember!.execute({ lista: "opex", texto: "x" })).rejects.toThrow()
+        execute.mockRejectedValueOnce(new DomainError(503, "fora", "ENGRAMIND_UNREACHABLE"))
+        expect(await tools.remember!.execute({ lista: "secretary-conversation", texto: "Ana é vizinha" })).toEqual({ pendente: true, id: "pendente:x" })
+        expect(mocks.enqueue).toHaveBeenCalledWith(expect.objectContaining({ channel: "agentes/secretario/conversas/5531999999999", list: "secretary-conversation", write: { op: "create", texto: "Ana é vizinha" } }))
+    })
+
+    it("em grupo com \"só quando mencionado\", a menção pelo LID do dono conta", async () => {
+        const GROUP = "120363000000000001@g.us"
+        const message = msg({ chatJid: GROUP, isGroup: true, text: "@999 viu?", mentioned: ["999@lid"] })
+        mocks.state = { pending: [message], lastOwnerMessageAt: null, pausedUntil: null }
+        mocks.settings = { ...mocks.settings, criteria: { ...(mocks.settings.criteria as object), chatTypes: { direct: true, groups: true }, groupMode: "mention" } }
+        await runSecretaryTurn({ id: "opex:g-120363000000000001", instance: "opex", chatId: "g-120363000000000001", ownerJid: "5531988887777@s.whatsapp.net", ownerLid: "999@lid", token: "T", message })
+        expect(decisions()).toEqual(["replied"])
     })
 })

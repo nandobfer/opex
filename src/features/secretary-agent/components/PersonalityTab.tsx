@@ -27,7 +27,7 @@ export function PersonalityTab({ form, contacts }: { form: SecretaryForm; contac
     return <>
         <Card><CardHeader><CardTitle>Modelo da análise</CardTitle></CardHeader><CardContent><SecondaryModel form={form} field="analysis.model" label="Modelo da análise" /></CardContent></Card>
         <AnalysisPanel contacts={contacts} />
-        <PersonalityEditor key={query.data.versionId ?? "initial"} data={query.data} contacts={contacts} />
+        <PersonalityEditor data={query.data} contacts={contacts} />
         <Card><CardHeader><CardTitle>Histórico de versões</CardTitle></CardHeader><CardContent className="space-y-3">
             {query.data.versions.length === 0 && <p>Nenhuma versão registrada.</p>}
             {query.data.versions.map((version) => <VersionItem key={version._id} version={version} />)}
@@ -35,13 +35,29 @@ export function PersonalityTab({ form, contacts }: { form: SecretaryForm; contac
     </>
 }
 
-function PersonalityEditor({ data, contacts }: { data: Data; contacts: EvolutionContactDto[] }) {
+/**
+ * Editor da base e das variantes. Uma versão nova (análise concluída, restauração) só substitui o que está na tela
+ * quando não há edição pendente; com edição pendente, a tela avisa e o dono escolhe recarregar.
+ */
+export function PersonalityEditor({ data, contacts }: { data: Data; contacts: EvolutionContactDto[] }) {
+    const [source, setSource] = useState({ versionId: data.versionId, blocks: data.snapshot.base.blocks })
     const [base, setBase] = useState(data.snapshot.base.blocks)
     const [jid, select] = useState<string[]>([])
+    const dirty = JSON.stringify(base) !== JSON.stringify(source.blocks)
+    const changed = data.versionId !== source.versionId
+    const reload = () => {
+        setSource({ versionId: data.versionId, blocks: data.snapshot.base.blocks })
+        setBase(data.snapshot.base.blocks)
+    }
+    if (changed && !dirty) reload()
     const variant = data.snapshot.variants.find((row) => row.jid === jid[0])
     const save = useEvolutionAction("/secretary/personality", "put", "Personalidade salva")
     return <>
         <Card><CardHeader><CardTitle>Personalidade base</CardTitle></CardHeader><CardContent className="space-y-4">
+            {changed && dirty && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-dashed p-3 text-sm">
+                A personalidade mudou (análise ou restauração) enquanto você editava. Suas edições continuam aqui.
+                <Button size="sm" variant="outline" onClick={reload}>Recarregar e descartar minhas edições</Button>
+            </div>}
             <Blocks blocks={base} setBlocks={setBase} />
             <Button disabled={save.isPending} onClick={() => { const input = personalitySchema.safeParse({ blocks: base }); if (input.success) save.mutate(input.data) }}>Salvar blocos</Button>
         </CardContent></Card>
@@ -89,7 +105,7 @@ function VariantEditor({ jid, title, initial, base, exists }: { jid: string; tit
 function VersionItem({ version }: { version: History }) {
     const [confirm, setConfirm] = useState(false)
     const restore = useEvolutionAction(`/secretary/personality/versions/${version._id}/restore`, "post", "Versão restaurada")
-    const labels: Record<string, string> = { edit: "Edição", analysis: "Análise", "analysis-cancelled": "Análise cancelada", restore: "Restauração" }
+    const labels: Record<string, string> = { edit: "Edição", analysis: "Análise", "analysis-cancelled": "Análise cancelada", "analysis-unapplied": "Análise não aplicada", restore: "Restauração" }
     return <details className="rounded-md border p-3"><summary>{labels[version.origin] ?? version.origin} · {new Date(version.at).toLocaleString("pt-BR")} · {version.changes.length} alterações</summary>
         {version.changes.map((change) => <div key={`${change.scope}:${change.key}`} className="my-2 border-b pb-2 text-sm"><p className="font-medium">{change.scopeTitle} · {change.title}</p>{change.before && <p className="whitespace-pre-wrap text-muted-foreground">Antes: {change.before}</p>}{change.after && <p className="whitespace-pre-wrap">Depois: {change.after}</p>}</div>)}
         <Button variant="outline" onClick={() => setConfirm(true)}>Restaurar</Button>

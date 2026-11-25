@@ -1,6 +1,7 @@
 
 import { createHash, timingSafeEqual } from "node:crypto"
-import { evolutionWebhookBodySchema, type EvolutionWebhookBody } from "../evolution-dto"
+import { evolutionWebhookBodySchema, type EvolutionMessage, type EvolutionWebhookBody } from "../evolution-dto"
+import { isGroupJid, LID_JID_SUFFIX, normalizeJid } from "../constants"
 import { parseEvolutionMessage, type ParsedMessage } from "../message"
 import { connectionOf, contactsOf, messagesOf, normalizeEventName, qrOf, type ContactUpdate } from "../webhook-parse"
 import { evolutionConfig, patchState } from "./instances"
@@ -86,6 +87,16 @@ async function publishContactsThrottled(instance: string): Promise<void> {
     await publishEvolution("contacts", instance)
 }
 
+/**
+ * LID do dono: numa mensagem dele (`fromMe`) num grupo com endereçamento por LID, o autor (`participant`) é o
+ * `<lid>@lid` do próprio dono. Serve para reconhecer menções e citações por LID ("só quando mencionado").
+ */
+export function ownerLidOf(raw: EvolutionMessage): string | null {
+    if (!raw.key.fromMe || !isGroupJid(raw.key.remoteJid)) return null
+    const participant = raw.key.participant ? normalizeJid(raw.key.participant) : null
+    return participant?.endsWith(LID_JID_SUFFIX) ? participant : null
+}
+
 /** Repassa a mensagem ao Agente Secretário (import sob demanda: o turno puxa a SDK de IA). */
 async function forwardToSecretary(instance: string, message: ParsedMessage): Promise<void> {
     const { handleIncomingMessage } = await import("@/features/secretary-agent/server/inbound")
@@ -153,6 +164,8 @@ export async function processEvolutionEvent(body: EvolutionWebhookBody): Promise
                 if (raw.key.remoteJid === "status@broadcast") return
                 if (!(await markSeen(`${instance}:${raw.key.id}`))) return
                 const parsed = parseEvolutionMessage(raw)
+                const ownerLid = ownerLidOf(raw)
+                if (ownerLid) await patchState(instance, { ownerLid })
                 await upsertContacts(
                     instance,
                     [{ jid: parsed.chatJid, name: null, pushName: parsed.fromMe || parsed.isGroup ? null : parsed.pushName, pictureUrl: null, isGroup: parsed.isGroup }],

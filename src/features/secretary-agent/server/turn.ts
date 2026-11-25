@@ -22,10 +22,11 @@ import { loadSecretarySettings } from "./settings"
 import { readTurnMedia } from "./media"
 import { pendingOpOfTool, withPendingQueue } from "./memory-queue"
 import type { AiAgentId } from "@/features/ai/agents"
+import { errorKind, secretaryLog } from "./log"
 
-interface Turn { id: string; instance: string; chatId: string; ownerJid: string; token: string; message: ParsedMessage; ownerAnswer?: string }
+interface Turn { id: string; instance: string; chatId: string; ownerJid: string; ownerLid?: string | null; token: string; message: ParsedMessage; ownerAnswer?: string }
 
-export async function runSecretaryTurn({ id, instance, chatId, ownerJid, token, message, ownerAnswer }: Turn) {
+export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLid = null, token, message, ownerAnswer }: Turn) {
     const state = await SecretaryConversation.findOneAndUpdate({ _id: id, token }, { $set: { pending: [] } }).lean()
     if (!state) {
         await recordDecision(instance, chatId, message, "grouped", "Outra mensagem chegou na janela de agrupamento.")
@@ -59,7 +60,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, token, 
         if (!messages.some((item, index) => item.text || media[index]?.understood) && !ownerAnswer) return await decide("ignored", "A mensagem não tem texto ou mídia interpretável.")
         const text = media.map((item) => item.text).filter(Boolean).join("\n")
         const subject = await classify(settings, settings.criteria, text, `${token}:subject`)
-        const verdict = evaluateCriteria(settings.criteria, { jid: message.chatJid, isGroup: message.isGroup, mentioned: messages.some((item) => mentionsOwner(item, ownerJid)) }, subject)
+        const verdict = evaluateCriteria(settings.criteria, { jid: message.chatJid, isGroup: message.isGroup, mentioned: messages.some((item) => mentionsOwner(item, ownerJid, ownerLid)) }, subject)
         if (verdict.decision === "skip") return await decide(verdict.rule === "subject-never" ? "subject-blocked" : "ignored", verdict.reason, subject?.topic)
         const observing = settings.mode === "observe"
         const turn = { kind: "conversation" as const, conversationId: chatId }
@@ -106,8 +107,9 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, token, 
             return await decide("asked-owner", "Enviou uma frase de espera e perguntou ao dono.", subject?.topic)
         }
         await decide("replied", verdict.reason, subject?.topic)
-    } catch {
-        await decide("error", "O turno falhou. Confira a conexão Evolution e o provedor. Nenhum envio será repetido automaticamente.")
+    } catch (error) {
+        secretaryLog.error({ err: error, instance, chatId }, "[secretario] Falha no turno")
+        await decide("error", `O turno falhou (${errorKind(error)}). Confira a conexão Evolution e o provedor. Nenhum envio será repetido automaticamente.`)
     } finally {
         await SecretaryConversation.updateOne({ _id: id, token }, { $set: { token: null } })
     }

@@ -27,6 +27,8 @@ export interface IEvolutionInstanceState {
     /** `open` | `connecting` | `close` | `refused`. */
     state: string
     ownerJid: string | null
+    /** JID `@lid` do dono (endereçamento por LID em grupos), aprendido das mensagens dele em grupos. */
+    ownerLid?: string | null
     profileName: string | null
     profilePictureUrl: string | null
     qr: IEvolutionQr | null
@@ -76,6 +78,7 @@ const instanceSchema = new Schema<IEvolutionInstanceState>(
         _id: { type: String, required: true },
         state: { type: String, default: "close" },
         ownerJid: { type: String, default: null },
+        ownerLid: { type: String, default: null },
         profileName: { type: String, default: null },
         profilePictureUrl: { type: String, default: null },
         qr: { type: qrSchema, default: null },

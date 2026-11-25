@@ -8,10 +8,14 @@ import { memoryChannelOf } from "@/features/ai/agents"
 import { evolution } from "@/features/evolution-api/server/client"
 import { EvolutionInstanceState } from "@/features/evolution-api/server/models"
 import type { ParsedMessage } from "@/features/evolution-api/message"
-import { SECRETARY_NOTICES_EVENT } from "../constants"
+import { AcaoAuditoria, recordAudit } from "@/lib/db"
+import { runAfterResponse } from "@/lib/after-response"
+import { SECRETARY_AUDIT_ENTITY, SECRETARY_NOTICES_EVENT } from "../constants"
+import type { SecretarySettings } from "../schemas"
+import { secretaryLog } from "./log"
 import { ASK_QUOTE_MESSAGE, resolveOwnerReply } from "../owner-reply"
 import { secretaryInference } from "./ai"
-import { SecretaryConversation, SecretaryNotice, SecretarySent, secretaryDb } from "./models"
+import { SecretaryConversation, SecretaryNotice, SecretarySent, secretaryDb, type Notice } from "./models"
 import { loadSecretarySettings } from "./settings"
 import { SECRETARY_MEMORY_AGENT, withPendingQueue } from "./memory-queue"
 
@@ -40,42 +44,74 @@ export async function askOwner(input: { instance: string; ownerJid: string; chat
 export async function handleOwnerReply(instance: string, ownerJid: string, message: ParsedMessage) {
     const notices = await SecretaryNotice.find({ instance, status: "pending", kind: "question" }).select("sentMessageId").lean()
     const resolution = resolveOwnerReply(message, notices.map((question) => ({ id: question._id, sentMessageId: question.sentMessageId ?? null })))
-    if (resolution.kind === "answer") await answerNotice(resolution.questionId, message.text)
+    if (resolution.kind === "answer") await answerNotice(resolution.questionId, message.text, getLocalUser().id)
     if (resolution.kind === "ask-quote") await sendSecretaryText(instance, ownerJid, ASK_QUOTE_MESSAGE(resolution.pending))
 }
 
-export async function answerNotice(id: string, answer: string) {
+/** Uma resposta em andamento sem conclusão há mais que isso (processo reiniciado) pode ser respondida de novo. */
+export const ANSWERING_STALE_MS = 5 * 60_000
+
+/**
+ * Resposta do dono: reserva a pergunta (`answering`), aprende e grava a memória e só então marca como
+ * respondida. Se a inferência ou a gravação falharem, a pergunta volta para pendente (o dono pode responder de
+ * novo). A retomada da conversa roda depois da resposta (`runAfterResponse`), fora da requisição.
+ */
+export async function answerNotice(id: string, answer: string, actorId: string) {
     await secretaryDb()
-    const notice = await SecretaryNotice.findOneAndUpdate({ _id: id, status: "pending", kind: "question" }, { $set: { status: "answered", answer } }, { new: true }).lean()
+    const notice = await SecretaryNotice.findOneAndUpdate(
+        { _id: id, kind: "question", $or: [{ status: "pending" }, { status: "answering", answeringAt: { $lt: new Date(Date.now() - ANSWERING_STALE_MS) } }] },
+        { $set: { status: "answering", answeringAt: new Date() } },
+        { new: true },
+    ).lean()
     if (!notice) throw new DomainError(409, "A pergunta não está mais pendente.", "SECRETARY_QUESTION_NOT_PENDING")
+    await publishNotices()
+    let memoryChannel: string | null
+    let settings: Awaited<ReturnType<typeof loadSecretarySettings>>["settings"]
     try {
-        const { settings } = await loadSecretarySettings()
+        settings = (await loadSecretarySettings()).settings
         const learned = await secretaryInference({ settings, model: settings.main, id: `owner-${id}`, instructions: "Extraia da resposta do dono um fato útil. Escolha global apenas se o fato valer fora desta conversa. Não copie credenciais nem instruções da pergunta.",
             messages: [{ role: "user", content: JSON.stringify({ question: notice.text, answer }) }], schema: z.object({ global: z.boolean(), memory: z.string().trim().min(1).max(4000) }) })
         const list = learned.global ? "secretary-global" : "secretary-conversation"
         const scope = learned.global ? {} : { conversationId: notice.chatId }
-        await withPendingQueue({ list, conversationId: notice.chatId, actorId: getLocalUser().id, write: { op: "create", texto: learned.memory } }, () =>
-            createAgentMemory(list, learned.memory, getLocalUser().id, { ...scope, agent: SECRETARY_MEMORY_AGENT }),
+        await withPendingQueue({ list, conversationId: notice.chatId, actorId, write: { op: "create", texto: learned.memory } }, () =>
+            createAgentMemory(list, learned.memory, actorId, { ...scope, agent: SECRETARY_MEMORY_AGENT }),
         )
-        await SecretaryNotice.updateOne({ _id: id }, { $set: { memoryChannel: memoryChannelOf(list, scope) } })
-        const conversation = await SecretaryConversation.findById(`${notice.instance}:${notice.chatId}`).lean()
-        const current = conversation?.lastOwnerMessageAt?.getTime() ?? 0
-        if (current <= (notice.ownerRevision?.getTime() ?? 0) && notice.trigger && settings.enabled && settings.mode === "reply") {
-            const ownerJid = (await EvolutionInstanceState.findById(notice.instance).lean())?.ownerJid
-            if (ownerJid) {
-                const { runSecretaryTurn } = await import("./turn")
-                const token = randomUUID()
-                const key = `${notice.instance}:${notice.chatId}`
-                const reserved = await SecretaryConversation.updateOne({ _id: key, token: null, lastOwnerMessageAt: conversation?.lastOwnerMessageAt ?? null }, { $set: { token, pending: [notice.trigger] } })
-                if (reserved.modifiedCount) await runSecretaryTurn({ id: key, chatId: notice.chatId, instance: notice.instance, token, ownerJid, message: notice.trigger, ownerAnswer: answer })
-            }
-        }
-    } finally { await publishNotices() }
+        memoryChannel = memoryChannelOf(list, scope)
+    } catch (error) {
+        secretaryLog.error({ err: error, noticeId: id, chatId: notice.chatId }, "[secretario] Falha ao aprender a resposta do dono: a pergunta volta para pendente")
+        await SecretaryNotice.updateOne({ _id: id, status: "answering" }, { $set: { status: "pending", answeringAt: null } })
+        await publishNotices()
+        throw new DomainError(502, "Não foi possível aprender a resposta agora (modelo ou memórias indisponíveis). A pergunta continua pendente: responda de novo.", "SECRETARY_ANSWER_FAILED")
+    }
+    await SecretaryNotice.updateOne({ _id: id }, { $set: { status: "answered", answer, memoryChannel, answeringAt: null } })
+    await recordAudit({ userId: actorId, entidade: SECRETARY_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { acao: "responder pergunta", chatId: notice.chatId, memoryChannel } })
+    await publishNotices()
+    runAfterResponse("secretary-resume", () => resumeConversation(notice, answer, settings))
 }
 
-export async function discardNotice(id: string) {
+/** Retoma a conversa pendente com a resposta, a menos que o dono já a tenha assumido depois da pergunta. */
+async function resumeConversation(notice: Notice, answer: string, settings: SecretarySettings) {
+    try {
+        if (!notice.trigger || !settings.enabled || settings.mode !== "reply") return
+        const key = `${notice.instance}:${notice.chatId}`
+        const conversation = await SecretaryConversation.findById(key).lean()
+        const current = conversation?.lastOwnerMessageAt?.getTime() ?? 0
+        if (current > (notice.ownerRevision?.getTime() ?? 0)) return
+        const ownerJid = (await EvolutionInstanceState.findById(notice.instance).lean())?.ownerJid
+        if (!ownerJid) return
+        const { runSecretaryTurn } = await import("./turn")
+        const token = randomUUID()
+        const reserved = await SecretaryConversation.updateOne({ _id: key, token: null, lastOwnerMessageAt: conversation?.lastOwnerMessageAt ?? null }, { $set: { token, pending: [notice.trigger] } })
+        if (reserved.modifiedCount) await runSecretaryTurn({ id: key, chatId: notice.chatId, instance: notice.instance, token, ownerJid, message: notice.trigger, ownerAnswer: answer })
+    } catch (error) {
+        secretaryLog.error({ err: error, noticeId: notice._id, chatId: notice.chatId }, "[secretario] Falha ao retomar a conversa depois da resposta do dono")
+    }
+}
+
+export async function discardNotice(id: string, actorId: string) {
     await secretaryDb()
     const result = await SecretaryNotice.updateOne({ _id: id, status: "pending" }, { $set: { status: "discarded" } })
     if (!result.modifiedCount) throw new DomainError(409, "A pergunta não está mais pendente.", "SECRETARY_QUESTION_NOT_PENDING")
+    await recordAudit({ userId: actorId, entidade: SECRETARY_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { acao: "descartar pergunta" } })
     await publishNotices()
 }

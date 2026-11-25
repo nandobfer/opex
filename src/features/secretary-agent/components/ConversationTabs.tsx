@@ -12,6 +12,7 @@ import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
 import { CONVERSATION_STATE_LABELS, NOTICE_KIND_LABELS, type ConversationAgentState, type SecretaryNoticeKind } from "../constants"
 import type { ConversationActionInput, NoticeActionInput } from "../schemas"
+import { CONVERSATION_PARAM } from "../memory-focus"
 
 type Conversation = EvolutionContactDto & { chatId: string; state: ConversationAgentState; pausedUntil: string | null }
 export function ConversationsTab({ minutes }: { minutes: number }) {
@@ -32,7 +33,7 @@ export function ConversationsTab({ minutes }: { minutes: number }) {
 function ConversationRow({ row, minutes }: { row: Conversation; minutes: number }) {
     const action = useEvolutionAction<unknown, ConversationActionInput>(`/secretary/conversations/${encodeURIComponent(row.chatId)}`, "post", "Conversa atualizada")
     return <div className="flex flex-wrap items-center gap-3 border-b py-3">
-        <Link href={`/integracoes/ia?aba=agente-secretario&secao=memorias&conversa=${encodeURIComponent(row.chatId)}`} className="min-w-0 flex-1"><ConversationLabel contact={row} /></Link>
+        <Link href={`/integracoes/ia?aba=agente-secretario&secao=memorias&${CONVERSATION_PARAM}=${encodeURIComponent(row.chatId)}`} className="min-w-0 flex-1"><ConversationLabel contact={row} /></Link>
         <p className="text-sm">{CONVERSATION_STATE_LABELS[row.state]}{row.state === "paused" && row.pausedUntil ? ` até ${new Date(row.pausedUntil).toLocaleString("pt-BR")}` : ""}</p>
         <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate(row.state === "paused" ? { action: "resume" } : { action: "pause", minutes })}>{row.state === "paused" ? "Retomar" : "Pausar"}</Button>
         <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate({ action: row.state === "excluded" ? "include" : "exclude" })}>{row.state === "excluded" ? "Remover exclusão" : "Excluir dos critérios"}</Button>

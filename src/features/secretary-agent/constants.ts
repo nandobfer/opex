@@ -111,7 +111,7 @@ export const NOTICE_KIND_LABELS: Record<SecretaryNoticeKind, string> = {
     budget: "Orçamento diário",
     error: "Erro",
 }
-export const NOTICE_STATUSES = ["pending", "answered", "discarded", "info"] as const
+export const NOTICE_STATUSES = ["pending", "answering", "answered", "discarded", "info"] as const
 export type SecretaryNoticeStatus = (typeof NOTICE_STATUSES)[number]
 
 /** Fases da análise de personalidade. */
@@ -129,9 +129,9 @@ export const ANALYSIS_STATUS_LABELS: Record<AnalysisStatus, string> = {
     interrupted: "Interrompida",
 }
 
-export const ANALYSIS_CHAT_STATES = ["queued", "reading", "read", "empty"] as const
+export const ANALYSIS_CHAT_STATES = ["queued", "reading", "read", "empty", "failed"] as const
 export type AnalysisChatState = (typeof ANALYSIS_CHAT_STATES)[number]
-export const ANALYSIS_CHAT_STATE_LABELS: Record<AnalysisChatState, string> = { queued: "Na fila", reading: "Lendo", read: "Lida", empty: "Sem conteúdo útil" }
+export const ANALYSIS_CHAT_STATE_LABELS: Record<AnalysisChatState, string> = { queued: "Na fila", reading: "Lendo", read: "Lida", empty: "Sem conteúdo útil", failed: "Não foi lida (erro)" }
 
 /** Batimento da análise (mesma regra dos rotineiros: 15 s; interrompida após 90 s). */
 export const ANALYSIS_BEAT_MS = 15_000

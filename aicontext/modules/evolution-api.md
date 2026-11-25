@@ -16,7 +16,9 @@ Código: `src/features/evolution-api/` (puros: `constants.ts`, `evolution-dto.ts
   (informativo, vindo do ambiente).
 - Privado: `apiKey` (chave global `AUTHENTICATION_API_KEY`, cifrada).
 - Gravados só pelas rotas da integração (`group: "card"`): `webhookUrl` e o privado `webhookSecret` (gerado no
-  servidor com `randomBytes`, nunca exibido).
+  servidor com `randomBytes`, nunca exibido). A criação do segredo é condicional (`server/webhook-secret.ts`: só
+  grava se ainda não existe e relê o vencedor), então chamadas simultâneas ou outra instância do app no mesmo banco
+  terminam com um único segredo, o mesmo registrado na Evolution.
 - Nenhum campo declara `env` (configuração só pela tela). Debug pelo Pusher (`streamsDebugOverPusher`).
 - **Pré-preenchimento**: sem configuração salva, `GET /api/integrations/evolution-api/prefill` lê o ambiente
   `evolution-api` NO SERVIDOR (`resolveEnvironmentRef` + `envVarsOf`) e devolve URL interna
@@ -58,6 +60,8 @@ Código: `src/features/evolution-api/` (puros: `constants.ts`, `evolution-dto.ts
   instância desconhecida é ignorada e logada. O `apikey` que a Evolution manda no corpo nunca é logado nem
   gravado.
 - Mensagens novas vão para o Agente Secretário (`handleIncomingMessage`, importado sob demanda).
+- Mensagem do próprio dono (`fromMe`) num grupo com endereçamento por LID ensina o `ownerLid` da instância
+  (`ownerLidOf`): menções e citações por `<lid>@lid` passam a contar como menção ao dono.
 
 ## Contatos e operações (aba Operações)
 
@@ -65,7 +69,8 @@ Código: `src/features/evolution-api/` (puros: `constants.ts`, `evolution-dto.ts
   eventos de contatos/conversas, pelas mensagens recebidas e por **Sincronizar fotos e nomes**
   (`findContacts`, `fetchAllGroups`, `findChats`). Serve aos seletores com foto (`ConversationPicker`, sobre o
   `AvatarLabel` compartilhado com o GitHub), à aba Conversas do Secretário e aos rótulos dos canais de memória.
-- Enviar mensagem de teste (número + texto; o texto não vai para a auditoria), listar conversas, contatos e
+- Enviar mensagem de teste (número + texto; o texto não vai para a auditoria; o id fica em `secretary_sent` para que
+  a volta como `fromMe` não pause a conversa no Agente Secretário), listar conversas, contatos e
   grupos com foto, e consultar se um número tem WhatsApp (`chat/whatsappNumbers`).
 
 ## Debug, auditoria e tempo real

@@ -9,8 +9,7 @@ import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
 import { ProviderModelCard } from "@/features/ai/components/shared/ProviderModelCard"
-import { SelfMemorySwitch } from "@/features/ai/components/memories/SelfMemorySwitch"
-import { MemoryUniverseSection } from "@/features/ai/components/memories/MemoryUniverseSection"
+import { SecretaryMemories } from "./SecretaryMemories"
 import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
 import { isOpexProviderId } from "@/features/opex-agent/constants"
 import { useEvolution, useEvolutionAction, useEvolutionRealtime } from "@/features/evolution-api/hooks/useEvolution"
@@ -36,9 +35,6 @@ export type SecretaryForm = UseFormReturn<SecretarySettings>
 const endpoint = "/ai/features/secretary-agent"
 const events = [SECRETARY_ANALYSIS_EVENT, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, SECRETARY_NOTICES_EVENT, SECRETARY_PERSONALITY_EVENT, "ai-feature-updated", "pusher:subscription_succeeded"]
 
-export function SecretaryMemories() {
-    return <><SelfMemorySwitch consumer="secretario" /><MemoryUniverseSection consumer="secretario" /></>
-}
 
 export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
     const cache = useQueryClient()

@@ -70,7 +70,12 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 - **Conferência antes de enviar**: antes de cada parte, confere se o token é o mesmo, se o dono não falou na
   conversa e se ela não foi pausada; se mudou, descarta ("descartada"). Marca como lida só ao enviar a primeira
   parte e só com a opção ligada.
-- Erro (Evolution fora, instância desconectada, provedor) → decisão "erro", sem reenvio.
+- Erro (Evolution fora, instância desconectada, provedor) → decisão "erro" com a classe do erro no motivo e log
+  Pino (`feature: secretary-agent`, instância e conversa, sem texto de mensagem), sem reenvio.
+- Grupo com "só quando mencionado": vale a menção ou a citação pelo número do dono ou pelo LID dele
+  (`ownerLid`, aprendido das mensagens do dono em grupos; ver `evolution-api.md`).
+- Mensagens que o próprio Opex envia (respostas do agente e a mensagem de teste da integração) ficam em
+  `secretary_sent` e não pausam a conversa quando voltam como `fromMe`.
 - Consumo em `ai_consumption_logs` com origem `secretary-agent` (`secretary-analysis` na análise).
 
 ## Perguntar ao dono e aba Avisos
@@ -80,8 +85,12 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   guarda o id da mensagem.
 - Resposta do dono (`resolveOwnerReply`): citando a pergunta, vale para ela; sem citação e com uma pendente, vale
   para ela; com várias, o agente pede que cite; sem pendentes, ignora. Também pela aba Avisos.
-- Depois: a IA extrai um fato e escolhe o canal (global ou da conversa); o aviso mostra onde gravou; a conversa é
-  retomada, a menos que o dono já tenha falado nela depois da pergunta.
+- Depois: a pergunta fica reservada (`answering`), a IA extrai um fato e escolhe o canal (global ou da conversa) e a
+  memória é gravada; só então o aviso vira respondido e mostra onde gravou. Se a inferência ou a gravação falharem,
+  a pergunta volta para pendente (o dono responde de novo; resposta reservada há mais de 5 min também pode ser
+  refeita). A conversa é retomada depois da resposta (`runAfterResponse`, fora da requisição da aba Avisos), a menos
+  que o dono já tenha falado nela depois da pergunta.
+- Responder e descartar são auditados (`AgenteSecretario`, sem o texto da resposta).
 - Pergunta sem prazo; **Descartar** na aba Avisos.
 - Limite ou orçamento: aviso com `_id` da janela (`limit:<conversa>:<hora>` / `budget:<dia>`), enviado ao dono
   e listado em Avisos **uma vez por janela**; retoma sozinho na janela seguinte.
@@ -105,6 +114,12 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   útil) e descobertas. O trabalho é feito num rascunho: concluída vira a personalidade atual (versão "Análise");
   **Cancelar** guarda o rascunho na versão "Análise cancelada" (restaurável, não aplicada). Batimento a cada 15 s;
   sem batimento por 90 s a análise vira "Interrompida". Sem teto de custo; não conta no orçamento diário.
+  Falha numa conversa (Evolution, modelo) marca só essa conversa como "Não foi lida (erro)" e a análise segue. Se a
+  personalidade for editada durante a análise (conflito de versão) ou houver erro fatal, o que já foi aprendido fica
+  na versão "Análise não aplicada" (restaurável, não aplicada) e a mensagem diz a causa. Iniciar e cancelar são
+  auditados com a contagem de conversas.
+- **Editor**: uma versão nova (análise, restauração) só substitui a tela sem edição pendente; com edição pendente
+  o texto digitado fica e a tela avisa, com "Recarregar e descartar minhas edições".
   Modelo próprio ("Modelo da análise": o mesmo do agente ou outro).
 
 ## Memórias (aba Memórias)
@@ -115,7 +130,10 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 - Contexto do turno: só o global e o canal da conversa atual.
 - Aprendizado autônomo (criar, editar, ativar/desativar) com a chave `secretario` em Memórias autônomas.
 - Universo do agente (`AgentUniverseCard`): canais das conversas rotulados pelo nome (número na dica;
-  `secretaryChannelLabels`); a foto fica na aba Conversas e nos seletores.
+  `secretaryChannelLabels`); a foto fica na aba Conversas e nos seletores (decisão do dono no planejamento: a lib
+  `@engramind/client` não aceita foto no rótulo do canal; a foto no universo é tarefa separada).
+- `?conversa=<id>` (ação "abrir as memórias" da aba Conversas) abre o universo só com o global e o canal daquela
+  conversa, com Nova memória já no canal dela (`conversationFocus`), e um botão para voltar a todas.
 - Engramind fora do ar: a gravação vai para a fila `engramind_pending_writes` (ver `engramind.md`) e a ferramenta
   devolve `pendente:<chave>`.
 

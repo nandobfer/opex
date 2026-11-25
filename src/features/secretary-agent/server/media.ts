@@ -5,6 +5,7 @@ import { messageDisplayText, type ParsedMessage } from "@/features/evolution-api
 import { modelFileKinds, opexFileDelivery } from "@/features/opex-agent/files"
 import type { SecretarySettings } from "../schemas"
 import { secretaryInference } from "./ai"
+import { secretaryLog } from "./log"
 
 export async function readTurnMedia(settings: SecretarySettings, instance: string, message: ParsedMessage, token: string) {
     const fallback = { text: messageDisplayText(message), understood: false }
@@ -23,5 +24,8 @@ export async function readTurnMedia(settings: SecretarySettings, instance: strin
             messages: [{ role: "user", content: [kind === "image" ? { type: "image", image: bytes, mediaType: mime } : { type: "file", data: bytes, mediaType: mime }] }],
             schema: z.object({ text: z.string().trim().min(1).max(8000) }) })
         return { text: [fallback.text, result.text].filter(Boolean).join("\n"), understood: true }
-    } catch { return fallback }
+    } catch (error) {
+        secretaryLog.warn({ err: error, instance, messageId: message.id, kind }, "[secretario] Mídia não lida: segue com o marcador")
+        return fallback
+    }
 }

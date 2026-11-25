@@ -22,7 +22,9 @@ export async function handleIncomingMessage(instance: string, message: ParsedMes
     await secretaryDb()
     const { settings } = await loadSecretarySettings()
     if (settings.instance !== instance) return
-    const ownerJid = (await EvolutionInstanceState.findById(instance).select("ownerJid").lean())?.ownerJid
+    const owner = await EvolutionInstanceState.findById(instance).select("ownerJid ownerLid").lean()
+    const ownerJid = owner?.ownerJid
+    const ownerLid = owner?.ownerLid ?? null
     if (!ownerJid) {
         if (!message.fromMe) await recordDecision(instance, chatId, message, "error", "Não foi possível identificar o perfil conectado.")
         return
@@ -49,5 +51,5 @@ export async function handleIncomingMessage(instance: string, message: ParsedMes
     const token = randomUUID()
     await SecretaryConversation.updateOne({ _id: id }, { $set: { token }, $setOnInsert: { instance, jid: message.chatJid }, $push: { pending: message } }, { upsert: true, setDefaultsOnInsert: false })
     await sleep(settings.human.groupingSeconds * 1000)
-    await runSecretaryTurn({ id, instance, chatId, ownerJid, token, message })
+    await runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLid, token, message })
 }

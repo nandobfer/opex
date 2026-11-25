@@ -88,6 +88,10 @@ export async function sendTestMessage(input: SendTestInput, actorId: string): Pr
     try {
         const sent = await evolution.sendText(instance, { number: input.number, text: input.text })
         id = sent.key.id
+        // Volta pelo webhook como `fromMe`: registrada como envio do Opex, não conta como o dono assumindo a conversa.
+        const { SecretarySent, secretaryDb } = await import("@/features/secretary-agent/server/models")
+        await secretaryDb()
+        await SecretarySent.updateOne({ _id: `${instance}:${id}` }, { $setOnInsert: { sentAt: new Date() } }, { upsert: true })
     } catch (error) {
         toDomainError(error)
     }

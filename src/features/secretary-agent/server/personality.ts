@@ -18,7 +18,8 @@ export async function writeVersion(snapshot: PersonalitySnapshot, origin: Versio
     const id = randomUUID()
     const changes = diffPersonality(previous.snapshot, next)
     await SecretaryVersion.create({ _id: id, origin, snapshot: next, changes, at: new Date() })
-    if (origin !== "analysis-cancelled") {
+    // Análise cancelada ou não aplicada só entra no histórico (restaurável); não troca a personalidade atual.
+    if (origin !== "analysis-cancelled" && origin !== "analysis-unapplied") {
         const version = expected === undefined ? previous.versionId : expected
         const update = await SecretaryPersonality.updateOne(
             { _id: "current", ...(version ? { versionId: version } : { versionId: { $exists: false } }) },
