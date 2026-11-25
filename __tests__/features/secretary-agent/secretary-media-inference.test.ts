@@ -102,6 +102,30 @@ describe("secretaryInference (SDK real, modelo fake)", () => {
         await expect(infer()).rejects.toThrow("formato inválido")
     })
 
+    it("uma entrega inválida volta ao modelo com o erro e a segunda, válida, é devolvida", async () => {
+        const model = new MockLanguageModelV4({ doStream: [await toolStream({ ok: "talvez" })(), await toolStream({ ok: true })()] })
+        mocks.model = model
+        await expect(infer()).resolves.toEqual({ ok: true })
+        expect(model.doStreamCalls).toHaveLength(2)
+        expect(JSON.stringify(model.doStreamCalls[1]!.prompt)).toContain("tool-result")
+    })
+
+    it("depois de 8 passos inválidos, o erro aponta os campos sem repetir os valores", async () => {
+        const model = jsonModel({ ok: "segredo-do-contato" })
+        mocks.model = model
+        const error = await infer().catch((reason: unknown) => reason as Error)
+        expect(model.doStreamCalls).toHaveLength(8)
+        expect(error.message).toBe("O modelo entregou uma resposta em formato inválido (campos: ok).")
+        expect(error.message).not.toContain("segredo")
+    })
+
+    it("normaliza a entrega antes do schema estrito", async () => {
+        mocks.model = jsonModel({ ok: "sim" })
+        const result = await secretaryInference({ settings: settings({}, "anthropic"), model: { provider: "anthropic", model: "m", variant: null }, id: "t1", instructions: "x", messages: [{ role: "user", content: "oi" }],
+            schema: z.object({ ok: z.boolean() }), deliverySchema: z.object({ ok: z.string() }), normalize: (raw) => ({ ok: (raw as { ok: string }).ok === "sim" }) })
+        expect(result).toEqual({ ok: true })
+    })
+
     it("executa a ferramenta de memória antes de entregar", async () => {
         const execute = vi.fn(async () => "gravado")
         mocks.model = new MockLanguageModelV4({ doStream: [await toolStream({}, "remember")(), await toolStream({ ok: true })()] })

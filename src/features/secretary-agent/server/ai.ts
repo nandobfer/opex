@@ -7,9 +7,16 @@ import { SECRETARY_CONSUMPTION_ORIGIN } from "../constants"
 import { priceKey, stepCostUsd } from "../cost"
 import type { SecretaryMainModel, SecretarySettings } from "../schemas"
 
+/** Só os caminhos dos campos que falharam (nunca os valores). */
+function issuePaths(error: z.ZodError): string[] {
+    return [...new Set(error.issues.map((issue) => issue.path.map(String).join(".")).filter(Boolean))].slice(0, 8)
+}
+
 export async function secretaryInference<T>(options: {
     settings: SecretarySettings; model: Pick<SecretaryMainModel, "provider" | "model" | "variant">; id: string; instructions: string;
     messages: ModelMessage[]; schema: z.ZodType<T>; signal?: AbortSignal; origin?: string; subject?: string; tools?: ToolSet;
+    /** Schema que o modelo vê na ferramenta `entregar` (mais tolerante); o resultado ainda passa por `normalize` e `schema`. */
+    deliverySchema?: z.ZodType; normalize?: (raw: unknown) => unknown;
 }): Promise<T> {
     const { provider, model, variant } = options.model
     if (!provider || !model) throw new Error("Configure o provedor e o modelo do Secretário.")
@@ -24,12 +31,26 @@ export async function secretaryInference<T>(options: {
             inputTokens: tokens.inputTokens ?? null, outputTokens: tokens.outputTokens ?? null, totalTokens: tokens.totalTokens ?? null,
             costUsd: cost.costUsd, billing: reported?.billing, apiKeyId: prepared.apiKeyId })
     }
+    const strict = async (raw: unknown) => options.schema.safeParseAsync(options.normalize ? options.normalize(raw) : raw)
     try {
         let streamError: unknown
+        let delivered: { value: T } | undefined
+        // A entrega só encerra o laço quando é válida: o erro de validação volta ao modelo como resultado da ferramenta e ele
+        // corrige no passo seguinte, dentro do limite de passos.
+        const entregar = ai.tool({
+            description: "Entrega o resultado final.",
+            inputSchema: options.deliverySchema ?? options.schema,
+            execute: async (raw: unknown) => {
+                const parsed = await strict(raw)
+                if (!parsed.success) throw new Error(`Formato inválido nos campos: ${issuePaths(parsed.error).join(", ") || "(raiz)"}. Corrija e chame entregar de novo.`)
+                delivered = { value: parsed.data }
+                return { ok: true }
+            },
+        })
         const run = ai.streamText({ model: prepared.model, providerOptions: prepared.providerOptions, abortSignal: signal, maxRetries: 0,
             instructions: `${options.instructions}\nTermine sempre chamando a ferramenta entregar.`, messages: options.messages,
-            tools: { ...options.tools, entregar: ai.tool({ description: "Entrega o resultado final.", inputSchema: options.schema }) },
-            toolChoice: "required", stopWhen: [ai.hasToolCall("entregar"), ai.stepCountIs(8)],
+            tools: { ...options.tools, entregar },
+            toolChoice: "required", stopWhen: [() => delivered !== undefined, ai.stepCountIs(8)],
             onError: ({ error }) => { streamError ??= error },
             onStepFinish: async (part: { usage: LanguageModelUsage; providerMetadata?: Parameters<typeof prepared.takeStepCost>[0] }) => usage(part.usage, part.providerMetadata),
         })
@@ -38,11 +59,11 @@ export async function secretaryInference<T>(options: {
             const steps = await run.steps
             if (streamError !== undefined) throw streamError
             signal.throwIfAborted()
-            const delivery = steps.at(-1)?.toolCalls.find((call) => call.toolName === "entregar")
-            if (!delivery) throw new SecretaryDeliveryError("missing")
-            const parsed = await options.schema.safeParseAsync(delivery.input)
-            if (!parsed.success || delivery.invalid) throw new SecretaryDeliveryError("invalid")
-            return parsed.data
+            if (delivered) return delivered.value
+            const attempt = [...steps].reverse().flatMap((item) => item.toolCalls).find((call) => call.toolName === "entregar")
+            if (!attempt) throw new SecretaryDeliveryError("missing")
+            const parsed = await strict(attempt.input)
+            throw new SecretaryDeliveryError("invalid", parsed.success ? [] : issuePaths(parsed.error))
         } catch (error) {
             signal.throwIfAborted()
             const cause = streamError ?? error

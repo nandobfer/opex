@@ -32,6 +32,7 @@ const mocks = vi.hoisted(() => {
         rows,
         model,
         jobs: [] as (() => Promise<void>)[],
+        realDetached: false,
         writeVersion: vi.fn<(...args: unknown[]) => Promise<string>>(async () => "v1"),
         publish: vi.fn(),
         inference: vi.fn(),
@@ -47,7 +48,10 @@ vi.mock("mongoose", async (importOriginal) => {
 })
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(), AcaoAuditoria: { EXECUTAR: "EXECUTAR" }, recordAudit: mocks.audit }))
 vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ cost: 0.01 }] } }))
-vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, job: () => Promise<void>) => mocks.jobs.push(job) }))
+vi.mock("@/lib/detached", async (importOriginal) => {
+    const actual = (await importOriginal()) as typeof import("@/lib/detached")
+    return { runDetached: (label: string, job: () => Promise<void>) => (mocks.realDetached ? actual.runDetached(label, job) : void mocks.jobs.push(job)) }
+})
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("ai", () => ({ tool: (definition: unknown) => definition }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: { findChats: async () => [], findMessages: mocks.messages } }))
@@ -69,6 +73,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.rows.length = 0
     mocks.jobs.length = 0
+    mocks.realDetached = false
     mocks.messages.mockReset()
     mocks.messages.mockResolvedValue(page(true))
     mocks.writeVersion.mockReset()
@@ -147,7 +152,41 @@ describe("análise de personalidade", () => {
         if (!readFirst) {
             expect(first().error).toContain("O modelo da análise recusou as chamadas")
             expect(mocks.writeVersion).not.toHaveBeenCalled()
+            expect(first().error).toContain("Nada foi aplicado")
+            expect(first().error).not.toContain("Análise não aplicada")
+            // As chamadas recusadas também foram pagas: o custo é relido mesmo na falha.
+            expect(first().cost).toBe(0.01)
         }
+    })
+
+    it("página aprendida seguida de página com erro deixa a conversa \"lida em parte\" e mantém o aprendizado", async () => {
+        mocks.messages.mockImplementation(async (_instance: string, input: { page: number }) => ({ ...page(true), pages: 2, page: input.page }))
+        mocks.inference.mockResolvedValueOnce({ blocks: [{ key: "tom", title: "Tom", content: "Informal" }], variant: null })
+            .mockRejectedValueOnce(Object.assign(new Error("dados privados"), { statusCode: 400 }))
+        await startAnalysis({ scope: "selected", jids: [A], months: 6 }, "local")
+        await mocks.jobs[0]!()
+        expect(first().chats).toEqual([{ jid: A, state: "partial", error: expect.stringContaining("HTTP 400") }])
+        expect(first()).toMatchObject({ status: "done", cost: 0.01 })
+        expect(mocks.writeVersion).toHaveBeenCalledWith(expect.objectContaining({ base: expect.objectContaining({ blocks: expect.arrayContaining([expect.objectContaining({ key: "tom" })]) }) }), "analysis", "local", "v0")
+    })
+
+    it("passa a entrega tolerante e o normalizador para a inferência", async () => {
+        await startAnalysis({ scope: "selected", jids: [A], months: 6 }, "local")
+        await mocks.jobs[0]!()
+        const call = mocks.inference.mock.calls[0]?.[0] as { deliverySchema: unknown; normalize: unknown }
+        expect(call.deliverySchema).toBeDefined()
+        expect(typeof call.normalize).toBe("function")
+    })
+
+    it("iniciar devolve antes de a execução terminar, que segue e grava o progresso", async () => {
+        mocks.realDetached = true
+        let release!: () => void
+        mocks.inference.mockImplementationOnce(() => new Promise((resolve) => { release = () => resolve({ blocks: [], variant: null }) }))
+        await startAnalysis({ scope: "selected", jids: [A], months: 6 }, "local")
+        expect(first().status).toBe("running")
+        await vi.waitFor(() => expect(release).toBeTypeOf("function"))
+        release()
+        await vi.waitFor(() => expect(first()).toMatchObject({ status: "done", chats: [{ jid: A, state: "read" }] }))
     })
 
     it("personalidade editada durante a análise guarda o aprendizado numa versão não aplicada", async () => {

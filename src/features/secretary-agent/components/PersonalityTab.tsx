@@ -12,7 +12,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { ConversationLabel, ConversationPicker } from "@/features/evolution-api/components/ConversationPicker"
 import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks/useEvolution"
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
-import { ANALYSIS_CHAT_STATE_LABELS, ANALYSIS_PHASE_LABELS, ANALYSIS_STATUS_LABELS, type AnalysisChatState, type AnalysisPhase, type AnalysisStatus } from "../constants"
+import { ANALYSIS_CHAT_STATE_LABELS, ANALYSIS_DONE_STATES, ANALYSIS_PHASE_LABELS, ANALYSIS_STATUS_LABELS, type AnalysisChatState, type AnalysisPhase, type AnalysisStatus } from "../constants"
 import { blockKeyOf, isFixedBlock, type BlockChange, type PersonalityBlock, type PersonalitySnapshot } from "../personality"
 import { analysisStartSchema, personalitySchema, variantSchema, type AnalysisStartInput, type PersonalitySaveInput } from "../schemas"
 import { SecondaryModel, type SecretaryForm } from "./SecretaryAgentTab"
@@ -145,7 +145,7 @@ function AnalysisPanel({ contacts }: { contacts: EvolutionContactDto[] }) {
 }
 
 export function AnalysisProgress({ run, contacts }: { run: AnalysisDto; contacts: EvolutionContactDto[] }) {
-    const read = run.chats.filter((item) => item.state === "read" || item.state === "empty").length
+    const read = run.chats.filter((item) => ANALYSIS_DONE_STATES.includes(item.state)).length
     const failures = run.chats.filter((item) => item.state === "failed").length
     const status = run.status === "done" && failures ? `Concluída com ${failures} ${failures === 1 ? "erro" : "erros"}` : ANALYSIS_STATUS_LABELS[run.status]
     const pct = read / Math.max(1, run.chats.length)

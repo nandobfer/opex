@@ -1,8 +1,10 @@
 import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
 
 export class SecretaryDeliveryError extends Error {
-    constructor(readonly kind: "missing" | "invalid") {
-        super(kind === "missing" ? "O modelo terminou sem entregar a resposta." : "O modelo entregou uma resposta em formato inválido.")
+    /** `paths`: só os caminhos dos campos que falharam (ex.: `blocks.0.key`), nunca os valores. */
+    constructor(readonly kind: "missing" | "invalid", readonly paths: string[] = []) {
+        super(kind === "missing" ? "O modelo terminou sem entregar a resposta."
+            : `O modelo entregou uma resposta em formato inválido${paths.length ? ` (campos: ${paths.join(", ")})` : ""}.`)
         this.name = "SecretaryDeliveryError"
     }
 }

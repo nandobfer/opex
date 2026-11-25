@@ -147,9 +147,12 @@ export const ANALYSIS_STATUS_LABELS: Record<AnalysisStatus, string> = {
     interrupted: "Interrompida",
 }
 
-export const ANALYSIS_CHAT_STATES = ["queued", "reading", "read", "empty", "failed"] as const
+/** `partial`: páginas anteriores aprendidas e uma seguinte com erro (conta como lida). */
+export const ANALYSIS_CHAT_STATES = ["queued", "reading", "read", "partial", "empty", "failed"] as const
 export type AnalysisChatState = (typeof ANALYSIS_CHAT_STATES)[number]
-export const ANALYSIS_CHAT_STATE_LABELS: Record<AnalysisChatState, string> = { queued: "Na fila", reading: "Lendo", read: "Lida", empty: "Sem conteúdo útil", failed: "Não foi lida (erro)" }
+export const ANALYSIS_CHAT_STATE_LABELS: Record<AnalysisChatState, string> = { queued: "Na fila", reading: "Lendo", read: "Lida", partial: "Lida em parte (erro)", empty: "Sem conteúdo útil", failed: "Não foi lida (erro)" }
+/** Conversas que contam como lidas no progresso (inclui as lidas em parte). */
+export const ANALYSIS_DONE_STATES: readonly AnalysisChatState[] = ["read", "partial", "empty"]
 
 /** Batimento da análise (mesma regra dos rotineiros: 15 s; interrompida após 90 s). */
 export const ANALYSIS_BEAT_MS = 15_000
