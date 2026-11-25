@@ -302,6 +302,14 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `agentes/desenvolvedor/global` e o canal da central (`memoryUniverseOf`, `src/features/ai/memory-universe.ts`).
   Rótulos no `OpexEngramindProvider`: siglas das centrais (`centralChannelLabels`) e nomes dos clientes nos
   canais `agentes/{opex|maddox}/clientes/<id>` (`clientChannelLabels`, `useOrcamentoClients`).
+- **Cadastrar agente no universo (OPE-192)**: com `consumer` (as seções de memórias dos agentes do Opex passam a
+  identidade), o `AgentUniverseCard` confere se o agente existe (`GET /api/ai/memories/agents/[consumer]`, só o
+  dono: `agentMemoryStatus`, `AGENT_NOT_FOUND` vira `exists: false`). Sem o agente, mostra no lugar do universo o
+  estado "Agente não encontrado no Engramind" (a lib só tem o aviso, sem ação) com o botão **Cadastrar agente no
+  Engramind** (`POST /api/ai/memories/agents/[consumer]/provision`, que roda o passo "Memórias dos agentes" —
+  `ensureAgentMemoryNetwork`, idempotente e auditado). Sucesso: toast e recarga da existência e das consultas da lib
+  (o universo aparece); passo `failed`: a mensagem e "Tentar novamente". Agente desativado mostra o aviso e o link
+  para Identidades, sem o botão (reativar é ação de gestão). Os rotineiros não passam `consumer`.
 - **Altura da rede de `/engramind` (OPE-151, lib ≥ 0.9.0):** `EngramindNetwork fill="viewport"`. O bloco da
   rede (trilha, filtros e canvas) **ocupa a altura visível da área que rola**: canvas = `<main>.clientHeight`
   − padding de cima e de baixo do `<main>` (a folga em relação a `100dvh`, `visibleScrollHeight`) − a altura da

@@ -4,13 +4,13 @@ Agente que lê as mensagens que o dono recebe no WhatsApp (integração `evoluti
 quando a conversa atende aos critérios, responde **como o próprio dono** (nunca se identifica como assistente).
 Tem memórias próprias no Engramind, aprende sozinho e pergunta ao dono o que não sabe (OPE-192).
 
-Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|personalidade|memorias|conversas|avisos>`.
+Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|simulacao|personalidade|memorias|conversas|avisos>`.
 Página de métricas: `/agente-secretario` (Visão geral, Histórico e Memórias).
 
 Código: `src/features/secretary-agent/` — puros: `constants.ts`, `schemas.ts`, `criteria.ts`, `personality.ts`,
-`conversation-id.ts`, `split.ts`, `cost.ts`, `limits.ts`, `owner-reply.ts`; servidor em `server/` (`settings`,
-`models`, `inbound`, `turn`, `classify`, `media`, `ai`, `owner-questions`, `personality`, `analysis`,
-`conversations`, `memory-queue`, `metrics`); telas em `components/`. Rotas em `src/app/api/secretary/**` e
+`criteria-describe.ts`, `jev-subjects.ts`, `conversation-id.ts`, `split.ts`, `cost.ts`, `limits.ts`, `owner-reply.ts`;
+servidor em `server/` (`settings`, `models`, `inbound`, `turn`, `plan-reply`, `decide-subject`, `budget`, `simulate`,
+`media`, `ai`, `owner-questions`, `personality`, `analysis`, `conversations`, `memory-queue`, `metrics`); telas em `components/`. Rotas em `src/app/api/secretary/**` e
 `src/app/api/ai/features/secretary-agent`.
 
 Fora do escopo (refinamento): modo Sugerir, Apresentação, horário de atuação e "pedir decisão".
@@ -20,8 +20,9 @@ Fora do escopo (refinamento): modo Sugerir, Apresentação, horário de atuaçã
 Feature `secretary-agent` em `ai_feature_settings` (`loadFeature`/`persistFeature`, padrões novos por
 `withSecretaryDefaults`). O mesmo schema (`secretarySettingsSchema`) valida a tela e a rota.
 
-1. **Provedor e modelo** (`ProviderModelCard`): só `OPEX_PROVIDER_IDS` (inferência por API com ferramentas, sem o
-   OpenCode de sessão).
+1. **Provedor e modelo** (`SecretaryModelCard`, que envolve o `ProviderModelCard` e grava o provedor escolhido,
+   limpando o modelo e a variante): só `OPEX_PROVIDER_IDS` (inferência por API com ferramentas, sem o OpenCode de
+   sessão). O mesmo cartão serve ao Modelo de mídia, ao Modelo da análise e a quem decide o assunto.
 2. **Ligar/desligar**. Ligado exige provedor, modelo e instância.
 3. **Instância** do WhatsApp (da integração Evolution API).
 4. **Modo** (`OptionTabs`): **Responder** (envia sozinho) ou **Só observar** (aprende e registra, sem enviar nem
@@ -32,27 +33,77 @@ Feature `secretary-agent` em `ai_feature_settings` (`loadFeature`/`persistFeatur
 6. **Comportamento humano**: agrupar mensagens (15 s), atraso aleatório (3 a 10 s), "digitando…", dividir em
    mensagens curtas (`splitMessages`, até 4 partes) e marcar como lida (só ao enviar).
 7. **Pausa quando o dono responde pelo celular**: 30 min naquela conversa.
-8. **Limites**: 20 respostas por conversa por hora e orçamento diário de US$ 2 (dia de São Paulo).
-9. **Preços estimados**: com o agente ligado, todo modelo em uso (principal, mídia, análise) de provedor que não
+8. **Limites**: 20 respostas por conversa por hora e orçamento diário de US$ 2 (dia de São Paulo). O orçamento soma
+   as respostas (`secretary-agent`) e a decisão do assunto (`secretary-decision`, por modelo de texto em
+   `ai_consumption_logs` ou pelo JEV em `ai_usage_logs`; `spentTodayUsd`). A análise e a simulação ficam de fora.
+9. **Preços estimados**: com o agente ligado, todo modelo de texto em uso (principal, mídia, análise e decisão do
+   assunto; o JEV tem tarifa fixa) de provedor que não
    informa o custo (fora de `opencode-go` e `command-code`) exige o preço em US$ por 1M de tokens de entrada e
    saída. O custo do passo é o informado pelo provedor ou, sem ele, `estimateCostUsd` pela tabela.
 
 ## Critérios (aba Critérios)
 
-`evaluateCriteria(criteria, conversa, assunto)` (pura) devolve `{ decision, rule, reason }`. Precedência
-(mostrada na tela): **contato/grupo excluído > assunto "nunca" > assunto "sempre" > inclusões > escopo base**.
-O tipo de conversa (individuais/grupos) e o "só quando mencionado" fazem parte da camada do escopo base: uma
-inclusão ou um assunto "sempre" passam por cima deles. Em grupo, conta como menção a menção ao número do dono ou a
-resposta (citação) a uma mensagem dele (`mentionsOwner`).
+Duas etapas que precisam passar **juntas**, sem precedência entre elas (plano v3, pedido do dono: a precedência da
+v1 era confusa). Regra escrita na tela: "O Secretário só responde quando a mensagem passa nas duas etapas."
 
-- Assunto: a IA classifica (saída estruturada) só quando há critério de assunto preenchido e a conversa não está
-  excluída; o tópico curto alimenta "assuntos mais frequentes".
-- **Testar critérios** (`POST /api/secretary/criteria/test`): conversa + mensagem (+ "menciona o dono" em grupo),
-  com os critérios em edição; mostra "Responderia"/"Não responderia", a regra e o motivo. Não envia nada.
+1. **Quem pode ser respondido** (`criteria.audience`):
+   - **Nunca responder a** (`blocked`): sempre fica de fora;
+   - **Responder a**: **Todos** (com as chaves "Conversas individuais" e "Grupos") ou **Só os escolhidos**
+     (`selected`, as chaves de tipo somem);
+   - **Em grupos, responder**: **Sempre** ou **Só quando me mencionam** (menção ou citação pelo número ou pelo LID do
+     dono, `mentionsOwner`); vale para todo grupo que passa na etapa, inclusive os escolhidos.
+2. **Sobre o quê** (`criteria.subjects`): **Assuntos bloqueados** (lista de assuntos com nome, descrição e exemplos)
+   sempre bloqueiam — o agente fica quieto, não avisa e não marca como lida; **Responder sobre**: **Qualquer assunto**
+   (exceto os bloqueados) ou **Só os assuntos liberados** (outra lista de assuntos).
+
+Quem não passa na etapa 1 não é respondido, seja qual for o assunto (um assunto liberado não "puxa" quem está fora).
+Para responder qualquer pessoa sobre um assunto específico: "Responder a: Todos" + "Só os assuntos liberados".
+Validação: "Só os escolhidos" exige ao menos uma conversa e "Só os assuntos liberados" ao menos um assunto.
+
+- `evaluateCriteria(criteria, conversa, decisãoDoAssunto)` (pura) devolve `{ decision, rule, reason, steps }`; cada
+  passo (`blocked`, `audience`, `mention`, `subject-blocked`, `subject-allowed`) vem como `pass`, `fail` ou `skipped`.
+  `evaluateAudience` roda a etapa 1 antes de chamar quem decide o assunto (quem não passa não gasta decisão).
+- Tela: resumo em frases (`describeCriteria`) e **Fluxo da decisão** (`criteriaSteps` + `CriteriaFlow`), atualizados
+  enquanto o dono edita, e um link "Simular uma mensagem" para a aba Simulação.
+- **Configuração salva no formato da v1** é convertida na leitura (`migrateLegacyCriteria` em `withSecretaryDefaults`):
+  escopo "todas" vira "Todos" e "nenhuma" vira "Só os escolhidos" com as antigas inclusões; exclusões viram "Nunca
+  responder a"; tipos de conversa e menção são mantidos; o assunto "nunca" vira o assunto bloqueado "Assunto
+  bloqueado" e o "sempre" vira o assunto liberado "Assunto liberado" **mantendo "Qualquer assunto"** (o agente não
+  fica mudo). O efeito antigo de o assunto "sempre" responder quem estava fora deixou de existir.
+- **Quem decide o assunto** (`decision.model`): "Mesmo do agente", outro modelo de texto (`OPEX_PROVIDER_IDS`) ou o
+  **JEV** (`decideSubject`). Só é chamado quando há assunto bloqueado ou "Só os assuntos liberados" e quem enviou
+  passou na etapa 1. Com modelo de texto: saída estruturada com os ids que bateram, o tópico e o motivo. Com o JEV:
+  uma pergunta `noul` por assunto (estado: a mensagem e as 5 anteriores), faixas sim ≥ 70%, não ≤ 30%, incerto no
+  meio, e a política "na dúvida, fica quieto" (bloqueado com sim ou incerto bloqueia; no modo "Só os liberados", só
+  o sim libera; `jev-subjects.ts`). Falha do decisor vira a decisão "erro" e o agente não responde. Consumo com a
+  origem/feature `secretary-decision`, que conta no orçamento diário. O tópico (ou o nome do assunto que bateu, no
+  JEV) alimenta "assuntos mais frequentes".
 - **Registro de decisões** (`secretary_decisions`, `GET /api/secretary/decisions?jid=`), uma por mensagem
-  recebida: respondeu, ignorou, pausado, assunto bloqueado, limite atingido, só observar, perguntou ao dono,
-  desligado, agrupada, descartada, erro.
-- Seleção de contatos/grupos com foto e busca (`ConversationPicker`).
+  recebida: respondeu, ignorou, pausado, assunto bloqueado (também quando o assunto não é um dos liberados), limite
+  atingido, só observar, perguntou ao dono, desligado, agrupada, descartada, erro.
+- Seleção de contatos/grupos com foto e busca (`ConversationPickerField`, com "Sincronizar contatos e conversas" ao
+  lado quando a lista está vazia).
+
+## Simulação (aba Simulação)
+
+Substitui o "Testar critérios" da v1, no molde do simulador do agente vendedor do zaturno-crm: conversa simulada à
+esquerda e coluna lateral (320 px) com os dados de cada resposta.
+
+- Topo: contato ou grupo (com foto), "A mensagem me menciona" em grupos, "Histórico": **Só a conversa simulada**
+  (padrão) ou **Continuar a conversa real** (as últimas 30 mensagens da Evolution, só leitura) e **Reiniciar**.
+- `POST /api/secretary/simulate` (só o dono, `simulateSchema`): as configurações **em edição** no formulário (mesmo
+  schema, sem exigir "ligado" nem instância), a conversa, a mensagem, o histórico simulado e as memórias que a
+  simulação já "gravou". Usa o mesmo núcleo do turno real (`planSecretaryReply`) com portas que não enviam, não
+  marcam como lida, não gravam decisão e não gravam memória no Engramind (a ferramenta `remember` da simulação só
+  acumula o fato, que volta ao navegador e entra no contexto das próximas mensagens até Reiniciar).
+- Coluna lateral: **Decisão** (responderia / não responderia, regra e motivo), **Passo a passo dos critérios**
+  (`CriteriaFlow` com ✓/✗/—), **Decisão do assunto** (modelo ou JEV, o modelo usado, o assunto e, com o JEV, cada
+  pergunta com a probabilidade e a faixa), **Limites e pausa** da conversa real (informativo: a simulação não aplica),
+  **Personalidade aplicada** (base + variante), **Memórias** (contagem do contexto e as que gravaria), **Pergunta ao
+  dono** (nada é enviado) e **Custo desta mensagem**.
+- Quando não responderia, o chat mostra uma linha discreta: "O Secretário não responderia: <motivo>".
+- Custo real (modelo e JEV) com a origem `secretary-simulation`, somado pelo assunto da simulação e **fora** do
+  orçamento diário. Só texto (sem mídia).
 
 ## Turno
 
@@ -64,9 +115,11 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 - Agente desligado ou sem modelo: decisão "desligado".
 - Cada mensagem recebida grava um **token novo** e entra na lista pendente; depois da janela, só o turno cujo token
   ainda é o atual responde (os outros ficam como "agrupada").
-- Ordem: excluído → pausado → limites (o orçamento esgotado barra também o modo Só observar) → mídia → mensagem
+- Ordem: "Nunca responder a" → pausado → limites (o orçamento esgotado barra também o modo Só observar) → mídia → mensagem
   só de mídia não lida vira "ignorou" → critérios ("assunto bloqueado" fica quieto, não avisa e não marca como
-  lida) → contexto (histórico de ~30 mensagens, personalidade base + variante, memórias) → geração.
+  lida) → contexto (histórico de ~30 mensagens, personalidade base + variante, memórias) → geração. Do critério à
+  geração é o núcleo `planSecretaryReply` (o mesmo da Simulação); o turno real cuida dos limites, da mídia, do envio
+  em partes, da leitura e do registro.
 - **Conferência antes de enviar**: antes de cada parte, confere se o token é o mesmo, se o dono não falou na
   conversa e se ela não foi pausada; se mudou, descarta ("descartada"). Marca como lida só ao enviar a primeira
   parte e só com a opção ligada.
@@ -76,7 +129,8 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   (`ownerLid`, aprendido das mensagens do dono em grupos; ver `evolution-api.md`).
 - Mensagens que o próprio Opex envia (respostas do agente e a mensagem de teste da integração) ficam em
   `secretary_sent` e não pausam a conversa quando voltam como `fromMe`.
-- Consumo em `ai_consumption_logs` com origem `secretary-agent` (`secretary-analysis` na análise).
+- Consumo em `ai_consumption_logs` com origem `secretary-agent` (`secretary-decision` na decisão do assunto,
+  `secretary-analysis` na análise e `secretary-simulation` na Simulação).
 
 ## Perguntar ao dono e aba Avisos
 
@@ -134,6 +188,8 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   `lid-<dígitos>`), criado na primeira gravação. Assinatura só `agentes/secretario/*` (não lê as Memórias do Opex).
 - Contexto do turno: só o global e o canal da conversa atual.
 - Aprendizado autônomo (criar, editar, ativar/desativar) com a chave `secretario` em Memórias autônomas.
+- Agente ainda não cadastrado no Engramind: o universo dá lugar ao estado "Agente não encontrado no Engramind" com o
+  botão "Cadastrar agente no Engramind" (ver `engramind.md`).
 - Universo do agente (`AgentUniverseCard`): canais das conversas rotulados pelo nome (número na dica;
   `secretaryChannelLabels`); a foto fica na aba Conversas e nos seletores (decisão do dono no planejamento: a lib
   `@engramind/client` não aceita foto no rótulo do canal; a foto no universo é tarefa separada).
@@ -144,9 +200,11 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 
 ## Conversas (aba Conversas)
 
-Lista das conversas com foto e o estado do agente (ativo, pausado até…, excluído, aguardando o dono), virtualizada
-acima de 50. Ações: pausar (pelo tempo da pausa configurado), retomar, excluir/remover exclusão dos critérios e
-abrir as memórias.
+Lista das conversas com foto e o estado do agente (ativo, pausado até…, nunca responder, aguardando o dono),
+virtualizada acima de 50. Ações: pausar (pelo tempo da pausa configurado), retomar, "Nunca responder"/"Voltar a
+responder" (entra ou sai de `criteria.audience.blocked`) e abrir as memórias. Sem conversas, o estado vazio mostra
+"Nenhuma conversa ainda." com o botão "Sincronizar contatos e conversas" (`EvolutionSyncAction`); sem instância
+escolhida, um link para a aba Instância da integração.
 
 ## Tempo real (`private-app`)
 
