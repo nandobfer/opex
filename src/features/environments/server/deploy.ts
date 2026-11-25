@@ -34,7 +34,8 @@ import {
 import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices, type ComposeService } from "../compose-config"
 import { DEPLOY_HEARTBEAT_MS, DEPLOY_LOG_MAX, ENVIRONMENTS_AUDIT_ENTITY, ENV_FILE, MANAGED_COMPOSE_FILE, OVERRIDE_FILE } from "../constants"
 import { executionSteps, type DeployStep } from "../pipeline"
-import type { EnvironmentActionInput, EnvironmentsSettings, Machine } from "../schemas"
+import { environmentLimitsOf, limitsForService, limitsText, unknownLimitServices, type ResourceLimits } from "../resource-limits"
+import type { EnvironmentActionInput, EnvironmentLimits, EnvironmentsSettings, Machine } from "../schemas"
 import type { DeployKind } from "../types"
 import { emitDeploy, openDeployChannel } from "./hub"
 import { Environment, EnvironmentDeploy, type DeployCheckpoint, type IEnvironment, type IEnvironmentDeploy } from "./models"
@@ -227,7 +228,8 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     }
     const cross = target.buildOn !== target.runOn
     const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
-    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan) })), timeoutMs: 30_000 })
+    const limits = deployLimits(ctx, environmentLimitsOf(env.limits), services)
+    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits })), timeoutMs: 30_000 })
     return { services, envFiles, composeVersion }
 }
 
@@ -241,6 +243,18 @@ async function writeManagedCompose(ctx: DeployContext, env: IEnvironment, plan: 
     await runStep(ctx, { label: `Compose gerenciado v${revision.version}`, command: writeFileCommand(plan, MANAGED_COMPOSE_FILE, revision.content), timeoutMs: 30_000 }, { redactedAs: `gravar ${MANAGED_COMPOSE_FILE} (compose gerenciado v${revision.version}, conteúdo omitido)` })
     await EnvironmentDeploy.updateOne({ _id: ctx.deployId }, { $set: { composeVersion: revision.version } })
     return revision.version
+}
+
+/**
+ * Limites de cada serviço para o override e as linhas do log: os limites (ou "sem limite") e as linhas do
+ * modo por serviço que não existem no compose (ignoradas, sem bloquear o deploy).
+ */
+export function deployLimits(ctx: Pick<DeployContext, "write">, limits: EnvironmentLimits, services: ComposeService[]): Record<string, ResourceLimits | null> {
+    const byService = Object.fromEntries(services.map((service) => [service.name, limitsForService(limits, service.name)]))
+    const configured = Object.values(byService).some(Boolean)
+    for (const service of unknownLimitServices(limits, services.map((item) => item.name))) ctx.write(`\u001b[33mLimite do serviço ${service} ignorado: o serviço não está no compose.\u001b[0m\n`)
+    if (configured) ctx.write(`Limites: ${services.map((service) => `${service.name} ${byService[service.name] ? limitsText(byService[service.name]!) : "sem limite"}`).join("; ")}\n`)
+    return byService
 }
 
 /** Fim da saída de erro do `config` (sem JSON: nunca as variáveis resolvidas). */
@@ -338,7 +352,7 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices, envFiles)
         if (skipBuild) ctx.write(`\nBuild reaproveitado: as imagens do commit ${commit} já existem no ${machineName(target.buildOn)}.\n`)
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
-        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, composeVersion }
+        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
         await runExecution(ctx, env, settings, plan, access, checkpoint)
         await completeDeploy(env, deployId, recorder, checkpoint)
@@ -367,7 +381,7 @@ type Recorder = ReturnType<typeof deployRecorder>
 
 async function completeDeploy(env: IEnvironment, deployId: string, recorder: Recorder, checkpoint: DeployCheckpoint): Promise<void> {
     const target = { buildOn: env.buildOn, runOn: env.runOn }
-    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, ...(typeof checkpoint.composeVersion === "number" ? { deployedComposeVersion: checkpoint.composeVersion } : {}), updatedAt: new Date() } })
+    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), ...(typeof checkpoint.composeVersion === "number" ? { deployedComposeVersion: checkpoint.composeVersion } : {}), updatedAt: new Date() } })
     if (typeof checkpoint.composeVersion === "number") await markComposeDeployed(String(env._id), checkpoint.composeVersion)
     await finishDeploy(deployId, "success", null, recorder.log(), checkpoint.commit, checkpoint.tag)
     envLog.info({ id: String(env._id), deployId, ...target }, "[environments] Deploy concluído")

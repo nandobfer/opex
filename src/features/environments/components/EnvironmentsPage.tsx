@@ -20,7 +20,7 @@ import { BuilderCard } from "./builder/BuilderCard"
 import { DeleteEnvironmentDialog } from "./DeleteEnvironmentDialog"
 import { DeployHistoryDialog } from "./DeployHistoryDialog"
 import { DeployDrawer } from "./DeployDrawer"
-import { EnvironmentFormDialog } from "./EnvironmentFormDialog"
+import { EnvironmentFormDialog, NO_HOSTS } from "./EnvironmentFormDialog"
 import { EnvironmentRow, type RowIntent } from "./EnvironmentRow"
 import { MoveDialog } from "./MoveDialog"
 import { SettingsDialog } from "./SettingsDialog"
@@ -84,7 +84,7 @@ function EnvironmentsContent() {
                     <UnmanagedList projects={data.unmanaged} onAdopt={(project) => setDialog({ kind: "adopt", project })} />
                 </>
             )}
-            <EnvironmentFormDialog open={dialog?.kind === "form"} env={dialog?.kind === "form" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} />
+            <EnvironmentFormDialog open={dialog?.kind === "form"} env={dialog?.kind === "form" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} hosts={data?.hosts ?? NO_HOSTS} onClose={() => setDialog(null)} />
             <DeleteEnvironmentDialog env={dialog?.kind === "delete" ? dialog.env : null} onClose={() => setDialog(null)} />
             <MoveDialog env={dialog?.kind === "move" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} onStarted={(id, title) => setDeploy({ id, title })} />
             <DeployHistoryDialog

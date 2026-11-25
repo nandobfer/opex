@@ -28,6 +28,7 @@ vi.mock('@/features/environments/hooks/useEnvironments', () => ({
   useEnvironmentEnvValues: () => ({ data: { items: [] }, isError: false, isFetching: false, refetch: vi.fn() }),
   useEnvironmentAction: () => ({ mutate: mocks.action, isPending: false }),
   useDeleteEnvironment: () => ({ mutate: mocks.remove }),
+  useReadComposeServices: () => ({ mutate: vi.fn(), isPending: false, isError: false, error: null, reset: vi.fn() }),
 }))
 vi.mock('@/features/environments/hooks/useEnvironmentCompose', () => ({
   useEnvironmentCompose: () => mocks.compose,
@@ -38,7 +39,7 @@ vi.mock('@/features/environments/hooks/useEnvironmentCompose', () => ({
 
 import { ComposeDialog } from '@/features/environments/components/ComposeDialog'
 import { DeleteEnvironmentDialog } from '@/features/environments/components/DeleteEnvironmentDialog'
-import { EnvironmentFormDialog } from '@/features/environments/components/EnvironmentFormDialog'
+import { EnvironmentFormDialog, NO_HOSTS } from '@/features/environments/components/EnvironmentFormDialog'
 import { EnvironmentRow } from '@/features/environments/components/EnvironmentRow'
 
 const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
@@ -78,7 +79,7 @@ afterEach(cleanup)
 
 describe('formulário: origem', () => {
   it('Novo: três origens (adotado desabilitado, vem de Adotar); gerenciado mostra projeto, serviços e o editor e exige o compose', async () => {
-    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} onClose={vi.fn()} />)
+    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} hosts={NO_HOSTS} onClose={vi.fn()} />)
     const radios = screen.getAllByRole('radio').filter((item) => ['Central', 'Compose gerenciado', 'Projeto adotado'].includes(item.textContent ?? ''))
     expect(radios.map((item) => item.textContent)).toEqual(['Central', 'Compose gerenciado', 'Projeto adotado'])
     expect(radios[2]!.hasAttribute('disabled')).toBe(true)
@@ -104,7 +105,7 @@ describe('formulário: origem', () => {
   })
 
   it('Editar gerenciado: origem travada e o compose fica no botão Compose', () => {
-    render(<EnvironmentFormDialog open env={env()} pcAvailable pcReason={null} onClose={vi.fn()} />)
+    render(<EnvironmentFormDialog open env={env()} pcAvailable pcReason={null} hosts={NO_HOSTS} onClose={vi.fn()} />)
     const managed = screen.getAllByRole('radio').find((item) => item.textContent === 'Compose gerenciado')!
     expect(managed.getAttribute('aria-checked')).toBe('true')
     expect(managed.hasAttribute('disabled')).toBe(true)

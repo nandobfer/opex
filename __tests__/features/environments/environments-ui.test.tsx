@@ -38,10 +38,13 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   healthUrl: null,
   buildOn: 'server',
   runOn: 'server',
+  limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  limitsConfigured: false,
+  deployedLimits: null,
   deployedOn: { buildOn: 'server', runOn: 'server' },
   deployedVersion: '1.43.0',
   lastDeploy: null,
-  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '', cpu: '1.5%', memory: '120MiB / 8GiB', version: '1.44.0' }],
+  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '', cpu: '1.5%', memory: '120MiB / 8GiB', version: '1.44.0', limits: null }],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   ...overrides,
@@ -85,6 +88,24 @@ describe('linha do ambiente', () => {
     expect(mocks.action).toHaveBeenCalledWith({ action: 'down' }, expect.anything())
     fireEvent.click(screen.getByRole('button', { name: 'Apagar' }))
     expect(onIntent).toHaveBeenCalledWith({ kind: 'delete' })
+    // Limites não lidos: nada de texto nem selo.
+    expect(document.body.textContent).not.toContain('limites:')
+    expect(screen.queryByText(/faça Deploy/)).toBeNull()
+  })
+
+  it('limites aplicados na linha; salvos diferentes dos aplicados pedem Deploy (OPE-193)', () => {
+    const applied = { memoryGb: 4, swapGb: null, cpus: 2 }
+    const services = [{ ...env().services[0]!, limits: applied }]
+    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', ...applied } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    expect(screen.getByText(/limites: RAM 4 GiB · swap padrão · 2 CPUs/)).toBeTruthy()
+    expect(screen.queryByText(/faça Deploy/)).toBeNull()
+    cleanup()
+    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    expect(screen.getByText('Limites salvos diferem dos aplicados: faça Deploy')).toBeTruthy()
+    cleanup()
+    // Nunca implantado: não há o que comparar.
+    render(<EnvironmentRow env={env({ services, deployedOn: null, limitsConfigured: true, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    expect(screen.queryByText(/faça Deploy/)).toBeNull()
   })
 
   it('ambiente no PC com o túnel fechado: ações bloqueadas', () => {

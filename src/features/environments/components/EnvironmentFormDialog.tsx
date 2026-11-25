@@ -11,8 +11,9 @@ import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { useEnvironmentEnvValues, useSaveEnvironment } from "../hooks/useEnvironments"
 import { environmentCreateSchema, environmentInputSchema, type EnvironmentInput, type Machine } from "../schemas"
-import type { EnvironmentDto } from "../types"
+import type { EnvironmentDto, HostCapacityDto } from "../types"
 import { formValuesOf, machineOptions, slugify } from "../view"
+import { EnvironmentLimitsField } from "./EnvironmentLimitsField"
 import { EnvVarsField, type EnvValuesStatus } from "./EnvVarsField"
 import { listToText, SourceFields, textToList } from "./SourceFields"
 
@@ -21,14 +22,18 @@ interface Props {
     env: EnvironmentDto | null
     pcAvailable: boolean
     pcReason: string | null
+    /** CPUs e memória de cada máquina (ajuda dos limites). */
+    hosts: Record<Machine, HostCapacityDto | null>
     onClose: () => void
 }
 
+export const NO_HOSTS: Record<Machine, HostCapacityDto | null> = { server: null, pc: null }
+const MACHINE_SUBJECT: Record<Machine, string> = { server: "o servidor", pc: "o PC" }
 const createResolver = zodResolver(environmentCreateSchema)
 const editResolver = zodResolver(environmentInputSchema)
 
 /** Novo/Editar ambiente (mesmos schemas Zod da API: criação exige o compose do gerenciado). */
-export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, onClose }: Props) {
+export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, hosts, onClose }: Props) {
     const save = useSaveEnvironment(env?.id ?? null)
     const editing = useRef(Boolean(env))
     useEffect(() => {
@@ -51,6 +56,7 @@ export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, onClos
     const envStatus: EnvValuesStatus = !env ? "ready" : envValues.isError && !envValues.isFetching ? "error" : freshValues ? "ready" : "loading"
     const errors = form.formState.errors
     const name = useWatch({ control: form.control, name: "name" })
+    const runOn = useWatch({ control: form.control, name: "runOn" }) ?? "server"
     const options = machineOptions(pcAvailable, pcReason)
     const submit = form.handleSubmit((values) => save.mutate(values, { onSuccess: onClose }))
 
@@ -79,6 +85,7 @@ export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, onClos
                     </div>
                     <SourceFields form={form} editing={Boolean(env)} />
                     <EnvVarsField form={form} status={envStatus} onRetry={() => void envValues.refetch()} />
+                    <EnvironmentLimitsField form={form} env={env} host={hosts[runOn]} machine={MACHINE_SUBJECT[runOn]} />
                     <div className={FORM_GRID}>
                         <Field id="environment-ports" label="Portas (separadas por vírgula)" error={errors.ports?.message ?? errors.ports?.find?.((item) => item?.message)?.message}>
                             <Controller control={form.control} name="ports" render={({ field }) => <Input id="environment-ports" className="font-mono" value={listToText(field.value.map(String))} onChange={(event) => field.onChange(textToList(event.target.value).map(Number))} placeholder="4100, 4101" />} />

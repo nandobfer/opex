@@ -10,7 +10,7 @@ import { sourceLabel } from '@/features/environments/opex-format'
 
 const MINIO = 'services:\n  minio:\n    image: minio/minio\n    ports:\n      - "9000:9000"\n'
 const managed = { kind: 'managed' as const, projectName: 'minio', services: [], composeVersion: 3 }
-const base = { name: 'MinIO', slug: 'minio', env: [], ports: [], healthUrl: '' as const, buildOn: 'server' as const, runOn: 'pc' as const }
+const base = { name: 'MinIO', slug: 'minio', env: [], ports: [], healthUrl: '' as const, limits: null, buildOn: 'server' as const, runOn: 'pc' as const }
 
 describe('composeContentProblem', () => {
   it('aceita um YAML válido', () => {

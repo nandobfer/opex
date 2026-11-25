@@ -2,7 +2,7 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
 import { dbConnect } from "@/lib/db"
 import type { EncryptedSecret } from "@/lib/crypto/secretBox"
 import { DEPLOY_TTL_SECONDS } from "../constants"
-import type { EnvironmentSource, Machine } from "../schemas"
+import type { EnvironmentLimits, EnvironmentSource, Machine } from "../schemas"
 import type { DeployKind, DeployStatus } from "../types"
 
 /** Coleções do módulo Ambientes (índices garantidos no primeiro uso). Ver `aicontext/modules/environments.md`. */
@@ -18,6 +18,10 @@ export interface IEnvironment {
     healthUrl: string | null
     buildOn: Machine
     runOn: Machine
+    /** Limites de recursos (OPE-193; ausente/`null` = sem limite, `environmentLimitsOf`). */
+    limits?: EnvironmentLimits | null
+    /** Limites gravados no override do último deploy com sucesso (o selo "faça Deploy" compara com eles). */
+    deployedLimits?: EnvironmentLimits | null
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     deployedRef: string | null
     deployedCommit: string | null
@@ -93,6 +97,8 @@ export interface DeployCheckpoint {
     from: Machine | null
     /** Compose gerenciado: a revisão gravada na pasta (a retomada termina gravando a mesma). */
     composeVersion?: number | null
+    /** Limites gravados no override deste deploy (ausente nos deploys anteriores à OPE-193). */
+    limits?: EnvironmentLimits
 }
 
 export interface IEnvironmentsState {
@@ -117,6 +123,8 @@ const environmentSchema = new Schema<IEnvironment>(
         healthUrl: { type: String, default: null },
         buildOn: { type: String, required: true },
         runOn: { type: String, required: true },
+        limits: { type: Schema.Types.Mixed, default: null },
+        deployedLimits: { type: Schema.Types.Mixed, default: null },
         deployedOn: { type: Schema.Types.Mixed, default: null },
         deployedRef: { type: String, default: null },
         deployedCommit: { type: String, default: null },

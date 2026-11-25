@@ -8,6 +8,8 @@ import { Badge } from "@/components/ui/badge"
 import { useEnvironmentAction } from "../hooks/useEnvironments"
 import { composeNotDeployed } from "../managed-compose"
 import type { EnvironmentDto } from "../types"
+import { limitsPendingDeploy } from "../limits-form"
+import { appliedLimitsText, environmentLimitsText } from "../resource-limits"
 import { healthOf, placementLabel, versionLabel } from "../view"
 import { DeployMenu } from "./DeployMenu"
 import { EnvironmentActionButton as RowButton, EnvironmentStatusBadges } from "./EnvironmentStatus"
@@ -34,6 +36,8 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
         })
     const cpu = env.services.map((service) => service.cpu).filter(Boolean).join(" · ")
     const memory = env.services.map((service) => service.memory?.split("/")[0]?.trim()).filter(Boolean).join(" · ")
+    const limits = appliedLimitsText(env.services)
+    const pendingLimits = limitsPendingDeploy(env)
 
     return (
         <div className="flex flex-col gap-2 py-3 md:flex-row md:items-center">
@@ -44,6 +48,11 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
                     <EnvironmentStatusBadges health={health} deploying={deploying} version={version} />
                     {env.source.kind === "adopted" && <Badge variant="secondary">{env.source.git ? "Adotado" : "Adotado (sem git)"}</Badge>}
                     {env.source.kind === "managed" && <Badge variant="secondary">Gerenciado v{env.source.composeVersion}</Badge>}
+                    {pendingLimits && (
+                        <Badge variant="outline" className="border-warning/50 text-warning" title={`Salvos: ${environmentLimitsText(env.limits)}`}>
+                            Limites salvos diferem dos aplicados: faça Deploy
+                        </Badge>
+                    )}
                 </div>
                 {composeNotDeployed(env) && (
                     <p className="text-xs text-warning">
@@ -56,6 +65,7 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
                     {env.services.length ? ` · ${env.services.filter((service) => service.state === "running").length}/${env.services.length} serviço(s)` : ""}
                     {cpu ? ` · CPU ${cpu}` : ""}
                     {memory ? ` · RAM ${memory}` : ""}
+                    {limits ? ` · limites: ${limits}` : ""}
                 </p>
                 {env.lastDeploy && (
                     <button type="button" className="text-left text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => onOpenDeploy(env.lastDeploy!.id)}>
