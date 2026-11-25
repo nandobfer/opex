@@ -116,6 +116,7 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
                 stopping={interrupt.isPending}
                 disabledReason={disabledReason}
                 initialText={initialText}
+                draftId={sessionId}
             />
         </OpexDropZone>
         </ReplyTargetProvider>

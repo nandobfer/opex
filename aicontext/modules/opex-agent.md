@@ -29,7 +29,8 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
 - O popover é o componente compartilhado `AgentChatPanel`: o agente vem do escopo
   (`OpexScopeProvider` com o descritor do agente — rotas, eventos, abas, rótulo, ícone, atalho e
   seletor de modelo — em `components/agents/agent-descriptors.ts`). Os painéis já abertos ficam
-  montados ao trocar de agente (rascunho, abas e envios preservados).
+  montados ao trocar de agente (abas e envios preservados). Fechar o popover desmonta o chat, mas o
+  texto do campo de mensagem volta ao reabrir (rascunho por aba, ver "Chat").
 - No celular (< 768 px) abre em painel de tela cheia (Dialog do Radix).
 - Atalho global **Ctrl+Shift+O** (⌘+Shift+O no Mac) abre e fecha no Agente Opex (`isOpexShortcut`);
   **Ctrl+Shift+M** é do Agente Maddox.
@@ -97,6 +98,16 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
   ver `aicontext/use-para-atualizar-tema-e-componentes-ui.md`, "Copiar bloco de código").
 - **Tentar novamente** quando a resposta falha ou é interrompida; **Parar** durante o turno (a
   resposta parcial é mantida); **Ir para o fim**; conversa virtualizada acima de 50 mensagens.
+- **Rascunho do campo por aba (OPE-195):** o texto digitado sobrevive ao fechamento do popover (Esc,
+  clique fora, item da barra lateral, ícone do cabeçalho no celular, Fechar) e ao recarregar a página.
+  Fica no `localStorage` em `composerDraftsKey(tabsKey)` (`<chave das abas>:composer-drafts:v1`: separa
+  agente, cliente e usuário do portal e o agente rotineiro), como um mapa `{ abaId: texto }` (id da
+  sessão ou `draft` da "Nova sessão"), validado por Zod (`hooks/useComposerDraft.ts`). O `OpexComposer`
+  lê o rascunho ao montar (`initialText`, quando vier, tem precedência) e grava a cada mudança do
+  campo (inclusive a citação); o envio esvazia o campo e apaga o rascunho da aba. Anexar um arquivo na
+  "Nova sessão" cria a sessão e **move** o rascunho para ela (`moveComposerDraft`). Fechar a aba de uma
+  sessão mantém o rascunho; ele só é esquecido quando a sessão sai da lista (`pruneDrafts`, junto com
+  as abas). Os anexos pendentes continuam na fila do `OpexUploadsProvider`.
 - Estados: vazio com sugestões, carregando (skeleton), erro (tentar novamente), agente não
   configurado (link para a aba) e reconectando.
 - Cores só por tokens (`warning`/`success`/`destructive`/`primary`); cada `Tooltip` traz o próprio
