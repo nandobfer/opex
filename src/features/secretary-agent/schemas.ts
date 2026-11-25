@@ -191,6 +191,9 @@ export const personalityBlockSchema = z.object({
 export type PersonalityBlockInput = z.infer<typeof personalityBlockSchema>
 
 export const personalitySchema = z.object({ blocks: z.array(personalityBlockSchema).min(1).max(40) })
+/** Gravação da base pela tela: leva a versão em que a edição se baseou (409 se a personalidade mudou desde então). */
+export const personalitySaveSchema = personalitySchema.extend({ expectedVersionId: z.string().min(1).max(100).nullable().optional() })
+export type PersonalitySaveInput = z.infer<typeof personalitySaveSchema>
 export type PersonalityInput = z.infer<typeof personalitySchema>
 
 export const variantSchema = z.object({

@@ -14,7 +14,7 @@ import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
 import { ANALYSIS_CHAT_STATE_LABELS, ANALYSIS_PHASE_LABELS, ANALYSIS_STATUS_LABELS, type AnalysisChatState, type AnalysisPhase, type AnalysisStatus } from "../constants"
 import { blockKeyOf, isFixedBlock, type BlockChange, type PersonalityBlock, type PersonalitySnapshot } from "../personality"
-import { analysisStartSchema, personalitySchema, variantSchema, type AnalysisStartInput } from "../schemas"
+import { analysisStartSchema, personalitySchema, variantSchema, type AnalysisStartInput, type PersonalitySaveInput } from "../schemas"
 import { SecondaryModel, type SecretaryForm } from "./SecretaryAgentTab"
 
 interface History { _id: string; origin: string; at: string; changes: BlockChange[] }
@@ -37,7 +37,9 @@ export function PersonalityTab({ form, contacts }: { form: SecretaryForm; contac
 
 /**
  * Editor da base e das variantes. Uma versão nova (análise concluída, restauração) só substitui o que está na tela
- * quando não há edição pendente; com edição pendente, a tela avisa e o dono escolhe recarregar.
+ * quando não há edição pendente; com edição pendente, a tela avisa, trava o Salvar e o dono escolhe recarregar. O
+ * próprio salvamento passa a ser a versão de referência (não dispara o aviso), e a gravação leva a versão em que a
+ * edição se baseou: o servidor recusa (409) se ela mudou no meio.
  */
 export function PersonalityEditor({ data, contacts }: { data: Data; contacts: EvolutionContactDto[] }) {
     const [source, setSource] = useState({ versionId: data.versionId, blocks: data.snapshot.base.blocks })
@@ -51,15 +53,20 @@ export function PersonalityEditor({ data, contacts }: { data: Data; contacts: Ev
     }
     if (changed && !dirty) reload()
     const variant = data.snapshot.variants.find((row) => row.jid === jid[0])
-    const save = useEvolutionAction("/secretary/personality", "put", "Personalidade salva")
+    const save = useEvolutionAction<{ versionId: string }, PersonalitySaveInput>("/secretary/personality", "put", "Personalidade salva")
+    const submit = () => {
+        const input = personalitySchema.safeParse({ blocks: base })
+        if (!input.success) return
+        save.mutate({ ...input.data, expectedVersionId: source.versionId }, { onSuccess: (saved) => setSource({ versionId: saved.versionId, blocks: base }) })
+    }
     return <>
         <Card><CardHeader><CardTitle>Personalidade base</CardTitle></CardHeader><CardContent className="space-y-4">
             {changed && dirty && <div role="alert" className="flex flex-wrap items-center gap-3 rounded-md border border-dashed p-3 text-sm">
-                A personalidade mudou (análise ou restauração) enquanto você editava. Suas edições continuam aqui.
+                A personalidade mudou (análise ou restauração) enquanto você editava. Suas edições continuam aqui, mas para salvar é preciso recarregar a versão nova.
                 <Button size="sm" variant="outline" onClick={reload}>Recarregar e descartar minhas edições</Button>
             </div>}
             <Blocks blocks={base} setBlocks={setBase} />
-            <Button disabled={save.isPending} onClick={() => { const input = personalitySchema.safeParse({ blocks: base }); if (input.success) save.mutate(input.data) }}>Salvar blocos</Button>
+            <Button disabled={save.isPending || (changed && dirty)} onClick={submit}>Salvar blocos</Button>
         </CardContent></Card>
         <Card><CardHeader><CardTitle>Variantes por conversa</CardTitle></CardHeader><CardContent className="space-y-4">
             <ConversationPicker items={contacts} selected={jid} onChange={select} multiple={false} />

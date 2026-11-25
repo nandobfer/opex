@@ -12,7 +12,7 @@ import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { runAfterResponse } from "@/lib/after-response"
 import { SECRETARY_AUDIT_ENTITY, SECRETARY_NOTICES_EVENT } from "../constants"
 import type { SecretarySettings } from "../schemas"
-import { secretaryLog } from "./log"
+import { safeErr, secretaryLog } from "./log"
 import { ASK_QUOTE_MESSAGE, resolveOwnerReply } from "../owner-reply"
 import { secretaryInference } from "./ai"
 import { SecretaryConversation, SecretaryNotice, SecretarySent, secretaryDb, type Notice } from "./models"
@@ -51,6 +51,11 @@ export async function handleOwnerReply(instance: string, ownerJid: string, messa
 /** Uma resposta em andamento sem conclusão há mais que isso (processo reiniciado) pode ser respondida de novo. */
 export const ANSWERING_STALE_MS = 5 * 60_000
 
+/** Pergunta que ainda aceita resposta ou descarte: pendente, ou com uma resposta presa (processo reiniciado no meio). */
+function openQuestionFilter() {
+    return [{ status: "pending" as const }, { status: "answering" as const, answeringAt: { $lt: new Date(Date.now() - ANSWERING_STALE_MS) } }]
+}
+
 /**
  * Resposta do dono: reserva a pergunta (`answering`), aprende e grava a memória e só então marca como
  * respondida. Se a inferência ou a gravação falharem, a pergunta volta para pendente (o dono pode responder de
@@ -59,7 +64,7 @@ export const ANSWERING_STALE_MS = 5 * 60_000
 export async function answerNotice(id: string, answer: string, actorId: string) {
     await secretaryDb()
     const notice = await SecretaryNotice.findOneAndUpdate(
-        { _id: id, kind: "question", $or: [{ status: "pending" }, { status: "answering", answeringAt: { $lt: new Date(Date.now() - ANSWERING_STALE_MS) } }] },
+        { _id: id, kind: "question", $or: openQuestionFilter() },
         { $set: { status: "answering", answeringAt: new Date() } },
         { new: true },
     ).lean()
@@ -78,7 +83,7 @@ export async function answerNotice(id: string, answer: string, actorId: string) 
         )
         memoryChannel = memoryChannelOf(list, scope)
     } catch (error) {
-        secretaryLog.error({ err: error, noticeId: id, chatId: notice.chatId }, "[secretario] Falha ao aprender a resposta do dono: a pergunta volta para pendente")
+        secretaryLog.error({ ...safeErr(error), noticeId: id, chatId: notice.chatId }, "[secretario] Falha ao aprender a resposta do dono: a pergunta volta para pendente")
         await SecretaryNotice.updateOne({ _id: id, status: "answering" }, { $set: { status: "pending", answeringAt: null } })
         await publishNotices()
         throw new DomainError(502, "Não foi possível aprender a resposta agora (modelo ou memórias indisponíveis). A pergunta continua pendente: responda de novo.", "SECRETARY_ANSWER_FAILED")
@@ -104,13 +109,13 @@ async function resumeConversation(notice: Notice, answer: string, settings: Secr
         const reserved = await SecretaryConversation.updateOne({ _id: key, token: null, lastOwnerMessageAt: conversation?.lastOwnerMessageAt ?? null }, { $set: { token, pending: [notice.trigger] } })
         if (reserved.modifiedCount) await runSecretaryTurn({ id: key, chatId: notice.chatId, instance: notice.instance, token, ownerJid, message: notice.trigger, ownerAnswer: answer })
     } catch (error) {
-        secretaryLog.error({ err: error, noticeId: notice._id, chatId: notice.chatId }, "[secretario] Falha ao retomar a conversa depois da resposta do dono")
+        secretaryLog.error({ ...safeErr(error), noticeId: notice._id, chatId: notice.chatId }, "[secretario] Falha ao retomar a conversa depois da resposta do dono")
     }
 }
 
 export async function discardNotice(id: string, actorId: string) {
     await secretaryDb()
-    const result = await SecretaryNotice.updateOne({ _id: id, status: "pending" }, { $set: { status: "discarded" } })
+    const result = await SecretaryNotice.updateOne({ _id: id, $or: openQuestionFilter() }, { $set: { status: "discarded", answeringAt: null } })
     if (!result.modifiedCount) throw new DomainError(409, "A pergunta não está mais pendente.", "SECRETARY_QUESTION_NOT_PENDING")
     await recordAudit({ userId: actorId, entidade: SECRETARY_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { acao: "descartar pergunta" } })
     await publishNotices()

@@ -15,7 +15,7 @@ import { personalityBlockSchema, type AnalysisStartInput, type SecretarySettings
 import { secretaryInference } from "./ai"
 import { loadPersonality, writeVersion } from "./personality"
 import { loadSecretarySettings } from "./settings"
-import { errorKind, secretaryLog } from "./log"
+import { errorKind, safeErr, secretaryLog } from "./log"
 
 interface Analysis {
     _id: string; status: AnalysisStatus; phase: AnalysisPhase; at: Date; beatAt: Date; cancelled: boolean;
@@ -132,7 +132,7 @@ async function runAnalysis(id: string, settings: SecretarySettings, instance: st
             } catch (error) {
                 // Cancelamento ou perda da execução encerram a análise; erro de uma conversa só marca essa conversa.
                 if (controller.signal.aborted) throw error
-                secretaryLog.warn({ err: error, analysisId: id, chat: index }, "[secretario] Conversa da análise não foi lida")
+                secretaryLog.warn({ ...safeErr(error), analysisId: id, chat: index }, "[secretario] Conversa da análise não foi lida")
                 chat.state = "failed"
             }
             await patch({ chats })
@@ -152,7 +152,7 @@ async function runAnalysis(id: string, settings: SecretarySettings, instance: st
         const row = await Analyses.findOne(filter).lean()
         if (row?.cancelled) await patch({ status: "cancelled", versionId: await writeVersion(draft, "analysis-cancelled", actor) })
         else if (row) {
-            secretaryLog.error({ err: error, analysisId: id }, "[secretario] Análise de personalidade falhou")
+            secretaryLog.error({ ...safeErr(error), analysisId: id }, "[secretario] Análise de personalidade falhou")
             const versionId = await saveUnapplied().catch(() => null)
             const reason = error instanceof AnalysisAllFailedError ? "Nenhuma conversa pôde ser lida: confira a Evolution API e o modelo da análise." : `A análise parou por um erro (${errorKind(error)}).`
             await patch({ status: "failed", versionId, error: versionId ? `${reason} O que já foi aprendido ficou na versão "Análise não aplicada" do histórico.` : reason })

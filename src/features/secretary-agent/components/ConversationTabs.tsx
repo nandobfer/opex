@@ -57,7 +57,8 @@ function NoticeItem({ notice }: { notice: NoticeDto }) {
         <p className="font-medium">{NOTICE_KIND_LABELS[notice.kind]} · {notice.jid}</p><p>{notice.text}</p>
         {notice.answer && <p className="text-sm">Sua resposta: {notice.answer}</p>}
         {notice.memoryChannel && <p className="text-sm text-muted-foreground">Memória gravada em {notice.memoryChannel}</p>}
-        {notice.status === "pending" && <><Textarea aria-label="Sua resposta" value={answer} onChange={(event) => setAnswer(event.target.value)} /><div className="flex gap-2">
+        {notice.status === "answering" && <p className="text-sm text-muted-foreground">Aprendendo a resposta… Se travar por mais de 5 minutos, você pode responder de novo ou descartar.</p>}
+        {(notice.status === "pending" || notice.status === "answering") && <><Textarea aria-label="Sua resposta" value={answer} onChange={(event) => setAnswer(event.target.value)} /><div className="flex gap-2">
             <Button disabled={!answer.trim() || action.isPending} onClick={() => action.mutate({ action: "answer", answer })}>Responder</Button>
             <Button variant="outline" disabled={action.isPending} onClick={() => action.mutate({ action: "discard" })}>Descartar</Button>
         </div></>}

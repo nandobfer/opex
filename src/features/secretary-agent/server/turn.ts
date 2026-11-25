@@ -22,7 +22,7 @@ import { loadSecretarySettings } from "./settings"
 import { readTurnMedia } from "./media"
 import { pendingOpOfTool, withPendingQueue } from "./memory-queue"
 import type { AiAgentId } from "@/features/ai/agents"
-import { errorKind, secretaryLog } from "./log"
+import { errorKind, safeErr, secretaryLog } from "./log"
 
 interface Turn { id: string; instance: string; chatId: string; ownerJid: string; ownerLid?: string | null; token: string; message: ParsedMessage; ownerAnswer?: string }
 
@@ -108,7 +108,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         }
         await decide("replied", verdict.reason, subject?.topic)
     } catch (error) {
-        secretaryLog.error({ err: error, instance, chatId }, "[secretario] Falha no turno")
+        secretaryLog.error({ ...safeErr(error), instance, chatId }, "[secretario] Falha no turno")
         await decide("error", `O turno falhou (${errorKind(error)}). Confira a conexão Evolution e o provedor. Nenhum envio será repetido automaticamente.`)
     } finally {
         await SecretaryConversation.updateOne({ _id: id, token }, { $set: { token: null } })

@@ -2,8 +2,8 @@ import { ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
 import { requireAdminSession } from "@/features/auth/server/context"
 import { getLocalUser } from "@/lib/local-user"
-import { personalitySchema } from "@/features/secretary-agent/schemas"
-import { listPersonalityVersions, loadPersonality, writeVersion } from "@/features/secretary-agent/server/personality"
+import { personalitySaveSchema } from "@/features/secretary-agent/schemas"
+import { listPersonalityVersions, loadPersonality, saveBasePersonality } from "@/features/secretary-agent/server/personality"
 
 export const GET = withRoute(async ({ req }) => {
     await requireAdminSession(req)
@@ -12,8 +12,7 @@ export const GET = withRoute(async ({ req }) => {
 
 export const PUT = withRoute(async ({ req }) => {
     await requireAdminSession(req)
-    const body = await parseBody(req, personalitySchema)
+    const body = await parseBody(req, personalitySaveSchema)
     if (!body.ok) return body.response
-    const { versionId, snapshot } = await loadPersonality()
-    return ok({ versionId: await writeVersion({ ...snapshot, base: body.data }, "edit", getLocalUser().id, versionId) })
+    return ok({ versionId: await saveBasePersonality(body.data, getLocalUser().id) })
 })

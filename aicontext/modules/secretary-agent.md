@@ -90,7 +90,10 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   a pergunta volta para pendente (o dono responde de novo; resposta reservada há mais de 5 min também pode ser
   refeita). A conversa é retomada depois da resposta (`runAfterResponse`, fora da requisição da aba Avisos), a menos
   que o dono já tenha falado nela depois da pergunta.
-- Responder e descartar são auditados (`AgenteSecretario`, sem o texto da resposta).
+- Responder e descartar são auditados (`AgenteSecretario`, sem o texto da resposta). A aba Avisos lista também as
+  respostas em andamento; uma presa há mais de 5 min pode ser respondida de novo ou descartada.
+- Logs de falha (turno, mídia, análise, perguntas) levam só a classe e o status HTTP do erro (`safeErr`), nunca o
+  objeto do erro da SDK de IA, que carrega o prompt, a mídia e a resposta do provedor.
 - Pergunta sem prazo; **Descartar** na aba Avisos.
 - Limite ou orçamento: aviso com `_id` da janela (`limit:<conversa>:<hora>` / `budget:<dia>`), enviado ao dono
   e listado em Avisos **uma vez por janela**; retoma sozinho na janela seguinte.
@@ -119,7 +122,9 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   na versão "Análise não aplicada" (restaurável, não aplicada) e a mensagem diz a causa. Iniciar e cancelar são
   auditados com a contagem de conversas.
 - **Editor**: uma versão nova (análise, restauração) só substitui a tela sem edição pendente; com edição pendente
-  o texto digitado fica e a tela avisa, com "Recarregar e descartar minhas edições".
+  o texto digitado fica, a tela avisa e o Salvar trava até "Recarregar e descartar minhas edições". O próprio
+  salvamento vira a versão de referência (sem aviso). O `PUT /api/secretary/personality` leva `expectedVersionId` (a
+  versão em que a edição se baseou) e responde 409 `SECRETARY_PERSONALITY_CHANGED` se ela mudou.
   Modelo próprio ("Modelo da análise": o mesmo do agente ou outro).
 
 ## Memórias (aba Memórias)

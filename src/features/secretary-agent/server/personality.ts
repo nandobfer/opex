@@ -4,6 +4,7 @@ import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { SECRETARY_AUDIT_ENTITY, SECRETARY_PERSONALITY_EVENT } from "../constants"
 import { diffPersonality, emptyPersonality, normalizePersonality, type PersonalitySnapshot } from "../personality"
+import type { PersonalitySaveInput } from "../schemas"
 import { SecretaryPersonality, SecretaryVersion, secretaryDb, type Version } from "./models"
 
 export async function loadPersonality() {
@@ -33,6 +34,19 @@ export async function writeVersion(snapshot: PersonalitySnapshot, origin: Versio
     await recordAudit({ userId: actor, entidade: SECRETARY_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { origin, blocksChanged: changes.length } })
     await publishAppEvent(SECRETARY_PERSONALITY_EVENT, { versionId: id })
     return id
+}
+
+/**
+ * Grava a base editada na tela. Com `expectedVersionId` (a versão em que a edição se baseou), a gravação só vale se a
+ * personalidade atual ainda for essa: se uma análise ou restauração trocou a versão no meio, responde 409
+ * `SECRETARY_PERSONALITY_CHANGED` em vez de sobrescrever o que mudou.
+ */
+export async function saveBasePersonality(input: PersonalitySaveInput, actor: string) {
+    await secretaryDb()
+    const { versionId, snapshot } = await loadPersonality()
+    const expected = input.expectedVersionId === undefined ? versionId : input.expectedVersionId
+    if (expected !== versionId) throw new DomainError(409, "A personalidade mudou enquanto você editava. Recarregue antes de gravar.", "SECRETARY_PERSONALITY_CHANGED")
+    return writeVersion({ ...snapshot, base: { blocks: input.blocks } }, "edit", actor, expected)
 }
 
 export async function restoreVersion(id: string, actor: string) {

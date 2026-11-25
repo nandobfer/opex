@@ -130,6 +130,32 @@ describe("perguntar ao dono", () => {
         await expect(answerNotice("q1", "sim", "local")).rejects.toThrow("não está mais pendente")
     })
 
+    it("resposta presa em andamento há mais de 5 min (processo reiniciado) pode ser respondida de novo", async () => {
+        mocks.notices = [{ ...question("q1", "m1"), status: "answering", answeringAt: new Date(Date.now() - 6 * 60_000) }]
+        await answerNotice("q1", "sim", "local")
+        expect(mocks.notices[0]).toMatchObject({ status: "answered", answer: "sim" })
+    })
+
+    it("resposta presa também pode ser descartada", async () => {
+        mocks.notices = [{ ...question("q1", "m1"), status: "answering", answeringAt: new Date(Date.now() - 6 * 60_000) }]
+        await discardNotice("q1", "local")
+        expect(mocks.notices[0]).toMatchObject({ status: "discarded" })
+    })
+
+    it("o log da falha não leva o corpo da requisição da SDK (conversa) nem a resposta", async () => {
+        const { secretaryLog } = await import("@/features/secretary-agent/server/log")
+        const spy = vi.spyOn(secretaryLog, "error").mockImplementation(() => undefined)
+        mocks.notices = [question("q1", "m1")]
+        mocks.inference.mockRejectedValueOnce(Object.assign(new Error("Internal Server Error: a conversa secreta"), { name: "AI_APICallError", statusCode: 500, requestBodyValues: { messages: "a conversa secreta" }, responseBody: "corpo", responseHeaders: { "x-key": "k" } }))
+        await expect(answerNotice("q1", "sim", "local")).rejects.toThrow()
+        const logged = JSON.stringify(spy.mock.calls)
+        expect(logged).toContain("AI_APICallError")
+        expect(logged).toContain("500")
+        expect(logged).not.toContain("a conversa secreta")
+        expect(logged).not.toContain("corpo")
+        spy.mockRestore()
+    })
+
     it("não retoma quando o dono já assumiu a conversa, mas grava a memória", async () => {
         mocks.notices = [question("q1", "m1", new Date("2026-11-25T10:00:00Z"))]
         mocks.conversation = { lastOwnerMessageAt: new Date("2026-11-25T11:00:00Z") }
