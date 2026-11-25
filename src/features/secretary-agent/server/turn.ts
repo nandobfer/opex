@@ -16,6 +16,7 @@ import { SecretaryConversation, SecretaryDecisionRecord, SecretaryNotice } from 
 import { askOwner, publishNotices, sendSecretaryText } from "./owner-questions"
 import { loadPersonality } from "./personality"
 import { planSecretaryReply } from "./plan-reply"
+import { costBySubject } from "./run-cost"
 import { resolveSecretaryContact } from "./contact"
 import { loadSecretarySettings } from "./settings"
 import { readTurnMedia } from "./media"
@@ -45,8 +46,10 @@ async function memoryToolSet(input: { chatId: string; token: string; write: Prom
 interface Turn { id: string; instance: string; chatId: string; ownerJid: string; ownerLid?: string | null; token: string; message: ParsedMessage; ownerAnswer?: string }
 
 export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLid = null, token, message, ownerAnswer }: Turn) {
-    const decide = (decision: SecretaryDecision, reason: string, topic?: string | null) =>
-        recordDecision(instance, chatId, message, decision, reason, topic, ownerAnswer !== undefined)
+    // As chamadas de IA do turno (mídia, decisão do assunto e resposta) são gravadas com o token como assunto: a decisão
+    // leva a soma, que vira o custo da execução nas métricas.
+    const decide = async (decision: SecretaryDecision, reason: string, topic?: string | null) =>
+        recordDecision(instance, chatId, message, decision, reason, topic, ownerAnswer !== undefined, await costBySubject(token).catch(() => undefined))
     const state = await SecretaryConversation.findOneAndUpdate({ _id: id, token }, { $set: { pending: [] } }).lean()
     if (!state) {
         await decide("grouped", "Outra mensagem chegou na janela de agrupamento.")
@@ -88,7 +91,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         const writeMemory = selfMemoryEnabled("secretario")
         const plan = await planSecretaryReply({
             settings, chatJid: message.chatJid, isGroup: message.isGroup, mentioned,
-            text, ownerAnswer, id: token, origins: { reply: SECRETARY_CONSUMPTION_ORIGIN, decision: SECRETARY_DECISION_CONSUMPTION_ORIGIN }, observing,
+            text, ownerAnswer, id: token, subject: token, origins: { reply: SECRETARY_CONSUMPTION_ORIGIN, decision: SECRETARY_DECISION_CONSUMPTION_ORIGIN }, observing,
         }, {
             history: () => (historyCache ??= evolution.findMessages(instance, { remoteJid: message.chatJid, pageSize: SECRETARY_HISTORY_LIMIT })
                 .then((page) => page.records.filter((item) => !pendingIds.has(item.key.id)).reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) })))),
@@ -106,6 +109,11 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         const result = { question: plan.question }
         if (observing) return await decide("observe-only", "Modo Só observar.", subject.topic)
         const parts = plan.parts
+        // Só a pergunta, sem frase de espera: a dúvida ainda chega ao dono (sem enviar nada ao contato).
+        if (!parts.length && result.question && !ownerAnswer && await current()) {
+            await askOwner({ instance, ownerJid, chatId, message, text, question: result.question, ownerRevision })
+            return await decide("asked-owner", "Perguntou ao dono sem enviar frase de espera.", subject.topic)
+        }
         if (!parts.length) return await decide("ignored", "Nenhuma resposta foi produzida.", subject.topic)
         await sleep(randomDelayMs(settings.human.delayMinSeconds, settings.human.delayMaxSeconds))
         let sent = 0

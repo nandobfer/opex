@@ -139,6 +139,8 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   (`ownerLid`, aprendido das mensagens do dono em grupos; ver `evolution-api.md`).
 - Mensagens que o próprio Opex envia (respostas do agente e a mensagem de teste da integração) ficam em
   `secretary_sent` e não pausam a conversa quando voltam como `fromMe`.
+- As chamadas de IA do turno (mídia, decisão do assunto e resposta) são gravadas com o token do turno como
+  assunto; a decisão registrada leva a soma (`costUsd`, texto + JEV), que vira o custo da execução em `agent_runs`.
 - Consumo em `ai_consumption_logs` com origem `secretary-agent` (`secretary-decision` na decisão do assunto,
   `secretary-analysis` na análise e `secretary-simulation` na Simulação).
 - **Com quem fala** (porta `contact()` do `planSecretaryReply`): nome do contato no cache `evolution_contacts`
@@ -159,6 +161,8 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 - Quando o modelo não sabe, responde uma frase natural de espera e devolve a pergunta: o agente cria o aviso
   (`secretary_notices`, `question`), envia a pergunta à conversa do dono consigo mesmo, com o nome do contato ou
   grupo (e autor no grupo) e um trecho de até 500 caracteres do texto agrupado, incluindo mídia interpretada.
+  Se o modelo devolver só a pergunta (sem frase de espera), a pergunta vai ao dono mesmo assim, nada é enviado ao
+  contato e a decisão é "perguntou ao dono".
   A aba Avisos mostra o mesmo trecho, com nome e foto da conversa quando disponíveis. O aviso guarda o id do envio.
 - Resposta do dono (`resolveOwnerReply`): citando a pergunta, vale para ela; sem citação e com uma pendente, vale
   para ela; com várias, o agente pede que cite; sem pendentes, ignora. Também pela aba Avisos.

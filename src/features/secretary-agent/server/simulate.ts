@@ -1,8 +1,6 @@
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import { DomainError } from "@/lib/api/route"
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
-import { AiUsageLog } from "@/lib/db/models/Ai"
 import { agentMemoryContext } from "@/features/ai/server/agent-memory-context"
 import { isGroupJid } from "@/features/evolution-api/constants"
 import { messageDisplayText, parseEvolutionMessage } from "@/features/evolution-api/message"
@@ -17,6 +15,7 @@ import type { SubjectTrace } from "./decide-subject"
 import { SecretaryConversation, SecretaryDecisionRecord, secretaryDb } from "./models"
 import { loadPersonality } from "./personality"
 import { planSecretaryReply } from "./plan-reply"
+import { costBySubject } from "./run-cost"
 import { resolveSecretaryContact } from "./contact"
 import type { SecretaryContact } from "../contact"
 
@@ -64,14 +63,6 @@ async function realState(settings: SecretarySettings, chatId: string | null) {
     const limit = checkLimits({ ...settings.limits, now, repliesLastHour, spentTodayUsd: spent, conversationId: chatId })
     const paused = conversation?.pausedUntil && conversation.pausedUntil > now ? conversation.pausedUntil.toISOString() : null
     return { limits: { repliesLastHour, repliesPerHour: settings.limits.repliesPerHour, spentTodayUsd: spent, dailyBudgetUsd: settings.limits.dailyBudgetUsd, blockedReason: limit.blocked ? limit.reason ?? null : null }, pausedUntil: paused }
-}
-
-async function costOf(subject: string): Promise<number> {
-    const [text, jev] = await Promise.all([
-        AiConsumption.aggregate<{ total: number }>([{ $match: { subject } }, { $group: { _id: null, total: { $sum: "$costUsd" } } }]),
-        AiUsageLog.aggregate<{ total: number }>([{ $match: { provider: "jev", subject } }, { $group: { _id: null, total: { $sum: "$costUsd" } } }]),
-    ])
-    return (text[0]?.total ?? 0) + (jev[0]?.total ?? 0)
 }
 
 export async function simulateSecretary(input: SimulateInput): Promise<SimulateResult> {
@@ -129,6 +120,6 @@ export async function simulateSecretary(input: SimulateInput): Promise<SimulateR
         question: plan.kind === "reply" ? plan.question : null,
         contact,
         observing,
-        costUsd: await costOf(simId),
+        costUsd: await costBySubject(simId),
     }
 }

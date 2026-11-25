@@ -11,8 +11,9 @@ import { loadSecretarySettings } from "./settings"
 import { runSecretaryTurn } from "./turn"
 import { handleOwnerReply } from "./owner-questions"
 
-export async function recordDecision(instance: string, chatId: string, message: ParsedMessage, decision: SecretaryDecision, reason: string, topic: string | null = null, resumed = false) {
-    await SecretaryDecisionRecord.updateOne({ _id: `${instance}:${message.id}${resumed ? ":resume" : ""}` }, { $set: { instance, chatId, jid: message.chatJid, decision, reason, topic, at: new Date() } }, { upsert: true })
+/** `costUsd`: custo de IA do turno que tomou a decisão (vai para as execuções das métricas); ausente quando não houve turno. */
+export async function recordDecision(instance: string, chatId: string, message: ParsedMessage, decision: SecretaryDecision, reason: string, topic: string | null = null, resumed = false, costUsd?: number) {
+    await SecretaryDecisionRecord.updateOne({ _id: `${instance}:${message.id}${resumed ? ":resume" : ""}` }, { $set: { instance, chatId, jid: message.chatJid, decision, reason, topic, at: new Date(), ...(costUsd === undefined ? {} : { costUsd }) } }, { upsert: true })
     await publishAppEvent(SECRETARY_DECISION_EVENT, { chatId })
 }
 

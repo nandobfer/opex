@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     inference: vi.fn(),
     decide: vi.fn(),
     decisionsById: new Map<string, string>(),
+    costsById: new Map<string, number | undefined>(),
     send: vi.fn(async () => "S1"),
     askOwner: vi.fn(),
     markAsRead: vi.fn(),
@@ -60,7 +61,7 @@ vi.mock("@/features/secretary-agent/server/models", () => ({
     },
     SecretaryDecisionRecord: {
         countDocuments: async () => mocks.replies,
-        updateOne: async (filter: { _id: string }, update: { $set: { decision: string } }) => { mocks.decisionsById.set(filter._id, update.$set.decision) },
+        updateOne: async (filter: { _id: string }, update: { $set: { decision: string; costUsd?: number } }) => { mocks.decisionsById.set(filter._id, update.$set.decision); mocks.costsById.set(filter._id, update.$set.costUsd) },
     },
     SecretaryNotice: { updateOne: mocks.noticeUpsert },
 }))
@@ -83,6 +84,7 @@ const withCriteria = (patch: { audience?: object; subjects?: object }) => {
 beforeEach(() => {
     vi.clearAllMocks()
     mocks.decisionsById.clear()
+    mocks.costsById.clear()
     Object.assign(mocks, { state: { pending: [msg()], lastOwnerMessageAt: null, pausedUntil: null }, current: true, currentAfter: Infinity, currentCalls: 0, replies: 0, spent: 0, subject: null })
     mocks.settings = {
         ...DEFAULT_SECRETARY_SETTINGS,
@@ -97,6 +99,21 @@ beforeEach(() => {
 })
 
 describe("runSecretaryTurn", () => {
+    it("sem frase de espera, a pergunta ainda chega ao dono e nada vai ao contato", async () => {
+        mocks.inference.mockResolvedValueOnce({ text: "", question: "Você vai na festa?" })
+        await turn()
+        expect(mocks.askOwner).toHaveBeenCalledWith(expect.objectContaining({ question: "Você vai na festa?" }))
+        expect(mocks.send).not.toHaveBeenCalled()
+        expect(decisions()).toEqual(["asked-owner"])
+    })
+
+    it("grava na decisão o custo das chamadas do turno (assunto = token)", async () => {
+        mocks.spent = 0.0123
+        await turn()
+        expect(mocks.inference).toHaveBeenCalledWith(expect.objectContaining({ subject: "T" }))
+        expect(mocks.costsById.get("opex:M1")).toBe(0.0123)
+    })
+
     it("diz ao modelo com quem está falando e que não pergunte quem é", async () => {
         await turn()
         const call = mocks.inference.mock.calls[0]?.[0] as { instructions: string; messages: { content: string }[] }
