@@ -4,7 +4,6 @@ import { isPreviewInstance } from "@/lib/instance"
 import { isBuildActive, runExclusiveBuild } from "@/features/agentic/server/build-queue"
 import { lastLine, type HostRunner } from "@/features/local-docker/server/shell"
 import {
-    appliedLimits,
     builderContainer,
     builderDeleteCommand,
     builderEnsureCommand,
@@ -15,7 +14,6 @@ import {
     builderUpdateCommand,
     builderUseCommand,
     cpuModeOf,
-    limitsDiffer,
     NETWORK_HOST_FLAG,
     needsRecreate,
     parseBuilderStatus,
@@ -23,6 +21,7 @@ import {
     type ParsedBuilderStatus,
 } from "../builder-commands"
 import { ENVIRONMENTS_AUDIT_ENTITY } from "../constants"
+import { appliedLimits, limitsDiffer } from "../resource-limits"
 import { environmentsBuilderSchema, type BuilderAction, type BuilderActionInput, type EnvironmentsBuilder } from "../schemas"
 import type { BuilderLastActionDto, BuilderResultDto, BuilderStatus, EnvironmentsBuilderDto } from "../types"
 import { EnvironmentsState, environmentsDb, type IEnvironmentsState } from "./models"

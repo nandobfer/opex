@@ -1,19 +1,9 @@
-import type { EnvironmentsBuilder } from "./schemas"
-import type { BuilderLimitsDto, BuilderStatus, EnvironmentsBuilderDto } from "./types"
+import { limitsText } from "./resource-limits"
+import type { BuilderStatus, EnvironmentsBuilderDto } from "./types"
 
 /** Textos (puros) da linha "Builder do servidor". */
 
 export const BUILDER_STATUS_LABELS: Record<BuilderStatus, string> = { running: "No ar", stopped: "Parado", missing: "Não existe", unmanageable: "Sem container", unknown: "Sem resposta" }
-
-const number = (value: number) => value.toLocaleString("pt-BR", { maximumFractionDigits: 2 })
-
-/** "RAM 24 GiB · swap +16 GiB · 6 CPUs" (vazio = sem limite; swap vazio = padrão do Docker). */
-export function limitsText(limits: BuilderLimitsDto | Pick<EnvironmentsBuilder, "memoryGb" | "swapGb" | "cpus">): string {
-    const ram = limits.memoryGb === null ? "RAM sem limite" : `RAM ${number(limits.memoryGb)} GiB`
-    const swap = limits.memoryGb === null ? null : limits.swapGb === null ? "swap padrão" : limits.swapGb === 0 ? "sem swap" : `swap +${number(limits.swapGb)} GiB`
-    const cpus = limits.cpus === null ? "CPU sem limite" : `${number(limits.cpus)} CPU${limits.cpus === 1 ? "" : "s"}`
-    return [ram, swap, cpus].filter(Boolean).join(" · ")
-}
 
 export function usageText(usage: EnvironmentsBuilderDto["usage"]): string | null {
     if (!usage) return null

@@ -1,6 +1,6 @@
 import { builderDriverOpts, quote } from "@/features/local-docker/commands"
+import { appliedLimits, limitsDiffer, round2, type LimitsContainerState } from "./resource-limits"
 import type { EnvironmentsBuilder } from "./schemas"
-import type { BuilderLimitsDto } from "./types"
 
 /**
  * Comandos (puros) do builder do buildx do **servidor** (linha "Builder do servidor" em Ambientes).
@@ -16,7 +16,6 @@ const KNOWN_FLAGS = new Set([NETWORK_HOST_FLAG])
 export const builderContainer = (name: string) => `buildx_buildkit_${name}0`
 
 const GIB = 1024 ** 3
-const round2 = (value: number) => Math.round(value * 100) / 100
 
 export function builderCreateCommand(config: EnvironmentsBuilder): string {
     const opts = builderDriverOpts({ memoryGb: config.memoryGb, cpus: config.cpus, swapGb: config.swapGb })
@@ -96,13 +95,8 @@ export function builderStatusCommand(name: string | null): string {
     ].join("; ")
 }
 
-export interface BuilderContainerState {
+export interface BuilderContainerState extends LimitsContainerState {
     state: string
-    memoryBytes: number
-    memorySwapBytes: number
-    nanoCpus: number
-    cpuPeriod: number
-    cpuQuota: number
 }
 
 export interface ParsedBuilderStatus {
@@ -186,29 +180,8 @@ export function parseBuilderStatus(output: string): ParsedBuilderStatus {
     }
 }
 
-/** Limites aplicados no container, nas unidades da configuração (GiB, swap além da RAM, CPUs). */
-export function appliedLimits(container: BuilderContainerState): BuilderLimitsDto {
-    const memoryGb = container.memoryBytes > 0 ? round2(container.memoryBytes / GIB) : null
-    const swapGb = memoryGb !== null && container.memorySwapBytes > container.memoryBytes ? round2((container.memorySwapBytes - container.memoryBytes) / GIB) : null
-    const cpus = container.nanoCpus > 0 ? round2(container.nanoCpus / 1e9) : container.cpuQuota > 0 && container.cpuPeriod > 0 ? round2(container.cpuQuota / container.cpuPeriod) : null
-    return { memoryGb, swapGb, cpus }
-}
-
 /** `--cpus` (NanoCpus) ou quota: o `docker update` precisa seguir o modo que o container já usa. */
 export const cpuModeOf = (container: BuilderContainerState | null): "nano" | "quota" => (container && container.nanoCpus > 0 ? "nano" : "quota")
-
-const same = (a: number | null, b: number | null) => (a === null ? null : round2(a)) === (b === null ? null : round2(b))
-
-/**
- * Os limites salvos diferem dos aplicados? Swap salvo vazio (padrão do Docker) aceita o aplicado vazio
- * ou igual à RAM (o padrão do Docker é o dobro da RAM no total).
- */
-export function limitsDiffer(config: Pick<EnvironmentsBuilder, "memoryGb" | "cpus" | "swapGb">, applied: BuilderLimitsDto): boolean {
-    if (!same(config.memoryGb, applied.memoryGb) || !same(config.cpus, applied.cpus)) return true
-    if (config.memoryGb === null) return false
-    if (config.swapGb === null) return !(applied.swapGb === null || same(applied.swapGb, config.memoryGb))
-    return !same(config.swapGb, applied.swapGb ?? (config.swapGb === 0 ? 0 : null))
-}
 
 /** Flags que o Opex não recria. */
 export const unknownFlags = (flags: string[]) => flags.filter((flag) => !KNOWN_FLAGS.has(flag))

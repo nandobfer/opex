@@ -8,9 +8,10 @@ const mocks = vi.hoisted(() => ({
   exclusive: vi.fn(async <T,>(run: () => Promise<T>) => run()),
   publish: vi.fn(async () => {}),
   queueFollowUp: vi.fn(async () => {}),
+  audit: vi.fn<(entry: { antes?: Record<string, unknown>; depois?: Record<string, unknown> }) => Promise<undefined>>(async () => undefined),
 }))
 
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(async () => undefined), AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
+vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.audit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@/lib/crypto/secretBox', () => ({ encryptSecret: (plain: string) => ({ v: 1, c: plain }), decryptSecret: (box: { c?: string }) => {
   if (typeof box.c !== 'string') throw new Error('falha ao decifrar')
   return box.c
@@ -39,6 +40,7 @@ vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.que
 import { Environment, EnvironmentDeploy } from '@/features/environments/server/models'
 import { deleteEnvironment, runEnvironmentAction, startDeploy } from '@/features/environments/server/deploy'
 import { createEnvironment, readEnvValues, updateEnvironment } from '@/features/environments/server/service'
+import { readComposeServices } from '@/features/environments/server/compose-read'
 import type { EnvironmentInput } from '@/features/environments/schemas'
 
 const envs = Environment as unknown as { docs: Record<string, unknown>[] }
@@ -84,8 +86,15 @@ const input = (overrides: Partial<EnvironmentInput> = {}): EnvironmentInput => (
   healthUrl: '',
   buildOn: 'server',
   runOn: 'server',
+  limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
   ...overrides,
 })
+
+/** Conteúdo do último override gravado (o `writeFileCommand` grava em base64). */
+const lastOverride = (calls: string[]) => {
+  const write = calls.filter((command) => command.includes('docker-compose.opex.yml') && command.includes('base64 -d')).at(-1)!
+  return Buffer.from(/printf %s '([^']+)'/.exec(write)![1]!, 'base64').toString('utf8')
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -167,6 +176,98 @@ describe('deploy — saída do compose, executor desacoplado e build reaproveita
     const { run } = host({ images: 'missing' })
     await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
     expect(String(deploys.docs[0]!.log)).toContain('▸ Build no PC')
+  })
+})
+
+describe('limites de recursos no deploy (OPE-193)', () => {
+  it('modo único: cada serviço recebe os limites no override e o log diz quais', async () => {
+    const env = await createEnvironment(input({ limits: { mode: 'shared', memoryGb: 4, swapGb: 2, cpus: 1.5 } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const yaml = lastOverride(calls)
+    expect(yaml).toContain('"app":\n    env_file:\n      - ".env.opex"\n    memswap_limit: "6144m"\n    deploy:\n      resources:\n        limits:\n          memory: "4096m"\n          cpus: "1.5"')
+    expect(yaml).toContain('"db":\n    env_file:\n      - ".env.opex"\n    memswap_limit: "6144m"')
+    expect(String(deploys.docs[0]!.log)).toContain('Limites: app RAM 4 GiB · swap +2 GiB · 1,5 CPUs; db RAM 4 GiB · swap +2 GiB · 1,5 CPUs')
+    // O override é gravado antes de subir.
+    const write = calls.findLastIndex((command) => command.includes('docker-compose.opex.yml') && command.includes('base64 -d'))
+    expect(write).toBeLessThan(calls.findIndex((command) => command.includes('up -d')))
+  })
+
+  it('por serviço: só o serviço com limite ganha chaves; linha de serviço fora do compose avisa no log e não bloqueia', async () => {
+    const env = await createEnvironment(input({ env: [], limits: { mode: 'service', services: [{ service: 'app', memoryGb: 2, swapGb: 0, cpus: null }, { service: 'antigo', memoryGb: 1, swapGb: null, cpus: null }] } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const yaml = lastOverride(calls)
+    expect(yaml).toContain('"app":\n    memswap_limit: "2048m"\n    deploy:\n      resources:\n        limits:\n          memory: "2048m"')
+    expect(yaml).not.toContain('"db"')
+    const log = String(deploys.docs[0]!.log)
+    expect(log).toContain('Limite do serviço antigo ignorado: o serviço não está no compose.')
+    expect(log).toContain('Limites: app RAM 2 GiB · sem swap · CPU sem limite; db sem limite')
+  })
+
+  it('sem limites: nenhuma chave no override nem linha no log (ambiente antigo sem o campo também)', async () => {
+    const env = await createEnvironment(input({ env: [] }), 'local')
+    delete envs.docs[0]!.limits
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(lastOverride(calls)).toContain('services: {}')
+    expect(String(deploys.docs[0]!.log)).not.toContain('Limites:')
+  })
+
+  it('o deploy com sucesso grava os limites que aplicou (o selo compara com eles); a falha não', async () => {
+    const env = await createEnvironment(input({ limits: { mode: 'shared', memoryGb: 4, swapGb: null, cpus: null } }), 'local')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host().run, wait: true })
+    expect(envs.docs[0]!.deployedLimits).toEqual({ mode: 'shared', memoryGb: 4, swapGb: null, cpus: null })
+    await updateEnvironment(String(env._id), input({ limits: { mode: 'shared', memoryGb: null, swapGb: null, cpus: null } }), 'local')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host({ fail: 'up -d' }).run, wait: true })
+    expect(envs.docs[0]!.deployedLimits).toEqual({ mode: 'shared', memoryGb: 4, swapGb: null, cpus: null })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host().run, wait: true })
+    expect(envs.docs[0]!.deployedLimits).toEqual({ mode: 'shared', memoryGb: null, swapGb: null, cpus: null })
+  })
+
+  it('salvar grava os limites e audita o texto (antes e depois)', async () => {
+    const env = await createEnvironment(input(), 'local')
+    await updateEnvironment(String(env._id), input({ limits: { mode: 'shared', memoryGb: 4, swapGb: null, cpus: 2 } }), 'local')
+    expect(envs.docs[0]!.limits).toEqual({ mode: 'shared', memoryGb: 4, swapGb: null, cpus: 2 })
+    const audit = mocks.audit.mock.calls.at(-1)![0]
+    expect(audit.antes.limites).toBe('sem limite')
+    expect(audit.depois.limites).toBe('RAM 4 GiB · swap padrão · 2 CPUs')
+  })
+})
+
+describe('"Ler compose" do formulário (OPE-193)', () => {
+  const LIMITED = JSON.stringify({ services: { app: { build: { context: '.' }, mem_limit: '1g', cpus: 2 }, db: { image: 'mongo:7' }, worker: { image: 'w' } } })
+
+  it('central: compose da ref numa pasta temporária, os serviços escolhidos e os limites declarados (saída fora do log)', async () => {
+    const run = vi.fn(async (): Promise<HostResult> => ({ exitCode: 0, output: `aviso\n${LIMITED}` }))
+    const result = await readComposeServices({ kind: 'central', centralId: 'c1', ref: 'dev', composeFile: 'docker-compose.yml', services: ['app', 'db'], projectName: 'loja' }, run)
+    expect(result).toEqual({ services: [{ name: 'app', hasBuild: true, declared: { memoryGb: 1, swapGb: null, cpus: 2 } }, { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null } }] })
+    const [command, , options] = run.mock.calls[0] as unknown as [string, number, { redactedAs?: string }]
+    expect(command).toContain("git -C '/home/u/loja' archive \"$sha\" -- 'docker-compose.yml'")
+    expect(command).toContain("'dev^{commit}'")
+    expect(options.redactedAs).toContain('saída omitida')
+  })
+
+  it('adotado: a pasta do projeto (no PC pela conexão mestra); PC fechado recusa', async () => {
+    const run = vi.fn(async (): Promise<HostResult> => ({ exitCode: 0, output: LIMITED }))
+    const source = { kind: 'adopted', machine: 'pc', workingDir: '/home/u/app', configFiles: ['/home/u/app/compose.yml'], projectName: 'app', git: true, pullOnRedeploy: false } as const
+    const result = await readComposeServices(source, run)
+    expect(result.services.map((service) => service.name)).toEqual(['app', 'db', 'worker'])
+    expect(String(run.mock.calls[0]![0])).toContain('ssh -S')
+    expect(String(run.mock.calls[0]![0])).toContain('config --no-env-resolution --no-interpolate --format json')
+    mocks.pcAvailable = false
+    await expect(readComposeServices(source, run)).rejects.toMatchObject({ status: 409, code: 'ENVIRONMENT_PC_UNAVAILABLE' })
+  })
+
+  it('falha: 502 com a última linha do erro, nunca o JSON', async () => {
+    const run = vi.fn(async (): Promise<HostResult> => ({ exitCode: 1, output: 'Ref não encontrada: xpto' }))
+    const source = { kind: 'central', centralId: 'c1', ref: 'xpto', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } as const
+    await expect(readComposeServices(source, run)).rejects.toMatchObject({ status: 502, code: 'ENVIRONMENT_COMPOSE_READ_FAILED', message: 'Não foi possível ler o compose: Ref não encontrada: xpto' })
+    const json = vi.fn(async (): Promise<HostResult> => ({ exitCode: 0, output: '{"segredo": true' }))
+    const error = await readComposeServices(source, json).catch((caught: Error) => caught)
+    expect(error.message).toBe('Não foi possível ler o compose: a saída não trouxe os serviços')
   })
 })
 

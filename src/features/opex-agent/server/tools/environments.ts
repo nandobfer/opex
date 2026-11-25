@@ -7,6 +7,7 @@ import {
     environmentInputSchema,
     environmentsSettingsSchema,
     envVarInputSchema,
+    environmentLimitsSchema,
     MACHINE_LABELS,
     MACHINES,
     projectNameSchema,
@@ -17,6 +18,7 @@ import {
     type EnvironmentInput,
 } from "@/features/environments/schemas"
 import type { IEnvironment } from "@/features/environments/server/models"
+import { environmentLimitsOf, environmentLimitsText } from "@/features/environments/resource-limits"
 import { moveWarning, slugify } from "@/features/environments/view"
 import { builderView, deployView, environmentDetailView, environmentsListView, mergeBuilderPatch, mergeEnvironmentPatch, mergeSettingsPatch, redactEnvValues, stripAnsi, tailLines } from "@/features/environments/opex-format"
 
@@ -64,12 +66,15 @@ async function resolve(ref: string): Promise<IEnvironment> {
 const environment = z.string().trim().min(1).max(100).describe("Id ou slug do ambiente (de list_environments)")
 const machine = z.enum(MACHINES).describe("server = Servidor; pc = PC (pelo Builder Machine)")
 const envVars = z.array(envVarInputSchema).max(100).describe("Variáveis extras (gravadas cifradas; o valor nunca é lido de volta)")
+const limits = environmentLimitsSchema.describe(
+    'Limites de recursos (valem no próximo deploy): { mode: "shared", memoryGb, cpus, swapGb } = os mesmos para cada serviço, ou { mode: "service", services: [{ service, memoryGb, cpus, swapGb }] } = por serviço (serviço sem linha = sem limite). memoryGb em GiB (mín. 0,5), cpus com fração (mín. 0,1), swapGb = swap ALÉM da RAM (null = padrão do Docker, 0 = sem swap; exige memoryGb). null = sem limite. Substitui os limites salvos inteiros.',
+)
 const LOG_LINES_DEFAULT = 200
 const DEPLOY_LOG_LINES_DEFAULT = 80
 
 /** Valores do formulário a partir do ambiente salvo (variáveis com valor vazio = mantém o salvo). */
 function inputOf(env: IEnvironment): EnvironmentInput {
-    return { name: env.name, slug: env.slug, source: env.source, env: env.env.map((item) => ({ key: item.key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn }
+    return { name: env.name, slug: env.slug, source: env.source, env: env.env.map((item) => ({ key: item.key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn, limits: env.limits ?? null }
 }
 
 const tool = <I>(def: Omit<Parameters<typeof defineTool<I>>[0], "group">) => defineTool<I>({ ...def, group: "environments" })
@@ -87,6 +92,7 @@ const createInput = z.object({
     healthUrl: z.string().trim().max(300).optional().describe("URL de saúde esperada no fim do deploy"),
     buildOn: machine.optional().describe("Onde fazer o build (padrão server)"),
     runOn: machine.optional().describe("Onde executar (padrão server)"),
+    limits: limits.optional(),
 })
 
 const updateInput = z.object({
@@ -108,6 +114,7 @@ const updateInput = z.object({
     healthUrl: z.string().trim().max(300).optional().describe("Vazio remove"),
     buildOn: machine.optional(),
     runOn: machine.optional(),
+    limits: limits.optional(),
 })
 type UpdateInput = z.infer<typeof updateInput>
 
@@ -137,7 +144,7 @@ export const environmentTools = [
         name: "get_environment",
         label: "Ver ambiente",
         risk: "read",
-        description: "Detalhe de um ambiente: origem (central/ref/compose/serviços ou pasta adotada), máquinas de build e execução, onde está no ar, nomes das variáveis (nunca os valores), URL de saúde, serviços com CPU/RAM/versão e o último deploy.",
+        description: "Detalhe de um ambiente: origem (central/ref/compose/serviços ou pasta adotada), máquinas de build e execução, onde está no ar, nomes das variáveis (nunca os valores), URL de saúde, limites de RAM/CPU/swap (salvos, aplicados no host e se diferem: os salvos valem no próximo deploy), serviços com CPU/RAM/versão/limites e o último deploy.",
         input: z.object({ environment }),
         execute: async (input) => {
             const env = await resolve(input.environment)
@@ -164,6 +171,7 @@ export const environmentTools = [
                 healthUrl: input.healthUrl ?? "",
                 buildOn: input.buildOn ?? "server",
                 runOn: input.runOn ?? "server",
+                limits: input.limits ?? null,
             })
             const env = await (await service()).createEnvironment(parsed, context.actorId)
             return { id: String(env._id), slug: env.slug, nome: env.name, criado: true, proximoPasso: "Implante com deploy_environment quando o usuário pedir." }
@@ -175,7 +183,7 @@ export const environmentTools = [
         risk: "write",
         confirmByDefault: true,
         description:
-            "Edita um ambiente: só os campos enviados mudam. `env` é a lista completa das variáveis (as ausentes saem; valor vazio mantém o salvo). Trocar slug ou projeto exige o ambiente derrubado. A nova configuração vale no próximo deploy.",
+            "Edita um ambiente: só os campos enviados mudam. `env` é a lista completa das variáveis (as ausentes saem; valor vazio mantém o salvo). `limits` substitui os limites de RAM/CPU/swap. Trocar slug ou projeto exige o ambiente derrubado. A nova configuração vale no próximo deploy (Reiniciar não aplica limites).",
         input: updateInput,
         summarize: (input) => {
             const fields = Object.keys(input).filter((key) => key !== "environment" && key !== "env")
@@ -186,10 +194,10 @@ export const environmentTools = [
             const saved = await resolve(input.environment)
             const current = inputOf(saved)
             const next = environmentInputSchema.parse(
-                mergeEnvironmentPatch(current, { name: input.name, slug: input.slug, source: sourcePatch(current.source, input), env: input.env, ports: input.ports, healthUrl: input.healthUrl, buildOn: input.buildOn, runOn: input.runOn }),
+                mergeEnvironmentPatch(current, { name: input.name, slug: input.slug, source: sourcePatch(current.source, input), env: input.env, ports: input.ports, healthUrl: input.healthUrl, buildOn: input.buildOn, runOn: input.runOn, limits: input.limits }),
             )
             const env = await (await service()).updateEnvironment(String(saved._id), next, context.actorId)
-            return { id: String(env._id), slug: env.slug, atualizado: true, variaveis: env.env.map((item) => item.key) }
+            return { id: String(env._id), slug: env.slug, atualizado: true, variaveis: env.env.map((item) => item.key), limites: environmentLimitsText(environmentLimitsOf(env.limits)) }
         },
     }),
     tool({

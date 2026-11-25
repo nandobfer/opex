@@ -1,4 +1,5 @@
 import type { OptionTabsOption } from "@/components/ui/option-tabs"
+import { initialLimits } from "./limits-form"
 import { MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
 import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto } from "./types"
 
@@ -42,8 +43,19 @@ export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: 
             healthUrl: "",
             buildOn: "server",
             runOn: "server",
+            limits: initialLimits(null),
         }
-    return { name: env.name, slug: env.slug, source: env.source, env: envValues ? envValues.items.map((item) => (item.value === null ? { key: item.key, value: "", keep: true } : { key: item.key, value: item.value })) : env.envKeys.map((key) => ({ key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn }
+    return {
+        name: env.name,
+        slug: env.slug,
+        source: env.source,
+        env: envValues ? envValues.items.map((item) => (item.value === null ? { key: item.key, value: "", keep: true } : { key: item.key, value: item.value })) : env.envKeys.map((key) => ({ key, value: "" })),
+        ports: env.ports,
+        healthUrl: env.healthUrl ?? "",
+        buildOn: env.buildOn,
+        runOn: env.runOn,
+        limits: initialLimits(env),
+    }
 }
 
 /** Slug sugerido a partir do nome. */

@@ -1,4 +1,5 @@
-import type { BuilderAction, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
+import type { ResourceLimits } from "./resource-limits"
+import type { BuilderAction, EnvironmentLimits, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 export type DeployStatus = "running" | "success" | "failed"
 export type DeployKind = "deploy" | "move" | "delete"
@@ -13,6 +14,8 @@ export interface ServiceStatusDto {
     memory: string | null
     /** Versão do `package.json` do app no container (`null` = sem o arquivo ou parado). */
     version: string | null
+    /** Limites aplicados no container (`docker inspect`; `null` = não lidos). */
+    limits: ResourceLimitsDto | null
 }
 
 export interface EnvironmentDeploySummaryDto {
@@ -50,6 +53,12 @@ export interface EnvironmentDto {
     healthUrl: string | null
     buildOn: Machine
     runOn: Machine
+    /** Limites de recursos salvos (valem no próximo deploy; sem configuração = sem limite). */
+    limits: EnvironmentLimits
+    /** Os limites já foram configurados (mesmo vazios); `false` = o Editar mostra os aplicados no host. */
+    limitsConfigured: boolean
+    /** Limites do último deploy com sucesso (`null` = nenhum deploy desde a OPE-193). */
+    deployedLimits: EnvironmentLimits | null
     /** Onde está no ar (último deploy com sucesso); `null` = nunca implantado. */
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     /** Versão do código do último deploy com sucesso. */
@@ -77,7 +86,19 @@ export interface EnvironmentsListDto {
     /** Túnel do Builder Machine aberto (o PC está alcançável). */
     pcAvailable: boolean
     pcReason: string | null
+    /** CPUs e memória de cada máquina (`null` = não lidas). */
+    hosts: Record<Machine, HostCapacityDto | null>
     checkedAt: string
+}
+
+/** "Ler compose" do formulário: os serviços e os limites declarados no compose (sem o override do app). */
+export interface ComposeServicesDto {
+    services: { name: string; hasBuild: boolean; declared: ResourceLimitsDto }[]
+}
+
+export interface HostCapacityDto {
+    cpus: number
+    memoryGb: number
 }
 
 export interface EnvironmentDeployDto extends EnvironmentDeploySummaryDto {
@@ -99,13 +120,10 @@ export interface RegistryStatusDto {
     detail: string
 }
 
-/** Limites aplicados de fato no container do builder (lidos do `docker inspect`). */
-export interface BuilderLimitsDto {
-    memoryGb: number | null
-    /** Swap além da RAM (`null` = padrão do Docker). */
-    swapGb: number | null
-    cpus: number | null
-}
+/** Limites aplicados de fato num container (lidos do `docker inspect`). */
+export type ResourceLimitsDto = ResourceLimits
+/** Limites aplicados de fato no container do builder. */
+export type BuilderLimitsDto = ResourceLimitsDto
 
 /**
  * Estado da linha "Builder do servidor": `missing` = o builder não existe; `unmanageable` = driver sem

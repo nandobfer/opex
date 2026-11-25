@@ -40,8 +40,11 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
 - **Novo/Editar** (react-hook-form + `environmentInputSchema`): nome e slug (sugerido pelo nome);
   origem **central** (central, ref, arquivo compose, serviços, nome do projeto) ou adotado (só
   leitura + "git pull no redeploy" quando há git); variáveis extras **cifradas**, com os valores à
-  vista (ver "Variáveis extras no formulário"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
+  vista (ver "Variáveis extras no formulário"); **limites de recursos** (RAM, swap e CPUs, ver "Limites de
+  recursos"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
   desabilitado com o motivo quando o túnel está fechado).
+- A linha do ambiente mostra os limites **aplicados** nos containers ("limites: RAM 4 GiB · swap padrão · 2 CPUs"
+  ou por serviço) e o selo "Limites salvos diferem dos aplicados: faça Deploy" (ver "Limites de recursos").
 - **Variáveis extras no formulário** (OPE-175):
   - Em **Editar**, os valores salvos são lidos à parte (`GET /api/environments/[id]/env`, só o dono,
     `readEnvValues`: decifra um a um; o que falhar volta `null`) e aparecem legíveis no campo **Valor**
@@ -111,6 +114,61 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
 - **Configurações** (engrenagem): pasta base no servidor (`opex-envs`), porta do registry
   (`5050`, só `127.0.0.1`) e tags mantidas por ambiente (`5`). A conexão com o PC é a do Builder
   Machine.
+
+### Limites de recursos (OPE-193)
+
+- **Campos** (`EnvironmentLimitsField` no formulário Novo/Editar, entre as variáveis e as portas): RAM (GiB), swap
+  **além da RAM** (GiB) e CPUs (fração), com a mesma semântica, validação e textos do builder do servidor: vazio =
+  sem limite; swap vazio = padrão do Docker; swap 0 = sem swap; swap sem RAM é erro ("Defina a RAM para limitar o
+  swap"). Os três campos são o componente compartilhado `ResourceLimitsFields` (o mesmo do formulário do builder), e
+  a ajuda mostra a RAM e as CPUs da máquina de execução (`EnvironmentsListDto.hosts`, do `docker info` do snapshot).
+- **Modos** (`OptionTabs`): **Mesmos para cada serviço** (`{ mode: "shared", memoryGb, cpus, swapGb }`: cada
+  container do ambiente recebe esses limites) ou **Por serviço** (`{ mode: "service", services: [{ service, … }] }`:
+  uma linha por serviço; serviço sem linha fica sem limite; nomes repetidos são erro). Trocar para "Por serviço" copia
+  os valores do modo único para os serviços conhecidos (os do último "Ler compose" ou, antes dele, os do host) e, sem
+  nenhum, lê o compose sozinho; voltar ao modo único usa os valores quando são iguais em todas as linhas
+  (`switchLimitMode`, `limits-form.ts`).
+- **Ler compose** (`POST /api/environments/compose-services` `{ source }`, só o dono, `readComposeServices`): os
+  serviços do compose da origem e os limites declarados neles (`mem_limit`, `memswap_limit`, `cpus` ou
+  `deploy.resources.limits`, em bytes ou com unidade), sem o override do app, com `config --no-env-resolution
+  --no-interpolate` (valor com `${VAR}` volta vazio). Central: `git fetch` + a ref resolvida e uma pasta temporária
+  com só o arquivo do compose e os `*.yml`/`*.yaml` da ref (`git archive`), apagada no fim — o worktree do ambiente
+  no ar não é tocado; os serviços escolhidos na origem filtram a lista. Adotado: a pasta do projeto (servidor ou PC).
+  Por serviço, as linhas existentes ficam e os serviços novos entram com os limites do compose; linha de serviço que
+  não está no compose ganha o selo "não está no compose" e pode ser removida. No modo único, os campos vazios
+  recebem os limites do compose quando são iguais em todos os serviços (diferentes: toast sugerindo "Por serviço").
+  Falha: 502 `ENVIRONMENT_COMPOSE_READ_FAILED` com a última linha do erro (nunca o JSON), aviso com "Tentar
+  novamente" no campo; skeleton das linhas durante a leitura. Com a origem incompleta (ex.: Novo sem a central), o
+  botão fica desabilitado, a troca para "Por serviço" não lê nada e o campo diz "Escolha a origem para ler o
+  compose." (`composeServicesInputSchema`).
+- **Editar abre com o que vale**: os limites **configurados**, mesmo vazios ("sem limite" salvo reabre vazio); nunca
+  configurados (`limits` ausente/`null`: ambiente antigo, adotado, criado pela ferramenta sem `limits`), os
+  **aplicados** hoje nos containers (`docker inspect` no snapshot: `HostConfig.Memory`/`MemorySwap`/`NanoCpus`/
+  `CpuQuota`, `appliedEnvironmentLimits`: modo único quando todos os serviços têm os mesmos, por serviço quando
+  diferem); sem nenhum, vazio ("Sem limite"). O campo mostra "No host hoje: …".
+- **Aplicação: só no deploy** (inclui Mover): o override `docker-compose.opex.yml` ganha os limites de cada serviço
+  (`limitLines`) e o `up -d` recria os containers cuja configuração mudou. Reiniciar (`compose restart`) e Levantar
+  (o override do último deploy) **não** aplicam limites novos. Chaves: RAM em `deploy.resources.limits.memory` (ou
+  `mem_limit` quando o compose do projeto usa `mem_limit`), CPUs em `deploy.resources.limits.cpus` (ou `cpus` no
+  serviço, idem) — o compose recusa as duas formas com valores diferentes no mesmo serviço ("can't set distinct
+  values on 'cpus' and 'deploy.resources.limits.cpus'"), então o override segue a forma do compose base; swap em
+  `memswap_limit` = RAM + swap (0 = igual à RAM; vazio = sem a chave). Com swap vazio e um `memswap_limit` declarado
+  no compose, a chave é reescrita como RAM nova + o swap declarado (o total antigo poderia ficar abaixo da RAM nova e
+  o Docker recusaria o container). Valor vazio não escreve chave. O log do deploy diz "Limites: app RAM 4 GiB · swap
+  padrão · 2 CPUs; db sem limite" e, por serviço, "Limite do serviço X ignorado: o serviço não está no compose."
+  (não bloqueia). O deploy com sucesso grava em `environments.deployedLimits` os limites que aplicou (vindos do ponto
+  de retomada, `checkpoint.limits`).
+- **Divergência** (`limitsPendingDeploy`): selo "Limites salvos diferem dos aplicados: faça Deploy" na linha e
+  `limites.diferem` em `get_environment`, só em ambiente implantado, quando (a) os limites configurados diferem dos
+  do último deploy (`sameEnvironmentLimits` com `deployedLimits`; inclui tirar um limite: salvo vazio × deploy com
+  limite) ou (b) algum serviço **com limite salvo** tem outro aplicado no container (`environmentLimitsDiffer`, mesma
+  regra do builder para o swap padrão). Serviço sem limite salvo não conta no (b): o que o próprio compose declara
+  segue valendo.
+- **Dados**: `environments.limits` (`Mixed`; `null`/ausente = nunca configurado, lido como sem limite por
+  `environmentLimitsOf`, sem migração) e `environments.deployedLimits`; `EnvironmentDto.limits` (salvos),
+  `limitsConfigured`, `deployedLimits` e `ServiceStatusDto.limits` (aplicados no container). `environmentInputSchema`
+  aceita `limits: null` (as ferramentas sem `limits` mantêm o que está salvo, inclusive o `null`); a tela sempre
+  envia o objeto. O portal do cliente não recebe limites. Auditoria: `limites` (texto) no antes/depois.
 
 ### Builder do servidor (OPE-186)
 
@@ -191,14 +249,16 @@ mesma validação, auditoria, Pusher e erros.
 
 - O ambiente é indicado por **id ou slug** (`resolveEnvironmentRef`).
 - Leitura: `list_environments` (Servidor/PC, estado, portas, serviços no ar, versão, build, último
-  deploy), `get_environment` (origem, máquinas, só os **nomes** das variáveis, URL de saúde,
-  serviços), `get_environment_logs` (últimas linhas, até 200, sem ANSI), `list_environment_deploys`
+  deploy, limites aplicados), `get_environment` (origem, máquinas, só os **nomes** das variáveis, URL de saúde,
+  `limites: { salvos, configuracao, aplicados, diferem }`, serviços com os limites de cada container), `get_environment_logs` (últimas linhas, até 200, sem ANSI), `list_environment_deploys`
   (30 últimos), `get_environment_deploy` (resumo + fim do log, o ao vivo do processo quando em
   andamento), `list_unmanaged_projects`, `get_environments_settings` (com o estado do registry),
   `get_environments_builder` (builder do servidor: estado, limites aplicados e salvos, uso, avisos e, sem
   configuração, a sugestão para gerenciar).
 - Escrita sem confirmação: `create_environment` (origem central; slug sugerido pelo nome, projeto =
   slug, ref `main`), `start_environment`, `create_environments_builder`, `start_environments_builder`.
+- `create_environment` e `update_environment` aceitam `limits` (o mesmo `environmentLimitsSchema` da tela; substitui os
+  limites salvos inteiros, `null` num campo = sem limite).
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
   tela, vazio grava vazio), `restart_environment`, `adopt_project`,
@@ -229,6 +289,7 @@ mesma validação, auditoria, Pusher e erros.
   ocultos"), com `$` escapado como `$$` (o valor chega literal), passado por `--env-file` e
   `env_file` no override — caminho relativo à pasta do primeiro arquivo do compose (ex.:
   `deploy/docker-compose.yml` → `../.env.opex`).
+- **Limites** (OPE-193): no override, por serviço (ver "Limites de recursos").
 - **Arquivos de variáveis do compose** (OPE-175, `server/env-files.ts` → `ensureComposeEnvFiles`): antes
   de toda ação que roda o compose (deploy/redeploy/mover, levantar, reiniciar, derrubar, logs e o
   derrubar de Apagar), em central ou adotado, no servidor ou no PC, o app lê os `env_file`
@@ -246,8 +307,8 @@ mesma validação, auditoria, Pusher e erros.
 - **Variável obrigatória faltando** (`${X:?…}`): a falha de "Lendo o compose" diz qual variável faltou e
   lembra de cadastrá-la em **Variáveis extras**.
 - **Override** `docker-compose.opex.yml` (regravado a cada deploy; os comandos do compose só o
-  incluem quando existe — um adotado ainda não implantado pelo app derruba/reinicia/apaga sem ele): `env_file` e, com build e
-  execução em máquinas diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`.
+  incluem quando existe — um adotado ainda não implantado pelo app derruba/reinicia/apaga sem ele): `env_file`, os limites de
+  recursos preenchidos e, com build e execução em máquinas diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`.
 - Combinações (`pipeline.ts`, `deploySteps`):
 
 | Build → Execução | Passos |
@@ -278,6 +339,10 @@ mesma validação, auditoria, Pusher e erros.
   do compose relativo sem `..`, serviços, nome do projeto) ou passa por `quote`.
 
 ### Limitações
+
+- Limites dos ambientes: campo vazio não escreve chave no override, então um limite declarado no próprio compose do
+  projeto continua valendo (aparece em "No host hoje" no Editar); tirá-lo exige editar o compose. Limites novos só
+  entram com Deploy (Reiniciar/Levantar não). "Ler compose" de uma central só traz os YAML da ref: `include`/`extends` de arquivos com outra extensão falham.
 
 - Builder do servidor: só os builds conhecidos pela fila global do build deste processo contam como "build
   em andamento"; um `docker build` manual no host não é detectado (recriar/derrubar/apagar o derrubaria).
