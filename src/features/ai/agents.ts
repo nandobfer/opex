@@ -16,6 +16,9 @@
  *   (`scope: "routine"`, canal `agentes/rotineiros/<slug>`). Cada agente rotineiro é uma identidade
  *   dinâmica no Engramind (`opex/rotineiro-<slug>`, fora de `MEMORY_IDENTITIES`), provisionada pela
  *   feature `routine-agents`.
+ * - **Agente Secretário** (OPE-192): o global do Secretário e uma lista por conversa do WhatsApp
+ *   (`scope: "conversation"`, canal `agentes/secretario/conversas/<id>`). Ele NÃO lê as Memórias do Opex: o
+ *   contexto do turno tem só o global dele e o canal da conversa atual.
  */
 
 export const AI_AGENT_IDS = [
@@ -34,11 +37,13 @@ export const AI_AGENT_IDS = [
     "developer-central",
     "routine-global",
     "routine-specific",
+    "secretary-global",
+    "secretary-conversation",
 ] as const
 export type AiAgentId = (typeof AI_AGENT_IDS)[number]
 
 /** Agentes do Opex que consomem memórias (um agente no app `opex` do Engramind, com token próprio). */
-export const MEMORY_CONSUMERS = ["opex", "maddox", "adversario", "arquiteto", "desenvolvedor"] as const
+export const MEMORY_CONSUMERS = ["opex", "maddox", "adversario", "arquiteto", "desenvolvedor", "secretario"] as const
 export type MemoryConsumer = (typeof MEMORY_CONSUMERS)[number]
 
 export const MEMORY_CONSUMER_DEFS: Record<MemoryConsumer, { name: string; description: string; label: string }> = {
@@ -47,6 +52,7 @@ export const MEMORY_CONSUMER_DEFS: Record<MemoryConsumer, { name: string; descri
     adversario: { name: "Agente Adversário", label: "Agente Adversário", description: "Revisor adversário das mesas de desenvolvimento" },
     arquiteto: { name: "Agente Arquiteto", label: "Agente Arquiteto", description: "Desenha a arquitetura do plano aprovado das mesas de desenvolvimento" },
     desenvolvedor: { name: "Agente desenvolvedor", label: "Agente desenvolvedor", description: "Agente das mesas e forks das centrais de desenvolvimento" },
+    secretario: { name: "Agente Secretário", label: "Agente Secretário", description: "Responde no WhatsApp do dono com a personalidade dele" },
 }
 
 /**
@@ -68,6 +74,7 @@ export const MEMORY_TOKEN_SCOPES: Record<MemoryIdentity, string[]> = {
     adversario: ["read", "write", "delete"],
     arquiteto: ["read", "write", "delete"],
     desenvolvedor: ["read", "write", "delete"],
+    secretario: ["read", "write", "delete"],
     mentor: ["read", "write"],
 }
 
@@ -79,8 +86,11 @@ export interface AiAgentDef {
     title: string
     description: string
     tab: string
-    /** `central`: uma lista por central; `client`: uma lista por cliente do portal; `routine`: uma por agente rotineiro (slug). */
-    scope?: "central" | "client" | "routine"
+    /**
+     * `central`: uma lista por central; `client`: uma lista por cliente do portal; `routine`: uma por agente rotineiro (slug);
+     * `conversation`: uma por conversa do WhatsApp do Agente Secretário (id derivado do JID).
+     */
+    scope?: "central" | "client" | "routine" | "conversation"
     /** Canal do Engramind (nas listas com escopo, o prefixo seguido do id). */
     channel: string
     /** Agente dono da lista (`null` nas Memórias do Opex, de todos). */
@@ -212,6 +222,23 @@ export const AI_AGENTS: Record<AiAgentId, AiAgentDef> = {
         channel: "agentes/rotineiros",
         consumer: null,
     },
+    "secretary-global": {
+        label: "Agente Secretário (global)",
+        title: "Memórias globais do Secretário",
+        description: "Fatos e regras que o Agente Secretário segue em todas as conversas do WhatsApp (o que vale para qualquer contato).",
+        tab: "agente-secretario",
+        channel: "agentes/secretario/global",
+        consumer: "secretario",
+    },
+    "secretary-conversation": {
+        label: "Agente Secretário nesta conversa",
+        title: "Memórias da conversa",
+        description: "Fatos que o Agente Secretário segue só nesta conversa do WhatsApp (contato ou grupo): quem é, combinados, preferências.",
+        tab: "agente-secretario",
+        scope: "conversation",
+        channel: "agentes/secretario/conversas",
+        consumer: "secretario",
+    },
 }
 
 /** Lista com uma coleção por central (a memória exige `centralId`). */
@@ -229,6 +256,11 @@ export function isClientScopedAgent(agentId: AiAgentId): boolean {
     return AI_AGENTS[agentId].scope === "client"
 }
 
+/** Lista com uma coleção por conversa do WhatsApp (a memória exige `conversationId`). */
+export function isConversationScopedAgent(agentId: AiAgentId): boolean {
+    return AI_AGENTS[agentId].scope === "conversation"
+}
+
 export function isAiAgentId(value: string): value is AiAgentId {
     return (AI_AGENT_IDS as readonly string[]).includes(value)
 }
@@ -238,9 +270,20 @@ export interface MemoryListScope {
     centralId?: string | null
     clientId?: string | null
     routineSlug?: string | null
+    /** Conversa do Agente Secretário (`conversationIdOfJid`). */
+    conversationId?: string | null
 }
 
 const OBJECT_ID = /^[a-f0-9]{24}$/
+/**
+ * Id de conversa do Secretário: dígitos (contato), `g-<dígitos>` (grupo; os antigos têm `<número>-<ts>`) ou
+ * `lid-<dígitos>` (contato sem número). Ver `conversationIdOfJid` (`features/secretary-agent/conversation-id.ts`).
+ */
+const CONVERSATION_ID = /^(?:[0-9]{5,20}|g-[0-9]{5,25}(?:-[0-9]{5,15})?|lid-[0-9]{5,25})$/
+
+export function isConversationId(value: string | null | undefined): value is string {
+    return Boolean(value) && CONVERSATION_ID.test(value!)
+}
 /** Slug de agente rotineiro (`global` é o canal dos rotineiros, nunca um agente). */
 const ROUTINE_SLUG = /^[a-z0-9]+(?:-[a-z0-9]+)*$/
 
@@ -256,6 +299,10 @@ export function memoryChannelOf(agentId: AiAgentId, scope: MemoryListScope = {})
         const slug = scope.routineSlug?.trim()
         return isRoutineSlug(slug) ? `${def.channel}/${slug}` : null
     }
+    if (def.scope === "conversation") {
+        const id = scope.conversationId?.trim()
+        return isConversationId(id) ? `${def.channel}/${id}` : null
+    }
     const id = (def.scope === "central" ? scope.centralId : scope.clientId)?.trim().toLowerCase()
     return id && OBJECT_ID.test(id) ? `${def.channel}/${id}` : null
 }
@@ -265,6 +312,7 @@ export interface ResolvedMemoryList {
     centralId?: string
     clientId?: string
     routineSlug?: string
+    conversationId?: string
 }
 
 /** Lista de um canal (webhook, contexto); `null` para canal fora do mapeamento (ignorado pelos cards). */
@@ -282,6 +330,10 @@ export function listOfChannel(slug: string | null | undefined): ResolvedMemoryLi
             if (!isRoutineSlug(id)) continue
             return { agentId, routineSlug: id }
         }
+        if (def.scope === "conversation") {
+            if (!isConversationId(id)) continue
+            return { agentId, conversationId: id }
+        }
         if (!OBJECT_ID.test(id)) return null
         return def.scope === "central" ? { agentId, centralId: id } : { agentId, clientId: id }
     }
@@ -289,7 +341,13 @@ export function listOfChannel(slug: string | null | undefined): ResolvedMemoryLi
 }
 
 /** Turno de um agente: escopo do chat (dono ou portal com o cliente) ou a central da mesa. */
-export type MemoryTurn = { kind: "owner" } | { kind: "client"; clientId: string } | { kind: "review" } | { kind: "central"; centralId: string | null }
+export type MemoryTurn =
+    | { kind: "owner" }
+    | { kind: "client"; clientId: string }
+    | { kind: "review" }
+    | { kind: "central"; centralId: string | null }
+    /** Turno do Agente Secretário numa conversa do WhatsApp (`null` = fora de uma conversa, ex.: o teste). */
+    | { kind: "conversation"; conversationId: string | null }
 
 /** Listas lidas no turno, na ordem do prompt (Memórias do Opex primeiro). */
 export function contextListsFor(consumer: MemoryConsumer, turn: MemoryTurn): { agentId: AiAgentId; scope?: MemoryListScope }[] {
@@ -301,6 +359,11 @@ export function contextListsFor(consumer: MemoryConsumer, turn: MemoryTurn): { a
     }
     if (consumer === "adversario") return [app, { agentId: "adversarial" }]
     if (consumer === "arquiteto") return [app, { agentId: "architect" }]
+    if (consumer === "secretario") {
+        // Sem as Memórias do Opex: só o global do Secretário e o canal da conversa atual.
+        const conversation = turn?.kind === "conversation" && turn.conversationId ? [{ agentId: "secretary-conversation" as const, scope: { conversationId: turn.conversationId } }] : []
+        return [{ agentId: "secretary-global" }, ...conversation]
+    }
     const central = turn.kind === "central" && turn.centralId ? [{ agentId: "developer-central" as const, scope: { centralId: turn.centralId } }] : []
     return [app, { agentId: "developer-global" }, ...central]
 }
@@ -324,6 +387,8 @@ export function writableListsFor(consumer: MemoryConsumer, turn: MemoryTurn): Ai
     }
     if (consumer === "adversario") return ["app-global", "adversarial"]
     if (consumer === "arquiteto") return ["app-global", "architect"]
+    // Sem turno (texto da instrução, tela), só o global; numa conversa, também o canal dela.
+    if (consumer === "secretario") return turn?.kind === "conversation" && turn.conversationId ? ["secretary-global", "secretary-conversation"] : ["secretary-global"]
     return turn.kind === "central" && turn.centralId ? ["app-global", "developer-global", "developer-central"] : ["app-global", "developer-global"]
 }
 
@@ -334,6 +399,8 @@ export const MEMORY_SUBSCRIPTION_TARGETS: Record<MemoryIdentity, string[]> = {
     adversario: [APP_MEMORY_CHANNEL, "agentes/adversario"],
     arquiteto: [APP_MEMORY_CHANNEL, "agentes/arquiteto"],
     desenvolvedor: [APP_MEMORY_CHANNEL, "agentes/desenvolvedor/*"],
+    // O Secretário não assina as Memórias do Opex (OPE-192).
+    secretario: ["agentes/secretario/*"],
     // Só onde o Mentor grava (o token de agente só escreve nos canais que assina).
     mentor: ["agentes/adversario", "agentes/desenvolvedor/*"],
 }

@@ -490,6 +490,14 @@ assinatura HMAC (não é token de sistema). Componentes compartilhados nascidos 
 (`src/components/ui/info-tooltip.tsx`) e `SecretReveal` (`src/components/ui/secret-reveal.tsx`, usado
 também pelo `ApiTokenReveal`). Detalhes em `modules/engramind.md`.
 
+### Evolution API
+
+Integração `evolution-api` (OPE-192, interno, sem `env`): WhatsApp pela Evolution API. Pré-preenchimento pelo
+ambiente `evolution-api` sem expor a chave, instância com pareamento por QR code ou código, webhook público
+`POST /api/evolution/webhook` autenticado só pelo header `x-opex-webhook-secret` (não é token de sistema),
+operações e aba Debug. A rotina interna `engramind-pending-writes` (1 min) entrou nos Crons padrão com a fila de
+pendências do Engramind. Detalhes em `modules/evolution-api.md` e `modules/secretary-agent.md`.
+
 ### Planejado (em desenvolvimento)
 
 - **Google Drive**: fonte de tarefas a partir de planilhas do Google Sheets.

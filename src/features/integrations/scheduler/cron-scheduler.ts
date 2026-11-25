@@ -9,6 +9,7 @@ import {
     GITHUB_ISSUE_SYNC_JOB_ID,
     HEALTH_CHECK_JOB_ID,
     HOST_METRICS_JOB_ID,
+    ENGRAMIND_PENDING_WRITES_JOB_ID,
     MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPENCODE_QUOTA_JOB_ID,
     OPENCODE_GO_USAGE_JOB_ID,
@@ -461,6 +462,11 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(HOST_METRICS_JOB_ID, async () => {
         const { runHostMetricsRefresh } = await import("@/features/host-metrics/server/service")
         return runHostMetricsRefresh()
+    })
+    registerInternalJob(ENGRAMIND_PENDING_WRITES_JOB_ID, async () => {
+        const { flushPendingWrites } = await import("@/features/engramind/server/pending-writes")
+        const result = await flushPendingWrites()
+        return `${result.done} gravada(s), ${result.failed} descartada(s), ${result.remaining} pendente(s)`
     })
     registerInternalJob(BUILDER_MACHINE_CLEANUP_JOB_ID, async () => {
         const { runBuilderMachineCleanup } = await import("@/features/local-docker/server/cleanup")

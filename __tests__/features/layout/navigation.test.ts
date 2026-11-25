@@ -26,6 +26,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
                 [
                     ["Opex", "/agente-opex"],
                     ["Maddox", "/agente-maddox"],
+                    ["Secretário", "/agente-secretario"],
                     ["Orçamentista", "/agente-orcamentista"],
                     ["Catalogador", "/agente-catalogador"],
                     ["Refinador", "/agente-refinador"],
@@ -64,6 +65,7 @@ describe("navegação em seções (padrão SideNavigation do DS Sipal)", () => {
             "/engramind",
             "/agente-opex",
             "/agente-maddox",
+            "/agente-secretario",
             "/agente-orcamentista",
             "/agente-catalogador",
             "/agente-refinador",
@@ -171,9 +173,9 @@ describe("contadores do menu", () => {
 describe("categoria Agentes (OPE-122)", () => {
     const agentes = APP_NAV[0]!.items.filter(isNavGroup).find((group) => group.id === "agentes")!
 
-    it("lista os 11 itens do catálogo (os 10 agentes e os Rotineiros, OPE-130), na ordem do fluxo, sem a palavra Agente no rótulo", () => {
+    it("lista os 12 itens do catálogo (os 11 agentes e os Rotineiros, OPE-130), na ordem do fluxo, sem a palavra Agente no rótulo", () => {
         expect(agentes.items.map((item) => item.href)).toEqual(AGENT_CATALOG.map((agent) => agent.href))
-        expect(agentes.items).toHaveLength(11)
+        expect(agentes.items).toHaveLength(12)
         for (const item of agentes.items) expect(item.label).not.toMatch(/agente/i)
         for (const item of agentes.items) expect(item.title).toMatch(/^Agentes? /)
     })

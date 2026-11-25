@@ -1013,6 +1013,23 @@ inativa (`403 OWNER_MEMORY_PROTECTED`). Auditoria `MemoriaAgente` com texto, ori
 pendente, disponibilidade e memórias fora do contexto. O resumo é o título do Redator (primeira frase
 enquanto `title_state = pending`).
 
+### Fila de pendências (OPE-192, `server/pending-writes.ts`)
+
+Com o Engramind fora do ar (`ENGRAMIND_UNREACHABLE`, `PROXY_MASKED`, `DATABASE_UNAVAILABLE`, `REQUEST_TIMEOUT`,
+`MIGRATIONS_PENDING`), a gravação de memória de um agente que usa a fila (hoje o Agente Secretário: criar,
+editar e ativar/desativar) vai para `engramind_pending_writes` com `_id = <canal>:<alvo>` (hash do texto ao criar,
+id da memória ao editar) e a ferramenta devolve `pendente:<chave>`. A rotina interna `engramind-pending-writes`
+(1 min, Crons) reprocessa as mais antigas primeiro, para no primeiro sinal de que o Engramind segue fora e descarta
+(com log) a pendência que o Engramind recusa por regra. Nunca guarda token.
+
+### Agente Secretário (OPE-192)
+
+Consumidor `secretario` (identidade `opex/secretario`) com as listas `secretary-global`
+(`agentes/secretario/global`) e `secretary-conversation` (escopo `conversation`,
+`agentes/secretario/conversas/<id>`; id por `conversationIdOfJid`). Assina só `agentes/secretario/*`: não lê as
+Memórias do Opex. Os canais das conversas aparecem no universo com o nome do contato/grupo
+(`secretaryChannelLabels`, número na dica). Ver `modules/secretary-agent.md`.
+
 ### Aprendizado autônomo ("Memória própria")
 
 Ver `aicontext/modules/ai.md`, "Aprendizado autônomo".
