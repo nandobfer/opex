@@ -44,7 +44,7 @@ vi.mock('@/lib/crypto/secretBox', () => ({
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { find: () => ({ select: () => ({ lean: async () => [] }) }) } }))
 
 import { MEMORY_IDENTITIES, MEMORY_TOKEN_SCOPES, isOpexMemoryAgent } from '@/features/ai/agents'
-import { agentTokenFor, ensureAgentMemoryNetwork, resetMemoryNetworkForTests } from '@/features/engramind/server/memory-network'
+import { agentMemoryStatus, agentTokenFor, ensureAgentMemoryNetwork, resetMemoryNetworkForTests } from '@/features/engramind/server/memory-network'
 
 const tokenOf = (agent: string) => [...holder.fake.state.tokens.values()].filter((item) => item.agent === agent)
 const subscriptionsOf = (agent: string) => holder.fake.state.subscriptions.filter((item) => item.agent === `opex/${agent}`).map((item) => item.target)
@@ -55,6 +55,21 @@ beforeEach(() => {
   holder.appToken = undefined
   holder.updateFails = false
   resetMemoryNetworkForTests()
+})
+
+describe('agentMemoryStatus (Cadastrar agente no universo)', () => {
+  it('agente que não existe vira exists: false e o cadastro o cria', async () => {
+    expect(await agentMemoryStatus('secretario')).toEqual({ exists: false, disabled: false })
+    const { step } = await ensureAgentMemoryNetwork('local')
+    expect(step.status).toBe('ok')
+    expect(await agentMemoryStatus('secretario')).toEqual({ exists: true, disabled: false })
+  })
+
+  it('outros erros do Engramind sobem (a tela mostra Tentar novamente)', async () => {
+    const spy = vi.spyOn(holder.fake, 'engramindCall').mockRejectedValueOnce(new Error('Engramind fora'))
+    await expect(agentMemoryStatus('secretario')).rejects.toThrow('Engramind fora')
+    spy.mockRestore()
+  })
 })
 
 describe('rede das memórias dos agentes', () => {

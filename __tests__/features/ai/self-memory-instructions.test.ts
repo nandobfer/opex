@@ -10,6 +10,7 @@ const TURNS: Record<MemoryConsumer, MemoryTurn> = {
   adversario: { kind: 'review' },
   arquiteto: { kind: 'review' },
   desenvolvedor: { kind: 'central', centralId: 'a'.repeat(24) },
+  secretario: { kind: 'conversation', conversationId: '5531999999999' },
 }
 
 describe('instrução de memória própria', () => {

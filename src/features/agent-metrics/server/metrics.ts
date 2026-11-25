@@ -8,6 +8,7 @@ import { createMetricsContext, filterOptions, lastUsedAt, runTotalsOf, usageOf, 
 import { developerMetrics } from "./developer"
 import { ensureFreshRuns } from "./usage-daily"
 import { agentAvailability } from "./availability"
+import { secretaryMetrics } from "@/features/secretary-agent/server/metrics"
 
 const USAGE_UNITS: Record<AgentId, string> = {
     opex: "respostas",
@@ -21,6 +22,7 @@ const USAGE_UNITS: Record<AgentId, string> = {
     revisor: "revisões",
     mentor: "execuções",
     rotineiros: "execuções",
+    secretario: "mensagens",
 }
 
 /**
@@ -46,6 +48,7 @@ const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<AgentMetricsPart
     revisor: reviewerMetrics,
     mentor: mentorMetrics,
     rotineiros: routineMetrics,
+    secretario: secretaryMetrics,
 }
 
 /**

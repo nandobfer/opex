@@ -19,7 +19,8 @@ import { useAgentActivity } from "../hooks/useAgentActivity"
 import { useRelatedMemories } from "../hooks/useRelatedMemories"
 import { useUniverseLayout } from "../hooks/useUniverseLayout"
 import { useOrcamentoClients } from "@/features/orcamentos/hooks/useOrcamentos"
-import { centralChannelLabels, clientChannelLabels } from "../network/channel-labels"
+import { centralChannelLabels, clientChannelLabels, secretaryChannelLabels } from "../network/channel-labels"
+import { useSecretaryChannelContacts } from "@/features/evolution-api/hooks/useEvolution"
 import { agentIcon } from "./network/agent-icons"
 import { AboutCard } from "./page/AboutCard"
 import { ChannelSettingsCard } from "./page/channels/ChannelSettingsCard"
@@ -77,10 +78,16 @@ export function OpexEngramindProvider({ children, channelLabels = true }: { chil
     const router = useRouter()
     const centrals = useCentrals(channelLabels)
     const clients = useOrcamentoClients({ enabled: channelLabels })
+    const conversations = useSecretaryChannelContacts(channelLabels)
     // Siglas das centrais e nomes dos clientes no lugar do id do canal (OPE-148: canais de cliente no universo único).
     const labels = useMemo(
-        () => new Map([...centralChannelLabels(Array.isArray(centrals.data) ? centrals.data : []), ...clientChannelLabels(Array.isArray(clients.data) ? clients.data : [])]),
-        [centrals.data, clients.data],
+        () =>
+            new Map([
+                ...centralChannelLabels(Array.isArray(centrals.data) ? centrals.data : []),
+                ...clientChannelLabels(Array.isArray(clients.data) ? clients.data : []),
+                ...secretaryChannelLabels(Array.isArray(conversations.data) ? conversations.data : []),
+            ]),
+        [centrals.data, clients.data, conversations.data],
     )
     const activity = useAgentActivity()
     // Layout dos universos (aba Visualização): vale para a rede, os universos de IA e os dos rotineiros; muda ao vivo.

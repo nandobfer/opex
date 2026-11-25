@@ -7,11 +7,25 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { OpexEngramindProvider } from "@/features/engramind/components/OpexEngramindProvider"
 import { useMemoriesMeta } from "../../hooks/useMemories"
 import { MemoriesNotices, type NoticesUniverse } from "./MemoriesNotices"
+import { AgentMissingState } from "./AgentMissingState"
+import { useAgentMemoryStatus } from "../../hooks/useAgentProvision"
+import type { MemoryIdentity } from "../../agents"
 
 /** Avisos do universo (migração pendente, Engramind indisponível, memórias fora do contexto do agente). */
 function UniverseNotices({ universe }: { universe: NoticesUniverse }) {
     const meta = useMemoriesMeta()
     return <MemoriesNotices meta={meta.data} universe={universe} />
+}
+
+function Universe({ agent, defaultCreateChannel, includeChannel }: { agent: string; defaultCreateChannel: string; includeChannel: ((slug: string) => boolean) | null }) {
+    return <OpexEngramindProvider><AgentUniverse agent={agent} defaultCreateChannel={defaultCreateChannel} includeChannel={includeChannel} fill="viewport" /></OpexEngramindProvider>
+}
+
+/** Agente que não existe (ou está desativado) no Engramind: o estado vazio do Opex com a ação no lugar do universo. */
+function UniverseOrMissing({ consumer, universe }: { consumer: MemoryIdentity; universe: React.ReactNode }) {
+    const status = useAgentMemoryStatus(consumer)
+    if (status.data && (!status.data.exists || status.data.disabled)) return <AgentMissingState consumer={consumer} status={status.data} />
+    return universe
 }
 
 export interface AgentUniverseCardProps {
@@ -25,6 +39,11 @@ export interface AgentUniverseCardProps {
     /** Consumidor dos avisos de memórias (`null` = sem avisos, ex.: rotineiros). */
     noticesConsumer?: string | null
     title?: string
+    /**
+     * Identidade de memórias do Opex: confere se o agente existe no Engramind e, se não existir, mostra o estado vazio
+     * com "Cadastrar agente no Engramind" no lugar do universo (a lib só mostra o aviso, sem ação).
+     */
+    consumer?: MemoryIdentity | null
 }
 
 /**
@@ -34,7 +53,7 @@ export interface AgentUniverseCardProps {
  * `/engramind` (OPE-151): o card é a âncora "bloco" do `fill="viewport"` e o canvas fica com o que sobra, com o
  * mínimo da lib.
  */
-export function AgentUniverseCard({ agent, description, defaultCreateChannel, channels = null, noticesConsumer = null, title = "Rede de memórias" }: AgentUniverseCardProps) {
+export function AgentUniverseCard({ agent, description, defaultCreateChannel, channels = null, noticesConsumer = null, title = "Rede de memórias", consumer = null }: AgentUniverseCardProps) {
     const channelsKey = channels ? channels.join("\n") : ""
     // Função estável: a lib memoriza o universo por ela.
     const includeChannel = useMemo(() => {
@@ -53,9 +72,11 @@ export function AgentUniverseCard({ agent, description, defaultCreateChannel, ch
             </CardHeader>
             <CardContent className="flex flex-col gap-3">
                 {universe && <UniverseNotices universe={universe} />}
-                <OpexEngramindProvider>
-                    <AgentUniverse agent={agent} defaultCreateChannel={defaultCreateChannel} includeChannel={includeChannel} fill="viewport" />
-                </OpexEngramindProvider>
+                {consumer ? (
+                    <UniverseOrMissing consumer={consumer} universe={<Universe agent={agent} defaultCreateChannel={defaultCreateChannel} includeChannel={includeChannel} />} />
+                ) : (
+                    <Universe agent={agent} defaultCreateChannel={defaultCreateChannel} includeChannel={includeChannel} />
+                )}
             </CardContent>
         </Card>
     )

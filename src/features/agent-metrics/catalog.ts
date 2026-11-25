@@ -1,4 +1,4 @@
-import { Bot, Calculator, CodeXml, GitPullRequest, GraduationCap, Orbit, Repeat, Swords, Tags, Wand2, type LucideIcon } from "lucide-react"
+import { Bot, Calculator, CodeXml, GitPullRequest, GraduationCap, MessagesSquare, Orbit, Repeat, Swords, Tags, Wand2, type LucideIcon } from "lucide-react"
 import type { AiTab } from "@/features/ai/constants"
 import { ARCHITECT_ICON } from "@/features/architect-agent/components/icons"
 
@@ -9,7 +9,7 @@ import { ARCHITECT_ICON } from "@/features/architect-agent/components/icons"
  * palavra "Agente"; o título da página leva.
  */
 
-export const AGENT_IDS = ["opex", "maddox", "orcamentista", "catalogador", "refinador", "desenvolvedor", "arquiteto", "adversario", "revisor", "mentor", "rotineiros"] as const
+export const AGENT_IDS = ["opex", "maddox", "secretario", "orcamentista", "catalogador", "refinador", "desenvolvedor", "arquiteto", "adversario", "revisor", "mentor", "rotineiros"] as const
 export type AgentId = (typeof AGENT_IDS)[number]
 
 export interface AgentDef {
@@ -54,6 +54,18 @@ export const AGENT_CATALOG: readonly AgentDef[] = [
         href: "/agente-maddox",
         settingsTab: "agente-maddox",
         filters: { client: true, repo: false },
+        hasHistory: true,
+        hasMemories: true,
+    },
+    {
+        id: "secretario",
+        navLabel: "Secretário",
+        title: "Agente Secretário",
+        description: "Respostas no WhatsApp, conversas atendidas, pausas, perguntas ao dono e consumo.",
+        icon: MessagesSquare,
+        href: "/agente-secretario",
+        settingsTab: "agente-secretario",
+        filters: { client: false, repo: false },
         hasHistory: true,
         hasMemories: true,
     },

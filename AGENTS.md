@@ -232,6 +232,11 @@ sem pedido explícito.
   (`{ pluginId, event, data }`) em `private-app`, publicado pelo servidor de um plugin com `ctx.realtime.publish`;
   `plugin-debug` (`{ entries }`, linhas de log) em `private-plugin-{pluginId}` (só o dono), para o debug do
   plugin (ver `aicontext/modules/plugins.md`).
+- Evolution API (OPE-192): `evolution-updated` (`{ type, instance }`, sem o QR nem dados do perfil) em `private-app` a
+  cada mudança de conexão, QR code, contatos, opções, instâncias ou webhook (ver `aicontext/modules/evolution-api.md`).
+- Agente Secretário (OPE-192): `secretary-decision-recorded` (`{ chatId }`), `secretary-conversation-updated`
+  (`{ chatId }`), `secretary-notices-updated` (`{ pending }`), `secretary-personality-updated` (`{ versionId }`) e
+  `secretary-analysis-updated` (`{ id }`) em `private-app` (ver `aicontext/modules/secretary-agent.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`

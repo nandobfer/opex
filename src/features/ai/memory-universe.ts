@@ -13,6 +13,7 @@ const DEFAULT_CREATE_LIST: Record<MemoryConsumer, AiAgentId> = {
     adversario: "adversarial",
     arquiteto: "architect",
     desenvolvedor: "developer-global",
+    secretario: "secretary-global",
 }
 
 export interface MemoryUniverseDef {

@@ -18,10 +18,11 @@ export const selfMemorySettingsSchema = z.object({
     adversario: z.boolean(),
     arquiteto: z.boolean(),
     desenvolvedor: z.boolean(),
+    secretario: z.boolean(),
 })
 export type SelfMemorySettings = z.infer<typeof selfMemorySettingsSchema>
 
-export const DEFAULT_SELF_MEMORY_SETTINGS: SelfMemorySettings = { opex: true, maddox: true, adversario: true, arquiteto: true, desenvolvedor: true }
+export const DEFAULT_SELF_MEMORY_SETTINGS: SelfMemorySettings = { opex: true, maddox: true, adversario: true, arquiteto: true, desenvolvedor: true, secretario: true }
 
 /** Gravações (criar, editar, fixar, ativar/inativar, excluir) aceitas por turno do agente. */
 export const SELF_MEMORY_TURN_LIMIT = 5
@@ -102,6 +103,8 @@ function listGuide(consumer: MemoryConsumer, turn: MemoryTurn): string[] {
             architect: "como desenhar a arquitetura deste app (camadas, nomes, o que destacar ou omitir)",
             "developer-global": "como trabalhar em qualquer projeto",
             "developer-central": "convenções, comandos, caminhos e preferências deste projeto (a central da mesa)",
+            "secretary-global": "fatos e regras que valem em qualquer conversa do WhatsApp (sobre o dono, a agenda, o trabalho)",
+            "secretary-conversation": "o que vale só nesta conversa: quem é a pessoa ou o grupo, combinados, preferências, assuntos em aberto",
         }
         return `- \`${id}\` (${def.title}): ${hint[id] ?? def.description}`
     })
