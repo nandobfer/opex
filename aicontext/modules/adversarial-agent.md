@@ -65,7 +65,10 @@ adversarial_blocked ─┬─ Corrigir (texto opcional, achados desmarcáveis) �
   commitado e os arquivos novos, mais o **contexto configurado**. A partir da 2ª rodada: conferir os
   achados anteriores (`previous`), aceitar contestações com evidência e não trocar de objetivo.
 - Agente, modelo, variante e **modelos de fallback** da configuração (`runWithFallback` da mesa);
-  tempo máximo configurável. **Cota/limite do provedor (OPE-181)**: o turno leva
+  tempo máximo configurável. O modelo da aba é o **padrão**: cada mesa pode trocá-lo (modelo e variante) na
+  seção **Agente Adversário** do popover "Modelos por etapa" (OPE-187, `modelOverrides.adversarial`,
+  `AdversaryRoundInput.modelOverride`), a partir da próxima rodada; agente e fallbacks continuam os da aba (ver
+  `modules/agentic-dev.md`, "Trocar o modelo na mesa e no fork"). **Cota/limite do provedor (OPE-181)**: o turno leva
   `providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY`; com 429/cota e o `retry-after` acima de 60 s (ou na 3ª
   tentativa), desiste em segundos e o próximo modelo assume na mesma sessão, com o aviso na saída
   ("Agente adversário: X falhou (motivo): continuando com Y — fallback 1 de N.") e no log (`from`, `to`,

@@ -13,9 +13,10 @@ const HIDDEN_STAGES: readonly WorkbenchDto["stage"][] = ["finishing", "done"]
 
 /**
  * Modelo da mesa na barra inferior: o texto do modelo e da variante em uso na etapa atual (na
- * revisão adversária, o do Agente Adversário, só leitura) e um botão de configuração que abre o
- * popover com o modelo de cada etapa (mesa > central > padrão global). Oculto em Concluindo e
- * Concluída e quando a central não pôde ser lida.
+ * revisão adversária, o do Agente Adversário, com a troca desta mesa — OPE-187) e um botão de
+ * configuração que abre o popover com o modelo de cada etapa (mesa > central > padrão global; no
+ * Refinamento e no Agente Adversário, mesa > aba do agente). Oculto em Concluindo e Concluída e quando a
+ * central não pôde ser lida.
  */
 export function WorkbenchModelSettings({ workbench, buttonClassName }: { workbench: WorkbenchDto; buttonClassName?: string }) {
     const models = useAiModels("opencode")
@@ -23,12 +24,7 @@ export function WorkbenchModelSettings({ workbench, buttonClassName }: { workben
     if (!workbench.models || HIDDEN_STAGES.includes(workbench.stage)) return null
     const role = STAGE_MODEL_ROLE[workbench.stage]
     const choice = role ? workbench.models[role] : null
-    const adversarial = workbench.stage === "adversarial_review" ? workbench.adversarialModel : null
-    const inUse = choice && role
-        ? { label: WORKBENCH_MODEL_ROLE_LABELS[role], choice, sourceText: choice.source ? MODEL_SOURCE_LABELS[choice.source] : undefined, highlighted: choice.overridden }
-        : adversarial
-          ? { label: "Modelo do Agente Adversário", choice: adversarial, sourceText: "configurado na aba Agente Adversário" }
-          : null
+    const inUse = choice && role ? { label: WORKBENCH_MODEL_ROLE_LABELS[role], choice, sourceText: choice.source ? MODEL_SOURCE_LABELS[choice.source] : undefined, highlighted: choice.overridden } : null
     const pendingRole = pendingRoleOf(mutation)
     return (
         <ModelSettingsControl

@@ -8,6 +8,7 @@ export const MODEL_SOURCE_LABELS: Record<ModelSourceDto, string> = {
     central: "da central",
     global: "do padrão global",
     refiner: "do Agente Refinador",
+    adversary: "do Agente Adversário",
 }
 
 /** Nome do modelo para a tela (catálogo do OpenCode) ou "Padrão do agente". */

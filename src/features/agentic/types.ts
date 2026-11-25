@@ -85,8 +85,11 @@ export interface SlotQueueDto {
     action: PendingTurnAction
 }
 
-/** De onde vem o modelo efetivo: troca do fork, troca da mesa, central ou Configurações Padrão (global). */
-export type ModelSourceDto = "fork" | "workbench" | "central" | "global" | "refiner"
+/**
+ * De onde vem o modelo efetivo: troca do fork, troca da mesa, central, Configurações Padrão (global),
+ * Agente Refinador (papel Refinamento) ou Agente Adversário (papel de mesmo nome — OPE-187).
+ */
+export type ModelSourceDto = "fork" | "workbench" | "central" | "global" | "refiner" | "adversary"
 
 /** Modelo efetivo de um papel na mesa ou no fork: o do papel (`overridden: false`) ou o trocado. */
 export interface ModelChoiceDto {
@@ -102,8 +105,11 @@ export interface ModelChoiceDto {
     inheritedSource?: ModelSourceDto
 }
 
-/** Modelos da mesa por papel; o "Refinamento" só existe enquanto a mesa está no refinamento (OPE-137). */
-export type WorkbenchModelsDto = Omit<Record<WorkbenchModelRole, ModelChoiceDto>, "refinement"> & { refinement?: ModelChoiceDto }
+/**
+ * Modelos da mesa por papel; o "Refinamento" só existe enquanto a mesa está no refinamento (OPE-137) e o
+ * "Agente Adversário" só quando a revisão adversária se aplica à mesa (OPE-187).
+ */
+export type WorkbenchModelsDto = Omit<Record<WorkbenchModelRole, ModelChoiceDto>, "refinement" | "adversarial"> & { refinement?: ModelChoiceDto; adversarial?: ModelChoiceDto }
 
 export interface WorkbenchDto {
     id: string
@@ -154,8 +160,6 @@ export interface WorkbenchDto {
     forksDonePrompt: { count: number; at: string } | null
     /** Modelo efetivo de cada papel da conversa principal (`null` quando a central não pôde ser lida). */
     models: WorkbenchModelsDto | null
-    /** Modelo do Agente Adversário (aba própria; só leitura na mesa), quando ele se aplica à mesa. */
-    adversarialModel: { model: string | null; variant: string | null } | null
     /** Chat durante a execução (padrão global + ajuste da central): mensagens com o agente trabalhando. */
     liveChat: boolean
     /** O Agente Adversário se aplica a esta mesa (ativo e a central no escopo): passo "Revisão adversária" na trilha. */

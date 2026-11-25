@@ -38,6 +38,13 @@ describe('rotas de troca de modelo', () => {
     expect(mocks.setWorkbenchModel).not.toHaveBeenCalled()
   })
 
+  it('mesa: papel do Agente Adversário é aceito (OPE-187)', async () => {
+    expect((await putWorkbench({ role: 'adversarial', model: 'openai/gpt-5', variant: null })).status).toBe(200)
+    expect(mocks.setWorkbenchModel).toHaveBeenCalledWith('w1', { role: 'adversarial', model: 'openai/gpt-5', variant: null })
+    expect((await putWorkbench({ role: 'adversarial', model: null })).status).toBe(200)
+    expect(mocks.setWorkbenchModel).toHaveBeenLastCalledWith('w1', { role: 'adversarial', model: null, variant: null })
+  })
+
   it('fork: troca o modelo; modelo vazio é recusado (400)', async () => {
     expect((await putFork({ model: 'openai/gpt-5', variant: null })).status).toBe(200)
     expect(mocks.setForkModel).toHaveBeenCalledWith('w1', 'f1', { model: 'openai/gpt-5', variant: null })

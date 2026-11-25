@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { STAGE_MODEL_ROLE, WORKBENCH_STAGES } from '@/features/agentic/constants'
-import { applyModelOverride, asModelOverride, draftWorkbenchModels, modelSource, optimisticModelChoice } from '@/features/agentic/logic'
+import { applyModelOverride, asModelOverride, draftWorkbenchModels, modelSource, optimisticModelChoice, roleModelSource } from '@/features/agentic/logic'
 import { describeModel, forkBaseAgent, forkModelChoice, toModelChoice, workbenchModelChoice, workbenchOverrides, workbenchTurnAgent } from '@/features/agentic/server/models'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
@@ -22,6 +22,8 @@ describe('troca de modelo: regras', () => {
     expect(STAGE_MODEL_ROLE.plan_review).toBe('planning')
     expect(STAGE_MODEL_ROLE.changes_requested).toBe('planning')
     expect(STAGE_MODEL_ROLE.implementing).toBe('implementation')
+    // OPE-187: a revisão adversária troca o modelo do Agente Adversário (antes era só leitura).
+    expect(STAGE_MODEL_ROLE.adversarial_review).toBe('adversarial')
     expect(STAGE_MODEL_ROLE.preview).toBe('build')
     expect(STAGE_MODEL_ROLE.resolving_conflicts).toBe('pr')
     expect(STAGE_MODEL_ROLE.deleting_pr_branch).toBe('pr')
@@ -61,6 +63,31 @@ describe('troca de modelo: regras', () => {
       inherited: { model: 'openai/o3', variant: 'high' },
       inheritedSource: 'central',
     })
+  })
+
+  it('Agente Adversário (OPE-187): só entra com o agente da aba; herda dele e a troca local vira da mesa', () => {
+    const config = defaultCentralConfig('/home/u/app')
+    const adversary = { agent: 'review', model: 'openai/gpt-5', variant: 'high', fallbacks: [] }
+    expect(draftWorkbenchModels(DEFAULT_AGENTIC_SETTINGS, config, {})).not.toHaveProperty('adversarial')
+    expect(draftWorkbenchModels(DEFAULT_AGENTIC_SETTINGS, config, {}, null, adversary).adversarial).toEqual({
+      model: 'openai/gpt-5',
+      variant: 'high',
+      overridden: false,
+      inherited: { model: 'openai/gpt-5', variant: 'high' },
+      source: 'adversary',
+      inheritedSource: 'adversary',
+    })
+    expect(draftWorkbenchModels(DEFAULT_AGENTIC_SETTINGS, config, { adversarial: { model: 'anthropic/opus', variant: null } }, null, adversary).adversarial).toMatchObject({
+      model: 'anthropic/opus',
+      variant: null,
+      overridden: true,
+      source: 'workbench',
+      inheritedSource: 'adversary',
+    })
+    expect(roleModelSource(config, 'adversarial')).toBe('adversary')
+    const doc = { modelOverrides: { adversarial: { model: 'anthropic/opus', variant: 'low' } } }
+    expect(workbenchOverrides(doc)).toEqual({ adversarial: { model: 'anthropic/opus', variant: 'low' } })
+    expect(workbenchModelChoice(DEFAULT_AGENTIC_SETTINGS, config, doc, 'adversarial', null, adversary)).toMatchObject({ model: 'anthropic/opus', variant: 'low', source: 'workbench', inherited: { model: 'openai/gpt-5', variant: 'high' } })
   })
 
   it('descrição do modelo', () => {

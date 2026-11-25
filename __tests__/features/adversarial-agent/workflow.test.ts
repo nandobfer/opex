@@ -79,7 +79,7 @@ vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask, move
 vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi.fn(() => 'tarefa') }))
 vi.mock('@/features/adversarial-agent/server/workflow-hook', () => ({
   adversaryApplies: mocks.applies,
-  adversaryModel: vi.fn(async () => ({ model: 'openai/gpt-5', variant: null })),
+  adversaryAgent: vi.fn(async () => ({ agent: 'review', model: 'openai/gpt-5', variant: null, fallbacks: [] })),
   runAdversaryRound: mocks.round,
   prepareUserFix: mocks.prepareUserFix,
   recordSkip: mocks.recordSkip,
@@ -141,8 +141,16 @@ describe('fim da implementação com o agente adversário', () => {
     const wb = await workbench()
     await implement(wb._id)
     await waitFor('build_queued')
-    expect(mocks.round).toHaveBeenCalledWith(expect.objectContaining({ workbenchId: wb._id, worktreePath: '/home/u/app/worktrees/opx-1', baseBranch: 'main', implementationText: 'Implementado.' }))
+    expect(mocks.round).toHaveBeenCalledWith(expect.objectContaining({ workbenchId: wb._id, worktreePath: '/home/u/app/worktrees/opx-1', baseBranch: 'main', implementationText: 'Implementado.', modelOverride: null }))
     expect(stages()).toEqual(['implementing'])
+  })
+
+  it('a rodada usa a troca do Agente Adversário gravada nesta mesa (OPE-187)', async () => {
+    mocks.round.mockResolvedValue({ kind: 'proceed', level: 'success', message: 'Aprovado' })
+    const wb = await workbench({ modelOverrides: { adversarial: { model: 'anthropic/opus', variant: 'high' }, implementation: { model: 'openai/o3', variant: null } } })
+    await implement(wb._id)
+    await waitFor('build_queued')
+    expect(mocks.round).toHaveBeenCalledWith(expect.objectContaining({ modelOverride: { model: 'anthropic/opus', variant: 'high' } }))
   })
 
   it('adversário desativado ou fora do escopo: fluxo de sempre, sem revisão', async () => {
@@ -273,10 +281,14 @@ describe('reinício e chat durante a revisão', () => {
 
   it('a mesa expõe se o adversário se aplica (passo na trilha)', async () => {
     const wb = await workbench()
-    // OPE-126: com o adversário aplicável, a mesa traz o modelo dele (texto da revisão adversária).
-    expect(await getWorkbench(wb._id)).toMatchObject({ adversarial: true, adversarialModel: { model: 'openai/gpt-5', variant: null } })
+    // OPE-187: com o adversário aplicável, os modelos da mesa trazem o papel dele (herdado da aba do agente).
+    const dto = await getWorkbench(wb._id)
+    expect(dto).toMatchObject({ adversarial: true, models: { adversarial: { model: 'openai/gpt-5', variant: null, overridden: false, source: 'adversary' } } })
+    expect(dto).not.toHaveProperty('adversarialModel')
     mocks.applies.mockResolvedValue(false)
-    expect(await getWorkbench(wb._id)).toMatchObject({ adversarial: false, adversarialModel: null })
+    const without = await getWorkbench(wb._id)
+    expect(without.adversarial).toBe(false)
+    expect(without.models).not.toHaveProperty('adversarial')
   })
 
   it('sem chat durante a revisão (guarda no servidor)', async () => {

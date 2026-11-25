@@ -6,6 +6,8 @@ import { ReasonButton } from "@/components/ui/reason-button"
 import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
 import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
 import { useRefinementRealtime, useTaskRefinement } from "@/features/refinement/hooks/useRefinement"
+import { useAdversarialSettings } from "@/features/adversarial-agent/hooks/useAdversarial"
+import { adversaryAppliesTo } from "@/features/adversarial-agent/scope"
 import type { WorkbenchModelRole } from "../../constants"
 import { useAgenticSettings, useCentralQueue, useRefineWorkbench, useStartWorkbench } from "../../hooks/useAgentic"
 import { useFieldAttachments } from "../../hooks/useWorkbenchFiles"
@@ -34,6 +36,9 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
     const task = useTaskDetail(taskId)
     const settings = useAgenticSettings()
     const refinementState = useTaskRefinement(taskId)
+    const adversarialSettings = useAdversarialSettings().data?.settings
+    // Seção "Agente Adversário" só quando a revisão adversária vai rodar nas mesas desta central (OPE-187).
+    const adversary = adversarialSettings && adversaryAppliesTo(adversarialSettings, central.id) ? adversarialSettings.agent : null
     const queue = useCentralQueue(central.id)
     const start = useStartWorkbench()
     const refine = useRefineWorkbench()
@@ -109,7 +114,7 @@ export function StartWorkbench({ central, taskId }: { central: CentralDto; taskI
                 <div className="flex flex-wrap items-center gap-2">
                     {/* Modelos (à esquerda) e os botões (à direita), como na barra da mesa. */}
                     <div className="mr-auto flex min-w-0 max-w-full items-center gap-3">
-                        <StartWorkbenchModelSettings central={central} settings={settings.data?.settings} overrides={modelOverrides} refiner={refinementState.data?.refinerModel ?? null} onChange={setRoleModel} />
+                        <StartWorkbenchModelSettings central={central} settings={settings.data?.settings} overrides={modelOverrides} refiner={refinementState.data?.refinerModel ?? null} adversary={adversary} onChange={setRoleModel} />
                     </div>
                     <div className="ml-auto flex min-w-0 flex-wrap items-center justify-end gap-2">
                         <ReasonButton variant="outline" disabled={pending} disabledReason={refineBlock} onClick={onRefine}>

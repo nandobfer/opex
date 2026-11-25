@@ -1,7 +1,7 @@
 import type { IAgenticFork, IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { WORKBENCH_MODEL_ROLE_LABELS, WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "../constants"
 import { loadTaskRefinementSettings } from "@/features/ai/server/settings"
-import { applyModelOverride, asModelOverride, modelSource, resolveAgent, roleBaseAgent, roleModelSource, toModelChoice, type ModelOverride, type RefinerAgent } from "../logic"
+import { applyModelOverride, asModelOverride, modelSource, resolveAgent, roleBaseAgent, roleModelSource, toModelChoice, type AdversaryAgent, type ModelOverride, type RefinerAgent } from "../logic"
 import type { AgentConfig, AgenticSettings, CentralConfig, ModelOverrideInput } from "../schemas"
 import type { ModelChoiceDto, ModelSourceDto, WorkbenchModelsDto } from "../types"
 import { loadCentral } from "./centrals"
@@ -32,9 +32,16 @@ export function workbenchTurnAgent(settings: AgenticSettings, config: Pick<Centr
     return role === "fork" ? base : applyModelOverride(base, workbenchOverrides(doc)[role] ?? null)
 }
 
-/** Modelo de um papel da mesa para a tela (central/global ou Agente Refinador + troca da mesa). */
-export function workbenchModelChoice(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, doc: Pick<IAgenticWorkbench, "modelOverrides">, role: WorkbenchModelRole, refiner: RefinerAgent | null = null): ModelChoiceDto {
-    return toModelChoice(roleBaseAgent(settings, config, role, refiner), workbenchOverrides(doc)[role] ?? null, roleModelSource(config, role))
+/** Modelo de um papel da mesa para a tela (central/global, Agente Refinador ou Agente Adversário + troca da mesa). */
+export function workbenchModelChoice(
+    settings: AgenticSettings,
+    config: Pick<CentralConfig, "agents">,
+    doc: Pick<IAgenticWorkbench, "modelOverrides">,
+    role: WorkbenchModelRole,
+    refiner: RefinerAgent | null = null,
+    adversary: AdversaryAgent | null = null,
+): ModelChoiceDto {
+    return toModelChoice(roleBaseAgent(settings, config, role, refiner, adversary), workbenchOverrides(doc)[role] ?? null, roleModelSource(config, role))
 }
 
 /** Modelo configurado no Agente Refinador (base do papel "Refinamento"); `null` se não puder ser lido. */
@@ -55,14 +62,19 @@ export async function refinementTurnAgent(doc: Pick<IAgenticWorkbench, "modelOve
 
 /**
  * Modelos efetivos dos papéis da mesa (`null` se a central não puder ser lida). O "Refinamento" só entra
- * enquanto a mesa está no refinamento (OPE-137): depois dele não há mais turno do Agente Refinador.
+ * enquanto a mesa está no refinamento (OPE-137): depois dele não há mais turno do Agente Refinador. O
+ * "Agente Adversário" (OPE-187) só entra quando a revisão adversária se aplica à mesa: quem chama passa o
+ * agente da aba (`adversary`) nesse caso e `undefined` quando ele não se aplica (`null` = aba ilegível).
  */
-export async function workbenchModels(doc: Pick<IAgenticWorkbench, "centralId" | "modelOverrides"> & Partial<Pick<IAgenticWorkbench, "stage">>): Promise<WorkbenchModelsDto | null> {
+export async function workbenchModels(
+    doc: Pick<IAgenticWorkbench, "centralId" | "modelOverrides"> & Partial<Pick<IAgenticWorkbench, "stage">>,
+    adversary?: { agent: AdversaryAgent | null },
+): Promise<WorkbenchModelsDto | null> {
     try {
         const refining = doc.stage === "refining" || doc.stage === "spec_ready"
         const [{ settings }, { config }, refiner] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId), refining ? refinerAgent() : Promise.resolve(null)])
-        const roles = WORKBENCH_MODEL_ROLES.filter((role) => refining || role !== "refinement")
-        return Object.fromEntries(roles.map((role) => [role, workbenchModelChoice(settings, config, doc, role, refiner)])) as WorkbenchModelsDto
+        const roles = WORKBENCH_MODEL_ROLES.filter((role) => (role === "refinement" ? refining : role === "adversarial" ? Boolean(adversary) : true))
+        return Object.fromEntries(roles.map((role) => [role, workbenchModelChoice(settings, config, doc, role, refiner, adversary?.agent ?? null)])) as WorkbenchModelsDto
     } catch {
         return null
     }

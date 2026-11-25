@@ -18,6 +18,12 @@ export function pendingRoleOf(mutation: { isPending: boolean; variables?: { role
 
 export const pendingText = (role: WorkbenchModelRole | null) => (role ? `Alterando: ${WORKBENCH_MODEL_ROLE_INFO[role].label}` : null)
 
+/** Opção de herdar por papel: Refinamento e Agente Adversário herdam da aba do agente; os demais, da central. */
+const INHERIT_LABELS: Partial<Record<WorkbenchModelRole, string>> = {
+    refinement: "Padrão do Agente Refinador",
+    adversarial: "Padrão do Agente Adversário",
+}
+
 interface WorkbenchModelSectionsProps {
     /** Modelos efetivos por papel (`null` = central ilegível: nenhuma seção). */
     choices: Partial<Record<WorkbenchModelRole, ModelChoiceDto>> | null
@@ -27,22 +33,24 @@ interface WorkbenchModelSectionsProps {
     currentRole?: WorkbenchModelRole | null
     /** Papel em gravação (destaque + "Alterando"). */
     pendingRole?: WorkbenchModelRole | null
+    /** Papéis fora deste popover (o fork não mostra o Agente Adversário — OPE-187). */
+    hiddenRoles?: readonly WorkbenchModelRole[]
     /** Entrega a troca de uma etapa a quem guarda os modelos (servidor na mesa, estado local na abertura). */
     onChange: (role: WorkbenchModelRole, input: ModelVariantValue) => void
 }
 
 /**
- * Seções das etapas da mesa no popover de modelos (Refinamento, Planejamento, Implementação, Build e
- * ambiente, Pull Request e Fork): cada troca é entregue ao dono dos dados com o papel daquela seção. Usado pela
+ * Seções das etapas da mesa no popover de modelos (Refinamento, Planejamento, Implementação, Agente
+ * Adversário, Build e ambiente, Pull Request e Fork): cada troca é entregue ao dono dos dados com o papel daquela seção. Usado pela
  * mesa em andamento, pelo fork e pela etapa inicial (antes de a mesa existir — OPE-134).
  */
-export function WorkbenchModelSections({ choices, models, idPrefix, currentRole = null, pendingRole = null, onChange }: WorkbenchModelSectionsProps) {
+export function WorkbenchModelSections({ choices, models, idPrefix, currentRole = null, pendingRole = null, hiddenRoles = [], onChange }: WorkbenchModelSectionsProps) {
     if (!choices) return null
     return (
         <>
             {WORKBENCH_MODEL_ROLES.flatMap((role) => {
                 const choice = choices[role]
-                return choice ? [{ role, choice }] : []
+                return choice && !hiddenRoles.includes(role) ? [{ role, choice }] : []
             }).map(({ role, choice }) => (
                 <ModelRoleSection
                     key={role}
@@ -52,7 +60,7 @@ export function WorkbenchModelSections({ choices, models, idPrefix, currentRole 
                     choice={choice}
                     current={role === currentRole}
                     pending={pendingRole === role}
-                    inheritLabel={role === "refinement" ? "Padrão do Agente Refinador" : "Padrão da central"}
+                    inheritLabel={INHERIT_LABELS[role] ?? "Padrão da central"}
                     customLabel="Personalizar nesta mesa"
                     models={models}
                     onChange={(input) => onChange(role, input)}

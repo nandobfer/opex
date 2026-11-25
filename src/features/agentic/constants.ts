@@ -160,20 +160,25 @@ export const STAGE_ROLE: Partial<Record<WorkbenchStage, AgentRole>> = {
 /**
  * Papéis da conversa principal cujo modelo pode ser trocado na mesa (o fork tem a própria troca).
  * `refinement` (OPE-137) é o Agente Refinador: o modelo base vem da aba "Agente Refinador" (não é um
- * papel do Agente Desenvolvedor) e a troca vale só para a mesa.
+ * papel do Agente Desenvolvedor) e a troca vale só para a mesa. `adversarial` (OPE-187) é o Agente
+ * Adversário: o modelo base vem da aba "Agente Adversário" e o papel só aparece na mesa em que a
+ * revisão adversária se aplica.
  */
-export const WORKBENCH_MODEL_ROLES = ["refinement", "planning", "implementation", "build", "pr", "fork"] as const
+export const WORKBENCH_MODEL_ROLES = ["refinement", "planning", "implementation", "adversarial", "build", "pr", "fork"] as const
 export type WorkbenchModelRole = (typeof WORKBENCH_MODEL_ROLES)[number]
 
-/** Papel de modelo que não é do Agente Desenvolvedor (base: aba "Agente Refinador"). */
+/** Papéis de modelo que não são do Agente Desenvolvedor (base: aba "Agente Refinador" / "Agente Adversário"). */
 export const REFINEMENT_MODEL_ROLE = "refinement" as const
-export const isAgentModelRole = (role: WorkbenchModelRole): role is Exclude<WorkbenchModelRole, "refinement"> => role !== REFINEMENT_MODEL_ROLE
+export const ADVERSARIAL_MODEL_ROLE = "adversarial" as const
+export const isAgentModelRole = (role: WorkbenchModelRole): role is Exclude<WorkbenchModelRole, "refinement" | "adversarial"> =>
+    role !== REFINEMENT_MODEL_ROLE && role !== ADVERSARIAL_MODEL_ROLE
 
 /** Título e descrição de cada papel no popover de modelos da mesa. */
 export const WORKBENCH_MODEL_ROLE_INFO: Record<WorkbenchModelRole, { label: string; description: string }> = {
     refinement: { label: "Refinamento", description: "Agente Refinador: esclarece a tarefa e grava a especificação técnica. Instruções, skill e agente continuam os da aba Agente Refinador" },
     planning: AGENT_ROLE_LABELS.planning,
     implementation: AGENT_ROLE_LABELS.implementation,
+    adversarial: { label: "Agente Adversário", description: "Revisão adversária ao fim da implementação. Instruções, nível, agente e fallbacks continuam os da aba Agente Adversário" },
     build: AGENT_ROLE_LABELS.build,
     pr: AGENT_ROLE_LABELS.pr,
     fork: AGENT_ROLE_LABELS.fork,
@@ -184,6 +189,7 @@ export const WORKBENCH_MODEL_ROLE_LABELS: Record<WorkbenchModelRole, string> = {
     refinement: "Modelo do Refinamento",
     planning: "Modelo do Plano",
     implementation: "Modelo da Implementação",
+    adversarial: "Modelo do Agente Adversário",
     build: "Modelo da Prévia",
     pr: "Modelo do Pull Request",
     fork: "Modelo do Fork",
@@ -202,7 +208,7 @@ export const STAGE_MODEL_ROLE: Record<WorkbenchStage, WorkbenchModelRole | null>
     plan_review: "planning",
     changes_requested: "planning",
     implementing: "implementation",
-    adversarial_review: null,
+    adversarial_review: "adversarial",
     adversarial_blocked: "implementation",
     build_queued: "build",
     building: "build",

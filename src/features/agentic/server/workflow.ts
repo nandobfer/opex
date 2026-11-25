@@ -148,12 +148,16 @@ async function reconcile(doc: IAgenticWorkbench): Promise<IAgenticWorkbench> {
     return { ...doc, runState: "interrupted", error, pendingPermissions: [], pendingForms: [] }
 }
 
-/** DTO completo da mesa: filas, modelos por papel, chat ao vivo, Agente Adversário (e o modelo dele) e Arquiteto. */
+/**
+ * DTO completo da mesa: filas, modelos por papel (com o do Agente Adversário quando ele se aplica à
+ * mesa — OPE-187), chat ao vivo, Agente Adversário e Arquiteto.
+ */
 async function workbenchDto(doc: IAgenticWorkbench): Promise<WorkbenchDto> {
     const id = String(doc._id)
     const adversary = await adversaryModule()
     const adversarial = await adversary.adversaryApplies(doc.centralId)
-    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, await workbenchModels(doc), await liveChatEnabled(doc.centralId), adversarial, await (await architectModule()).workbenchArchitect(doc), adversarial ? await adversary.adversaryModel() : null)
+    const models = await workbenchModels(doc, adversarial ? { agent: await adversary.adversaryAgent() } : undefined)
+    return toWorkbenchDto(doc, await buildQueuePosition(id), doc.pendingTurn ? await slotQueuePosition(id) : null, models, await liveChatEnabled(doc.centralId), adversarial, await (await architectModule()).workbenchArchitect(doc))
 }
 
 export async function getWorkbench(id: string): Promise<WorkbenchDto> {
@@ -442,8 +446,14 @@ export async function setWorkbenchModel(id: string, input: WorkbenchModelInput):
     const title = WORKBENCH_MODEL_ROLE_LABELS[input.role]
     const roleLabel = WORKBENCH_MODEL_ROLE_INFO[input.role].label
     const override = await validatedModelOverride(input, title)
-    const [{ settings }, { config }, refiner] = await Promise.all([loadAgenticSettings(), loadCentral(doc.centralId), input.role === "refinement" ? refinerAgent() : Promise.resolve(null)])
-    const base = roleBaseAgent(settings, config, input.role, refiner)
+    // A troca do Agente Adversário é gravada mesmo quando ele não se aplica à mesa (decisão do dono, OPE-187).
+    const [{ settings }, { config }, refiner, adversary] = await Promise.all([
+        loadAgenticSettings(),
+        loadCentral(doc.centralId),
+        input.role === "refinement" ? refinerAgent() : Promise.resolve(null),
+        input.role === "adversarial" ? adversaryModule().then((module) => module.adversaryAgent()) : Promise.resolve(null),
+    ])
+    const base = roleBaseAgent(settings, config, input.role, refiner, adversary)
     const current = workbenchOverrides(doc)
     const before = toModelChoice(base, current[input.role] ?? null)
     const after = toModelChoice(base, override)
@@ -1274,6 +1284,8 @@ async function adversarialTurn(loaded: Loaded, turn: TurnPlan, controller: Abort
         signal: controller.signal,
         onStep: hooks.onStep,
         heartbeat: hooks.heartbeat,
+        // Troca do popover "Modelos por etapa" (OPE-187): `doc` é relido a cada turno, então vale a partir da próxima rodada.
+        modelOverride: workbenchOverrides(doc).adversarial ?? null,
     })
     await flushWorkbenchEvents(id)
     const notice = (level: "info" | "warn" | "success" | "error", message: string) => publishWorkbenchEvent(id, { type: "notice", level, message })
