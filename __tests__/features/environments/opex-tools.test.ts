@@ -78,8 +78,10 @@ const run = (name: string, input: unknown) => find(name).execute(find(name).inpu
 const loja = { _id: 'e1', name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, env: [{ key: 'TOKEN', value: { c: 'segredo' } }], ports: [8080], healthUrl: null, buildOn: 'server', runOn: 'server', deployedOn: { buildOn: 'server', runOn: 'server' } }
 const adotado = { ...loja, _id: 'e2', slug: 'crm', source: { kind: 'adopted', machine: 'server', workingDir: '/srv/crm', configFiles: ['/srv/crm/docker-compose.yml'], projectName: 'crm', git: true, pullOnRedeploy: false } }
 
+const minio = { ...loja, _id: 'e3', slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 2 } }
+
 beforeEach(() => {
-  mocks.envs = [loja, adotado]
+  mocks.envs = [loja, adotado, minio]
   vi.clearAllMocks()
 })
 
@@ -175,6 +177,29 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     expect(out).toMatchObject({ deployId: 'd1', status: 'running', ref: 'main' })
     expect(mocks.runEnvironmentAction).toHaveBeenCalledWith('e1', { action: 'deploy', ref: '' }, 'local', 'host-runner', { notifyOpexSessionId: 's1' })
     await expect(run('deploy_environment', { environment: 'crm', ref: 'dev' })).rejects.toThrow(/adotado/)
+    await expect(run('deploy_environment', { environment: 'minio', ref: 'dev' })).rejects.toThrow(/Só a origem central aceita outra ref/)
+  })
+
+  it('compose gerenciado (OPE-191): cria com o YAML (v1), exige o compose e edita só projeto e serviços', async () => {
+    const compose = 'services:\n  minio:\n    image: minio/minio\n'
+    const out = await run('create_environment', { name: 'MinIO', kind: 'managed', compose })
+    expect(out).toMatchObject({ slug: 'minio', compose: 'v1' })
+    expect(mocks.createEnvironment).toHaveBeenCalledWith(expect.objectContaining({ slug: 'minio', compose, source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 } }), 'local')
+    expect(find('create_environment').summarize!({ name: 'MinIO', kind: 'managed', compose } as never)).toBe('Criar o ambiente MinIO (compose gerenciado v1)')
+    await expect(run('create_environment', { name: 'MinIO', kind: 'managed' })).rejects.toThrow(/exige o `compose`/)
+    await expect(run('create_environment', { name: 'MinIO', kind: 'managed', compose, centralId: 'c1' })).rejects.toThrow(/não se aplicam/)
+    await expect(run('create_environment', { name: 'Loja' })).rejects.toThrow(/centralId/)
+
+    await run('update_environment', { environment: 'minio', projectName: 'minio-2', services: ['minio'] })
+    expect(mocks.updateEnvironment).toHaveBeenCalledWith('e3', expect.objectContaining({ source: { kind: 'managed', projectName: 'minio-2', services: ['minio'], composeVersion: 2 } }), 'local')
+    await expect(run('update_environment', { environment: 'minio', ref: 'main' })).rejects.toThrow(/Compose gerenciado/)
+  })
+
+  it('compose gerenciado na saída: origem com a revisão vigente, a implantada e o aviso de compose novo', async () => {
+    const { environmentRow, deployView } = await import('@/features/environments/opex-format')
+    const env = { id: 'e3', name: 'MinIO', slug: 'minio', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 3 }, envKeys: [], ports: [], healthUrl: null, buildOn: 'server', runOn: 'server', deployedOn: { buildOn: 'server', runOn: 'server' }, deployedVersion: null, deployedComposeVersion: 2, lastDeploy: null, services: [], createdAt: '', updatedAt: '' } as const
+    expect(environmentRow(env as never)).toMatchObject({ origem: 'gerenciado (v3)', composeImplantado: 'v2', composeNaoImplantado: true })
+    expect(deployView({ id: 'd', kind: 'deploy', status: 'success', ref: null, commit: null, buildOn: 'server', runOn: 'server', error: null, startedAt: '', finishedAt: null, durationMs: null, version: null, skipBuild: false, resumed: false, composeVersion: 2 })).toMatchObject({ compose: 'v2' })
   })
 
   it('erro legível: ambiente desconhecido', async () => {

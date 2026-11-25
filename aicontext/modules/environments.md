@@ -37,9 +37,12 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   **Reiniciar** (otimistas, com reversão e toast), **Logs** (últimas 200 linhas no xterm),
   **Editar**, **Mover** (troca build/execução; aviso de volumes e de tempo fora do ar), **Apagar**
   (confirmação, opção de apagar os volumes; otimista).
-- **Novo/Editar** (react-hook-form + `environmentInputSchema`): nome e slug (sugerido pelo nome);
-  origem **central** (central, ref, arquivo compose, serviços, nome do projeto) ou adotado (só
-  leitura + "git pull no redeploy" quando há git); variáveis extras **cifradas**, com os valores à
+- **Novo/Editar** (react-hook-form; `environmentCreateSchema` no Novo, `environmentInputSchema` no Editar): nome e slug
+  (sugerido pelo nome); seletor **Origem** (`OptionTabs`) com **Central**, **Compose gerenciado** e **Projeto adotado**
+  (desabilitado no Novo: vem de **Adotar**; o seletor inteiro fica travado no Editar e o servidor recusa trocar a origem,
+  422 `ENVIRONMENT_SOURCE_LOCKED`). Central: central, ref, arquivo compose, serviços, nome do projeto. Compose
+  gerenciado: nome do projeto, serviços e, só no Novo, o editor do `docker-compose.yml` (ver "Compose gerenciado").
+  Adotado: só leitura + "git pull no redeploy" quando há git; variáveis extras **cifradas**, com os valores à
   vista (ver "Variáveis extras no formulário"); **limites de recursos** (RAM, swap e CPUs, ver "Limites de
   recursos"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
   desabilitado com o motivo quando o túnel está fechado).
@@ -115,6 +118,62 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   (`5050`, só `127.0.0.1`) e tags mantidas por ambiente (`5`). A conexão com o PC é a do Builder
   Machine.
 
+### Compose gerenciado (OPE-191)
+
+Terceira origem (`source.kind: "managed"`), para serviços sem repositório (Soketi, MinIO, um MCP, um banco auxiliar):
+o `docker-compose.yml` é escrito no Opex, guardado em **revisões** no banco e gravado na pasta do ambiente no
+servidor (`~/opex-envs/<slug>`, como a central) a cada deploy. As variáveis, o deploy e o histórico ficam no Opex.
+
+- **Origem** (`managedSourceSchema`): `projectName`, `services` (vazio = todos), `composeVersion` (revisão vigente,
+  ≥ 1) e `composeUpdatedAt`. Os dois últimos são gravados **só pelo serviço de revisões**: criar e editar o ambiente
+  ignoram o valor da entrada (um formulário aberto há tempo não volta a versão). Aceita build/execução em qualquer
+  máquina (os arquivos estão no servidor; executar no PC segue o bloqueio de bind mount).
+- **Compose obrigatório** (decisão do dono): a tela e `create_environment` exigem o YAML; o ambiente nasce com a
+  **v1**. A falha "O ambiente não tem compose" do deploy fica só como proteção.
+- **Revisões** (`environment_compose_versions`): `environmentId`, `version` (crescente por ambiente; índice único
+  `{ environmentId, version }`, duas gravações ao mesmo tempo tentam o número seguinte), `content` (YAML completo),
+  `authorId`, `note`, `createdAt` e `deployedAt` (último deploy com sucesso daquela revisão; decisão do dono no
+  lugar do `deployedVersion` da especificação, para marcar "Implantada" no histórico). A vigente é a de maior
+  `version`. Uma revisão nunca é sobrescrita.
+- **Validação** (`composeContentProblem`, `managed-compose.ts`, a mesma na tela e no servidor): recusa vazio, mais de
+  256 KB (bytes UTF-8) e YAML inválido (`parseDocument` da lib `yaml`), com a linha: "YAML inválido na linha N: …". O
+  servidor responde 422 `ENVIRONMENT_COMPOSE_INVALID` (`details.line`). A validação completa do compose continua no
+  deploy (`docker compose config`).
+- **Rotas**: `GET /api/environments/[id]/compose` (vigente com o conteúdo + as últimas revisões sem o conteúdo, com
+  tamanho e `deployedAt`, e a revisão implantada), `PUT` (`{ content, note? }`: revisão nova), `GET
+  /compose/[version]` (conteúdo de uma revisão) e `POST /compose/restore` (`{ version }`: revisão nova com o conteúdo
+  da escolhida e a nota "Restaurada da vN"). **Conteúdo igual ao da vigente é recusado** (decisão do dono): 422
+  `ENVIRONMENT_COMPOSE_UNCHANGED`, inclusive restaurar a própria vigente. Ambiente de outra origem: 422
+  `ENVIRONMENT_NOT_MANAGED`. Auditoria `Ambiente` com a versão e o tamanho (nunca o conteúdo); evento `environments`
+  `{ id, change: "compose" }`.
+- **Tela**:
+  - Novo ambiente › Compose gerenciado: editor monoespaçado (`ComposeEditorField`, o mesmo do diálogo) com o tamanho
+    e o erro com a linha em tempo real; Criar fica bloqueado sem o compose válido.
+  - Linha: selo **Gerenciado vN** (revisão vigente), aviso "Há compose novo não implantado (implantada: vM)" quando o
+    ambiente já implantado tem a vigente diferente da implantada (`composeNotDeployed`), e o botão **Compose**.
+  - Diálogo **Compose** (`ComposeDialog`): revisão vigente com data e autor, editor, nota opcional e **Salvar nova
+    revisão** (desabilitado sem mudança ou com erro); lista das revisões (`ComposeRevisionList`) com Vigente/
+    Implantada, **Ver** (só leitura, no mesmo editor) e **Restaurar** (confirmação; a vigente não oferece). Tudo
+    vale a partir do próximo deploy. Skeleton e erro com "Tentar novamente". O editor acompanha a vigente enquanto não
+    foi mexido (o tempo real pode trazer uma revisão nova).
+  - Histórico de deploys: "Compose vN" em cada deploy de gerenciado.
+- **Deploy** (`server/deploy.ts`):
+  1. Sem git nem código: passo "Pasta do ambiente" (`mkdir -p`), "Compose gerenciado: sem código-fonte nem git." e
+     `commit = null` (tag de horário, sem build reaproveitado). Outra `ref` é ignorada (só a central implanta outra
+     ref; o registro do deploy fica sem ref).
+  2. Antes do `.env.opex`: a revisão vigente é gravada como `docker-compose.yml` (`MANAGED_COMPOSE_FILE`) no passo
+     "Compose gerenciado vN", com o debug "gravar docker-compose.yml (compose gerenciado vN, conteúdo omitido)"; o
+     conteúdo nunca vai para o log. O deploy registra `composeVersion`.
+  3. Depois do `config`: serviço escolhido com `build` falha **antes de qualquer build** com "Compose gerenciado não
+     tem código-fonte: use `image:` nos serviços ou a origem central"; senão o log mostra "Compose gerenciado vN (K
+     serviço(s)): …" no lugar de "Compose lido". O resto é o pipeline de sempre (`.env.opex`, arquivos de variáveis
+     ausentes, override, `up -d`, saúde, portas).
+  4. O ponto de retomada leva `composeVersion`: o deploy retomado termina gravando a mesma revisão.
+  5. Só no sucesso: `environments.deployedComposeVersion` e o `deployedAt` da revisão.
+- **Levantar/Reiniciar/Derrubar/Logs** usam o arquivo que está na pasta, ou seja, a revisão **implantada**.
+- **Apagar**: derruba, remove a **pasta do ambiente inteira** (`rm -rf`, inclusive dados de volumes montados por
+  caminho relativo, que moram nela) e todas as revisões do compose.
+- **Portal do cliente**: nunca aparece (o portal só lista origem central).
 ### Limites de recursos (OPE-193)
 
 - **Campos** (`EnvironmentLimitsField` no formulário Novo/Editar, entre as variáveis e as portas): RAM (GiB), swap
@@ -134,6 +193,9 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   --no-interpolate` (valor com `${VAR}` volta vazio). Central: `git fetch` + a ref resolvida e uma pasta temporária
   com só o arquivo do compose e os `*.yml`/`*.yaml` da ref (`git archive`), apagada no fim — o worktree do ambiente
   no ar não é tocado; os serviços escolhidos na origem filtram a lista. Adotado: a pasta do projeto (servidor ou PC).
+  Compose gerenciado: a **revisão vigente** guardada no Opex, lida do YAML (`parseComposeYaml`, sem Docker); no Novo
+  ainda não há revisão, então o botão fica desabilitado (o YAML está no editor) e, sem `environmentId`, a rota
+  responde 422 `ENVIRONMENT_COMPOSE_READ_UNAVAILABLE`.
   Por serviço, as linhas existentes ficam e os serviços novos entram com os limites do compose; linha de serviço que
   não está no compose ganha o selo "não está no compose" e pode ser removida. No modo único, os campos vazios
   recebem os limites do compose quando são iguais em todos os serviços (diferentes: toast sugerindo "Por serviço").
@@ -248,24 +310,29 @@ serviços das rotas (`listEnvironments`, `createEnvironment`, `updateEnvironment
 mesma validação, auditoria, Pusher e erros.
 
 - O ambiente é indicado por **id ou slug** (`resolveEnvironmentRef`).
-- Leitura: `list_environments` (Servidor/PC, estado, portas, serviços no ar, versão, build, último
-  deploy, limites aplicados), `get_environment` (origem, máquinas, só os **nomes** das variáveis, URL de saúde,
-  `limites: { salvos, configuracao, aplicados, diferem }`, serviços com os limites de cada container), `get_environment_logs` (últimas linhas, até 200, sem ANSI), `list_environment_deploys`
+- Leitura: `list_environments` (Servidor/PC, estado, portas, serviços no ar, versão, origem — `central (ref main)`,
+  `gerenciado (v3)` ou `adotado (PC)` —, `composeImplantado` e `composeNaoImplantado` no gerenciado, build, último
+  deploy com `compose: vN`, limites aplicados), `get_environment` (origem, máquinas, só os **nomes** das variáveis, URL de saúde,
+  `limites: { salvos, configuracao, aplicados, diferem }`, serviços com os limites de cada container),
+  `get_environment_logs` (últimas linhas, até 200, sem ANSI), `list_environment_deploys`
   (30 últimos), `get_environment_deploy` (resumo + fim do log, o ao vivo do processo quando em
   andamento), `list_unmanaged_projects`, `get_environments_settings` (com o estado do registry),
   `get_environments_builder` (builder do servidor: estado, limites aplicados e salvos, uso, avisos e, sem
   configuração, a sugestão para gerenciar).
-- Escrita sem confirmação: `create_environment` (origem central; slug sugerido pelo nome, projeto =
-  slug, ref `main`), `start_environment`, `create_environments_builder`, `start_environments_builder`.
+- Escrita sem confirmação: `create_environment` (campo `kind`: `central`, o padrão, com `centralId` obrigatório e ref
+  `main`; ou `managed`, com o YAML em `compose` obrigatório, que vira a v1, e sem central/ref/arquivo. A origem vai
+  num campo achatado `kind`, no formato que a ferramenta já usava. Slug sugerido pelo nome, projeto = slug). O compose
+  em si só se edita pela tela (não há ferramenta de revisões); `start_environment`, `create_environments_builder`, `start_environments_builder`.
 - `create_environment` e `update_environment` aceitam `limits` (o mesmo `environmentLimitsSchema` da tela; substitui os
   limites salvos inteiros, `null` num campo = sem limite).
-- Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; `env`
+- Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; no gerenciado,
+  `projectName` e `services`; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
   tela, vazio grava vazio), `restart_environment`, `adopt_project`,
   `update_environments_settings`, `clean_environments_registry`, `configure_environments_builder` (patch
   sobre a configuração salva ou, sem ela, sobre a sugestão do host; `null` tira um limite).
 - Destrutivas (confirmação): `deploy_environment` (sem `ref` = a ref salva; outra ref só na origem
-  central), `move_environment` (a descrição manda avisar dos volumes e do tempo fora do ar; a saída
+  central; o gerenciado implanta a revisão vigente), `move_environment` (a descrição manda avisar dos volumes e do tempo fora do ar; a saída
   traz `moveWarning`), `stop_environment`, `delete_environment` (`removeVolumes`),
   `stop_environments_builder`, `recreate_environments_builder` e `delete_environments_builder` (com
   `force` quando há um build em andamento, depois de avisar que ele falha).
@@ -283,6 +350,8 @@ mesma validação, auditoria, Pusher e erros.
   (`config.sessionDirectory`); a ref é resolvida para um commit nesta ordem: branch remota
   (`origin/<ref>`), tag (`refs/tags/<ref>`) ou commit; `git worktree add --detach
   ~/opex-envs/<slug> <sha>` na 1ª vez, depois `checkout --detach <sha>`.
+- **Compose gerenciado**: pasta do ambiente no servidor, com a revisão vigente gravada a cada deploy (ver "Compose
+  gerenciado").
 - **Adotado**: usa o `working_dir` do label (no servidor ou no PC, pela conexão mestra). Com git,
   `git pull --ff-only` opcional; sem git, só o build. Adotado do PC fica no PC (build e execução).
 - **Variáveis**: `.env.opex` gravado em base64 na pasta do ambiente (o debug mostra só "valores
@@ -359,6 +428,9 @@ mesma validação, auditoria, Pusher e erros.
   recusa sobrescrever o arquivo não rastreado (erro no passo "Código da ref"); no adotado, o mesmo vale
   para o `git pull` ("git pull no redeploy") e para um `pull`/`checkout` manual. Apague o arquivo vazio
   da pasta e implante (ou atualize) de novo.
+- Compose gerenciado: sem suporte a `build` (não há código-fonte na pasta), sem editor no portal do cliente e sem
+  ferramenta do Agente Opex para editar o compose. Apagar remove a pasta inteira, com os dados de volumes montados
+  por caminho relativo.
 - O deploy só pode ser retomado a partir da fase de execução: reiniciar o app durante a preparação
   (código, variáveis, compose, build reaproveitado) encerra o deploy como falha, e é preciso
   implantar de novo.
@@ -374,7 +446,7 @@ mesma validação, auditoria, Pusher e erros.
   último deploy. Atualiza a cada 15 s e em tempo real.
 - **Vínculo**: o cliente vê só ambientes de origem **central** cuja central (`AgenticCentral.projectId`)
   está em `client.projectIds`, conferido em **toda** requisição (`server/portal.ts`). Projetos
-  **adotados** e ambientes de outro cliente nunca aparecem e respondem 404 nas ações.
+  **adotados**, **compose gerenciado** e ambientes de outro cliente nunca aparecem e respondem 404 nas ações.
 - **Visão reduzida** (`PortalEnvironmentDto`, `toPortalEnvironment`): sem variáveis, máquinas,
   portas, caminhos, containers, CPU/RAM, commit, erro nem log do deploy.
 - **Ações só do admin do cliente** (`assertClientAdmin`, 403 para os demais): **Implantar** (sempre a
@@ -398,7 +470,8 @@ mesma validação, auditoria, Pusher e erros.
   `builder-commands.ts` e `builder-view.ts` (builder do servidor, puros), `server/builder.ts`,
   `hooks/useEnvironmentsBuilder.ts`, `components/builder/` (`BuilderCard`, `BuilderRow`, `BuilderFormDialog`,
   `BuilderConfirmDialog`),
-  `compose-config.ts`, `pipeline.ts`, `view.ts`, `opex-format.ts`, `components/` (tela do dono;
+  `compose-config.ts`, `pipeline.ts`, `view.ts`, `opex-format.ts`, `managed-compose.ts` (regras puras do compose
+  gerenciado), `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
   `EnvironmentStatus.tsx` com o botão e os selos compartilhados com o portal), `hooks/`,
   `portal/` (página, linha e hooks do portal) e `server/` (`models`, `service`, `deploy`, `resume`,
   `hub`, `stream`, `forwards`, `registry`, `settings`, `opex-notice`, `portal`).
@@ -409,9 +482,11 @@ mesma validação, auditoria, Pusher e erros.
   global do build (`agentic/server/build-queue.ts`), ferramentas no registro do Agente Opex do dono e do
   portal, `kind: "notice"` nas mensagens do Agente Opex (avisos de fim de deploy) e `readNdjson`
   (`src/lib/ndjson-client.ts`, log ao vivo do deploy).
-- Dados: `environments`, `environment_deploys` (TTL de 90 dias), `environments_state`; auditoria
+- Dados: `environments`, `environment_deploys` (TTL de 90 dias), `environment_compose_versions` (revisões do compose
+  gerenciado, sem TTL; saem ao apagar o ambiente), `environments_state`; auditoria
   `entidade: "Ambiente"`.
-- Testes: `__tests__/features/environments/` (`commands`, `deploy`, `resume`, `environments-ui`,
+- Testes: `__tests__/features/environments/` (`commands`, `deploy`, `resume`, `environments-ui`, `managed-compose`,
+  `compose-revisions`, `compose-ui`,
   `opex-tools`, `portal`, `portal-ui`, `builder-commands`, `builder`, `builder-ui`),
   `__tests__/features/agentic/build-queue.test.ts` (`runExclusiveBuild` e a recriação pendente antes da
   próxima mesa), `__tests__/features/opex-agent/client-tools.test.ts` (grupo do portal).

@@ -220,6 +220,12 @@ export function removeWorktreeCommand(settings: EnvironmentsSettings, repo: stri
     return `git -C ${quote(repo)} worktree remove --force ${envDir(settings, slug)} 2>/dev/null || rm -rf ${envDir(settings, slug)}; git -C ${quote(repo)} worktree prune; true`
 }
 
+/** Cria (se faltar) a pasta do ambiente no servidor (compose gerenciado). */
+export const ensureEnvDirCommand = (settings: EnvironmentsSettings, slug: string) => `mkdir -p ${envDir(settings, slug)}`
+
+/** Apaga a pasta do ambiente no servidor inteira (compose gerenciado: compose, `.env.opex`, override e o que mais estiver nela). */
+export const removeEnvDirCommand = (settings: EnvironmentsSettings, slug: string) => `rm -rf ${envDir(settings, slug)}`
+
 export function removeGeneratedCommand(plan: Pick<ComposePlan, "dir" | "filesOn">): string {
     const command = `rm -f ${plan.dir}/${OVERRIDE_FILE} ${plan.dir}/${ENV_FILE}`
     return plan.filesOn === "pc" ? muxCommand(command) : command

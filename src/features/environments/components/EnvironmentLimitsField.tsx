@@ -51,8 +51,9 @@ function LimitRowsSkeleton() {
 export function EnvironmentLimitsField({ form, env, host, machine }: { form: UseFormReturn<EnvironmentInput>; env: EnvironmentDto | null; host: HostCapacityDto | null; machine: string }) {
     const limits = (useWatch({ control: form.control, name: "limits" }) ?? DEFAULT_ENVIRONMENT_LIMITS) as EnvironmentLimits
     const source = useWatch({ control: form.control, name: "source" })
-    // Origem incompleta (ex.: Novo sem a central) não dá para ler: nada de pedido que só voltaria erro.
-    const canRead = composeServicesInputSchema.safeParse({ source }).success
+    // Origem incompleta (ex.: Novo sem a central) não dá para ler: nada de pedido que só voltaria erro. No
+    // compose gerenciado a revisão só existe depois de salvar o ambiente (o YAML está no editor do Novo).
+    const canRead = composeServicesInputSchema.safeParse({ source, environmentId: env?.id }).success && (source?.kind !== "managed" || Boolean(env))
     const read = useReadComposeServices()
     const [composeNames, setComposeNames] = useState<string[] | null>(null)
     const known = composeNames ?? (env ? runningServiceNames(env) : null)
@@ -64,7 +65,7 @@ export function EnvironmentLimitsField({ form, env, host, machine }: { form: Use
     const readCompose = () => {
         if (!canRead) return
         read.mutate(
-            { source: form.getValues("source") },
+            { source: form.getValues("source"), ...(env && form.getValues("source")?.kind === "managed" ? { environmentId: env.id } : {}) },
             {
                 onSuccess: (result) => {
                     setComposeNames(result.services.map((service) => service.name))

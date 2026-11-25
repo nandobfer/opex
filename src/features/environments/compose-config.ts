@@ -1,3 +1,4 @@
+import { parse } from "yaml"
 import { ENV_FILE } from "./constants"
 import { round2, type ResourceLimits } from "./resource-limits"
 
@@ -46,7 +47,7 @@ const composeCpus = (value: unknown): number | null => {
 
 const GIB = 1024 ** 3
 
-function declaredLimits(service: RawService): Pick<ComposeService, "declared" | "limitStyle"> {
+function declaredLimits(service: Omit<RawService, "volumes">): Pick<ComposeService, "declared" | "limitStyle"> {
     const limits = service.deploy?.resources?.limits
     const serviceMemory = composeBytes(service.mem_limit)
     const memory = serviceMemory ?? composeBytes(limits?.memory)
@@ -78,6 +79,42 @@ export function parseComposeConfig(output: string): ComposeService[] | null {
         hasWatch: Array.isArray(service.develop?.watch) && service.develop.watch.length > 0,
         ...declaredLimits(service),
     }))
+}
+
+/**
+ * Lê o YAML guardado (compose gerenciado, OPE-191) sem o Docker: os serviços e os limites declarados. Os
+ * volumes em texto (`"./dados:/dados"`) contam como bind quando a origem é um caminho. Usa a mesma leitura de
+ * limites do `docker compose config`.
+ */
+type YamlService = Omit<RawService, "volumes"> & { volumes?: unknown }
+
+function yamlBindMounts(volumes: unknown): string[] {
+    if (!Array.isArray(volumes)) return []
+    const binds: string[] = []
+    for (const volume of volumes) {
+        if (typeof volume === "string") {
+            const source = volume.split(":")[0]!.trim()
+            if (source.startsWith(".") || source.startsWith("/") || source.startsWith("~")) binds.push(volume)
+        } else if (volume && typeof volume === "object" && (volume as { type?: unknown }).type === "bind") {
+            const item = volume as { source?: unknown; target?: unknown }
+            binds.push(`${item.source ?? "?"}:${item.target ?? "?"}`)
+        }
+    }
+    return binds
+}
+
+export function parseComposeYaml(content: string): ComposeService[] | null {
+    let parsed: { services?: Record<string, YamlService> }
+    try {
+        parsed = (parse(content) ?? {}) as { services?: Record<string, YamlService> }
+    } catch {
+        return null
+    }
+    if (!parsed.services || typeof parsed.services !== "object") return null
+    return Object.entries(parsed.services).map(([name, service]) => {
+        const watch = service.develop?.watch
+        return { name, hasBuild: Boolean(service.build), bindMounts: yamlBindMounts(service.volumes), hasWatch: Array.isArray(watch) && watch.length > 0, ...declaredLimits(service) }
+    })
 }
 
 /** Serviços do ambiente (os escolhidos; vazio = todos). */

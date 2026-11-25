@@ -6,12 +6,13 @@ import { AgenticWorkbench } from "@/lib/db/models/Agentic"
 import { quote } from "@/features/local-docker/commands"
 import { LocalDockerPreview } from "@/features/local-docker/server/models"
 import { containerVersionsCommand, envDir, gitDirsCommand, parseContainerVersions, parseGitDirs, parseSnapshot, parseSnapshotHost, snapshotCommand, type ComposeContainer, type ComposePlan } from "../commands"
-import { ENVIRONMENTS_AUDIT_ENTITY, REGISTRY_CONTAINER } from "../constants"
+import { ENVIRONMENTS_AUDIT_ENTITY, MANAGED_COMPOSE_FILE, REGISTRY_CONTAINER } from "../constants"
+import { composeBytes, composeContentProblem } from "../managed-compose"
 import { type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
 import { environmentLimitsOf, environmentLimitsText } from "../resource-limits"
 import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, HostCapacityDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
-import { Environment, EnvironmentDeploy, environmentsDb, type IEnvironment, type IEnvironmentDeploy } from "./models"
+import { Environment, EnvironmentComposeVersion, EnvironmentDeploy, environmentsDb, type IEnvironment, type IEnvironmentDeploy } from "./models"
 import { envLog, machineAccess, publishEnvironment, runEnvHost } from "./settings"
 import type { HostRunner } from "@/features/local-docker/server/shell"
 
@@ -19,6 +20,7 @@ import type { HostRunner } from "@/features/local-docker/server/shell"
 export function composePlanOf(env: Pick<IEnvironment, "slug" | "source">, settings: EnvironmentsSettings): ComposePlan {
     const source = env.source
     if (source.kind === "central") return { projectName: source.projectName, dir: envDir(settings, env.slug), filesOn: "server", composeFiles: [source.composeFile], services: source.services }
+    if (source.kind === "managed") return { projectName: source.projectName, dir: envDir(settings, env.slug), filesOn: "server", composeFiles: [MANAGED_COMPOSE_FILE], services: source.services }
     return { projectName: source.projectName, dir: quote(source.workingDir), filesOn: source.machine, composeFiles: source.configFiles, services: [] }
 }
 
@@ -38,6 +40,7 @@ export function deploySummary(deploy: IEnvironmentDeploy): EnvironmentDeploySumm
         version: deploy.version ?? null,
         skipBuild: Boolean(deploy.skipBuild),
         resumed: Boolean(deploy.resumed),
+        composeVersion: deploy.composeVersion ?? null,
     }
 }
 
@@ -57,6 +60,7 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
         deployedLimits: env.deployedLimits ?? null,
         deployedOn: env.deployedOn,
         deployedVersion: env.deployedVersion ?? null,
+        deployedComposeVersion: env.deployedComposeVersion ?? null,
         lastDeploy: lastDeploy ? deploySummary(lastDeploy) : null,
         services,
         createdAt: new Date(env.createdAt).toISOString(),
@@ -244,6 +248,7 @@ const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" 
     slug: env.slug,
     origem: env.source.kind,
     projeto: env.source.projectName,
+    ...(env.source.kind === "managed" ? { compose: `v${env.source.composeVersion}` } : {}),
     variaveis: env.env.map((item) => item.key),
     portas: env.ports,
     saude: env.healthUrl,
@@ -252,12 +257,38 @@ const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" 
     limites: environmentLimitsText(environmentLimitsOf(env.limits)),
 })
 
+/** Compose gerenciado válido (vazio, acima do limite ou YAML inválido: 422 com a linha). */
+export function assertComposeContent(content: string): void {
+    const problem = composeContentProblem(content)
+    if (problem) throw new DomainError(422, problem.message, "ENVIRONMENT_COMPOSE_INVALID", problem.line ? { line: problem.line } : undefined)
+}
+
+/** Campos do ambiente gravados no banco (o `compose` da entrada vira revisão, não campo). */
+function storedFields(input: EnvironmentInput): Omit<EnvironmentInput, "compose"> {
+    const { compose: _compose, ...rest } = input
+    void _compose
+    return rest
+}
+
 export async function createEnvironment(input: EnvironmentInput, actorId: string): Promise<IEnvironment> {
     await environmentsDb()
+    // Decisão do dono (OPE-191): o ambiente gerenciado sempre nasce com o compose (v1).
+    if (input.source.kind === "managed") assertComposeContent(input.compose ?? "")
     await assertUnique(input, null)
-    const doc = await Environment.create({ ...input, healthUrl: input.healthUrl || null, env: mergeEnvVars(input.env, []), createdAt: new Date(), updatedAt: new Date() })
+    const now = new Date()
+    const fields = storedFields(input)
+    const source = fields.source.kind === "managed" ? { ...fields.source, composeVersion: 1, composeUpdatedAt: now.toISOString() } : fields.source
+    const doc = await Environment.create({ ...fields, source, healthUrl: input.healthUrl || null, env: mergeEnvVars(input.env, []), createdAt: now, updatedAt: now })
     const env = doc.toObject() as IEnvironment
-    await recordAudit({ userId: actorId, entidade: ENVIRONMENTS_AUDIT_ENTITY, entidadeId: String(env._id), acao: AcaoAuditoria.CRIAR, depois: auditView(env) })
+    if (source.kind === "managed") {
+        try {
+            await EnvironmentComposeVersion.create({ environmentId: String(env._id), version: 1, content: input.compose ?? "", authorId: actorId, note: null, createdAt: now, deployedAt: null })
+        } catch (error) {
+            await Environment.deleteOne({ _id: env._id })
+            throw error
+        }
+    }
+    await recordAudit({ userId: actorId, entidade: ENVIRONMENTS_AUDIT_ENTITY, entidadeId: String(env._id), acao: AcaoAuditoria.CRIAR, depois: { ...auditView(env), ...(source.kind === "managed" ? { composeBytes: composeBytes(input.compose ?? "") } : {}) } })
     envLog.info({ id: String(env._id), slug: env.slug }, "[environments] Ambiente criado")
     await publishEnvironment(String(env._id), "created")
     return env
@@ -265,10 +296,14 @@ export async function createEnvironment(input: EnvironmentInput, actorId: string
 
 export async function updateEnvironment(id: string, input: EnvironmentInput, actorId: string, options: { emptyKeepsSaved?: boolean } = {}): Promise<IEnvironment> {
     const before = await loadEnvironment(id)
+    if (before.source.kind !== input.source.kind) throw new DomainError(422, "A origem do ambiente não pode ser trocada depois de criado", "ENVIRONMENT_SOURCE_LOCKED")
     if (before.slug !== input.slug && before.deployedOn) throw new DomainError(409, "Derrube o ambiente antes de trocar o slug", "ENVIRONMENT_DEPLOYED")
     if (before.source.projectName !== input.source.projectName && before.deployedOn) throw new DomainError(409, "Derrube o ambiente antes de trocar o projeto do compose", "ENVIRONMENT_DEPLOYED")
     await assertUnique(input, id)
-    const set = { ...input, healthUrl: input.healthUrl || null, env: mergeEnvVars(input.env, before.env, options), updatedAt: new Date() }
+    const fields = storedFields(input)
+    // A revisão vigente é do serviço de revisões: um formulário aberto há tempo não volta a versão.
+    const source = fields.source.kind === "managed" && before.source.kind === "managed" ? { ...fields.source, composeVersion: before.source.composeVersion, composeUpdatedAt: before.source.composeUpdatedAt } : fields.source
+    const set = { ...fields, source, healthUrl: input.healthUrl || null, env: mergeEnvVars(input.env, before.env, options), updatedAt: new Date() }
     await Environment.updateOne({ _id: id }, { $set: set })
     await recordAudit({ userId: actorId, entidade: ENVIRONMENTS_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: auditView(before), depois: auditView({ ...before, ...set }) })
     await publishEnvironment(id, "updated")

@@ -10,5 +10,6 @@ export const dynamic = "force-dynamic"
 export const POST = withRoute(async ({ req }) => {
     const body = await parseBody(req, composeServicesInputSchema)
     if (!body.ok) return body.response
-    return ok(await readComposeServices(body.data.source))
+    const environmentId = body.data.environmentId
+    return ok(await (environmentId ? readComposeServices(body.data.source, { environmentId }) : readComposeServices(body.data.source)))
 })

@@ -11,6 +11,7 @@ import {
     cleanTreeCommand,
     configCommand,
     downCommand,
+    ensureEnvDirCommand,
     envFileContent,
     envFileFromProject,
     forwardPorts,
@@ -21,6 +22,7 @@ import {
     parsePackageVersion,
     registryImage,
     registryRepository,
+    removeEnvDirCommand,
     removeEnvFileCommand,
     removeGeneratedCommand,
     removeWorktreeCommand,
@@ -30,13 +32,14 @@ import {
     type ComposePlan,
 } from "../commands"
 import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices, type ComposeService } from "../compose-config"
-import { DEPLOY_HEARTBEAT_MS, DEPLOY_LOG_MAX, ENVIRONMENTS_AUDIT_ENTITY, ENV_FILE, OVERRIDE_FILE } from "../constants"
+import { DEPLOY_HEARTBEAT_MS, DEPLOY_LOG_MAX, ENVIRONMENTS_AUDIT_ENTITY, ENV_FILE, MANAGED_COMPOSE_FILE, OVERRIDE_FILE } from "../constants"
 import { executionSteps, type DeployStep } from "../pipeline"
 import { environmentLimitsOf, limitsForService, limitsText, unknownLimitServices, type ResourceLimits } from "../resource-limits"
 import type { EnvironmentActionInput, EnvironmentLimits, EnvironmentsSettings, Machine } from "../schemas"
 import type { DeployKind } from "../types"
 import { emitDeploy, openDeployChannel } from "./hub"
 import { Environment, EnvironmentDeploy, type DeployCheckpoint, type IEnvironment, type IEnvironmentDeploy } from "./models"
+import { currentComposeRevision, deleteComposeRevisions, markComposeDeployed } from "./compose-revisions"
 import { ensureComposeEnvFiles } from "./env-files"
 import { composePlanOf, envVarsOf, loadEnvironment } from "./service"
 import { envLog, loadEnvironmentsSettings, machineAccess, publishEnvironment, runEnvHost, type MachineAccess } from "./settings"
@@ -68,6 +71,10 @@ const runnerStore = globalThis as unknown as Record<symbol, string | undefined>
 export const runnerId = () => (runnerStore[RUNNER_KEY] ??= `${process.pid}-${randomBytes(4).toString("hex")}`)
 
 class StepError extends Error {}
+
+/** Compose gerenciado com `build`: não há código-fonte na pasta (fora do escopo da OPE-191). */
+export const MANAGED_BUILD_UNSUPPORTED = "Compose gerenciado não tem código-fonte: use `image:` nos serviços ou a origem central"
+export const MANAGED_COMPOSE_MISSING = "O ambiente não tem compose: escreva-o em Compose e implante de novo"
 
 export const INTERRUPTED_BEFORE_EXECUTION = "O deploy foi interrompido antes de subir (o app reiniciou). Tente de novo."
 
@@ -171,6 +178,11 @@ async function prepareSource(ctx: DeployContext, env: IEnvironment, settings: En
         const output = await runStep(ctx, { label: `Código da ref ${ref ?? source.ref}`, command: centralCheckoutCommand(settings, config.sessionDirectory, env.slug, ref ?? source.ref), timeoutMs: 300_000 })
         return parseCommit(output)
     }
+    if (source.kind === "managed") {
+        await runStep(ctx, { label: "Pasta do ambiente", command: ensureEnvDirCommand(settings, env.slug), timeoutMs: 30_000 })
+        ctx.write("\nCompose gerenciado: sem código-fonte nem git.\n")
+        return null
+    }
     if (!source.git) {
         ctx.write("\nPasta sem git: o redeploy só refaz o build.\n")
         return null
@@ -183,7 +195,8 @@ async function prepareSource(ctx: DeployContext, env: IEnvironment, settings: En
  * `.env.opex`, arquivos de variáveis do compose, `config`, bloqueio de executar no PC e o override com
  * as imagens. Devolve os serviços e os arquivos de variáveis que o compose declara.
  */
-async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<{ services: ComposeService[]; envFiles: string[] }> {
+async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<{ services: ComposeService[]; envFiles: string[]; composeVersion: number | null }> {
+    const composeVersion = env.source.kind === "managed" ? await writeManagedCompose(ctx, env, plan) : null
     const vars = envVarsOf(env)
     if (vars.length) {
         await runStep(ctx, { label: "Variáveis extras", command: writeFileCommand(plan, ENV_FILE, envFileContent(vars)), timeoutMs: 30_000 }, { redactedAs: `gravar ${ENV_FILE} (${vars.length} variável(is), valores ocultos)` })
@@ -203,7 +216,12 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     if (!parsed) throw new StepError("Não foi possível ler o docker compose config")
     const services = selectServices(parsed, plan.services)
     if (!services.length) throw new StepError("Nenhum serviço do compose para implantar")
-    ctx.write(`Compose lido: ${services.length} serviço(s): ${services.map((service) => service.name).join(", ")}\n`)
+    const names = services.map((service) => service.name).join(", ")
+    if (composeVersion !== null) {
+        // Antes de qualquer build: o compose gerenciado não tem código-fonte na pasta.
+        if (services.some((service) => service.hasBuild)) throw new StepError(MANAGED_BUILD_UNSUPPORTED)
+        ctx.write(`Compose gerenciado v${composeVersion} (${services.length} serviço(s)): ${names}\n`)
+    } else ctx.write(`Compose lido: ${services.length} serviço(s): ${names}\n`)
     if (target.runOn === "pc" && plan.filesOn === "server") {
         const problem = runOnPcProblem(services)
         if (problem) throw new StepError(problem)
@@ -212,7 +230,19 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
     const limits = deployLimits(ctx, environmentLimitsOf(env.limits), services)
     await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits })), timeoutMs: 30_000 })
-    return { services, envFiles }
+    return { services, envFiles, composeVersion }
+}
+
+/**
+ * Grava a revisão vigente do compose gerenciado na pasta do ambiente e a registra no deploy. O conteúdo
+ * nunca vai para o log: o debug mostra só o nome e a versão.
+ */
+async function writeManagedCompose(ctx: DeployContext, env: IEnvironment, plan: ComposePlan): Promise<number> {
+    const revision = await currentComposeRevision(String(env._id))
+    if (!revision) throw new StepError(MANAGED_COMPOSE_MISSING)
+    await runStep(ctx, { label: `Compose gerenciado v${revision.version}`, command: writeFileCommand(plan, MANAGED_COMPOSE_FILE, revision.content), timeoutMs: 30_000 }, { redactedAs: `gravar ${MANAGED_COMPOSE_FILE} (compose gerenciado v${revision.version}, conteúdo omitido)` })
+    await EnvironmentDeploy.updateOne({ _id: ctx.deployId }, { $set: { composeVersion: revision.version } })
+    return revision.version
 }
 
 /**
@@ -278,7 +308,8 @@ export async function startDeploy(id: string, actorId: string, input: StartDeplo
     if ((env.buildOn === "pc" || env.runOn === "pc") && !access.pcAvailable) throw new DomainError(409, access.pcReason ?? "O PC não está disponível", "ENVIRONMENT_PC_UNAVAILABLE")
     if (busy().has(id)) throw new DomainError(409, "Já há um deploy deste ambiente em andamento", "ENVIRONMENT_BUSY")
     busy().add(id)
-    const ref = input.ref || null
+    // Só a central implanta outra ref (adotado refaz o build da pasta; gerenciado grava a revisão vigente).
+    const ref = env.source.kind === "central" ? input.ref || null : null
     let deployId: string
     try {
         if (input.placement) await Environment.updateOne({ _id: id }, { $set: { ...input.placement, updatedAt: new Date() } })
@@ -313,7 +344,7 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         commit = await prepareSource(ctx, env, settings, plan, ref, kind)
         tag = commit ?? `t${Date.now()}`
         const version = await readVersion(ctx, plan)
-        const { services, envFiles } = await prepareCompose(ctx, env, settings, plan, access, target, tag)
+        const { services, envFiles, composeVersion } = await prepareCompose(ctx, env, settings, plan, access, target, tag)
         const buildServices = services.filter((service) => service.hasBuild).map((service) => service.name)
         if (target.buildOn !== target.runOn && buildServices.length) {
             await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { repositories: buildServices.map((service) => registryRepository(env.slug, service)) } })
@@ -321,7 +352,7 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices, envFiles)
         if (skipBuild) ctx.write(`\nBuild reaproveitado: as imagens do commit ${commit} já existem no ${machineName(target.buildOn)}.\n`)
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
-        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits) }
+        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
         await runExecution(ctx, env, settings, plan, access, checkpoint)
         await completeDeploy(env, deployId, recorder, checkpoint)
@@ -350,7 +381,8 @@ type Recorder = ReturnType<typeof deployRecorder>
 
 async function completeDeploy(env: IEnvironment, deployId: string, recorder: Recorder, checkpoint: DeployCheckpoint): Promise<void> {
     const target = { buildOn: env.buildOn, runOn: env.runOn }
-    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), updatedAt: new Date() } })
+    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), ...(typeof checkpoint.composeVersion === "number" ? { deployedComposeVersion: checkpoint.composeVersion } : {}), updatedAt: new Date() } })
+    if (typeof checkpoint.composeVersion === "number") await markComposeDeployed(String(env._id), checkpoint.composeVersion)
     await finishDeploy(deployId, "success", null, recorder.log(), checkpoint.commit, checkpoint.tag)
     envLog.info({ id: String(env._id), deployId, ...target }, "[environments] Deploy concluído")
 }
@@ -463,6 +495,9 @@ export async function deleteEnvironment(id: string, options: { volumes: boolean 
     if (env.source.kind === "central") {
         const { config } = await loadCentral(env.source.centralId).catch(() => ({ config: null }))
         if (config) await run(removeWorktreeCommand(settings, config.sessionDirectory, env.slug), 120_000)
+    } else if (env.source.kind === "managed") {
+        await run(removeEnvDirCommand(settings, env.slug), 120_000)
+        await deleteComposeRevisions(id)
     } else {
         await run(removeGeneratedCommand(plan), 30_000)
     }

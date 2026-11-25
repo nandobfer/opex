@@ -35,6 +35,32 @@ export interface EnvironmentDeploySummaryDto {
     skipBuild: boolean
     /** Retomado depois de o app reiniciar no meio do deploy. */
     resumed: boolean
+    /** Compose gerenciado: revisão gravada por este deploy. */
+    composeVersion: number | null
+}
+
+/** Uma revisão do compose gerenciado na lista (sem o conteúdo). */
+export interface ComposeRevisionSummaryDto {
+    version: number
+    authorId: string
+    note: string | null
+    createdAt: string
+    /** Tamanho em bytes. */
+    size: number
+    /** Último deploy com sucesso desta revisão. */
+    deployedAt: string | null
+}
+
+export interface ComposeRevisionDto extends ComposeRevisionSummaryDto {
+    content: string
+}
+
+/** Compose gerenciado de um ambiente: a vigente (com o conteúdo) e o histórico. */
+export interface EnvironmentComposeDto {
+    current: ComposeRevisionDto | null
+    revisions: ComposeRevisionSummaryDto[]
+    /** Revisão implantada (último deploy com sucesso). */
+    deployedVersion: number | null
 }
 
 /** Valores das variáveis extras para o formulário do dono (`null` = não foi possível ler aquele valor). */
@@ -63,6 +89,8 @@ export interface EnvironmentDto {
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     /** Versão do código do último deploy com sucesso. */
     deployedVersion: string | null
+    /** Compose gerenciado: revisão implantada (`null` = nunca, ou outra origem). */
+    deployedComposeVersion: number | null
     lastDeploy: EnvironmentDeploySummaryDto | null
     /** Serviços em execução (snapshot na hora da consulta). */
     services: ServiceStatusDto[]

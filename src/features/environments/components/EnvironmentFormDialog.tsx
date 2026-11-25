@@ -10,7 +10,7 @@ import { FORM_GRID } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { useEnvironmentEnvValues, useSaveEnvironment } from "../hooks/useEnvironments"
-import { environmentInputSchema, type EnvironmentInput, type Machine } from "../schemas"
+import { environmentCreateSchema, environmentInputSchema, type EnvironmentInput, type Machine } from "../schemas"
 import type { EnvironmentDto, HostCapacityDto } from "../types"
 import { formValuesOf, machineOptions, slugify } from "../view"
 import { EnvironmentLimitsField } from "./EnvironmentLimitsField"
@@ -29,11 +29,17 @@ interface Props {
 
 export const NO_HOSTS: Record<Machine, HostCapacityDto | null> = { server: null, pc: null }
 const MACHINE_SUBJECT: Record<Machine, string> = { server: "o servidor", pc: "o PC" }
+const createResolver = zodResolver(environmentCreateSchema)
+const editResolver = zodResolver(environmentInputSchema)
 
-/** Novo/Editar ambiente (mesmo schema Zod da API). */
+/** Novo/Editar ambiente (mesmos schemas Zod da API: criação exige o compose do gerenciado). */
 export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, hosts, onClose }: Props) {
     const save = useSaveEnvironment(env?.id ?? null)
-    const form = useForm<EnvironmentInput>({ resolver: zodResolver(environmentInputSchema), mode: "onChange", defaultValues: formValuesOf(null, { centralId: "", projectName: "" }) })
+    const editing = useRef(Boolean(env))
+    useEffect(() => {
+        editing.current = Boolean(env)
+    }, [env])
+    const form = useForm<EnvironmentInput>({ resolver: (values, context, options) => (editing.current ? editResolver : createResolver)(values, context, options), mode: "onChange", defaultValues: formValuesOf(null, { centralId: "", projectName: "" }) })
     // Editar: os valores das variáveis são lidos à parte (a cada abertura) e entram na lista uma vez.
     const envValues = useEnvironmentEnvValues(env?.id ?? null, open)
     const appliedValues = useRef(false)
