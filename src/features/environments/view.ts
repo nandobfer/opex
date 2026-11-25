@@ -31,12 +31,23 @@ export function machineOptions(pcAvailable: boolean, pcReason: string | null): O
  * Valores do formulário a partir de um ambiente salvo, com os valores das variáveis lidos à parte
  * (`envValues`). Variável cujo valor não pôde ser lido vai com `keep` (mantém o salvo).
  */
+/** Origens que o formulário Novo cria (o adotado vem de "Adotar"). */
+export type CreatableSourceKind = "central" | "managed"
+
+export const SOURCE_KIND_LABELS: Record<EnvironmentInput["source"]["kind"], string> = { central: "Central", managed: "Compose gerenciado", adopted: "Projeto adotado" }
+
+/** Origem inicial de cada tipo no formulário Novo (o número da revisão é do servidor). */
+export function sourceDefaults(kind: CreatableSourceKind, defaults: { centralId: string; projectName: string }): EnvironmentInput["source"] {
+    if (kind === "managed") return { kind: "managed", projectName: defaults.projectName, services: [], composeVersion: 1 }
+    return { kind: "central", centralId: defaults.centralId, ref: "main", composeFile: "docker-compose.yml", services: [], projectName: defaults.projectName }
+}
+
 export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: string; projectName: string }, envValues?: EnvironmentEnvValuesDto): EnvironmentInput {
     if (!env)
         return {
             name: "",
             slug: "",
-            source: { kind: "central", centralId: defaults.centralId, ref: "main", composeFile: "docker-compose.yml", services: [], projectName: defaults.projectName },
+            source: sourceDefaults("central", defaults),
             env: [],
             ports: [],
             healthUrl: "",

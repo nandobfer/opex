@@ -48,6 +48,7 @@ export function DeployHistoryRow({ deploy, onOpen }: { deploy: EnvironmentDeploy
                     </span>
                 )}
                 {deploy.version && <span className="font-mono">v{deploy.version}</span>}
+                {deploy.composeVersion && <span className="font-mono">Compose v{deploy.composeVersion}</span>}
                 {deploy.skipBuild && <Badge variant="secondary">Build reaproveitado</Badge>}
                 {deploy.resumed && <Badge variant="secondary">Recuperado após reinício</Badge>}
             </div>

@@ -25,7 +25,11 @@ export function DeleteEnvironmentDialog({ env, onClose }: { env: EnvironmentDto 
                     <AlertDialogTitle>Apagar {env?.name}?</AlertDialogTitle>
                     <AlertDialogDescription>
                         {env?.deployedOn ? "Os containers são derrubados" : "O ambiente nunca foi implantado"}
-                        {env?.source.kind === "central" ? " e a pasta do código é removida." : "; os arquivos do projeto adotado ficam (só os gerados pelo opex saem)."}
+                        {env?.source.kind === "central"
+                            ? " e a pasta do código é removida."
+                            : env?.source.kind === "managed"
+                              ? " e a pasta do ambiente é removida (com o que estiver nela, inclusive dados de volumes montados na pasta), junto com todas as revisões do compose."
+                              : "; os arquivos do projeto adotado ficam (só os gerados pelo opex saem)."}
                     </AlertDialogDescription>
                 </AlertDialogHeader>
                 {env?.deployedOn && <ToggleCard id="environment-delete-volumes" checked={volumes} onCheckedChange={setVolumes} label="Apagar também os volumes" description="Os dados guardados nos volumes do compose são perdidos" onLabel="Apagar" offLabel="Manter" />}

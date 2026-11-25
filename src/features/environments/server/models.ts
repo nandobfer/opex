@@ -23,6 +23,8 @@ export interface IEnvironment {
     deployedCommit: string | null
     /** Versão do `package.json` do código do último deploy com sucesso. */
     deployedVersion?: string | null
+    /** Compose gerenciado: revisão implantada no último deploy com sucesso. */
+    deployedComposeVersion?: number | null
     lastDeployId: string | null
     createdAt: Date
     updatedAt: Date
@@ -58,6 +60,22 @@ export interface IEnvironmentDeploy {
     checkpoint?: DeployCheckpoint | null
     /** Sessão do Agente Opex que pediu o deploy: recebe um aviso quando ele termina. */
     notifyOpexSessionId?: string | null
+    /** Compose gerenciado: revisão gravada na pasta por este deploy. */
+    composeVersion?: number | null
+}
+
+/** Revisão do compose gerenciado (OPE-191): nunca é sobrescrita; a vigente é a de maior `version`. */
+export interface IEnvironmentComposeVersion {
+    _id: Types.ObjectId
+    environmentId: string
+    version: number
+    /** YAML completo (público ao dono; nunca vai para o log do deploy nem para a auditoria). */
+    content: string
+    authorId: string
+    note: string | null
+    createdAt: Date
+    /** Último deploy com sucesso desta revisão. */
+    deployedAt: Date | null
 }
 
 /** O suficiente para remontar os passos da fase de execução (`executionSteps`) e terminar o deploy. */
@@ -73,6 +91,8 @@ export interface DeployCheckpoint {
     buildServices: string[]
     skipBuild: boolean
     from: Machine | null
+    /** Compose gerenciado: a revisão gravada na pasta (a retomada termina gravando a mesma). */
+    composeVersion?: number | null
 }
 
 export interface IEnvironmentsState {
@@ -101,6 +121,7 @@ const environmentSchema = new Schema<IEnvironment>(
         deployedRef: { type: String, default: null },
         deployedCommit: { type: String, default: null },
         deployedVersion: { type: String, default: null },
+        deployedComposeVersion: { type: Number, default: null },
         lastDeployId: { type: String, default: null },
         createdAt: { type: Date, default: () => new Date() },
         updatedAt: { type: Date, default: () => new Date() },
@@ -130,11 +151,26 @@ const deploySchema = new Schema<IEnvironmentDeploy>(
         runnerId: { type: String, default: null },
         checkpoint: { type: Schema.Types.Mixed, default: null },
         notifyOpexSessionId: { type: String, default: null },
+        composeVersion: { type: Number, default: null },
     },
     { collection: "environment_deploys", versionKey: false },
 )
 deploySchema.index({ startedAt: 1 }, { expireAfterSeconds: DEPLOY_TTL_SECONDS })
 deploySchema.index({ status: 1, heartbeatAt: 1 })
+
+const composeVersionSchema = new Schema<IEnvironmentComposeVersion>(
+    {
+        environmentId: { type: String, required: true },
+        version: { type: Number, required: true },
+        content: { type: String, required: true },
+        authorId: { type: String, required: true },
+        note: { type: String, default: null },
+        createdAt: { type: Date, default: () => new Date() },
+        deployedAt: { type: Date, default: null },
+    },
+    { collection: "environment_compose_versions", versionKey: false },
+)
+composeVersionSchema.index({ environmentId: 1, version: 1 }, { unique: true })
 
 const stateSchema = new Schema<IEnvironmentsState>(
     {
@@ -150,13 +186,15 @@ const stateSchema = new Schema<IEnvironmentsState>(
 
 export const Environment: Model<IEnvironment> = (models.Environment as Model<IEnvironment>) ?? model<IEnvironment>("Environment", environmentSchema)
 export const EnvironmentDeploy: Model<IEnvironmentDeploy> = (models.EnvironmentDeploy as Model<IEnvironmentDeploy>) ?? model<IEnvironmentDeploy>("EnvironmentDeploy", deploySchema)
+export const EnvironmentComposeVersion: Model<IEnvironmentComposeVersion> =
+    (models.EnvironmentComposeVersion as Model<IEnvironmentComposeVersion>) ?? model<IEnvironmentComposeVersion>("EnvironmentComposeVersion", composeVersionSchema)
 export const EnvironmentsState: Model<IEnvironmentsState> = (models.EnvironmentsState as Model<IEnvironmentsState>) ?? model<IEnvironmentsState>("EnvironmentsState", stateSchema)
 
 let indexesReady: Promise<void> | null = null
 
 export async function environmentsDb(): Promise<void> {
     await dbConnect()
-    indexesReady ??= Promise.all([Environment.createIndexes(), EnvironmentDeploy.createIndexes(), EnvironmentsState.createIndexes()])
+    indexesReady ??= Promise.all([Environment.createIndexes(), EnvironmentDeploy.createIndexes(), EnvironmentComposeVersion.createIndexes(), EnvironmentsState.createIndexes()])
         .then(() => undefined)
         .catch((error: unknown) => {
             indexesReady = null
