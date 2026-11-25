@@ -17,6 +17,8 @@ import type { SubjectTrace } from "./decide-subject"
 import { SecretaryConversation, SecretaryDecisionRecord, secretaryDb } from "./models"
 import { loadPersonality } from "./personality"
 import { planSecretaryReply } from "./plan-reply"
+import { resolveSecretaryContact } from "./contact"
+import type { SecretaryContact } from "../contact"
 
 /**
  * Simulação (aba Simulação, plano v3 da OPE-192): o MESMO núcleo do turno real (`planSecretaryReply`) com as
@@ -35,6 +37,8 @@ export interface SimulateResult {
     personality: { variant: string | null }
     memories: { counts: { full: number; titles: number; overflow: number } | null; written: { channel: string; title: string; text: string }[] }
     question: string | null
+    /** O que o agente recebeu sobre o contato (nome, número e, em grupo, o autor). */
+    contact: SecretaryContact | null
     observing: boolean
     costUsd: number
 }
@@ -77,6 +81,7 @@ export async function simulateSecretary(input: SimulateInput): Promise<SimulateR
     const chatId = conversationIdOfJid(input.jid)
     const written: SimulateResult["memories"]["written"] = []
     let counts: SimulateResult["memories"]["counts"] = null
+    let contact: SecretaryContact | null = null
     const history = input.useRealHistory ? [...(await realHistory(settings, input.jid)), ...input.history] : input.history
     const observing = settings.mode === "observe"
     const [plan, state] = await Promise.all([
@@ -85,8 +90,9 @@ export async function simulateSecretary(input: SimulateInput): Promise<SimulateR
             origins: { reply: SECRETARY_SIMULATION_CONSUMPTION_ORIGIN, decision: SECRETARY_SIMULATION_CONSUMPTION_ORIGIN },
         }, {
             history: async () => history,
-            memory: async () => {
-                const memory = await agentMemoryContext("secretario", chatId ? { kind: "conversation", conversationId: chatId } : { kind: "review" }, { focus: input.message })
+            contact: async () => (contact = await resolveSecretaryContact({ jid: input.jid, author: "Participante do grupo", instance: settings.instance })),
+            memory: async (focus) => {
+                const memory = await agentMemoryContext("secretario", chatId ? { kind: "conversation", conversationId: chatId } : { kind: "review" }, { focus })
                 const simulated = input.memories.map((item) => `- (${item.channel}) ${item.text}`).join("\n")
                 counts = memory.counts
                 return { block: simulated ? `${memory.block}\n\nGravadas nesta simulação:\n${simulated}` : memory.block, counts: memory.counts }
@@ -121,6 +127,7 @@ export async function simulateSecretary(input: SimulateInput): Promise<SimulateR
         personality: { variant: plan.kind === "reply" ? plan.variant : null },
         memories: { counts, written },
         question: plan.kind === "reply" ? plan.question : null,
+        contact,
         observing,
         costUsd: await costOf(simId),
     }

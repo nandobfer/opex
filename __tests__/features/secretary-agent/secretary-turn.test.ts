@@ -25,7 +25,9 @@ const mocks = vi.hoisted(() => ({
     noticeUpsert: vi.fn(async () => ({ upsertedCount: 1 })),
     memoryTools: [] as unknown[],
     enqueue: vi.fn(async () => "pendente:x"),
+    contacts: vi.fn(async (): Promise<Map<string, { name: string }>> => new Map([["5531999999999@s.whatsapp.net", { name: "Alfredo Petri" }], ["123@g.us", { name: "Família" }], ["5531911112222@s.whatsapp.net", { name: "João Silva" }]])),
 }))
+vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mocks.contacts }))
 
 vi.mock("node:timers/promises", () => ({ setTimeout: vi.fn(async () => undefined) }))
 vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
@@ -95,6 +97,31 @@ beforeEach(() => {
 })
 
 describe("runSecretaryTurn", () => {
+    it("diz ao modelo com quem está falando e que não pergunte quem é", async () => {
+        await turn()
+        const call = mocks.inference.mock.calls[0]?.[0] as { instructions: string; messages: { content: string }[] }
+        expect(call.instructions).toContain("Você está falando com Alfredo Petri (+5531999999999). Se o nome é conhecido, não pergunte quem é")
+        expect(JSON.parse(call.messages[0]!.content).contact).toEqual({ nome: "Alfredo Petri", numero: "+5531999999999" })
+        expect(mocks.contacts).toHaveBeenCalledWith([CONTACT], "opex")
+    })
+
+    it("em grupo, manda o nome do grupo e o autor separados", async () => {
+        withCriteria({ audience: { groups: true, groupReply: "always" } })
+        const message = msg({ chatJid: "123@g.us", isGroup: true, participant: "5531911112222@s.whatsapp.net", pushName: "João" })
+        mocks.state = { pending: [message], lastOwnerMessageAt: null, pausedUntil: null }
+        await turn(message)
+        const call = mocks.inference.mock.calls[0]?.[0] as { instructions: string; messages: { content: string }[] }
+        expect(call.instructions).toContain("Você está falando no grupo Família; quem escreveu foi João Silva.")
+        expect(JSON.parse(call.messages[0]!.content).contact).toEqual({ nome: "Família", numero: null, grupo: "Família", autor: "João Silva" })
+    })
+
+    it("com o cache de contatos fora, segue com o nome do WhatsApp e o número", async () => {
+        mocks.contacts.mockRejectedValueOnce(new Error("banco fora"))
+        await turn()
+        expect(mocks.inference.mock.calls[0]?.[0].instructions).toContain("Você está falando com Ana (+5531999999999).")
+        expect(decisions()).toEqual(["replied"])
+    })
+
     it("registra a retomada da mesma mensagem sem sobrescrever a pergunta ao dono", async () => {
         const message = msg()
         mocks.inference.mockResolvedValueOnce({ text: "vou conferir", question: "Você vai?" })

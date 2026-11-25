@@ -6,6 +6,7 @@ import { formatUsd } from "@/features/ai/provider-usage"
 import { CRITERIA_RULE_LABELS } from "../../criteria"
 import type { SimulateResult } from "../../server/simulate"
 import { CriteriaFlow } from "../criteria/CriteriaFlow"
+import { ContactBlock } from "./ContactBlock"
 import { JevAnswersBlock } from "./JevAnswersBlock"
 import { SimulationBlock as Block } from "./SimulationBlock"
 
@@ -25,6 +26,7 @@ export function SimulationPanel({ result, error }: { result: SimulateResult | nu
                 <Block key="steps" icon={ListChecks} title="Passo a passo dos critérios">
                     <CriteriaFlow steps={result.steps} />
                 </Block>
+                {result.contact && <ContactBlock key="contact" contact={result.contact} />}
                 {result.subject && <JevAnswersBlock key="subject" subject={result.subject} />}
                 <Block key="limits" icon={Gauge} title="Limites e pausa (conversa real)">
                     {limits ? (

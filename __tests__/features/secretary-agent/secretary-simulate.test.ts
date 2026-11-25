@@ -13,13 +13,16 @@ const mocks = vi.hoisted(() => ({
     record: vi.fn(),
     countDecisions: vi.fn(async () => 3),
     pausedUntil: null as Date | null,
+    contacts: vi.fn(async (): Promise<Map<string, { name: string }>> => new Map([["5531999999999@s.whatsapp.net", { name: "Alfredo Petri" }]])),
+    memory: vi.fn(async (..._args: unknown[]) => ({ block: "- Ana é vizinha", counts: { full: 1, titles: 2, overflow: 0 } })),
 }))
+vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mocks.contacts }))
 
 vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
 vi.mock("@/features/auth/server/context", () => ({ requireAdminSession: vi.fn() }))
 vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async (pipeline: [{ $match: { subject?: string } }]) => (pipeline[0].$match.subject ? [{ total: 0.002 }] : [{ total: 1 }]) } }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
-vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: async () => ({ block: "- Ana é vizinha", counts: { full: 1, titles: 2, overflow: 0 } }) }))
+vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: mocks.memory }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: { findMessages: mocks.findMessages, sendText: mocks.send, markAsRead: mocks.markAsRead } }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
@@ -86,6 +89,26 @@ describe("simulateSecretary", () => {
         expect(result.pausedUntil).not.toBeNull()
         expect(mocks.inference).not.toHaveBeenCalled()
         expect(mocks.decideSubject).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ origin: "secretary-simulation" }))
+    })
+
+    it("o agente recebe o nome do contato escolhido e devolve o contato no rastro", async () => {
+        const result = await run({ message: "oi" })
+        const call = mocks.inference.mock.calls[0]?.[0] as { instructions: string; messages: { content: string }[] }
+        expect(call.instructions).toContain("Você está falando com Alfredo Petri (+5531999999999). Se o nome é conhecido, não pergunte quem é")
+        expect(JSON.parse(call.messages[0]!.content).contact).toEqual({ nome: "Alfredo Petri", numero: "+5531999999999" })
+        expect(mocks.contacts).toHaveBeenCalledWith([CONTACT], "opex")
+        expect(mocks.memory).toHaveBeenCalledWith("secretario", expect.anything(), { focus: "Alfredo Petri\noi" })
+        expect(result.contact).toEqual({ name: "Alfredo Petri", number: "5531999999999", isGroup: false, groupName: null, author: null })
+    })
+
+    it("com o cache de contatos fora, segue só com o número e o nome desconhecido", async () => {
+        mocks.contacts.mockRejectedValueOnce(new Error("banco fora"))
+        const result = await run()
+        const call = mocks.inference.mock.calls[0]?.[0] as { instructions: string; messages: { content: string }[] }
+        expect(call.instructions).toContain("nome desconhecido (só o número) (+5531999999999)")
+        expect(call.instructions).not.toContain("não pergunte quem é")
+        expect(JSON.parse(call.messages[0]!.content).contact.nome).toBe("nome desconhecido (só o número)")
+        expect(result.contact?.name).toBeNull()
     })
 
     it("o histórico real só é lido quando pedido", async () => {

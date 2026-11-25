@@ -19,7 +19,7 @@ import { DEFAULT_SECRETARY_SETTINGS, type SecretarySettings } from "@/features/s
 
 const contacts = [{ jid: CONTACT, name: "Ana", number: "5531999999999", pictureUrl: null, isGroup: false, lastMessageAt: null }]
 const base = {
-    subject: null, limits: null, pausedUntil: null, personality: { variant: null }, memories: { counts: null, written: [] }, question: null, observing: false, costUsd: 0.001,
+    subject: null, limits: null, pausedUntil: null, personality: { variant: null }, memories: { counts: null, written: [] }, question: null, contact: null, observing: false, costUsd: 0.001,
     steps: [{ id: "blocked", label: "Está em \"Nunca responder a\"?", outcome: "pass", detail: "Não." }],
 }
 
@@ -50,13 +50,14 @@ describe("SimulationTab", () => {
         expect(screen.queryByRole("alert")).toBeNull()
     })
     it("mostra a resposta em balões e a coluna lateral; Reiniciar limpa", async () => {
-        mocks.mutateAsync.mockResolvedValueOnce({ ...base, replies: ["oi!", "tudo sim"], decision: { decision: "reply", rule: "allowed", reason: "Passou", label: "Responderia" } })
+        mocks.mutateAsync.mockResolvedValueOnce({ ...base, contact: { name: "Ana Souza", number: "5531999999999", isGroup: false, groupName: null, author: null }, replies: ["oi!", "tudo sim"], decision: { decision: "reply", rule: "allowed", reason: "Passou", label: "Responderia" } })
         render(<Harness />)
         fireEvent.click(screen.getByRole("button", { name: "Escolher Ana" }))
         await sendMessage("oi, tudo bem?")
         await waitFor(() => expect(screen.getByText("tudo sim")).toBeTruthy())
         expect(mocks.mutateAsync).toHaveBeenCalledWith(expect.objectContaining({ jid: CONTACT, message: "oi, tudo bem?", useRealHistory: false, history: [] }))
         expect(screen.getByTestId("simulation-panel").textContent).toContain("Responderia")
+        expect(screen.getByLabelText("Contato recebido pelo agente").textContent).toContain("Ana Souza")
         fireEvent.click(screen.getByRole("button", { name: "Reiniciar" }))
         expect(screen.queryByText("tudo sim")).toBeNull()
         expect(screen.queryByTestId("simulation-panel")).toBeNull()

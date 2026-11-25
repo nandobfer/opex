@@ -16,6 +16,7 @@ import { SecretaryConversation, SecretaryDecisionRecord, SecretaryNotice } from 
 import { askOwner, publishNotices, sendSecretaryText } from "./owner-questions"
 import { loadPersonality } from "./personality"
 import { planSecretaryReply } from "./plan-reply"
+import { resolveSecretaryContact } from "./contact"
 import { loadSecretarySettings } from "./settings"
 import { readTurnMedia } from "./media"
 import { pendingOpOfTool, withPendingQueue } from "./memory-queue"
@@ -91,7 +92,8 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         }, {
             history: () => (historyCache ??= evolution.findMessages(instance, { remoteJid: message.chatJid, pageSize: SECRETARY_HISTORY_LIMIT })
                 .then((page) => page.records.filter((item) => !pendingIds.has(item.key.id)).reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) })))),
-            memory: () => agentMemoryContext("secretario", turn, { focus: text }),
+            contact: () => resolveSecretaryContact({ jid: message.chatJid, participant: message.participant, pushName: message.pushName, instance }),
+            memory: (focus) => agentMemoryContext("secretario", turn, { focus }),
             personality: async () => (await loadPersonality()).snapshot,
             stillCurrent: current,
             tools: () => memoryToolSet({ chatId, token, write: writeMemory, stillCurrent: current }),
