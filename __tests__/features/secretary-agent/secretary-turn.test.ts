@@ -85,6 +85,14 @@ beforeEach(() => {
 })
 
 describe("runSecretaryTurn", () => {
+    it("registra a falha do provedor com diagnóstico seguro sem enviar", async () => {
+        mocks.inference.mockRejectedValueOnce(Object.assign(new Error("mensagem privada"), { statusCode: 400 }))
+        await turn()
+        expect(decisions()).toEqual(["error"])
+        expect(mocks.decide.mock.calls[0]?.[4]).toContain("OpenCode Go recusou a chamada (HTTP 400)")
+        expect(mocks.decide.mock.calls[0]?.[4]).not.toContain("mensagem privada")
+        expect(mocks.send).not.toHaveBeenCalled()
+    })
     it("só a última mensagem da janela responde (token trocado vira agrupada)", async () => {
         mocks.state = null
         await turn()

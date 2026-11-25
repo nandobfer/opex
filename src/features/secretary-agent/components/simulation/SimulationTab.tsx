@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { motion } from "framer-motion"
 import { FlaskConical, Loader2, RotateCcw, Send } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
+import { apiErrorMessage } from "@/lib/api"
 import { ConversationPickerField } from "@/features/evolution-api/components/ConversationPicker"
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
 import { useSecretarySimulation } from "../../hooks/useSecretarySimulation"
@@ -32,21 +33,30 @@ export function SimulationTab({ form, contacts }: { form: SecretaryForm; contact
     const [lines, setLines] = useState<SimulationLine[]>([])
     const [memories, setMemories] = useState<SimulateInput["memories"]>([])
     const [result, setResult] = useState<SimulateResult | null>(null)
+    const [error, setError] = useState<string | null>(null)
+    const generation = useRef(0)
     const [text, setText] = useState("")
     const contact = contacts.find((item) => item.jid === jid[0])
     const reset = () => {
+        generation.current++
         setLines([])
         setMemories([])
         setResult(null)
+        setError(null)
     }
     const send = async () => {
         const message = text.trim()
         if (!message || !jid[0] || simulate.isPending) return
+        const currentGeneration = generation.current
+        setError(null)
         const history = lines.flatMap((line) => (line.kind === "text" ? [{ owner: line.author === "secretary", text: line.text }] : []))
         setLines((current) => [...current, { id: `c${Date.now()}`, kind: "text", author: "contact", text: message }])
         setText("")
-        const response = await simulate.mutateAsync({ settings: form.getValues(), jid: jid[0], mentionsOwner: mentioned, history, message, useRealHistory: historyMode === "real", memories }).catch(() => null)
-        if (!response) return
+        const response = await simulate.mutateAsync({ settings: form.getValues(), jid: jid[0], mentionsOwner: mentioned, history, message, useRealHistory: historyMode === "real", memories }).catch((error: unknown) => {
+            if (generation.current === currentGeneration) setError(apiErrorMessage(error, "Não foi possível simular a mensagem"))
+            return null
+        })
+        if (!response || generation.current !== currentGeneration) return
         setResult(response)
         setMemories((current) => [...current, ...response.memories.written.map((item) => ({ channel: item.channel, title: item.title, text: item.text }))].slice(-20))
         const now = Date.now()
@@ -93,7 +103,7 @@ export function SimulationTab({ form, contacts }: { form: SecretaryForm; contact
                             </div>
                         </div>
                     </div>
-                    <SimulationPanel result={result} />
+                    <SimulationPanel result={result} error={error} />
                 </div>
             </CardContent>
         </Card>

@@ -10,7 +10,8 @@ import { JevAnswersBlock } from "./JevAnswersBlock"
 import { SimulationBlock as Block } from "./SimulationBlock"
 
 /** Coluna lateral da Simulação: a decisão, o passo a passo, o assunto, limites, personalidade, memórias, pergunta e custo. */
-export function SimulationPanel({ result }: { result: SimulateResult | null }) {
+export function SimulationPanel({ result, error }: { result: SimulateResult | null; error: string | null }) {
+    if (error) return <aside aria-label="Resultado da simulação"><Block icon={CircleX} title="Erro"><p className="text-sm text-destructive" role="alert">{error}</p></Block></aside>
     if (!result) return <p className="rounded-md border border-dashed p-4 text-center text-xs text-muted-foreground">Envie uma mensagem para ver se o Secretário responderia, o motivo, o assunto identificado e o que ele aprenderia.</p>
     const replied = result.decision.decision === "reply"
     const { limits } = result

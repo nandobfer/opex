@@ -21,6 +21,7 @@ import { readTurnMedia } from "./media"
 import { pendingOpOfTool, withPendingQueue } from "./memory-queue"
 import type { AiAgentId } from "@/features/ai/agents"
 import { errorKind, safeErr, secretaryLog } from "./log"
+import { SecretaryProviderError } from "../ai-errors"
 
 /**
  * Ferramentas de memória do turno real (sem `forget_my_memory`), com a fila de pendências quando o Engramind está fora
@@ -121,8 +122,10 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         }
         await decide("replied", verdict.reason, subject.topic)
     } catch (error) {
-        secretaryLog.error({ ...safeErr(error), instance, chatId }, "[secretario] Falha no turno")
-        await decide("error", `O turno falhou (${errorKind(error)}). Confira a conexão Evolution e o provedor. Nenhum envio será repetido automaticamente.`)
+        const providerFailure = error instanceof SecretaryProviderError
+        const reason = providerFailure ? error.message : `O turno falhou (${errorKind(error)}). Confira a conexão Evolution e o provedor.`
+        secretaryLog.error({ ...safeErr(providerFailure ? error.cause : error), reason, instance, chatId }, "[secretario] Falha no turno")
+        await decide("error", `${reason} Nenhum envio será repetido automaticamente.`)
     } finally {
         await SecretaryConversation.updateOne({ _id: id, token }, { $set: { token: null } })
     }

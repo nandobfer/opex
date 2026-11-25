@@ -39,6 +39,16 @@ afterEach(() => {
 })
 
 describe("SimulationTab", () => {
+    it("mostra o diagnóstico do 502 na coluna lateral e o limpa ao reiniciar", async () => {
+        const message = "OpenCode Go recusou a chamada (HTTP 400)."
+        mocks.mutateAsync.mockRejectedValueOnce({ isAxiosError: true, response: { data: { error: message } } })
+        render(<Harness />)
+        fireEvent.click(screen.getByRole("button", { name: "Escolher Ana" }))
+        await sendMessage("oi")
+        expect((await screen.findByRole("alert")).textContent).toBe(message)
+        fireEvent.click(screen.getByRole("button", { name: "Reiniciar" }))
+        expect(screen.queryByRole("alert")).toBeNull()
+    })
     it("mostra a resposta em balões e a coluna lateral; Reiniciar limpa", async () => {
         mocks.mutateAsync.mockResolvedValueOnce({ ...base, replies: ["oi!", "tudo sim"], decision: { decision: "reply", rule: "allowed", reason: "Passou", label: "Responderia" } })
         render(<Harness />)

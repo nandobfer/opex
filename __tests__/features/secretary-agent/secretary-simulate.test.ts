@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { NextRequest } from "next/server"
 import { DEFAULT_SECRETARY_SETTINGS, simulateSchema, type SecretarySettings } from "@/features/secretary-agent/schemas"
 
 const CONTACT = "5531999999999@s.whatsapp.net"
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
+vi.mock("@/features/auth/server/context", () => ({ requireAdminSession: vi.fn() }))
 vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async (pipeline: [{ $match: { subject?: string } }]) => (pipeline[0].$match.subject ? [{ total: 0.002 }] : [{ total: 1 }]) } }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
 vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: async () => ({ block: "- Ana é vizinha", counts: { full: 1, titles: 2, overflow: 0 } }) }))
@@ -29,6 +31,7 @@ vi.mock("@/features/secretary-agent/server/models", () => ({
 }))
 
 import { simulateSecretary } from "@/features/secretary-agent/server/simulate"
+import { POST } from "@/app/api/secretary/simulate/route"
 
 const MONEY = { id: "dinheiro", name: "Dinheiro", description: "", examples: [] }
 function settings(patch: Partial<SecretarySettings> = {}): SecretarySettings {
@@ -46,6 +49,16 @@ beforeEach(() => {
 })
 
 describe("simulateSecretary", () => {
+    it("responde 502 com diagnóstico seguro quando a inferência falha", async () => {
+        mocks.inference.mockRejectedValueOnce(Object.assign(new Error("mensagem privada"), { statusCode: 400 }))
+        const req = new NextRequest("http://localhost/api/secretary/simulate", { method: "POST", body: JSON.stringify({ settings: settings(), jid: CONTACT, message: "oi" }) })
+        const response = await POST(req, { params: Promise.resolve({}) })
+        expect(response.status).toBe(502)
+        const body = await response.text()
+        expect(body).toContain("SECRETARY_PROVIDER_ERROR")
+        expect(body).toContain("OpenCode Go recusou a chamada (HTTP 400)")
+        expect(body).not.toContain("mensagem privada")
+    })
     it("responde com as configurações enviadas, sem enviar, marcar como lida, gravar decisão nem memória", async () => {
         const result = await run()
         expect(result.replies).toEqual(["oi!", "tudo sim"])
