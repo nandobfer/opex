@@ -8,6 +8,12 @@ export const SECRETARY_FEATURE = "secretary-agent"
 /** Origem do consumo de IA (`ai_consumption_logs`). */
 export const SECRETARY_CONSUMPTION_ORIGIN = "secretary-agent"
 export const SECRETARY_ANALYSIS_CONSUMPTION_ORIGIN = "secretary-analysis"
+/** Decisão do assunto (modelo de texto ou JEV): conta no orçamento diário das respostas. */
+export const SECRETARY_DECISION_CONSUMPTION_ORIGIN = "secretary-decision"
+/** Simulação (aba Simulação): custo real, fora do orçamento diário. */
+export const SECRETARY_SIMULATION_CONSUMPTION_ORIGIN = "secretary-simulation"
+/** Origens somadas no orçamento diário (a análise e a simulação ficam de fora). */
+export const SECRETARY_BUDGET_ORIGINS: readonly string[] = [SECRETARY_CONSUMPTION_ORIGIN, SECRETARY_DECISION_CONSUMPTION_ORIGIN]
 /** Entidade da auditoria. */
 export const SECRETARY_AUDIT_ENTITY = "AgenteSecretario"
 
@@ -21,7 +27,7 @@ export const SECRETARY_PERSONALITY_EVENT = "secretary-personality-updated"
 export const SECRETARY_ANALYSIS_EVENT = "secretary-analysis-updated"
 
 /** Sub-abas em `/integracoes/ia?aba=agente-secretario&secao=…`. */
-export const SECRETARY_SECTIONS = ["geral", "criterios", "personalidade", "memorias", "conversas", "avisos"] as const
+export const SECRETARY_SECTIONS = ["geral", "criterios", "simulacao", "personalidade", "memorias", "conversas", "avisos"] as const
 export type SecretarySection = (typeof SECRETARY_SECTIONS)[number]
 
 export const SECRETARY_MODES = ["reply", "observe"] as const
@@ -99,7 +105,7 @@ export type ConversationAgentState = "active" | "paused" | "excluded" | "waiting
 export const CONVERSATION_STATE_LABELS: Record<ConversationAgentState, string> = {
     active: "Ativo",
     paused: "Pausado",
-    excluded: "Excluído",
+    excluded: "Nunca responder",
     "waiting-owner": "Aguardando o dono",
 }
 

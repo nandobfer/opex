@@ -2,6 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { useEffect } from "react"
 import { useForm, type UseFormReturn } from "react-hook-form"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../helpers/framer-motion"
@@ -26,11 +27,13 @@ const providers: AiProviderStatusDto[] = [
     { id: "anthropic", integrationId: "ai_anthropic", name: "Anthropic", configured: true, connected: true },
 ]
 
-let form: UseFormReturn<SecretarySettings>
+const holder: { form: UseFormReturn<SecretarySettings> | null } = { form: null }
 function Harness({ prefix, initial }: { prefix: SecretaryModelPrefix; initial?: Partial<SecretarySettings> }) {
-    form = useForm<SecretarySettings>({ defaultValues: { ...DEFAULT_SECRETARY_SETTINGS, ...initial } })
+    const form = useForm<SecretarySettings>({ defaultValues: { ...DEFAULT_SECRETARY_SETTINGS, ...initial } })
+    useEffect(() => { holder.form = form }, [form])
     return <SecretaryModelCard form={form} prefix={prefix} idPrefix={prefix} providers={providers} />
 }
+const form = { getValues: (name: string) => (holder.form!.getValues as (name: string) => unknown)(name) }
 
 afterEach(() => cleanup())
 

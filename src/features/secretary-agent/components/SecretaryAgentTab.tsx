@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { useForm, type UseFormReturn } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useQueryClient } from "@tanstack/react-query"
-import { Bell, Brain, ListFilter, MessagesSquare, Settings2, Sparkles } from "lucide-react"
+import { Bell, Brain, FlaskConical, ListFilter, MessagesSquare, Settings2, Sparkles } from "lucide-react"
 import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
@@ -28,6 +28,7 @@ import { DEFAULT_SECRETARY_SETTINGS, modelsInUse, secretarySettingsSchema, type 
 import { SECRETARY_ANALYSIS_EVENT, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, SECRETARY_NOTICES_EVENT, SECRETARY_PERSONALITY_EVENT } from "../constants"
 import { needsPrice, priceKey } from "../cost"
 import { CriteriaTab } from "./CriteriaTab"
+import { SimulationTab } from "./simulation/SimulationTab"
 import { ConversationsTab, NoticesTab } from "./ConversationTabs"
 import { PersonalityTab } from "./PersonalityTab"
 
@@ -56,7 +57,7 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     if (config.isPending) return <div className="grid gap-6"><Skeleton className="h-12" /><Skeleton className="h-48" /><Skeleton className="h-64" /></div>
     if (config.isError) return <Button variant="outline" onClick={() => void config.refetch()}>Tentar novamente</Button>
     return <AgentSettingsTabs fallback="geral" label="Agente Secretário" tabs={[
-        { id: "geral", label: "Geral", icon: Settings2 }, { id: "criterios", label: "Critérios", icon: ListFilter },
+        { id: "geral", label: "Geral", icon: Settings2 }, { id: "criterios", label: "Critérios", icon: ListFilter }, { id: "simulacao", label: "Simulação", icon: FlaskConical },
         { id: "personalidade", label: "Personalidade", icon: Sparkles }, { id: "memorias", label: "Memórias", icon: Brain },
         { id: "conversas", label: "Conversas", icon: MessagesSquare }, { id: "avisos", label: "Avisos", icon: Bell, badge: notices.data?.pending || null },
     ]}>{(section) => {
@@ -64,6 +65,7 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
         return <>
             {section === "geral" && <GeneralSettings form={form} />}
             {section === "criterios" && <CriteriaTab form={form} contacts={contactItems} />}
+            {section === "simulacao" && <SimulationTab form={form} contacts={contactItems} />}
             {section === "personalidade" && <PersonalityTab form={form} contacts={contactItems} />}
             {section === "memorias" && <SecretaryMemories />}
             {section === "conversas" && <ConversationsTab minutes={form.getValues("pauseMinutes")} />}

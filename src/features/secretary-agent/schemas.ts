@@ -30,6 +30,12 @@ export const secondaryModelSchema = z.object({
 })
 export type SecretarySecondaryModel = z.infer<typeof secondaryModelSchema>
 
+/** Provedores de quem decide o assunto: os de texto do Agente Opex e o JEV (decisão tipada, sem gerar texto). */
+export const DECISION_PROVIDER_IDS = [...OPEX_PROVIDER_IDS, "jev"] as const
+export type SecretaryDecisionProvider = (typeof DECISION_PROVIDER_IDS)[number]
+export const decisionModelSchema = secondaryModelSchema.extend({ provider: z.enum(DECISION_PROVIDER_IDS).nullable() })
+export type SecretaryDecisionModel = z.infer<typeof decisionModelSchema>
+
 export const tokenPriceSchema = z.object({
     inputPerMTok: z.number({ error: "Informe o preço" }).min(0, "Mínimo 0").max(1000, "Máximo US$ 1000"),
     outputPerMTok: z.number({ error: "Informe o preço" }).min(0, "Mínimo 0").max(1000, "Máximo US$ 1000"),
@@ -37,19 +43,35 @@ export const tokenPriceSchema = z.object({
 
 const jidSchema = z.string().trim().min(5).max(120).regex(/^[^@\s]+@[a-z.]+$/, "Conversa inválida")
 
+/** Um assunto (bloqueado ou liberado): nome curto, descrição e exemplos. */
 export const subjectRuleSchema = z.object({
+    id: z.string().trim().min(1).max(40).regex(/^[a-z0-9-]+$/, "Identificador inválido"),
+    name: z.string().trim().min(1, "Dê um nome ao assunto").max(60, "Máximo de 60 caracteres"),
     description: z.string().trim().max(1000, "Máximo de 1000 caracteres"),
     examples: z.array(z.string().trim().min(1).max(300, "Máximo de 300 caracteres")).max(20, "Máximo de 20 exemplos"),
 })
 export type SubjectRule = z.infer<typeof subjectRuleSchema>
 
+/**
+ * Critérios (OPE-192, plano v3): duas etapas que precisam passar JUNTAS, sem precedência entre elas.
+ * - `audience` ("Quem pode ser respondido"): nunca responder a `blocked`; responder a todos (com os tipos de
+ *   conversa) ou só aos `selected`; em grupo, sempre ou só quando mencionam o dono.
+ * - `subjects` ("Sobre o quê"): assuntos bloqueados sempre bloqueiam; responder sobre qualquer assunto ou só os liberados.
+ */
 export const criteriaSchema = z.object({
-    baseScope: z.enum(["all", "none"]),
-    exclude: z.array(jidSchema).max(2000),
-    include: z.array(jidSchema).max(2000),
-    chatTypes: z.object({ direct: z.boolean(), groups: z.boolean() }),
-    groupMode: z.enum(["always", "mention"]),
-    subjects: z.object({ always: subjectRuleSchema, never: subjectRuleSchema }),
+    audience: z.object({
+        mode: z.enum(["everyone", "selected"]),
+        selected: z.array(jidSchema).max(2000),
+        blocked: z.array(jidSchema).max(2000),
+        direct: z.boolean(),
+        groups: z.boolean(),
+        groupReply: z.enum(["always", "mention"]),
+    }),
+    subjects: z.object({
+        mode: z.enum(["any", "only"]),
+        blocked: z.array(subjectRuleSchema).max(20, "Máximo de 20 assuntos"),
+        allowed: z.array(subjectRuleSchema).max(20, "Máximo de 20 assuntos"),
+    }),
 })
 export type SecretaryCriteria = z.infer<typeof criteriaSchema>
 
@@ -74,17 +96,24 @@ const baseSettingsSchema = z.object({
     }),
     pricing: z.record(z.string(), tokenPriceSchema),
     analysis: z.object({ model: secondaryModelSchema }),
+    /** Quem decide o assunto: "Mesmo do agente", outro modelo de texto ou o JEV. */
+    decision: z.object({ model: decisionModelSchema }),
     criteria: criteriaSchema,
 })
 export type SecretarySettingsShape = z.infer<typeof baseSettingsSchema>
 
-/** Modelos em uso (principal, mídia e análise), resolvendo "Mesmo do agente". */
-export function modelsInUse(settings: Pick<SecretarySettingsShape, "main" | "media" | "analysis">): { role: "main" | "media" | "analysis"; provider: string; model: string }[] {
-    const out: { role: "main" | "media" | "analysis"; provider: string; model: string }[] = []
+type ModelRole = "main" | "media" | "analysis" | "decision"
+
+/**
+ * Modelos de texto em uso (principal, mídia, análise e decisão do assunto), resolvendo "Mesmo do agente". O JEV fica
+ * de fora: tem tarifa fixa e não precisa de preço na tabela.
+ */
+export function modelsInUse(settings: Pick<SecretarySettingsShape, "main" | "media" | "analysis"> & { decision?: SecretarySettingsShape["decision"] }): { role: ModelRole; provider: string; model: string }[] {
+    const out: { role: ModelRole; provider: string; model: string }[] = []
     if (settings.main.provider && settings.main.model) out.push({ role: "main", provider: settings.main.provider, model: settings.main.model })
-    for (const role of ["media", "analysis"] as const) {
-        const ref = role === "media" ? settings.media.model : settings.analysis.model
-        if (!ref.sameAsAgent && ref.provider && ref.model) out.push({ role, provider: ref.provider, model: ref.model })
+    const refs: [ModelRole, { sameAsAgent: boolean; provider: string | null; model: string | null } | undefined][] = [["media", settings.media.model], ["analysis", settings.analysis.model], ["decision", settings.decision?.model]]
+    for (const [role, ref] of refs) {
+        if (ref && !ref.sameAsAgent && ref.provider && ref.provider !== "jev" && ref.model) out.push({ role, provider: ref.provider, model: ref.model })
     }
     return out
 }
@@ -96,9 +125,15 @@ export const secretarySettingsSchema = baseSettingsSchema.superRefine((value, ct
         if (!value.instance) ctx.addIssue({ code: "custom", path: ["instance"], message: "Escolha a instância do WhatsApp" })
     }
     if (value.human.delayMaxSeconds < value.human.delayMinSeconds) ctx.addIssue({ code: "custom", path: ["human", "delayMaxSeconds"], message: "O máximo não pode ser menor que o mínimo" })
-    for (const role of ["media", "analysis"] as const) {
-        const ref = role === "media" ? value.media.model : value.analysis.model
+    for (const role of ["media", "analysis", "decision"] as const) {
+        const ref = role === "media" ? value.media.model : role === "analysis" ? value.analysis.model : value.decision.model
         if (!ref.sameAsAgent && (!ref.provider || !ref.model)) ctx.addIssue({ code: "custom", path: [role, "model", "model"], message: "Escolha o provedor e o modelo, ou use o mesmo do agente" })
+    }
+    if (value.criteria.subjects.mode === "only" && value.criteria.subjects.allowed.length === 0) {
+        ctx.addIssue({ code: "custom", path: ["criteria", "subjects", "allowed"], message: "Cadastre ao menos um assunto liberado, ou responda sobre qualquer assunto" })
+    }
+    if (value.criteria.audience.mode === "selected" && value.criteria.audience.selected.length === 0) {
+        ctx.addIssue({ code: "custom", path: ["criteria", "audience", "selected"], message: "Escolha ao menos uma conversa, ou responda a todos" })
     }
     if (value.enabled) {
         for (const item of modelsInUse(value)) {
@@ -123,14 +158,50 @@ export const DEFAULT_SECRETARY_SETTINGS: SecretarySettings = {
     limits: { repliesPerHour: SECRETARY_DEFAULTS.repliesPerHour, dailyBudgetUsd: SECRETARY_DEFAULTS.dailyBudgetUsd },
     pricing: {},
     analysis: { model: { sameAsAgent: true, ...emptyModel } },
+    decision: { model: { sameAsAgent: true, ...emptyModel } },
     criteria: {
-        baseScope: "none",
-        exclude: [],
-        include: [],
-        chatTypes: { direct: true, groups: false },
-        groupMode: "mention",
-        subjects: { always: { description: "", examples: [] }, never: { description: "", examples: [] } },
+        audience: { mode: "everyone", selected: [], blocked: [], direct: true, groups: false, groupReply: "mention" },
+        subjects: { mode: "any", blocked: [], allowed: [] },
     },
+}
+
+type LegacyRule = { description?: unknown; examples?: unknown }
+const legacyFilled = (rule: LegacyRule | undefined) => Boolean(rule && ((typeof rule.description === "string" && rule.description.trim()) || (Array.isArray(rule.examples) && rule.examples.length)))
+const legacySubject = (id: string, name: string, rule: LegacyRule): SubjectRule => ({
+    id, name,
+    description: typeof rule.description === "string" ? rule.description : "",
+    examples: Array.isArray(rule.examples) ? rule.examples.filter((item): item is string => typeof item === "string" && item.trim().length > 0) : [],
+})
+const jids = (value: unknown): string[] => (Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [])
+
+/**
+ * Critérios salvos no formato da v1 (escopo base, exclusões, inclusões, assuntos "sempre"/"nunca") viram o formato
+ * novo (puro). `none` vira "Só os escolhidos" com as antigas inclusões; o assunto "sempre" vira um assunto liberado
+ * MANTENDO "Qualquer assunto" (o agente não fica mudo de repente). O "sempre puxa quem está fora" deixa de existir.
+ */
+export function migrateLegacyCriteria(raw: unknown): unknown {
+    if (!raw || typeof raw !== "object" || Array.isArray(raw)) return raw
+    const value = raw as Record<string, unknown>
+    if (!("baseScope" in value) && !("exclude" in value) && !("include" in value)) return raw
+    const types = (value.chatTypes ?? {}) as { direct?: unknown; groups?: unknown }
+    const subjects = (value.subjects ?? {}) as { always?: LegacyRule; never?: LegacyRule }
+    const include = jids(value.include)
+    const selected = value.baseScope === "none"
+    return {
+        audience: {
+            mode: selected ? "selected" : "everyone",
+            selected: selected ? include : [],
+            blocked: jids(value.exclude),
+            direct: typeof types.direct === "boolean" ? types.direct : true,
+            groups: typeof types.groups === "boolean" ? types.groups : false,
+            groupReply: value.groupMode === "always" ? "always" : "mention",
+        },
+        subjects: {
+            mode: "any",
+            blocked: legacyFilled(subjects.never) ? [legacySubject("assunto-bloqueado", "Assunto bloqueado", subjects.never!)] : [],
+            allowed: legacyFilled(subjects.always) ? [legacySubject("assunto-liberado", "Assunto liberado", subjects.always!)] : [],
+        },
+    }
 }
 
 /** Configuração salva antes de um campo novo existir recebe o padrão dele (mescla rasa por seção). */
@@ -142,7 +213,8 @@ export function withSecretaryDefaults(saved: unknown): unknown {
         const current = value[key]
         return base && typeof base === "object" && !Array.isArray(base) && current && typeof current === "object" ? { ...base, ...current } : (current ?? base)
     }
-    const criteria = merge("criteria") as Record<string, unknown>
+    const criteria = (migrateLegacyCriteria(value.criteria) ?? {}) as Record<string, unknown>
+    const section = (key: "audience" | "subjects") => ({ ...DEFAULT_SECRETARY_SETTINGS.criteria[key], ...((criteria[key] as object | undefined) ?? {}) })
     return {
         ...DEFAULT_SECRETARY_SETTINGS,
         ...value,
@@ -151,19 +223,25 @@ export function withSecretaryDefaults(saved: unknown): unknown {
         human: merge("human"),
         limits: merge("limits"),
         analysis: merge("analysis"),
-        criteria: { ...criteria, chatTypes: { ...DEFAULT_SECRETARY_SETTINGS.criteria.chatTypes, ...((criteria.chatTypes as object) ?? {}) }, subjects: { ...DEFAULT_SECRETARY_SETTINGS.criteria.subjects, ...((criteria.subjects as object) ?? {}) } },
+        decision: merge("decision"),
+        criteria: { audience: section("audience"), subjects: section("subjects") },
     }
 }
 
-/** Testar critérios (aba Critérios): conversa + mensagem digitada. */
-export const criteriaTestSchema = z.object({
+/**
+ * Simulação (aba Simulação): as configurações em edição (o mesmo schema, sem exigir "ligado" nem instância), a
+ * conversa, a mensagem do contato e o que a simulação já acumulou (histórico e memórias gravadas só no navegador).
+ */
+export const simulateSchema = z.object({
+    settings: baseSettingsSchema,
     jid: jidSchema,
-    text: z.string().trim().min(1, "Digite a mensagem").max(4000, "Máximo de 4000 caracteres"),
-    mentioned: z.boolean().optional(),
-    /** Critérios em edição (testa antes de salvar); ausente = os salvos. */
-    criteria: criteriaSchema.optional(),
+    mentionsOwner: z.boolean().default(false),
+    history: z.array(z.object({ owner: z.boolean(), text: z.string().max(4000) })).max(60).default([]),
+    message: z.string().trim().min(1, "Escreva a mensagem").max(4000, "Máximo de 4000 caracteres"),
+    useRealHistory: z.boolean().default(false),
+    memories: z.array(z.object({ channel: z.string().max(200), title: z.string().max(200), text: z.string().max(4000) })).max(20).default([]),
 })
-export type CriteriaTestInput = z.infer<typeof criteriaTestSchema>
+export type SimulateInput = z.infer<typeof simulateSchema>
 
 /** Ações rápidas da aba Conversas. */
 export const conversationActionSchema = z.discriminatedUnion("action", [

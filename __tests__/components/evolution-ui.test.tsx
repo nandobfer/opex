@@ -1,7 +1,7 @@
 /**
  * @vitest-environment happy-dom
  */
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../helpers/framer-motion"
 
@@ -11,7 +11,6 @@ vi.mock("@/features/evolution-api/hooks/useEvolution", () => ({ useEvolutionActi
 
 import { ConnectedProfile, PairingCode, QrConnect } from "@/features/evolution-api/components/InstanceTab"
 import { ConversationLabel } from "@/features/evolution-api/components/ConversationPicker"
-import { CriteriaTester } from "@/features/secretary-agent/components/CriteriaTab"
 
 afterEach(() => {
     cleanup()
@@ -66,16 +65,5 @@ describe("ConversationLabel", () => {
         expect(container.querySelector("img")).toBeNull()
         expect(screen.getByText("F")).toBeTruthy()
         expect(screen.getByText("Grupo")).toBeTruthy()
-    })
-})
-
-describe("CriteriaTester", () => {
-    it("mostra Responderia/Não responderia com a regra e o motivo", () => {
-        mocks.data = { decision: "skip", rule: "subject-never", reason: "O assunto é um dos que nunca responde" }
-        render(<CriteriaTester contacts={[]} criteria={undefined} />)
-        expect(screen.getByRole("status").textContent).toContain("Não responderia")
-        expect(screen.getByRole("status").textContent).toContain("Assunto \"nunca\"")
-        fireEvent.change(screen.getByLabelText("Mensagem para testar"), { target: { value: "me empresta dinheiro" } })
-        expect((screen.getByRole("button", { name: "Testar critérios" }) as HTMLButtonElement).disabled).toBe(true)
     })
 })

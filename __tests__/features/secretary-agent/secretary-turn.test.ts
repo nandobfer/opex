@@ -13,6 +13,7 @@ const mocks = vi.hoisted(() => ({
     replies: 0,
     spent: 0,
     subject: null as unknown,
+    decideSubject: vi.fn(),
     inference: vi.fn(),
     decide: vi.fn(),
     send: vi.fn(async () => "S1"),
@@ -36,7 +37,8 @@ vi.mock("@/features/evolution-api/server/client", () => ({
 }))
 vi.mock("@/features/secretary-agent/server/inbound", () => ({ recordDecision: mocks.decide }))
 vi.mock("@/features/secretary-agent/server/settings", () => ({ loadSecretarySettings: async () => ({ settings: mocks.settings }) }))
-vi.mock("@/features/secretary-agent/server/classify", () => ({ classify: async () => mocks.subject }))
+vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
+vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@/features/secretary-agent/server/media", () => ({ readTurnMedia: async (_s: unknown, _i: string, message: ParsedMessage) => ({ text: message.text || "[áudio]", understood: false }) }))
 vi.mock("@/features/secretary-agent/server/personality", () => ({ loadPersonality: async () => ({ snapshot: { base: { blocks: [] }, variants: [] } }) }))
@@ -60,6 +62,11 @@ function msg(patch: Partial<ParsedMessage> = {}): ParsedMessage {
 }
 const turn = (message = msg()) => runSecretaryTurn({ id: "opex:5531999999999", instance: "opex", chatId: "5531999999999", ownerJid: "5531988887777@s.whatsapp.net", token: "T", message })
 const decisions = () => mocks.decide.mock.calls.map((call) => call[3])
+const MONEY = { id: "dinheiro", name: "Dinheiro", description: "", examples: [] }
+const withCriteria = (patch: { audience?: object; subjects?: object }) => {
+    const criteria = mocks.settings.criteria as typeof DEFAULT_SECRETARY_SETTINGS.criteria
+    mocks.settings = { ...mocks.settings, criteria: { audience: { ...criteria.audience, ...patch.audience }, subjects: { ...criteria.subjects, ...patch.subjects } } }
+}
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -69,8 +76,9 @@ beforeEach(() => {
         enabled: true,
         instance: "opex",
         main: { ...DEFAULT_SECRETARY_SETTINGS.main, provider: "opencode-go", model: "m" },
-        criteria: { ...DEFAULT_SECRETARY_SETTINGS.criteria, baseScope: "all" },
+        criteria: DEFAULT_SECRETARY_SETTINGS.criteria,
     }
+    mocks.decideSubject.mockImplementation(async () => ({ decider: "model", provider: "opencode-go", model: "m", decision: mocks.subject ?? { blocked: [], allowed: [], topic: null, reason: null }, answers: [] }))
     mocks.inference.mockResolvedValue({ text: "oi!\n\ntudo sim", question: null })
     mocks.memoryTools = []
 })
@@ -99,12 +107,12 @@ describe("runSecretaryTurn", () => {
     })
 
     it.each([
-        ["excluída", () => (mocks.settings = { ...mocks.settings, criteria: { ...(mocks.settings.criteria as object), exclude: [CONTACT] } }), "ignored"],
+        ["em \"Nunca responder a\"", () => withCriteria({ audience: { blocked: [CONTACT] } }), "ignored"],
         ["pausada", () => (mocks.state = { ...mocks.state, pausedUntil: new Date(Date.now() + 60_000) }), "paused"],
-        ["assunto nunca", () => (mocks.subject = { never: true, always: false, topic: "dinheiro", reason: null }), "subject-blocked"],
+        ["com assunto bloqueado", () => { withCriteria({ subjects: { blocked: [MONEY] } }); mocks.subject = { blocked: ["dinheiro"], allowed: [], topic: "Dinheiro", reason: null } }, "subject-blocked"],
         ["só observar", () => (mocks.settings = { ...mocks.settings, mode: "observe" }), "observe-only"],
         ["limite atingido", () => (mocks.replies = 20), "limit-reached"],
-        ["escopo nenhuma", () => (mocks.settings = { ...mocks.settings, criteria: { ...(mocks.settings.criteria as object), baseScope: "none" } }), "ignored"],
+        ["fora dos escolhidos", () => withCriteria({ audience: { mode: "selected", selected: ["5531000000000@s.whatsapp.net"] } }), "ignored"],
     ])("conversa %s não é respondida nem marcada como lida", async (_label, setup, decision) => {
         setup()
         await turn()
@@ -113,8 +121,9 @@ describe("runSecretaryTurn", () => {
         expect(mocks.send.mock.calls.filter((call) => (call as unknown[])[1] === CONTACT)).toHaveLength(0)
     })
 
-    it("assunto nunca não avisa o dono", async () => {
-        mocks.subject = { never: true, always: false, topic: null, reason: null }
+    it("assunto bloqueado não avisa o dono", async () => {
+        withCriteria({ subjects: { blocked: [MONEY] } })
+        mocks.subject = { blocked: ["dinheiro"], allowed: [], topic: null, reason: null }
         await turn()
         expect(mocks.send).not.toHaveBeenCalled()
         expect(mocks.askOwner).not.toHaveBeenCalled()
@@ -172,8 +181,41 @@ describe("runSecretaryTurn", () => {
         const GROUP = "120363000000000001@g.us"
         const message = msg({ chatJid: GROUP, isGroup: true, text: "@999 viu?", mentioned: ["999@lid"] })
         mocks.state = { pending: [message], lastOwnerMessageAt: null, pausedUntil: null }
-        mocks.settings = { ...mocks.settings, criteria: { ...(mocks.settings.criteria as object), chatTypes: { direct: true, groups: true }, groupMode: "mention" } }
+        withCriteria({ audience: { groups: true, groupReply: "mention" } })
         await runSecretaryTurn({ id: "opex:g-120363000000000001", instance: "opex", chatId: "g-120363000000000001", ownerJid: "5531988887777@s.whatsapp.net", ownerLid: "999@lid", token: "T", message })
         expect(decisions()).toEqual(["replied"])
+    })
+
+    it("quem está fora dos escolhidos não é respondido mesmo com assunto liberado, e o decisor nem é chamado", async () => {
+        withCriteria({ audience: { mode: "selected", selected: ["5531000000000@s.whatsapp.net"] }, subjects: { mode: "only", allowed: [MONEY] } })
+        mocks.subject = { blocked: [], allowed: ["dinheiro"], topic: "Dinheiro", reason: null }
+        await turn()
+        expect(decisions()).toEqual(["ignored"])
+        expect(mocks.decideSubject).not.toHaveBeenCalled()
+    })
+
+    it("com \"Só os assuntos liberados\", responde ao assunto liberado e ignora o resto", async () => {
+        withCriteria({ subjects: { mode: "only", allowed: [MONEY] } })
+        mocks.subject = { blocked: [], allowed: ["dinheiro"], topic: "Dinheiro", reason: null }
+        await turn()
+        expect(decisions()).toEqual(["replied"])
+        vi.clearAllMocks()
+        mocks.subject = { blocked: [], allowed: [], topic: "Futebol", reason: null }
+        await turn()
+        expect(decisions()).toEqual(["subject-blocked"])
+    })
+
+    it("falha de quem decide o assunto vira a decisão de erro, sem responder", async () => {
+        withCriteria({ subjects: { blocked: [MONEY] } })
+        mocks.decideSubject.mockRejectedValueOnce(new Error("O JEV não respondeu"))
+        await turn()
+        expect(decisions()).toEqual(["error"])
+        expect(mocks.send).not.toHaveBeenCalled()
+    })
+
+    it("o orçamento soma o gasto das respostas e das decisões", async () => {
+        mocks.spent = 5
+        await turn()
+        expect(decisions()).toEqual(["limit-reached"])
     })
 })

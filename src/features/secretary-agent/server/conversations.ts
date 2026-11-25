@@ -19,7 +19,7 @@ export async function listSecretaryConversations() {
         const chatId = conversationIdOfJid(contact.jid)
         if (!chatId) return []
         const paused = byJid.get(contact.jid)?.pausedUntil
-        const state: ConversationAgentState = settings.criteria.exclude.includes(contact.jid) ? "excluded" : paused && paused > new Date() ? "paused" : notices.includes(chatId) ? "waiting-owner" : "active"
+        const state: ConversationAgentState = settings.criteria.audience.blocked.includes(contact.jid) ? "excluded" : paused && paused > new Date() ? "paused" : notices.includes(chatId) ? "waiting-owner" : "active"
         return [{ ...contact, chatId, state, pausedUntil: paused?.toISOString() ?? null }]
     })
 }
@@ -33,9 +33,10 @@ export async function changeConversation(chatId: string, input: ConversationActi
         const pausedUntil = input.action === "pause" ? new Date(Date.now() + input.minutes * 60_000) : null
         await SecretaryConversation.updateOne({ _id: `${settings.instance}:${chatId}` }, { $set: { pausedUntil }, $setOnInsert: { instance: settings.instance, jid } }, { upsert: true })
     } else {
-        const exclude = settings.criteria.exclude.filter((item) => item !== jid)
-        if (input.action === "exclude") exclude.push(jid)
-        await saveSecretarySettings({ ...settings, criteria: { ...settings.criteria, exclude } }, actor)
+        // "Excluir dos critérios" = "Nunca responder a" (etapa 1 dos critérios).
+        const blocked = settings.criteria.audience.blocked.filter((item) => item !== jid)
+        if (input.action === "exclude") blocked.push(jid)
+        await saveSecretarySettings({ ...settings, criteria: { ...settings.criteria, audience: { ...settings.criteria.audience, blocked } } }, actor)
     }
     await recordAudit({ userId: actor, entidade: SECRETARY_AUDIT_ENTITY, entidadeId: chatId, acao: AcaoAuditoria.ATUALIZAR, depois: { action: input.action } })
     await publishAppEvent(SECRETARY_CONVERSATION_EVENT, { chatId })

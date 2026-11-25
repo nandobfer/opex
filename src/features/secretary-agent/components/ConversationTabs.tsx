@@ -42,7 +42,7 @@ function ConversationRow({ row, minutes }: { row: Conversation; minutes: number 
         <Link href={`/integracoes/ia?aba=agente-secretario&secao=memorias&${CONVERSATION_PARAM}=${encodeURIComponent(row.chatId)}`} className="min-w-0 flex-1"><ConversationLabel contact={row} /></Link>
         <p className="text-sm">{CONVERSATION_STATE_LABELS[row.state]}{row.state === "paused" && row.pausedUntil ? ` até ${new Date(row.pausedUntil).toLocaleString("pt-BR")}` : ""}</p>
         <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate(row.state === "paused" ? { action: "resume" } : { action: "pause", minutes })}>{row.state === "paused" ? "Retomar" : "Pausar"}</Button>
-        <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate({ action: row.state === "excluded" ? "include" : "exclude" })}>{row.state === "excluded" ? "Remover exclusão" : "Excluir dos critérios"}</Button>
+        <Button size="sm" variant="outline" disabled={action.isPending} onClick={() => action.mutate({ action: row.state === "excluded" ? "include" : "exclude" })}>{row.state === "excluded" ? "Voltar a responder" : "Nunca responder"}</Button>
     </div>
 }
 
