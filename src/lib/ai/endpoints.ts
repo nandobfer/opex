@@ -14,3 +14,8 @@ export const OPENCODE_GO_API_URL = `${OPENCODE_GO_BASE_URL}/openai/v1`
 export const OPENCODE_GO_USER_AGENT = "Opex (opencode-go; +https://github.com/nandobfer/opex)"
 /** API do Console do OpenCode (status da assinatura Go e consumo por dia/modelo), com a mesma chave `oc_sk_`. */
 export const OPENCODE_CONSOLE_API_URL = "https://opencode.ai/console/api"
+/** Provider API do Command Code (OPE-190): Chat Completions, Responses e Messages abaixo desta base. */
+export const COMMAND_CODE_API_URL = "https://api.commandcode.ai/provider/v1"
+/** API da CLI do Command Code (`/alpha/*`, não documentada): conta, créditos, assinatura e totais de uso. */
+export const COMMAND_CODE_ALPHA_URL = "https://api.commandcode.ai/alpha"
+export const COMMAND_CODE_USER_AGENT = "Opex (command-code; +https://github.com/nandobfer/opex)"

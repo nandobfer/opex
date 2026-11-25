@@ -41,6 +41,7 @@ export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]>
     openai: ["configuracao", "modelos", "consumo"],
     deepseek: ["configuracao", "modelos", "consumo"],
     "opencode-go": ["configuracao", "modelos", "consumo"],
+    "command-code": ["configuracao", "modelos", "consumo"],
     jev: ["configuracao", "modelos", "consumo"],
 }
 

@@ -5,11 +5,11 @@
 
 import type { IntegrationId } from "@/lib/integrations/catalog"
 
-export const AI_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "opencode-go", "jev"] as const
+export const AI_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code", "jev"] as const
 export type AiProviderId = (typeof AI_PROVIDER_IDS)[number]
 
 /** Provedores que geram texto (ex.: "Resumos de tarefas" e "Tags de tarefas"). */
-export const AI_TEXT_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "opencode-go"] as const
+export const AI_TEXT_PROVIDER_IDS = ["opencode", "gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code"] as const
 export type AiTextProviderId = (typeof AI_TEXT_PROVIDER_IDS)[number]
 
 export interface AiProviderDef {
@@ -34,6 +34,8 @@ export const AI_PROVIDERS: readonly AiProviderDef[] = [
     { id: "deepseek", integrationId: "ai_deepseek", name: "DeepSeek", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Raciocínio" },
     // Só inferência pela API do Go (assinatura OpenCode Go): não abre sessão no host nem roda agente.
     { id: "opencode-go", integrationId: "ai_opencode_go", name: "OpenCode Go", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Esforço de raciocínio" },
+    // Provider API do Command Code (OPE-190): só inferência por API, sem sessão no host nem agente.
+    { id: "command-code", integrationId: "ai_command_code", name: "Command Code", supportsTextGeneration: true, supportsSampling: true, supportsAgent: false, variantLabel: "Esforço de raciocínio" },
     { id: "jev", integrationId: "ai_jev", name: "JEV", supportsTextGeneration: false, supportsSampling: false, supportsAgent: false, variantLabel: "Variante" },
 ]
 
@@ -59,14 +61,14 @@ export interface AiModelDto {
     /** Id usado na chamada (OpenCode: `provedor/modelo`; Gemini: `gemini-…`). */
     id: string
     name: string
-    /** Variantes aceitas (OpenCode: `variants` do modelo; Gemini: níveis de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio; OpenCode Go: esforços do próprio modelo). */
+    /** Variantes aceitas (OpenCode: `variants` do modelo; Gemini: níveis de thinking; Anthropic, OpenAI e DeepSeek: nível de raciocínio; OpenCode Go e Command Code: esforços do próprio modelo). */
     variants: string[]
     /** Grupo exibido na lista (OpenCode: provedor de origem). */
     group: string | null
     contextWindow: number | null
     /** Sem custo por token (ex.: modelos gratuitos do OpenCode Zen). */
     free: boolean
-    /** Tipos de entrada aceitos (só OpenCode Go: `text`, `image/png`, `application/pdf`...). */
+    /** Tipos de entrada aceitos (OpenCode Go e Command Code: `text`, `image/png`, `application/pdf`...). */
     inputModalities?: string[]
 }
 

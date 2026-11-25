@@ -8,7 +8,7 @@ import type { AiProviderId } from "@/lib/ai/providers"
  */
 
 /** Provedores com chaveiro: todos os de API key (OpenCode Go desde a OPE-156); o OpenCode no host usa a senha do `opencode serve` e fica fora. */
-export const AI_API_KEY_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "jev"] as const satisfies readonly AiProviderId[]
+export const AI_API_KEY_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code", "jev"] as const satisfies readonly AiProviderId[]
 export type AiApiKeyProviderId = (typeof AI_API_KEY_PROVIDER_IDS)[number]
 
 export function isAiApiKeyProviderId(value: string): value is AiApiKeyProviderId {
@@ -17,7 +17,7 @@ export function isAiApiKeyProviderId(value: string): value is AiApiKeyProviderId
 
 /**
  * Provedores que alimentam o Engramind (Redator/embedding): ele aceita uma chave só e recebe a principal.
- * O JEV não gera texto e o Go não é fonte do Redator nem do embedding.
+ * O JEV não gera texto; o Go e o Command Code não são fonte do Redator nem do embedding.
  */
 export const AI_API_KEY_ENGRAMIND_PROVIDERS = ["gemini", "anthropic", "openai", "deepseek"] as const satisfies readonly AiApiKeyProviderId[]
 

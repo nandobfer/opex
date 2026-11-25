@@ -48,6 +48,12 @@ async function probe(providerId: AiProviderId, signal: AbortSignal): Promise<voi
         await verifyOpencodeGoKey(signal)
         return
     }
+    if (providerId === "command-code") {
+        // O catálogo do Command Code também é público: só a conferência prova a chave.
+        const { verifyCommandCodeKey } = await import("./command-code")
+        await verifyCommandCodeKey(signal)
+        return
+    }
     await listAiModels(providerId, { fresh: true, signal })
 }
 

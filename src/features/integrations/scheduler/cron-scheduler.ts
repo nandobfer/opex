@@ -12,6 +12,7 @@ import {
     MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPENCODE_QUOTA_JOB_ID,
     OPENCODE_GO_USAGE_JOB_ID,
+    COMMAND_CODE_USAGE_JOB_ID,
     OPENCODE_SESSIONS_CLEANUP_JOB_ID,
     OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPEX_FILES_CLEANUP_JOB_ID,
@@ -452,6 +453,10 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(OPENCODE_GO_USAGE_JOB_ID, async () => {
         const { runOpencodeGoUsageRefresh } = await import("@/features/opencode-quota/server/go-usage")
         return runOpencodeGoUsageRefresh()
+    })
+    registerInternalJob(COMMAND_CODE_USAGE_JOB_ID, async () => {
+        const { runCommandCodeUsageRefresh } = await import("@/features/command-code-usage/server/usage")
+        return runCommandCodeUsageRefresh()
     })
     registerInternalJob(HOST_METRICS_JOB_ID, async () => {
         const { runHostMetricsRefresh } = await import("@/features/host-metrics/server/service")

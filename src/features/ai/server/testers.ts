@@ -1,6 +1,7 @@
 import { getIntegrationDef } from "@/lib/integrations/catalog"
 import { getIntegration, isIntegrationConfigured } from "@/lib/integrations/config"
 import { listAnthropicModels } from "@/lib/ai/anthropic"
+import { verifyCommandCodeKey } from "@/lib/ai/command-code"
 import { getAiProviderKeyPool, type AiProviderKey } from "@/lib/ai/api-keys"
 import { clearAiCatalogCache, listAiAgents, listAiModels } from "@/lib/ai/catalog"
 import { listDeepseekModels } from "@/lib/ai/deepseek"
@@ -28,6 +29,7 @@ const KEY_CHECKS: Record<AiApiKeyProviderId, (signal: AbortSignal | undefined, k
     deepseek: listDeepseekModels,
     jev: listJevModels,
     "opencode-go": verifyOpencodeGoKey,
+    "command-code": verifyCommandCodeKey,
 }
 
 /**
@@ -125,6 +127,23 @@ export const testOpencodeGo: IntegrationTester = async ({ emit, signal }) => {
     const keyWarning = await checkEachKey("opencode-go", emit, signal)
     if (keyWarning) return warnResult(keyWarning)
     if (!models.length) return warnResult("Chave aceita, mas o Go não listou modelos")
+    return `Chave aceita; ${models.length} modelo(s)`
+}
+
+/** Command Code: o catálogo é público, então o teste também confere a chave (sem gerar nada). */
+export const testCommandCode: IntegrationTester = async ({ emit, signal }) => {
+    const resolved = await getIntegration("ai_command_code")
+    if (!resolved.values.apiKey) fail("Sem chave de API ativa: cadastre e ative uma chave do Studio do Command Code em Chaves de API")
+    clearAiCatalogCache()
+    emit("step", "GET /provider/v1/models")
+    const models = await listAiModels("command-code", { fresh: true, signal: stepSignal(signal, 20_000) }).catch(failFrom)
+    emit(models.length ? "success" : "warn", `${models.length} modelo(s) disponível(is) no Command Code`)
+    emit("step", "POST /provider/v1/chat/completions (conferência da chave, sem gerar)")
+    await verifyCommandCodeKey(stepSignal(signal, 20_000)).catch(failFrom)
+    emit("success", "Chave aceita pelo Command Code")
+    const keyWarning = await checkEachKey("command-code", emit, signal)
+    if (keyWarning) return warnResult(keyWarning)
+    if (!models.length) return warnResult("Chave aceita, mas o Command Code não listou modelos")
     return `Chave aceita; ${models.length} modelo(s)`
 }
 

@@ -37,4 +37,4 @@ export type GoMeterId = keyof typeof GO_METER_LABELS
 export const GO_METER_IDS = ["fiveHour", "week", "month"] as const satisfies readonly GoMeterId[]
 
 /** Fuso de exibição; também converte o período do filtro (datas locais) em dias. */
-export const GO_DISPLAY_TIME_ZONE = "America/Sao_Paulo"
+export { USAGE_DISPLAY_TIME_ZONE as GO_DISPLAY_TIME_ZONE } from "@/features/subscription-usage/constants"

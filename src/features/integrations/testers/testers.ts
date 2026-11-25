@@ -7,7 +7,7 @@ import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { dbConnect } from "@/lib/db"
 import { getRawPusherServer } from "@/lib/pusher/server"
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
-import { testAiHub, testAnthropic, testDeepseek, testGemini, testJev, testOpenai, testOpencode, testOpencodeGo } from "@/features/ai/server/testers"
+import { testAiHub, testAnthropic, testCommandCode, testDeepseek, testGemini, testJev, testOpenai, testOpencode, testOpencodeGo } from "@/features/ai/server/testers"
 import { verifyConnection } from "@/lib/email/mailer"
 import { checkBucket } from "@/lib/storage/s3"
 import { describeFetchError, fail, stepSignal, warnResult, type IntegrationTester } from "./types"
@@ -210,6 +210,7 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     ai_openai: testOpenai,
     ai_deepseek: testDeepseek,
     ai_opencode_go: testOpencodeGo,
+    ai_command_code: testCommandCode,
     ai_jev: testJev,
     orcamentos: testOrcamentos,
     smtp: testSmtp,

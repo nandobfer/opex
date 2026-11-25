@@ -38,6 +38,23 @@ describe('migração da API key única para o chaveiro (OPE-155)', () => {
     expect(mocks.findOne).not.toHaveBeenCalledWith('ai_opencode')
   })
 
+  it('Command Code (OPE-190): entra pelo catálogo; documento sem chave não é tocado e, com o chaveiro já criado, a segunda rodada não grava de novo', async () => {
+    mocks.findOne.mockImplementation(async (id: string) => (id === 'ai_command_code' ? { secretValues: {} } : null))
+    await migrateAiProviderApiKeys()
+    expect(mocks.findOne).toHaveBeenCalledWith('ai_command_code')
+    expect(mocks.updateOne).not.toHaveBeenCalled()
+
+    mocks.findOne.mockImplementation(async (id: string) => (id === 'ai_command_code' ? { secretValues: { apiKey: box } } : null))
+    await migrateAiProviderApiKeys()
+    expect(mocks.updateOne).toHaveBeenCalledOnce()
+    expect(mocks.updateOne.mock.calls[0]![0]).toEqual({ integrationId: 'ai_command_code', apiKeys: { $exists: false } })
+
+    mocks.updateOne.mockClear()
+    mocks.findOne.mockImplementation(async (id: string) => (id === 'ai_command_code' ? { secretValues: { apiKey: box }, apiKeys: [{ id: 'key_x' }] } : null))
+    await migrateAiProviderApiKeys()
+    expect(mocks.updateOne).not.toHaveBeenCalled()
+  })
+
   it('idempotente: documento com chaveiro, sem chave ou com segredo limpo não é tocado', async () => {
     mocks.findOne.mockImplementation(async (id: string) => {
       if (id === 'ai_gemini') return { secretValues: { apiKey: box }, apiKeys: [] }
