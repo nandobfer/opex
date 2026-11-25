@@ -105,7 +105,9 @@ esquerda e coluna lateral (320 px) com os dados de cada resposta.
   (`CriteriaFlow` com ✓/✗/—), **Decisão do assunto** (modelo ou JEV, o modelo usado, o assunto e, com o JEV, cada
   pergunta com a probabilidade e a faixa), **Limites e pausa** da conversa real (informativo: a simulação não aplica),
   **Personalidade aplicada** (base + variante), **Memórias** (contagem do contexto e as que gravaria), **Pergunta ao
-  dono** (nada é enviado) e **Custo desta mensagem**.
+  dono** (nada é enviado), **Contato** (o que o agente recebeu: nome, número e, em grupo, o autor) e **Custo desta
+  mensagem**. O contato vem do cache `evolution_contacts` da instância escolhida; em grupo, o autor simulado é
+  "Participante do grupo".
 - Quando não responderia, o chat mostra uma linha discreta: "O Secretário não responderia: <motivo>".
 - Custo real (modelo e JEV) com a origem `secretary-simulation`, somado pelo assunto da simulação e **fora** do
   orçamento diário. Só texto (sem mídia).
@@ -125,7 +127,7 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   ainda é o atual responde (os outros ficam como "agrupada").
 - Ordem: critérios de público → pausado → limites (o orçamento esgotado barra também o modo Só observar) → mídia → mensagem
   só de mídia não lida vira "ignorou" → critérios ("assunto bloqueado" fica quieto, não avisa e não marca como
-  lida) → contexto (histórico de ~30 mensagens, personalidade base + variante, memórias) → geração. Do critério à
+  lida) → contexto (contato, histórico de ~30 mensagens, personalidade base + variante, memórias) → geração. Do critério à
   geração é o núcleo `planSecretaryReply` (o mesmo da Simulação); o turno real cuida dos limites, da mídia, do envio
   em partes, da leitura e do registro.
 - **Conferência antes de enviar**: antes de cada parte, confere se o token é o mesmo, se o dono não falou na
@@ -139,7 +141,16 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   `secretary_sent` e não pausam a conversa quando voltam como `fromMe`.
 - Consumo em `ai_consumption_logs` com origem `secretary-agent` (`secretary-decision` na decisão do assunto,
   `secretary-analysis` na análise e `secretary-simulation` na Simulação).
-- A inferência valida a saída da ferramenta final `entregar` com o schema do turno, sem `response_format`.
+- **Com quem fala** (porta `contact()` do `planSecretaryReply`): nome do contato no cache `evolution_contacts`
+  (alternativa: `pushName`), número e, em grupo, o nome do grupo e o autor. Vai na mensagem ao modelo (`contact`) e
+  numa linha das instruções ("Você está falando com <nome> (<número>). Se o nome é conhecido, não pergunte quem
+  é…"); sem nome, diz "nome desconhecido (só o número)". O nome também entra no foco da busca de memórias. Se o
+  cache falhar, segue só com o número (aviso no log).
+- A inferência valida a saída da ferramenta final `entregar` com o schema do turno, sem `response_format`. A
+  entrega só encerra a chamada quando é válida: entrega inválida volta ao modelo como erro da ferramenta (com os
+  campos que falharam) e ele corrige, até 8 passos. Esgotado, o erro diz os campos ("formato inválido (campos:
+  blocks.0.key, variant)"), nunca os valores. Quem chama pode dar um schema mais tolerante ao modelo
+  (`deliverySchema`) e um normalizador antes do schema estrito.
   Falhas de IA aparecem no motivo da decisão. Diagnósticos reconhecidos do provedor viram mensagens fixas em
   pt-BR; o texto bruto do erro, o prompt, a mídia e os cabeçalhos não são expostos.
 
@@ -177,18 +188,28 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
 - **Analisar minhas conversas** (`secretary_analyses`): todas (`findChats`) ou escolhidas, período padrão 6 meses.
   Uma por vez (índice único parcial em `running`, 409). Conversa por conversa, lê o histórico da Evolution
   (ignorando o que o próprio agente enviou), com foco no que o dono escreveu; a IA devolve os blocos e a variante
-  e usa a ferramenta `report_progress` para as descobertas. Progresso persistido e publicado
+  e usa a ferramenta `report_progress` para as descobertas. A entrega da análise é tolerante
+  (`analysis-delivery.ts`): chave vira slug (`tom_de_voz` → `tom-de-voz`, ou do título se faltar), título e conteúdo
+  são cortados nos limites, variante ausente vira nula, blocos em string JSON são aceitos e chaves repetidas são
+  fundidas; conteúdo faltando continua inválido. A execução é tarefa solta do processo (`runDetached`), não presa à
+  requisição: o dono pode sair da tela (toast e linha "Continua em segundo plano…"); ao voltar, a tela lê o estado
+  gravado, a em andamento aparece primeiro e aberta, o anel parte do valor atual, e a sub-aba mostra
+  "Personalidade · Analisando N/M". Progresso persistido e publicado
   (`secretary-analysis-updated`): anel "N de M conversas lidas", mensagens, conversa atual, fase (lendo,
   comparando, escrevendo), tempo estimado, custo, estado de cada conversa (na fila, lendo, lida, sem conteúdo
   útil) e descobertas. O trabalho é feito num rascunho: concluída vira a personalidade atual (versão "Análise");
   **Cancelar** guarda o rascunho na versão "Análise cancelada" (restaurável, não aplicada). Batimento a cada 15 s;
   sem batimento por 90 s a análise vira "Interrompida". Sem teto de custo; não conta no orçamento diário.
-   Falha numa conversa (Evolution, modelo) mostra o motivo em "Não foi lida (erro)". Se as três primeiras
+   Falha numa conversa (Evolution, modelo) mostra o motivo em "Não foi lida (erro)"; se páginas anteriores da
+   conversa já foram aprendidas, ela fica "Lida em parte (erro)" (conta como lida) e o aprendizado continua no
+   rascunho. O custo é relido depois de cada chamada, inclusive as que falharam, e no fim (também em falha e
+   cancelamento). Se as três primeiras
    conversas com conteúdo útil falharem pelo mesmo motivo de IA e nenhuma tiver sido lida, a execução para;
    se houver leitura bem-sucedida e falhas, a execução finalizada mostra "Concluída com N erros". A fase só é
    exibida enquanto a análise está em andamento. Se a
   personalidade for editada durante a análise (conflito de versão) ou houver erro fatal, o que já foi aprendido fica
-  na versão "Análise não aplicada" (restaurável, não aplicada) e a mensagem diz a causa. Iniciar e cancelar são
+  na versão "Análise não aplicada" (restaurável, não aplicada) e a mensagem diz a causa; sem conversa lida (inteira
+  ou em parte), a mensagem diz que nada foi aplicado. Iniciar e cancelar são
   auditados com a contagem de conversas.
 - **Editor**: uma versão nova (análise, restauração) só substitui a tela sem edição pendente; com edição pendente
   o texto digitado fica, a tela avisa e o Salvar trava até "Recarregar e descartar minhas edições". O próprio
