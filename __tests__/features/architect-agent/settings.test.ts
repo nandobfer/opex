@@ -85,7 +85,7 @@ describe('provedor do Agente Arquiteto', () => {
     for (const provider of ['jev', 'xyz']) {
       const result = architectSettingsSchema.safeParse({ ...DEFAULT_ARCHITECT_SETTINGS, provider })
       expect(result.success).toBe(false)
-      expect(result.error?.issues[0]!.message).toContain('OpenCode, Gemini, Anthropic, OpenAI, DeepSeek ou OpenCode Go')
+      expect(result.error?.issues[0]!.message).toContain('OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go ou Command Code')
     }
   })
 

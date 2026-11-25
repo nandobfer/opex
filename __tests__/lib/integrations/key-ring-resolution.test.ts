@@ -22,7 +22,7 @@ const stored = (overrides: Partial<StoredIntegration>): StoredIntegration => ({ 
 
 describe('chaveiro das integrações de IA', () => {
   it('vale para Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go (OPE-156) e JEV; nunca para o OpenCode no host', () => {
-    expect([...KEY_RING_INTEGRATION_IDS].sort()).toEqual(['ai_anthropic', 'ai_deepseek', 'ai_gemini', 'ai_jev', 'ai_openai', 'ai_opencode_go'])
+    expect([...KEY_RING_INTEGRATION_IDS].sort()).toEqual(['ai_anthropic', 'ai_command_code', 'ai_deepseek', 'ai_gemini', 'ai_jev', 'ai_openai', 'ai_opencode_go'])
     expect(KEY_RING_INTEGRATION_IDS).not.toContain('ai_opencode')
   })
 
