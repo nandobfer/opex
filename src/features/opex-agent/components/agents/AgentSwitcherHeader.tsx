@@ -11,6 +11,7 @@ import { ModelOverridePicker, type ModelChoiceInput } from "@/features/ai/compon
 import { useMaddoxModels } from "@/features/maddox-agent/hooks/useMaddoxModels"
 import type { ChatAgentId } from "../../agents"
 import { useOpexView } from "../../hooks/useOpexSettings"
+import { NEW_SESSION_SHORTCUT_LABEL } from "../../constants"
 import { OpexScopeProvider, useOpexScope } from "../OpexScopeProvider"
 import { useAgentSwitch } from "./AgentSwitchProvider"
 
@@ -54,7 +55,7 @@ export function AgentSwitcherHeader({ listOpen, onToggleList, onNew, maximized, 
                 <HeaderButton label={listOpen ? "Fechar a lista de sessões" : "Todas as sessões"} onClick={onToggleList} active={listOpen}>
                     <History className="h-4 w-4" />
                 </HeaderButton>
-                <HeaderButton label="Nova sessão" onClick={onNew}>
+                <HeaderButton label="Nova sessão" shortcut={NEW_SESSION_SHORTCUT_LABEL} onClick={onNew}>
                     <MessageSquarePlus className="h-4 w-4" />
                 </HeaderButton>
                 {settingsHref && (
@@ -174,7 +175,7 @@ function OtherAgentButton({ id }: { id: ChatAgentId }) {
 }
 
 /** Botão de ícone dos cabeçalhos de chat (com dica); compartilhado com a conversa de um rotineiro (OPE-160). */
-export function HeaderButton({ label, onClick, active, side = "bottom", children }: { label: string; onClick: () => void; active?: boolean; side?: "top" | "bottom" | "left" | "right"; children: ReactNode }) {
+export function HeaderButton({ label, shortcut, onClick, active, side = "bottom", children }: { label: string; /** Atalho mostrado só na dica (o nome acessível continua `label`). */ shortcut?: string; onClick: () => void; active?: boolean; side?: "top" | "bottom" | "left" | "right"; children: ReactNode }) {
     return (
         <TooltipProvider delayDuration={300}>
             <Tooltip>
@@ -183,13 +184,14 @@ export function HeaderButton({ label, onClick, active, side = "bottom", children
                         type="button"
                         onClick={onClick}
                         aria-label={label}
+                        aria-keyshortcuts={shortcut ? shortcut.replace("Ctrl", "Control") : undefined}
                         aria-pressed={active}
                         className={cn("rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/70", active && "bg-muted text-foreground")}
                     >
                         {children}
                     </button>
                 </TooltipTrigger>
-                <TooltipContent side={side}>{label}</TooltipContent>
+                <TooltipContent side={side}>{shortcut ? `${label} (${shortcut})` : label}</TooltipContent>
             </Tooltip>
         </TooltipProvider>
     )

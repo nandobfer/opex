@@ -34,6 +34,18 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
 - No celular (< 768 px) abre em painel de tela cheia (Dialog do Radix).
 - Atalho global **Ctrl+Shift+O** (⌘+Shift+O no Mac) abre e fecha no Agente Opex (`isOpexShortcut`);
   **Ctrl+Shift+M** é do Agente Maddox.
+- Atalho global **Ctrl+O** (⌘+O no Mac, OPE-198), em qualquer tela do dono e do portal: abre o agente
+  **selecionado** (Opex ou Maddox) já na **"Nova sessão"**. Com o chat aberto numa sessão, troca para a
+  "Nova sessão" (a sessão anterior continua na aba e no histórico); nunca fecha o painel. É o mesmo fluxo
+  do botão "Nova sessão" (sem chamada ao servidor: a sessão nasce na primeira mensagem), e o rascunho
+  digitado na "Nova sessão" continua lá; o campo recebe o foco. Mora no mesmo listener dos outros atalhos
+  (`AgentChatNavItem`), que pede a aba ao painel por `focusTab = OPEX_DRAFT_TAB` (o `useAgentChat` chama o
+  `newSession`). O `preventDefault` (que também impede o "Abrir arquivo" do navegador) só acontece quando o
+  Opex trata o atalho: `isNewSessionShortcut` exige Ctrl/⌘ sem Shift e sem Alt, e `ignoresGlobalShortcut`
+  deixa o evento intacto quando já foi tratado (`defaultPrevented`), durante composição (IME) ou com o foco
+  num editor que dá sentido próprio ao Ctrl+O (`.cm-editor` do modo Vim ou `[data-shortcut-scope="editor"]`).
+  Campos de texto comuns, inclusive o do chat, disparam o atalho. Tecla segurada não repete a ação. A dica do
+  botão "Nova sessão" mostra "(Ctrl+O)".
 - Um ponto pulsando no ícone avisa que alguma sessão (de qualquer agente) está respondendo ou aguarda
   confirmação; o botão do outro agente tem o próprio ponto.
 

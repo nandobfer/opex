@@ -44,12 +44,14 @@ interface OpexComposerProps {
     initialText?: string
     /** Aba do rascunho guardado no navegador (id da sessão ou a "Nova sessão"); sem ela, nada é guardado. */
     draftId?: string
+    /** Mudar o valor devolve o foco ao campo já montado (ex.: "Nova sessão" pelo Ctrl+O, OPE-198). */
+    focusKey?: number
 }
 
 const MAX_HEIGHT = 180
 
 /** Campo do chat: Enter envia, Shift+Enter quebra linha; cresce até ~7 linhas. */
-export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(function OpexComposer({ onSend, attachments, onStop, running, sending, stopping, disabledReason, initialText, draftId }, ref) {
+export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(function OpexComposer({ onSend, attachments, onStop, running, sending, stopping, disabledReason, initialText, draftId, focusKey }, ref) {
     const agentLabel = useOpexScope().agent.label
     const draft = useComposerDraft(draftId)
     const [text, setTextState] = useState(() => initialText ?? draft.initial)
@@ -72,7 +74,7 @@ export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(fu
 
     useEffect(() => {
         textareaRef.current?.focus({ preventScroll: true })
-    }, [])
+    }, [focusKey])
 
     useLayoutEffect(() => {
         const element = textareaRef.current

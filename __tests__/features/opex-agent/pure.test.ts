@@ -11,7 +11,7 @@ import { buildAgentUiScope } from '@/features/opex-agent/components/OpexScopePro
 import { reduceStream, splitLines } from '@/features/opex-agent/hooks/useOpexStream'
 import { buildChatItems } from '@/features/opex-agent/components/chat/OpexMessageList'
 import { searchSessions } from '@/features/opex-agent/components/OpexSessionsPanel'
-import { isOpexShortcut } from '@/features/opex-agent/constants'
+import { ignoresGlobalShortcut, isNewSessionShortcut, isOpexShortcut } from '@/features/opex-agent/constants'
 import { DEFAULT_OPEX_AGENT_SETTINGS, opexAgentSettingsSchema } from '@/features/opex-agent/schemas'
 import type { OpexLiveMessage, OpexMessageDto, OpexSessionDto } from '@/features/opex-agent/types'
 
@@ -207,6 +207,28 @@ describe('busca de sessões e atalho', () => {
     expect(isOpexShortcut({ key: 'O', ctrlKey: true, metaKey: false, shiftKey: true, altKey: false })).toBe(true)
     expect(isOpexShortcut({ key: 'o', ctrlKey: false, metaKey: true, shiftKey: true, altKey: false })).toBe(true)
     expect(isOpexShortcut({ key: 'o', ctrlKey: true, metaKey: false, shiftKey: false, altKey: false })).toBe(false)
+  })
+
+  it('OPE-198: Ctrl+O (ou ⌘+O) é a nova sessão, sem Shift nem Alt', () => {
+    const key = (over: Partial<Pick<KeyboardEvent, 'key' | 'ctrlKey' | 'metaKey' | 'shiftKey' | 'altKey'>>) => ({ key: 'o', ctrlKey: false, metaKey: false, shiftKey: false, altKey: false, ...over })
+    expect(isNewSessionShortcut(key({ ctrlKey: true }))).toBe(true)
+    expect(isNewSessionShortcut(key({ key: 'O', ctrlKey: true }))).toBe(true)
+    expect(isNewSessionShortcut(key({ metaKey: true }))).toBe(true)
+    expect(isNewSessionShortcut(key({ ctrlKey: true, shiftKey: true }))).toBe(false)
+    expect(isNewSessionShortcut(key({ ctrlKey: true, altKey: true }))).toBe(false)
+    expect(isNewSessionShortcut(key({}))).toBe(false)
+    expect(isNewSessionShortcut(key({ key: 'p', ctrlKey: true }))).toBe(false)
+  })
+
+  it('OPE-198: o atalho global fica com o editor, com o evento já tratado e com a composição (IME)', () => {
+    const inside = (selectors: string[]) => ({ closest: (selector: string) => (selectors.some((item) => selector.includes(item)) ? {} : null) }) as unknown as EventTarget
+    const event = (over: Partial<Pick<KeyboardEvent, 'defaultPrevented' | 'isComposing' | 'target'>>) => ({ defaultPrevented: false, isComposing: false, target: null, ...over })
+    expect(ignoresGlobalShortcut(event({}))).toBe(false)
+    expect(ignoresGlobalShortcut(event({ target: inside([]) }))).toBe(false)
+    expect(ignoresGlobalShortcut(event({ defaultPrevented: true }))).toBe(true)
+    expect(ignoresGlobalShortcut(event({ isComposing: true }))).toBe(true)
+    expect(ignoresGlobalShortcut(event({ target: inside(['.cm-editor']) }))).toBe(true)
+    expect(ignoresGlobalShortcut(event({ target: inside(['data-shortcut-scope']) }))).toBe(true)
   })
 })
 

@@ -17,7 +17,7 @@ import { useOpexScope } from "../OpexScopeProvider"
  * arquivo também cria a sessão na hora (o envio precisa dela); o rascunho digitado vai junto para a aba
  * da sessão criada (OPE-195).
  */
-export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: string) => void; model?: { model: string; variant: string | null } | null }) {
+export function OpexDraftChat({ onCreated, model, focusKey }: { onCreated: (sessionId: string) => void; model?: { model: string; variant: string | null } | null; focusKey?: number }) {
     const { agent } = useOpexScope()
     const view = useOpexView()
     const create = useCreateOpexSession()
@@ -52,6 +52,7 @@ export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: str
                 stopping={false}
                 disabledReason={disabledReason}
                 draftId={OPEX_DRAFT_TAB}
+                focusKey={focusKey}
             />
         </OpexDropZone>
     )
