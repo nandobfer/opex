@@ -22,6 +22,8 @@ export function toContactDto(contact: IEvolutionContact): EvolutionContactDto {
         pictureUrl: contact.pictureUrl ?? null,
         isGroup: contact.isGroup,
         lastMessageAt: contact.lastMessageAt?.toISOString() ?? null,
+        lastMessage: contact.lastMessage ? { text: contact.lastMessage.text, kind: contact.lastMessage.kind, fromMe: contact.lastMessage.fromMe } : null,
+        unreadCount: contact.unreadCount ?? 0,
     }
 }
 
@@ -69,7 +71,7 @@ export async function syncContacts(actorId: string): Promise<{ contacts: number;
             instance,
             chats
                 .filter((chat) => chat.remoteJid.includes("@") && chat.remoteJid !== "status@broadcast")
-                .map((chat) => ({ jid: normalizeJid(chat.remoteJid), name: chat.name ?? null, pushName: chat.pushName ?? null, pictureUrl: chat.profilePicUrl ?? null, isGroup: isGroupJid(chat.remoteJid) })),
+                .map((chat) => ({ jid: normalizeJid(chat.remoteJid), name: chat.name ?? null, pushName: chat.pushName ?? null, pictureUrl: chat.profilePicUrl ?? null, isGroup: isGroupJid(chat.remoteJid), unreadCount: typeof chat.unreadMessages === "number" ? chat.unreadMessages : null })),
             { hasChat: true },
         )
         counts = { contacts: contacts.length, groups: groups.length, chats: chats.length }
@@ -91,7 +93,7 @@ export async function sendTestMessage(input: SendTestInput, actorId: string): Pr
         // Volta pelo webhook como `fromMe`: registrada como envio do Opex, não conta como o dono assumindo a conversa.
         const { SecretarySent, secretaryDb } = await import("@/features/secretary-agent/server/models")
         await secretaryDb()
-        await SecretarySent.updateOne({ _id: `${instance}:${id}` }, { $setOnInsert: { sentAt: new Date() } }, { upsert: true })
+        await SecretarySent.updateOne({ _id: `${instance}:${id}` }, { $setOnInsert: { sentAt: new Date(), origin: "test" } }, { upsert: true })
     } catch (error) {
         toDomainError(error)
     }

@@ -1,18 +1,10 @@
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
-import { ClipboardList, FlaskConical } from "lucide-react"
-import { format } from "date-fns"
-import { ptBR } from "date-fns/locale"
-import { EmptyState } from "@/components/feedback/EmptyState"
-import { Skeleton } from "@/components/ui/skeleton"
+import { FlaskConical } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { ConversationPicker } from "@/features/evolution-api/components/ConversationPicker"
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
-import { useEvolution } from "@/features/evolution-api/hooks/useEvolution"
-import { SECRETARY_DECISION_LABELS, type SecretaryDecision } from "../constants"
 import { criteriaSteps, describeCriteria } from "../criteria-describe"
 import type { SecretaryForm } from "./SecretaryAgentTab"
 import { AudienceCard } from "./criteria/AudienceCard"
@@ -22,7 +14,8 @@ import { SubjectsCard } from "./criteria/SubjectsCard"
 
 /**
  * Aba Critérios (plano v3 da OPE-192): duas etapas que precisam passar juntas (quem e sobre o quê), quem decide o
- * assunto, o resumo em frases e o fluxo da decisão (atualizados enquanto o dono edita) e o registro de decisões.
+ * assunto e o resumo em frases e o fluxo da decisão (atualizados enquanto o dono edita). O registro de decisões saiu
+ * daqui para a aba Decisões (OPE-197).
  */
 export function CriteriaTab({ form, contacts }: { form: SecretaryForm; contacts: EvolutionContactDto[] }) {
     const criteria = form.watch("criteria")
@@ -49,36 +42,6 @@ export function CriteriaTab({ form, contacts }: { form: SecretaryForm; contacts:
             <AudienceCard form={form} contacts={contacts} />
             <SubjectsCard form={form} />
             <DecisionModelCard form={form} />
-            <DecisionLog contacts={contacts} />
         </>
-    )
-}
-
-type DecisionRow = { _id: string; jid: string; decision: SecretaryDecision; reason: string; at: string }
-
-export function DecisionLog({ contacts }: { contacts: EvolutionContactDto[] }) {
-    const [jid, setJid] = useState<string[]>([])
-    const rows = useEvolution<DecisionRow[]>(`/secretary/decisions${jid[0] ? `?jid=${encodeURIComponent(jid[0])}` : ""}`)
-    return (
-        <Card>
-            <CardHeader>
-                <CardTitle className="text-base">Registro de decisões</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-3">
-                <ConversationPicker items={contacts} selected={jid} onChange={setJid} multiple={false} placeholder="Todas as conversas" />
-                {jid.length > 0 && <Button variant="ghost" onClick={() => setJid([])}>Limpar filtro</Button>}
-                {rows.isError && <Button variant="outline" onClick={() => void rows.refetch()}>Tentar novamente</Button>}
-                {rows.isPending && <div role="status" aria-label="Carregando decisões" className="divide-y">{[0, 1, 2].map((row) => <div key={row} className="space-y-2 py-2"><Skeleton className="h-4 w-44" /><Skeleton className="h-4 w-3/4" /></div>)}</div>}
-                {rows.data?.length === 0 && <EmptyState icon={ClipboardList} title="Nenhuma decisão registrada." description={jid.length ? "Não há decisões para a conversa selecionada." : "As decisões do Secretário aparecem aqui ao avaliar mensagens."} actionLabel={jid.length ? "Ver todas as conversas" : "Atualizar decisões"} onAction={() => { if (jid.length) setJid([]); else void rows.refetch() }} />}
-                <ul className="divide-y">
-                    {rows.data?.map((row) => (
-                        <li key={row._id} className="py-2">
-                            <strong>{SECRETARY_DECISION_LABELS[row.decision]}</strong> · {contacts.find((contact) => contact.jid === row.jid)?.name ?? row.jid}
-                            <p className="text-sm text-muted-foreground">{row.reason} · {format(new Date(row.at), "Pp", { locale: ptBR })}</p>
-                        </li>
-                    ))}
-                </ul>
-            </CardContent>
-        </Card>
     )
 }

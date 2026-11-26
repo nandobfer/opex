@@ -4,7 +4,7 @@ import { useEffect } from "react"
 import { useForm, type UseFormReturn } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useQueryClient } from "@tanstack/react-query"
-import { Bell, Brain, FlaskConical, ListFilter, MessagesSquare, Settings2, Sparkles } from "lucide-react"
+import { Bell, Brain, ClipboardList, FlaskConical, ListFilter, MessagesSquare, Settings2, Sparkles } from "lucide-react"
 import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
@@ -29,7 +29,9 @@ import { SECRETARY_ANALYSIS_EVENT, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECIS
 import { needsPrice, priceKey } from "../cost"
 import { CriteriaTab } from "./CriteriaTab"
 import { SimulationTab } from "./simulation/SimulationTab"
-import { ConversationsTab, NoticesTab } from "./ConversationTabs"
+import { NoticesTab } from "./NoticesTab"
+import { DecisionsTab } from "./decisions/DecisionsTab"
+import { ConversationsInbox } from "./conversations/ConversationsInbox"
 import { PersonalityTab } from "./PersonalityTab"
 import { personalityTabLabel, useSecretaryAnalyses } from "../hooks/useSecretaryAnalyses"
 
@@ -59,7 +61,7 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
     if (config.isPending) return <div className="grid gap-6"><Skeleton className="h-12" /><Skeleton className="h-48" /><Skeleton className="h-64" /></div>
     if (config.isError) return <Button variant="outline" onClick={() => void config.refetch()}>Tentar novamente</Button>
     return <AgentSettingsTabs fallback="geral" label="Agente Secretário" tabs={[
-        { id: "geral", label: "Geral", icon: Settings2 }, { id: "criterios", label: "Critérios", icon: ListFilter }, { id: "simulacao", label: "Simulação", icon: FlaskConical },
+        { id: "geral", label: "Geral", icon: Settings2 }, { id: "criterios", label: "Critérios", icon: ListFilter }, { id: "decisoes", label: "Decisões", icon: ClipboardList }, { id: "simulacao", label: "Simulação", icon: FlaskConical },
         { id: "personalidade", label: personalityTabLabel(analysis), icon: Sparkles }, { id: "memorias", label: "Memórias", icon: Brain },
         { id: "conversas", label: "Conversas", icon: MessagesSquare }, { id: "avisos", label: "Avisos", icon: Bell, badge: notices.data?.pending || null },
     ]}>{(section) => {
@@ -67,10 +69,11 @@ export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: bo
         return <>
             {section === "geral" && <GeneralSettings form={form} />}
             {section === "criterios" && <CriteriaTab form={form} contacts={contactItems} />}
+            {section === "decisoes" && <DecisionsTab contacts={contactItems} />}
             {section === "simulacao" && <SimulationTab form={form} contacts={contactItems} />}
             {section === "personalidade" && <PersonalityTab form={form} contacts={contactItems} />}
             {section === "memorias" && <SecretaryMemories />}
-            {section === "conversas" && <ConversationsTab minutes={form.getValues("pauseMinutes")} />}
+            {section === "conversas" && <ConversationsInbox minutes={form.getValues("pauseMinutes")} contacts={contactItems} />}
             {section === "avisos" && <NoticesTab />}
             {(section === "geral" || section === "criterios" || section === "personalidade") && dirty && <div className="flex flex-wrap items-center gap-2">
                 <Button variant="outline" onClick={() => form.reset(config.data?.settings)}>Desfazer configuração</Button>

@@ -62,7 +62,18 @@ export interface IEvolutionContact {
     /** Apareceu na lista de conversas (findChats ou mensagem recebida). */
     hasChat: boolean
     lastMessageAt: Date | null
+    /** Prévia da última mensagem (aba Conversas do Secretário, OPE-197): nunca vai para log, auditoria nem evento. */
+    lastMessage: IEvolutionLastMessage | null
+    /** Não lidas do WhatsApp (o Opex só mostra; nunca marca como lida ao abrir a conversa). */
+    unreadCount: number
     updatedAt: Date
+}
+
+export interface IEvolutionLastMessage {
+    text: string
+    /** `text` ou o tipo da mídia (`image`, `audio`, `video`, `document`, `sticker`). */
+    kind: string
+    fromMe: boolean
 }
 
 const qrSchema = new Schema<IEvolutionQr>(
@@ -111,6 +122,8 @@ const contactSchema = new Schema<IEvolutionContact>(
         isGroup: { type: Boolean, default: false },
         hasChat: { type: Boolean, default: false },
         lastMessageAt: { type: Date, default: null },
+        lastMessage: { type: new Schema({ text: String, kind: String, fromMe: Boolean }, { _id: false }), default: null },
+        unreadCount: { type: Number, default: 0 },
         updatedAt: { type: Date, default: () => new Date() },
     },
     { collection: "evolution_contacts", versionKey: false },

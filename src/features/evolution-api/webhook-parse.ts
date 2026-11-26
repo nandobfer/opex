@@ -34,6 +34,15 @@ export interface ContactUpdate {
     pushName: string | null
     pictureUrl: string | null
     isGroup: boolean
+    /** Não lidas do WhatsApp (só nos `CHATS_*`: `unreadMessages` ou `unreadCount`); ausente = não veio. */
+    unreadCount?: number | null
+}
+
+const count = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) && value >= 0 ? Math.floor(value) : null)
+
+function unreadOf(row: Record<string, unknown>): { unreadCount?: number } {
+    const unread = count(row.unreadMessages) ?? count(row.unreadCount)
+    return unread === null ? {} : { unreadCount: unread }
 }
 
 /** Contatos/conversas de `CONTACTS_*` e `CHATS_*` (campos `remoteJid` ou `id`). */
@@ -51,9 +60,21 @@ export function contactsOf(data: unknown): ContactUpdate[] {
             pushName: str(row.pushName) ?? str(row.notify),
             pictureUrl: str(row.profilePicUrl) ?? str(row.profilePictureUrl) ?? str(row.imgUrl),
             isGroup: isGroupJid(jid),
+            ...unreadOf(row),
         })
     }
     return out
+}
+
+/** Conversas tocadas por um `MESSAGES_UPDATE` (status de entrega/leitura, edição): `remoteJid` ou `key.remoteJid`. */
+export function chatJidsOfUpdate(data: unknown): string[] {
+    const jids = new Set<string>()
+    for (const item of asArray(data)) {
+        const row = record(item)
+        const raw = str(row?.remoteJid) ?? str(record(row?.key)?.remoteJid)
+        if (raw && raw.includes("@") && raw !== "status@broadcast") jids.add(normalizeJid(raw))
+    }
+    return [...jids]
 }
 
 export interface ConnectionUpdate {

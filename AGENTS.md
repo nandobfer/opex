@@ -238,7 +238,9 @@ sem pedido explícito.
   cada mudança de conexão, QR code, contatos, opções, instâncias ou webhook (ver `aicontext/modules/evolution-api.md`).
 - Agente Secretário (OPE-192): `secretary-decision-recorded` (`{ chatId }`), `secretary-conversation-updated`
   (`{ chatId }`), `secretary-notices-updated` (`{ pending }`), `secretary-personality-updated` (`{ versionId }`) e
-  `secretary-analysis-updated` (`{ id }`) em `private-app` (ver `aicontext/modules/secretary-agent.md`).
+  `secretary-analysis-updated` (`{ id }`) em `private-app`; e `secretary-chat-updated` (`{ chatId }`, OPE-197) a cada
+  mensagem nova ou atualizada e mudança de não lidas na instância do Secretário, para a aba Conversas (ver
+  `aicontext/modules/secretary-agent.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
@@ -353,6 +355,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Ícones: lucide-react
 - Datas: date-fns (locale pt-BR); seletor de datas: react-day-picker
 - Busca local: fuse.js
+- Seletor de emojis: `emoji-picker-react` (aba Conversas do Agente Secretário, a mesma biblioteca do Atendimento do
+  Zaturno CRM; carregado sob demanda)
 - Markdown: `react-markdown` + `remark-gfm` (componente `src/components/ui/markdown.tsx`)
 - Preferências/filtros persistentes no navegador: `usePersistentState` (`src/hooks/`, Zod)
 - Engramind no app: `@engramind/client` (npm; repositório `nandobfer/engramind-client`), no modo gestor

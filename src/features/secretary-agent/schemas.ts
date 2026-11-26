@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { OPEX_PROVIDER_IDS } from "@/features/opex-agent/constants"
-import { SECRETARY_DEFAULTS, SECRETARY_MODES } from "./constants"
+import { csvList, isoDate, pageQuery } from "@/lib/list/query"
+import { SECRETARY_DECISIONS, SECRETARY_DEFAULTS, SECRETARY_MODES } from "./constants"
 import { needsPrice, priceKey } from "./cost"
 
 /**
@@ -251,6 +252,20 @@ export const conversationActionSchema = z.discriminatedUnion("action", [
     z.object({ action: z.literal("include") }),
 ])
 export type ConversationActionInput = z.infer<typeof conversationActionSchema>
+
+/**
+ * `GET /api/secretary/decisions` — aba Decisões (OPE-197): conversas e decisões em CSV, período ISO (dia inteiro no
+ * fuso do navegador, `dayRangeParams`) e página. `jid` único (contrato antigo) continua aceito.
+ */
+export const DECISION_PAGE_LIMIT = 50
+export const decisionListQuerySchema = z.object({
+    jid: csvList.pipe(z.array(jidSchema).max(200)),
+    decision: csvList.pipe(z.array(z.enum(SECRETARY_DECISIONS)).max(SECRETARY_DECISIONS.length)),
+    from: isoDate.optional(),
+    to: isoDate.optional(),
+    ...pageQuery(DECISION_PAGE_LIMIT, 100),
+})
+export type DecisionListQuery = z.infer<typeof decisionListQuerySchema>
 
 /** Resposta do dono a uma pergunta pela aba Avisos. */
 export const noticeAnswerSchema = z.object({ answer: z.string().trim().min(1, "Escreva a resposta").max(4000, "Máximo de 4000 caracteres") })
