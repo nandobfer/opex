@@ -2,7 +2,7 @@
 
 import { format } from "date-fns"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { Bot, Check, CheckCheck, Clock, Pencil, RotateCcw } from "lucide-react"
+import { Bot, Check, CheckCheck, Clock, RotateCcw } from "lucide-react"
 import { cn } from "@/lib/utils"
 import type { ChatMessageDto, ChatMessageStatus } from "@/features/evolution-api/chat-message"
 import { isTempId, quotedAuthorLabel } from "../../chat-timeline"
@@ -105,7 +105,6 @@ export function MessageBubble(props: MessageBubbleProps) {
                     </p>
                 ) : !bareMedia && !sticker && <span className="block h-4" aria-hidden />}
                 <span className={cn("absolute bottom-1 right-2 flex items-center gap-1 text-[11px] leading-none", bareMedia ? "bottom-2 right-3 rounded-full bg-background/60 px-1.5 py-0.5 text-foreground" : "opacity-70")}>
-                    {message.edited && <Pencil className="h-2.5 w-2.5" aria-label="Editada" />}
                     <time dateTime={message.timestamp}>{format(new Date(message.timestamp), "HH:mm")}</time>
                     {out && <StatusIcon status={message.status} />}
                 </span>
