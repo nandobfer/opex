@@ -650,6 +650,8 @@ export async function moveTask(id: string, input: MoveTaskInput, actorId: string
     if (options.publish !== false) await publishTasksUpdated([id])
     if (options.publish !== false && input.targetColumn !== task.columnId) notifyAgenticQueue([id])
     if (options.origin !== "github" && input.targetColumn !== task.columnId) await syncGithubIssue(id)
+    // Observações do Agente Opex (OPE-194): a tarefa mudou de coluna.
+    if (input.targetColumn !== task.columnId) notifyTaskWatches((events) => events.watchTaskMoved({ id, code: task.code, projectId: task.projectId }, task.columnId, input.targetColumn))
     const updated = await DevTask.findById(id).lean()
     const project = updated ? await Project.findById(updated.projectId).lean() : null
     return updated ? toTaskDto(updated, project) : null
@@ -670,6 +672,12 @@ export async function setTaskArchived(id: string, archive: boolean, actorId: str
         depois: { codigo: task.code, arquivada: archive },
     })
     if (options.publish !== false) await publishTasksUpdated([id])
+    if (archive && !task.archived) notifyTaskWatches((events) => events.watchTaskArchived({ id, code: task.code }))
+}
+
+/** Observações do Agente Opex (OPE-194): sob demanda, sem bloquear nem derrubar a mutação. */
+function notifyTaskWatches(run: (events: typeof import("@/features/opex-agent/server/watch-events")) => Promise<void>): void {
+    void import("@/features/opex-agent/server/watch-events").then(run).catch(() => undefined)
 }
 
 export async function deleteTask(id: string, actorId: string): Promise<void> {
@@ -692,6 +700,7 @@ export async function deleteTask(id: string, actorId: string): Promise<void> {
     })
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { codigo: task.code, titulo: task.title } })
     await publishTasksUpdated([id])
+    notifyTaskWatches((events) => events.watchTargetDeleted("task", id, task.code))
 }
 
 /** Autor de um comentário (origem + nome exibido). */

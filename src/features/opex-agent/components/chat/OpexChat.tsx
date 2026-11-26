@@ -19,6 +19,7 @@ import { OpexComposer, type OpexComposerAttachments, type OpexComposerHandle } f
 import { OpexDropZone } from "./OpexDropZone"
 import { OpexEmptyChat } from "./OpexEmptyChat"
 import { buildChatItems, OpexMessageList } from "./OpexMessageList"
+import { OpexSessionWatches } from "./OpexSessionWatches"
 
 export const OPEX_SETTINGS_HREF = OWNER_OPEX_SETTINGS_HREF
 
@@ -106,6 +107,7 @@ export function OpexChat({ sessionId, initialText }: { sessionId: string; initia
                     onRetry={(text) => send.mutate({ text })}
                 />
             )}
+            {agent.watches && <OpexSessionWatches sessionId={sessionId} />}
             <OpexComposer
                 ref={composerRef}
                 onSend={onSend}

@@ -26,6 +26,8 @@ export interface ChatAgentDescriptor {
     modelPicker: boolean
     /** Jobs agendados (só o Agente Opex). */
     jobs: boolean
+    /** Observação de eventos: faixa "Observando…" no chat (só o Agente Opex, OPE-194). */
+    watches: boolean
     /** Anexos no chat (a conversa com um agente rotineiro não aceita, OPE-160). */
     attachments: boolean
 }
@@ -45,6 +47,7 @@ export const CHAT_AGENTS: Record<ChatAgentId, ChatAgentDescriptor> = {
         isShortcut: isOpexShortcut,
         modelPicker: false,
         jobs: true,
+        watches: true,
         attachments: true,
     },
     maddox: {
@@ -61,6 +64,7 @@ export const CHAT_AGENTS: Record<ChatAgentId, ChatAgentDescriptor> = {
         isShortcut: isMaddoxShortcut,
         modelPicker: true,
         jobs: false,
+        watches: false,
         attachments: true,
     },
 }

@@ -2,11 +2,12 @@ import { Schema, model, models, type Model, type Types } from "mongoose"
 import type { OpexJobStatus, OpexJobUnit, OpexJobWhen } from "@/features/opex-agent/jobs"
 import type { OpexMcpAuthMode, OpexMcpOauthStatus, OpexMcpToolInfo, OpexMcpTransport } from "@/features/opex-agent/mcp"
 import type { EncryptedSecret } from "@/lib/crypto/secretBox"
-import type { OpexConfirmationStatus, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexUsageDto } from "@/features/opex-agent/types"
+import type { OpexConfirmationStatus, OpexMessageKind, OpexMessageStatus, OpexMessageWatchRef, OpexPart, OpexSessionStatus, OpexUsageDto } from "@/features/opex-agent/types"
+import type { OpexWatchCondition, OpexWatchOutcome, OpexWatchStatus, OpexWatchTarget } from "@/features/opex-agent/watches"
 
 /**
  * Coleções do Agente Opex (`opex_sessions`, `opex_messages`, `opex_pending_actions`, `opex_files`, `opex_jobs`,
- * `opex_mcp_servers` e `opex_skills`).
+ * `opex_watches`, `opex_mcp_servers` e `opex_skills`).
  * Ver `aicontext/modules/opex-agent.md`. Os índices são garantidos pela migração
  * `ensure-opex-indexes`.
  */
@@ -67,9 +68,11 @@ export interface IOpexMessage {
     sessionId: Types.ObjectId
     seq: number
     role: "user" | "assistant"
-    kind: "message" | "confirmation" | "job" | "notice"
+    kind: OpexMessageKind
     /** Mensagem disparada por um job agendado. */
     job?: { id: string; title: string } | null
+    /** Notificação do sistema que acordou o agente (observações entregues, OPE-194). */
+    watch?: OpexMessageWatchRef | null
     text: string
     files: IOpexFileRef[]
     parts: OpexPart[]
@@ -160,8 +163,9 @@ const OpexMessageSchema = new Schema<IOpexMessage>(
         sessionId: { type: Schema.Types.ObjectId, required: true },
         seq: { type: Number, required: true },
         role: { type: String, enum: ["user", "assistant"], required: true },
-        kind: { type: String, enum: ["message", "confirmation", "job", "notice"], default: "message" },
+        kind: { type: String, enum: ["message", "confirmation", "job", "notice", "event"], default: "message" },
         job: { type: Schema.Types.Mixed, default: undefined },
+        watch: { type: Schema.Types.Mixed, default: undefined },
         text: { type: String, default: "" },
         files: { type: Schema.Types.Mixed, default: [] },
         parts: { type: Schema.Types.Mixed, default: [] },
@@ -175,6 +179,8 @@ const OpexMessageSchema = new Schema<IOpexMessage>(
     { collection: "opex_messages", versionKey: false, timestamps: { createdAt: true, updatedAt: false } },
 )
 OpexMessageSchema.index({ sessionId: 1, seq: 1 }, { unique: true })
+// Recuperação da entrega de observações: a mensagem que já acordou o agente (OPE-194).
+OpexMessageSchema.index({ "watch.ids": 1 }, { sparse: true })
 
 const OpexPendingActionSchema = new Schema<IOpexPendingAction>(
     {
@@ -265,6 +271,66 @@ OpexJobSchema.index({ status: 1, runAt: 1 })
 OpexJobSchema.index({ createdAt: -1 })
 OpexJobSchema.index({ clientId: 1, userId: 1, runAt: -1 })
 OpexJobSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0, name: "purge_ttl" })
+
+/**
+ * Observação de evento do Agente Opex (OPE-194) — `opex_watches`. Acorda a sessão `sessionId` uma vez,
+ * quando o evento acontece, vence ou o alvo é excluído. Encerrada, sai pelo TTL de `purgeAt`.
+ */
+export interface IOpexWatch {
+    _id: Types.ObjectId
+    sessionId: Types.ObjectId
+    /** Cliente do portal; `null` = observação do dono. */
+    clientId: string | null
+    userId: string
+    createdBy: "agent"
+    target: OpexWatchTarget & { meta?: Record<string, unknown> | null }
+    condition: OpexWatchCondition
+    note: string
+    status: OpexWatchStatus
+    outcome: OpexWatchOutcome | null
+    event: { summary: string; short: string; at: Date } | null
+    expiresAt: Date
+    triggeredAt: Date | null
+    deliveryKey: string | null
+    deliveringAt: Date | null
+    wokenAt: Date | null
+    messageId: Types.ObjectId | null
+    error: string | null
+    canceledBy: string | null
+    purgeAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+const OpexWatchSchema = new Schema<IOpexWatch>(
+    {
+        sessionId: { type: Schema.Types.ObjectId, required: true },
+        clientId: { type: String, default: null },
+        userId: { type: String, default: "" },
+        createdBy: { type: String, enum: ["agent"], default: "agent" },
+        target: { type: Schema.Types.Mixed, required: true },
+        condition: { type: Schema.Types.Mixed, required: true },
+        note: { type: String, default: "" },
+        status: { type: String, enum: ["watching", "triggered", "delivering", "woken", "expired", "canceled", "error"], default: "watching" },
+        outcome: { type: String, enum: ["event", "expired", "target_deleted", null], default: null },
+        event: { type: Schema.Types.Mixed, default: null },
+        expiresAt: { type: Date, required: true },
+        triggeredAt: { type: Date, default: null },
+        deliveryKey: { type: String, default: null },
+        deliveringAt: { type: Date, default: null },
+        wokenAt: { type: Date, default: null },
+        messageId: { type: Schema.Types.ObjectId, default: null },
+        error: { type: String, default: null },
+        canceledBy: { type: String, default: null },
+        purgeAt: { type: Date, default: null },
+    },
+    { collection: "opex_watches", versionKey: false, timestamps: true },
+)
+OpexWatchSchema.index({ status: 1, "target.kind": 1, "target.id": 1 })
+OpexWatchSchema.index({ status: 1, expiresAt: 1 })
+OpexWatchSchema.index({ sessionId: 1, status: 1 })
+OpexWatchSchema.index({ clientId: 1, userId: 1, createdAt: -1 })
+OpexWatchSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0, name: "purge_ttl" })
 
 /** Header (HTTP/SSE) ou variável de ambiente (stdio) de um MCP: valor cifrado com `secretBox`. */
 export interface IOpexMcpSecret {
@@ -431,6 +497,7 @@ if (process.env.NODE_ENV === "development") {
     delete models.OpexSkill
     delete models.OpexMcpServer
     delete models.OpexJob
+    delete models.OpexWatch
     delete models.OpexFile
     delete models.OpexSession
     delete models.OpexMessage
@@ -441,6 +508,7 @@ export const OpexSession: Model<IOpexSession> = (models.OpexSession as Model<IOp
 export const OpexMessage: Model<IOpexMessage> = (models.OpexMessage as Model<IOpexMessage>) || model<IOpexMessage>("OpexMessage", OpexMessageSchema)
 export const OpexFile: Model<IOpexFile> = (models.OpexFile as Model<IOpexFile>) || model<IOpexFile>("OpexFile", OpexFileSchema)
 export const OpexJob: Model<IOpexJob> = (models.OpexJob as Model<IOpexJob>) || model<IOpexJob>("OpexJob", OpexJobSchema)
+export const OpexWatch: Model<IOpexWatch> = (models.OpexWatch as Model<IOpexWatch>) || model<IOpexWatch>("OpexWatch", OpexWatchSchema)
 export const OpexPendingAction: Model<IOpexPendingAction> =
     (models.OpexPendingAction as Model<IOpexPendingAction>) || model<IOpexPendingAction>("OpexPendingAction", OpexPendingActionSchema)
 export const OpexMcpServer: Model<IOpexMcpServer> = (models.OpexMcpServer as Model<IOpexMcpServer>) || model<IOpexMcpServer>("OpexMcpServer", OpexMcpServerSchema)

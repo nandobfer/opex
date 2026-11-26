@@ -123,6 +123,13 @@ async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId
     // O apontamento agêntico acompanha o estado da mesa (abre/atualiza/fecha o período).
     await syncWorkbenchTimer(String(doc._id))
     await publishAgentic({ centralId: doc.centralId, workbenchId: String(doc._id), taskId: doc.taskId })
+    // Observações do Agente Opex (OPE-194): etapa nova ou execução que falhou/foi interrompida.
+    const runState = typeof set.runState === "string" ? set.runState : null
+    if (typeof set.stage === "string" || runState === "failed" || runState === "interrupted") {
+        const previousStage = "stage" in doc && typeof (doc as { stage?: unknown }).stage === "string" ? (doc as { stage: string }).stage : null
+        const change = { stage: typeof set.stage === "string" ? set.stage : null, previousStage, runState, error: typeof set.error === "string" ? set.error : null }
+        void import("@/features/opex-agent/server/watch-events").then(({ watchWorkbenchChanged }) => watchWorkbenchChanged(String(doc._id), change)).catch(() => undefined)
+    }
 }
 
 /** Mesa "executando" sem turno vivo neste processo (o app reiniciou): vira interrompida. */
@@ -2463,6 +2470,7 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage, limpezaAmbiente: Boolean(doc.deletionRequestedAt) } })
     centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id, limpezaAmbiente: Boolean(doc.deletionRequestedAt) })
     await publishAgentic({ centralId: doc.centralId, workbenchId: id, taskId: doc.taskId })
+    void import("@/features/opex-agent/server/watch-events").then(({ watchTargetDeleted }) => watchTargetDeleted("workbench", id, doc.taskCode)).catch(() => undefined)
     pumpQueue(doc.centralId)
     pumpBuildQueue()
 }

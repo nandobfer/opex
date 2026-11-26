@@ -270,6 +270,7 @@ export async function cancelOpexJob(id: string, actorId: string, scope: OpexServ
     if (!updated) throw new DomainError(409, "Só jobs agendados podem ser cancelados", "OPEX_JOB_NOT_SCHEDULED")
     await recordAudit({ userId: actorId, entidade: OPEX_JOB_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ABORTAR, antes: { titulo: before.title, execucao: new Date(before.runAt).toISOString(), cliente: before.clientId ?? null } })
     await publishJob(before, id, "canceled")
+    void import("./watch-events").then(({ watchJobSettled }) => watchJobSettled({ id, title: before.title, status: "canceled", error: null })).catch(() => undefined)
     const [dto] = await toJobDtos([updated])
     return dto!
 }
@@ -302,10 +303,12 @@ async function finishJob(job: IOpexJob, status: Extract<OpexJobStatus, "done" | 
     await publishJob(job, id, status)
     const payload: OpexJobFinishedPayload = { id, title: job.title, status, sessionId: idOf(updated.resultSessionId), error, origin: job.clientId ? "client" : "owner" }
     await publishJobEvent(job, OPEX_JOB_FINISHED_EVENT, { ...payload })
+    // Observações do Agente Opex (OPE-194): o job terminou.
+    void import("./watch-events").then(({ watchJobSettled }) => watchJobSettled({ id, title: job.title, status, error })).catch(() => undefined)
 }
 
-/** Motivo pt-BR, acionável, para a falha ao reconstruir o ator do portal. */
-const CLIENT_FAILURES: Record<string, string> = {
+/** Motivo pt-BR, acionável, para a falha ao reconstruir o ator do portal (jobs e observações). */
+export const CLIENT_FAILURES: Record<string, string> = {
     UNAUTHENTICATED: "O usuário foi desativado ou removido",
     FORBIDDEN: "O usuário não está mais vinculado ao cliente",
     CLIENT_INACTIVE: "O cliente foi desativado ou excluído",
@@ -332,7 +335,7 @@ async function clientActorForJob(job: IOpexJob): Promise<ClientActor> {
 }
 
 /** Agente do dono desligado ou sem modelo: o job do dono espera (não falha) e roda depois, com atraso. */
-async function ownerAgentReady(): Promise<boolean> {
+export async function ownerAgentReady(): Promise<boolean> {
     const { settings } = await loadOpexSettings()
     return (await opexAvailability(settings)).available
 }

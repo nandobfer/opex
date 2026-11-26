@@ -315,6 +315,14 @@ export async function runSchedulerTick(now: Date = new Date()): Promise<TickResu
         logger.error({ err: error }, "[scheduler] Falha nos jobs do Agente Opex")
     }
 
+    // Agente Opex: observações de evento vencidas e entregas pendentes (OPE-194) — só lê as observações.
+    try {
+        const { runDueOpexWatches } = await import("@/features/opex-agent/server/watches")
+        await runDueOpexWatches(now)
+    } catch (error) {
+        logger.error({ err: error }, "[scheduler] Falha nas observações do Agente Opex")
+    }
+
     // Builder Machine: confere/reabre o túnel do PC (só com a integração ativa). Ver aicontext/modules/builder-machine.md.
     try {
         const { runLocalDockerHealth } = await import("@/features/local-docker/server/health")

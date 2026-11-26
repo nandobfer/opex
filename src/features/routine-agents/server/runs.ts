@@ -399,6 +399,11 @@ async function afterSettle(run: RoutineRunDoc, actorId: string): Promise<void> {
     } else if (run.status === "awaiting_confirmation") {
         await publishRunAttention({ id: runId, agentId: String(run.agentId), kind: "confirmation", status: run.status, agentName: agent?.name })
     }
+    // Observações do Agente Opex (OPE-194): a execução terminou ou parou aguardando confirmação.
+    if (isFinalRunStatus(run.status) || run.status === "awaiting_confirmation") {
+        const settled = { id: runId, agentName: agent?.name || "agente", status: run.status, error: run.error ?? null }
+        void import("@/features/opex-agent/server/watch-events").then(({ watchRoutineRunSettled }) => watchRoutineRunSettled(settled)).catch(() => undefined)
+    }
     await publishAgentUpdated(String(run.agentId))
     routineLog.info({ runId, status: run.status, tokens: run.tokens }, "[routine-agents] turno da execução encerrado")
 }

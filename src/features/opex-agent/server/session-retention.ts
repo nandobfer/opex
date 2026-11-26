@@ -1,6 +1,7 @@
 import type { Types } from "mongoose"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
-import { OpexJob, OpexSession, type IOpexSession, type OpexAgentKind } from "@/lib/db/models/Opex"
+import { OpexJob, OpexSession, OpexWatch, type IOpexSession, type OpexAgentKind } from "@/lib/db/models/Opex"
+import { OPEX_WATCH_ACTIVE_STATUSES } from "../watches"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import { agentAuditEntity } from "../constants"
@@ -17,7 +18,8 @@ import { opexSessionAgentFilter } from "../session-filter"
  *   de vez (`purgeSession`). A carência conta do arquivamento: a sessão fica pelo menos X dias arquivada.
  *   Arquivadas antes do campo `archivedAt` usam o `updatedAt`.
  * - Nunca toca sessão respondendo ou aguardando confirmação, com turno vivo neste processo nem
- *   vinculada a um job do agente ainda ativo (agendado, executando ou aguardando confirmação).
+ *   vinculada a um job do agente ainda ativo (agendado, executando ou aguardando confirmação) nem com
+ *   observação de evento ativa (OPE-194: observando, disparada ou acordando o agente).
  */
 
 const log = loggerFor({ module: "agent-session-retention" })
@@ -52,6 +54,9 @@ async function sessionsWithActiveJobs(): Promise<Set<string>> {
         .lean<{ sessionId: Types.ObjectId | null; originSessionId: Types.ObjectId | null; resultSessionId: Types.ObjectId | null }[]>()
     const ids = new Set<string>()
     for (const job of jobs) for (const id of [job.sessionId, job.originSessionId, job.resultSessionId]) if (id) ids.add(String(id))
+    // Observações ativas (OPE-194): a sessão é a que vai acordar.
+    const watches = await OpexWatch.find({ status: { $in: [...OPEX_WATCH_ACTIVE_STATUSES] } }).select({ sessionId: 1 }).lean<{ sessionId: Types.ObjectId }[]>()
+    for (const watch of watches) ids.add(String(watch.sessionId))
     return ids
 }
 
