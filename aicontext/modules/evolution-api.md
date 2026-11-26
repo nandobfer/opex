@@ -26,8 +26,12 @@ Código: `src/features/evolution-api/` (puros: `constants.ts`, `evolution-dto.ts
   `keyAvailable` e a URL padrão do webhook. **A chave nunca é devolvida**: a tela mostra "Chave disponível no
   ambiente" e, ao salvar, `POST` na mesma rota grava o formulário e a chave lida de novo do ambiente
   (`updateIntegration`). Com a integração já salva, o ambiente não é lido.
-- **Testar**: `GET /` (alcance e versão) e `GET /instance/fetchInstances` (chave válida). Amarelo quando a
-  instância padrão não existe, está desconectada ou não tem o webhook do Opex.
+- **Testar** (inclusive a verificação periódica): `GET /instance/fetchInstances` confere o alcance e a chave (rota
+  local da Evolution, só Postgres); depois, `GET /` só para a versão, com timeout de 5 s (`VERSION_TIMEOUT_MS`), e
+  a falha dela vira "Versão indisponível agora", sem mudar o resultado. O `GET /` da 2.3.8 consulta
+  `web.whatsapp.com` a cada chamada (sem timeout) e trava quando essa consulta externa demora, mesmo com a Evolution
+  no ar; por isso não serve de teste de alcance. Amarelo quando a instância padrão não existe, está desconectada
+  ou não tem o webhook do Opex.
 
 ## Instância (aba Instância)
 
