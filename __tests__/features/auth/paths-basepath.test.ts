@@ -19,4 +19,10 @@ describe("guarda de acesso com subcaminho público", () => {
         expect(resolveAuthDecision(`${BASE}/cliente`, null).action).toBe("allow")
         expect(resolveAuthDecision(`${BASE}/cliente/dashboard`, CLIENT).action).toBe("allow")
     })
+
+    it("libera o PWA com o prefixo e mantém o app protegido", () => {
+        for (const path of ["/manifest.webmanifest", "/sw.js", "/offline"]) expect(resolveAuthDecision(`${BASE}${path}`, null).action).toBe("allow")
+        expect(resolveAuthDecision(`${BASE}/offline/x`, null)).toEqual({ action: "redirect", redirectTo: "/login" })
+        expect(resolveAuthDecision(`${BASE}/dashboard`, null)).toEqual({ action: "redirect", redirectTo: "/login" })
+    })
 })

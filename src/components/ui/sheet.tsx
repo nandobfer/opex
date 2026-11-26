@@ -7,6 +7,7 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { usePortalContainer } from "@/components/ui/portal-container"
+import { SAFE_AREA_SHEET } from "@/components/ui/safe-area"
 
 const Sheet = SheetPrimitive.Root
 
@@ -62,7 +63,8 @@ const SheetContent = React.forwardRef<
     <SheetOverlay />
     <SheetPrimitive.Content
       ref={ref}
-      className={cn(sheetVariants({ side }), className)}
+      // Safe area por último: o padding do chamador não a descarta (PWA, OPE-196).
+      className={cn(sheetVariants({ side }), className, SAFE_AREA_SHEET[side ?? "right"])}
       {...props}
     >
       <SheetPrimitive.Close className="absolute right-4 top-4 rounded-sm opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:pointer-events-none data-[state=open]:bg-secondary">

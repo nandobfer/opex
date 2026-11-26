@@ -5,6 +5,7 @@ import * as DialogPrimitive from "@radix-ui/react-dialog"
 import * as PopoverPrimitive from "@radix-ui/react-popover"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { cn } from "@/lib/utils"
+import { SAFE_AREA_Y } from "@/components/ui/safe-area"
 import { VisuallyHidden } from "@/components/ui/visually-hidden"
 import { SidebarTooltip } from "@/features/layout/components/sidebar/SidebarTooltip"
 import { SidebarItemSurface } from "@/features/layout/components/sidebar/SidebarItemSurface"
@@ -214,7 +215,7 @@ function AgentChatNavItemContent({ collapsed, variant }: { collapsed: boolean; v
                         {open && (
                             <DialogPrimitive.Portal forceMount>
                                 <DialogPrimitive.Content forceMount asChild aria-describedby={undefined} onOpenAutoFocus={(event) => event.preventDefault()}>
-                                    <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }} transition={{ duration: 0.22, ease: "easeOut" }} className="fixed inset-0 z-50 flex flex-col bg-popover text-popover-foreground">
+                                    <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 24 }} transition={{ duration: 0.22, ease: "easeOut" }} className={cn("fixed inset-0 z-50 flex flex-col bg-popover text-popover-foreground", SAFE_AREA_Y)}>
                                         <VisuallyHidden>
                                             <DialogPrimitive.Title>{agent.label}</DialogPrimitive.Title>
                                         </VisuallyHidden>

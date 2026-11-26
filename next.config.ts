@@ -2,6 +2,10 @@ import type { NextConfig } from "next"
 import pkg from "./package.json"
 import { BASE_PATH } from "./src/lib/base-path"
 
+// Versão do build (PWA, OPE-196): muda a cada `next build` e fica fixa no bundle. O service worker
+// (`src/app/sw.js/route.ts`) a embute, então cada deploy instala um SW novo e limpa o cache antigo.
+const BUILD_ID = `${pkg.version}-${Date.now().toString(36)}`
+
 const nextConfig: NextConfig = {
     // Subcaminho público (proxy com prefixo). Mesmo valor no acesso direto pelo IP/porta.
     basePath: BASE_PATH || undefined,
@@ -20,6 +24,7 @@ const nextConfig: NextConfig = {
     serverExternalPackages: ["ssh2", "cordis", "rolldown", "tailwindcss"],
     env: {
         APP_VERSION: pkg.version,
+        APP_BUILD_ID: BUILD_ID,
     },
     async redirects() {
         // Acesso direto pela raiz (`http://IP:porta/`) cai no subcaminho do app.

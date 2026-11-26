@@ -4,6 +4,7 @@ import { useState } from "react"
 import { Bug } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
+import { SAFE_AREA_INSET_4 } from "@/components/ui/safe-area"
 import { IntegrationDebugConsole } from "@/features/integrations/components/IntegrationDebugConsole"
 import { centralLogScope } from "../../constants"
 import { useTestCentral } from "../../hooks/useAgentic"
@@ -13,7 +14,7 @@ export function CentralLogsSection({ centralId }: { centralId: string }) {
     const test = useTestCentral(centralId)
     const [maximized, setMaximized] = useState(false)
     return (
-        <Card className={cn("flex flex-col", maximized ? "fixed inset-4 z-50" : "h-[560px]")}>
+        <Card className={cn("flex flex-col", maximized ? cn("fixed z-50", SAFE_AREA_INSET_4) : "h-[560px]")}>
             <CardContent className="flex min-h-0 flex-1 flex-col pt-6">
                 <IntegrationDebugConsole
                     integrationId="ai"

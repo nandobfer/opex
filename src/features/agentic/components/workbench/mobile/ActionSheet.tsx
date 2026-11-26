@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils"
 export function ActionSheet({ open, onOpenChange, title, description, children, testId }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; children: ReactNode; testId?: string }) {
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-xl p-4 pb-[max(1rem,env(safe-area-inset-bottom))]" data-testid={testId}>
+            <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-xl p-4" data-testid={testId}>
                 <SheetHeader className="mb-3 pr-8 text-left">
                     <SheetTitle className="text-base">{title}</SheetTitle>
                     <SheetDescription className={cn(!description && "sr-only")}>{description ?? title}</SheetDescription>

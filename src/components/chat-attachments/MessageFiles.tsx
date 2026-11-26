@@ -8,6 +8,7 @@ import { VisuallyHidden } from "@/components/ui/visually-hidden"
 import { formatAttachmentSize } from "@/lib/attachments"
 import { withBasePath } from "@/lib/base-path"
 import { cn } from "@/lib/utils"
+import { SAFE_AREA_INSET_6 } from "@/components/ui/safe-area"
 import type { ChatFileDto } from "@/lib/chat-files/kind"
 import { fileIcon } from "./file-icons"
 
@@ -76,7 +77,7 @@ export function MessageFiles({ files, align = "end", className, fileHref = defau
                                     animate={{ opacity: 1, scale: 1 }}
                                     exit={{ opacity: 0, scale: 0.94 }}
                                     transition={{ duration: 0.18 }}
-                                    className="fixed inset-6 z-[60] flex flex-col items-center justify-center gap-3"
+                                    className={cn("fixed z-[60] flex flex-col items-center justify-center gap-3", SAFE_AREA_INSET_6)}
                                 >
                                     <VisuallyHidden>
                                         <DialogPrimitive.Title>{zoomed.name}</DialogPrimitive.Title>
