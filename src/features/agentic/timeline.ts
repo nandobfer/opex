@@ -45,6 +45,8 @@ export function applyTimelineLine(state: TimelineState, line: WorkbenchStreamLin
         case "reset":
             return { ...INITIAL_TIMELINE, loaded: true }
         case "ping":
+        case "ready":
+            // `ready` (fim do histórico) é tratado pelo hook do stream: não muda a saída.
             return state
         case "reasoning":
             return state.reasoning ? state : { ...state, reasoning: true }

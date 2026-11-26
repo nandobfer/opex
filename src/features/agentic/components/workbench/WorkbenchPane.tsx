@@ -48,6 +48,9 @@ function WorkbenchSkeleton() {
     )
 }
 
+const VIEW_EXIT = { opacity: 0, y: -8 }
+const SKELETON_EXIT = { opacity: 0, transition: { duration: 0 } }
+
 /** "Voltar para tarefas" do celular nas telas sem cabeçalho de mesa (abrir mesa e erro). */
 function BackRow({ href }: { href: string }) {
     return (
@@ -73,7 +76,8 @@ export function WorkbenchPane({ central, taskId, scopeName, backHref = null }: {
             <WorkbenchBackHrefProvider href={backHref}>
                 <Card className={WORKBENCH_CARD_CLASS}>
                     <AnimatePresence mode="wait" initial={false}>
-                        <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }} transition={{ duration: 0.2 }} className="flex min-h-0 flex-1 flex-col">
+                        {/* O skeleton sai sem esperar (OPE-188): a mesa carregada entra na hora; as demais trocas animam a saída. */}
+                        <motion.div key={view} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} exit={view === "loading" ? SKELETON_EXIT : VIEW_EXIT} transition={{ duration: 0.2 }} className="flex min-h-0 flex-1 flex-col">
                             {view === "empty" && (
                                 <div className="flex flex-1 items-center justify-center p-6">
                                     <EmptyState icon={MousePointerClick} title="Selecione uma tarefa" description={scopeName ? `Escolha uma tarefa de ${scopeName} para abrir a mesa de trabalho.` : "Escolha uma tarefa para abrir a mesa de trabalho."} />

@@ -80,9 +80,25 @@ describe('DevCenterPage em tempo real', () => {
   })
 
   it('mesa aberta, avançada ou excluída (agentic-updated) recarrega as consultas do desenvolvimento agêntico', () => {
-    const { emit, keys } = setup()
+    const { emit, keys, invalidate } = setup()
     emit(AGENTIC_UPDATED_EVENT, { centralId: 'c1', workbenchId: 'w1', taskId: 't1' })
-    expect(keys()).toEqual([[AGENTIC_QUERY_KEY]])
+    expect(keys()).toEqual([[AGENTIC_QUERY_KEY], [AGENTIC_QUERY_KEY]])
+    // OPE-188: a busca em andamento (ex.: a mesa abrindo) não é cancelada; as consultas de outra mesa só
+    // ficam desatualizadas (sem refazer agora).
+    const [[refetch, refetchOptions], [stale]] = invalidate.mock.calls as [{ predicate: (query: { queryKey: unknown[] }) => boolean }, unknown][]
+    expect(refetchOptions).toEqual({ cancelRefetch: false })
+    expect(stale).toMatchObject({ refetchType: 'none' })
+    const other = { queryKey: agenticKey('workbench', 't2') as unknown as unknown[] }
+    const same = { queryKey: agenticKey('workbench', 't1') as unknown as unknown[] }
+    expect(refetch.predicate(same)).toBe(true)
+    expect(refetch.predicate(other)).toBe(false)
+    expect((stale as typeof refetch).predicate(other)).toBe(true)
+  })
+
+  it('OPE-188: evento sem mesa (configuração) recarrega tudo, sem cancelar a busca em andamento', () => {
+    const { emit, invalidate } = setup()
+    emit(AGENTIC_UPDATED_EVENT, { scope: 'settings' })
+    expect(invalidate.mock.calls).toEqual([[{ queryKey: [AGENTIC_QUERY_KEY] }, { cancelRefetch: false }]])
   })
 
   it('colunas do quadro alteradas recarregam o quadro e a lista', () => {

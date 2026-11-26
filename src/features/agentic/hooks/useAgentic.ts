@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useCallback, useEffect, useRef } from "react"
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
@@ -10,6 +10,8 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { AGENTIC_UPDATED_EVENT, WORKBENCH_MODEL_ROLE_LABELS } from "../constants"
 import type { DockerBuildersDto } from "../docker-builders"
+import { isOtherWorkbenchQuery, workbenchEventTarget } from "../realtime-invalidation"
+import { dropTimelineCache } from "../timeline-cache"
 import { optimisticModelChoice, type WorkbenchAction } from "../logic"
 import type { AgenticSettings, CentralConfig, CreateCentralInput, FormReplyInput, PermissionReplyInput, SetWorkbenchStageInput, StartWorkbenchModelsInput, WorkbenchModelInput } from "../schemas"
 import type { AgenticSettingsDto, CentralDto, CentralTestOutcome, InProgressWorkbenchDto, PrWatchScheduleDto, QueueItemDto, RefineWorkbenchResultDto, WorkbenchDto, WorkbenchSummaryDto } from "../types"
@@ -128,8 +130,35 @@ export const useWorkbenchesInProgress = (enabled = true) =>
 export const usePrWatchSchedule = (enabled: boolean) =>
     useQuery({ queryKey: agenticKey("pr-watch"), queryFn: () => get<PrWatchScheduleDto>("/agentic/pr-watch"), enabled, refetchInterval: enabled ? 30_000 : false })
 
-export const useWorkbenchByTask = (taskId: string | null) =>
-    useQuery({ queryKey: agenticKey("workbench", taskId), queryFn: () => get<WorkbenchDto | null>(`/agentic/workbenches/by-task/${taskId}`), enabled: Boolean(taskId) })
+const workbenchByTaskQuery = (taskId: string | null) => ({ queryKey: agenticKey("workbench", taskId), queryFn: () => get<WorkbenchDto | null>(`/agentic/workbenches/by-task/${taskId}`) })
+
+export const useWorkbenchByTask = (taskId: string | null) => useQuery({ ...workbenchByTaskQuery(taskId), enabled: Boolean(taskId) })
+
+/** Atraso da pré-busca ao passar o mouse numa tarefa (só quem para em cima busca). */
+export const PREFETCH_WORKBENCH_DELAY_MS = 120
+
+/**
+ * Pré-busca da mesa de uma tarefa (OPE-188): `schedule` ao passar o mouse (com atraso) ou focar a linha;
+ * `cancel` ao sair. Respeita o `staleTime` (mesa fresca no cache não é buscada de novo).
+ */
+export function usePrefetchWorkbench() {
+    const queryClient = useQueryClient()
+    const timer = useRef<ReturnType<typeof setTimeout> | null>(null)
+    const cancel = useCallback(() => {
+        if (timer.current) clearTimeout(timer.current)
+        timer.current = null
+    }, [])
+    const prefetch = useCallback((taskId: string) => void queryClient.prefetchQuery(workbenchByTaskQuery(taskId)), [queryClient])
+    const schedule = useCallback(
+        (taskId: string) => {
+            cancel()
+            timer.current = setTimeout(() => prefetch(taskId), PREFETCH_WORKBENCH_DELAY_MS)
+        },
+        [cancel, prefetch],
+    )
+    useEffect(() => cancel, [cancel])
+    return { schedule, prefetch, cancel }
+}
 
 function useSetWorkbench() {
     const queryClient = useQueryClient()
@@ -388,6 +417,7 @@ export function useDeleteWorkbench() {
         },
         onSuccess: ({ workbench, deleted }) => {
             if (deleted) {
+                dropTimelineCache(workbench.id)
                 queryClient.setQueryData(agenticKey("workbench", workbench.taskId), null)
                 void queryClient.invalidateQueries({ queryKey: agenticKey("workbenches", workbench.centralId) })
                 toast.success("Mesa excluída")
@@ -465,9 +495,19 @@ export function useAgenticRealtime(): void {
         if (!isPusherClientAvailable()) return
         const name = appChannel()
         const channel = acquireChannel(name)
-        const handler = () => void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY] })
+        // `cancelRefetch: false`: um evento não cancela (e reinicia) a busca em andamento — ex.: a mesa que
+        // está abrindo. Consultas de OUTRA mesa só ficam desatualizadas (buscadas na próxima visita) (OPE-188).
+        const handler = (payload: unknown) => {
+            const target = workbenchEventTarget(payload)
+            if (!target) {
+                void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY] }, { cancelRefetch: false })
+                return
+            }
+            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY], predicate: (query) => !isOtherWorkbenchQuery(query.queryKey, target) }, { cancelRefetch: false })
+            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY], predicate: (query) => isOtherWorkbenchQuery(query.queryKey, target), refetchType: "none" })
+        }
         // A fila muda quando tarefas mudam de coluna (mesmo sem abrir mesa): recarrega só a fila.
-        const queueHandler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("queue") })
+        const queueHandler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("queue") }, { cancelRefetch: false })
         channel.bind(AGENTIC_UPDATED_EVENT, handler)
         channel.bind(TASKS_UPDATED_EVENT, queueHandler)
         return () => {

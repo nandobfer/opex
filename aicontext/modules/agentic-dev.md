@@ -431,6 +431,13 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   as colunas ficam paradas (rolagem e filtros mantidos)
   e só o que mudou faz um fade curto — a mesa ao trocar de tarefa, a lista de tarefas ao trocar de
   central (Framer Motion, sem deslocamento com movimento reduzido).
+- **Troca de mesa instantânea (OPE-188)**: o painel da mesa remonta só pela **tarefa** (a central
+  resolvida depois, em "Todos os projetos", não remonta) e **não espera** a saída da mesa anterior: a
+  nova entra na hora com fade de 0,15 s. No `WorkbenchPane`, o skeleton sai sem espera (as demais
+  trocas de visão animam a saída). A mesa vem do cache da query (`by-task`) e a saída do cache da
+  timeline (ver "Saída ao vivo"), então voltar a uma mesa já vista mostra tudo na hora e atualiza por
+  trás. **Pré-busca:** parar o mouse (120 ms) ou focar uma tarefa com mesa na coluna Tarefas busca a
+  mesa (`usePrefetchWorkbench`, respeita o `staleTime`; o stream não é pré-buscado).
 - **Tempo real (OPE-124)**: a Central se atualiza sozinha, sem recarregar e sem polling. `DevCenterPage`
   monta `useAgenticRealtime` (`agentic-updated` → consultas `["agentic"]`: mesas, fila e mesa aberta;
   `tasks-updated` → fila) e `useTasksRealtime` (`tasks-updated` → lista de tarefas e detalhe das
@@ -1408,15 +1415,40 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   assiste e é gravado em lote em `agentic_events` (textos seguidos viram um documento; saída de
   ferramenta cortada em 20 mil caracteres guardando o fim). Raciocínio e progresso de ferramenta são
   só ao vivo. O **refinamento de tarefas** reusa este barramento/coleção (chave = id do refinamento).
-- `GET /api/agentic/workbenches/[id]/events` (NDJSON): `reset` + tudo o que foi gravado + ao vivo,
-  `ping` a cada 15 s. Sem buracos: assina, grava o pendente, lê o banco e descarta `seq` repetido.
-  O cliente (`useWorkbenchStream`) reconecta sozinho (3 s; 45 s sem nada = reconectar) e reconstrói
-  com `applyTimelineLine` (`timeline.ts`, puro). Na reconexão do SSE o runner relê as pendências da
+- `GET /api/agentic/workbenches/[id]/events` (NDJSON): `reset` + tudo o que foi gravado + `ready` + ao
+  vivo, `ping` a cada 15 s. Sem buracos: assina, grava o pendente, manda o `reset`, escreve o histórico
+  **conforme o cursor lê** (`streamWorkbenchEvents`, lotes de 200, sem esperar a mesa inteira), repassa o
+  que chegou ao vivo nesse meio-tempo, manda `ready` (fim do histórico) e só então segue ao vivo,
+  descartando `seq` repetido. Fechar a conexão no meio do histórico para a leitura e fecha o cursor.
+  A rota da mesa só **confere a existência** (`assertWorkbenchExists`, 404 igual ao de sempre): o DTO
+  completo (e o `reconcile`) vem do `by-task`, que a tela sempre busca antes. Forks, refinamento e
+  revisão de PR usam o mesmo `openEventStream` (com `ready`) (OPE-188).
+  O cliente (`useWorkbenchStream`/`useEventStream`) reconecta sozinho (3 s; 45 s sem nada = reconectar) e
+  reconstrói com `applyTimelineLine` (`timeline.ts`, puro), aplicando as linhas uma vez por quadro.
+- **Saída já vista aparece na hora (OPE-188)**: a saída carregada fica em memória na aba
+  (`timeline-cache.ts`, LRU de 12 por URL do stream, sem persistir; exclusão da mesa/descartar o fork
+  esquece). Ao voltar a uma mesa, a Saída mostra a guardada (sem "Carregando a saída…"); o stream relê
+  tudo por trás e a tela **troca de uma vez no `ready`** (`stream-view.ts`, puro: com saída exibida, o
+  `reset` abre uma carga em preparo; sem nada exibido — primeira visita — a carga é progressiva). A
+  reconexão segue a mesma regra, então não pisca mais o vazio. Não há retomada por `seq` (decisão do
+  dono): textos agrupados no banco e `seq` reaproveitado após reinício duplicariam a saída.
+- **Saída longa virtualizada (OPE-188)**: `Timeline` desenha a lista por `TimelineList` (`VirtualStack`
+  de `src/components/list`): inteira até 50 itens e virtualizada acima (TanStack Virtual, altura medida
+  por item), em todas as saídas (mesa, forks, refinamento e revisão de PR). `TimelineItemView` é
+  memorizado (só o item alterado redesenha). "Acompanhar o fim" continua: além da mudança da `timeline`,
+  o `useStickToBottom` observa a altura do conteúdo (`contentRef`, `ResizeObserver`) e prende ao fim
+  quando a medição dos itens muda a altura. Só os itens que chegam depois de a lista montar animam a
+  entrada; a saída que já estava pronta aparece parada. Itens que saem da janela voltam com o estado
+  inicial (ferramenta recolhida). Na reconexão do SSE o runner relê as pendências da
   sessão (ver "Reconectar") e a timeline **atualiza o item pelo id** (pergunta/permissão reenviadas
   não duplicam). A queda da conexão do navegador/Pusher é coberta pelo `RealtimeStatusBanner`,
   que invalida as consultas ativas ao reconectar — a pendência persistida reaparece sem clique.
 - Mudanças de etapa/pedidos chegam pelo Pusher (`agentic-updated` em `private-app`, payload
-  `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]`. Na Central de desenvolvimento, `useTasksRealtime` também
+  `{centralId, workbenchId, taskId}`) → `useAgenticRealtime` invalida as consultas `["agentic"]` com
+  `cancelRefetch: false` (um evento não cancela e reinicia a busca em andamento, como a da mesa que está
+  abrindo). Com `workbenchId` no payload, as consultas de **outra** mesa (`["agentic","workbench",outraTarefa]`,
+  `["agentic","forks"|"builds",outraMesa]`, regra pura em `realtime-invalidation.ts`) só ficam
+  desatualizadas (`refetchType: "none"`) e são buscadas na próxima visita; o resto recarrega (OPE-188). Na Central de desenvolvimento, `useTasksRealtime` também
   mantém a lista de tarefas atualizada (ver "Central de desenvolvimento", "Tempo real").
 - Tela: cabeçalho (código → página da tarefa, etapa, "ao vivo", custo, branch, worktree, porta,
   prévia, PR), passos (Plano → Implementação → Prévia → Pull Request → Concluída), abas
@@ -1593,6 +1625,13 @@ sem faixa de pedidos, folha de pedidos e "Excluir mesa" com a central), `dev-cen
 `RefinementActionBar.test.tsx` e `ForkPanel.test.tsx` (com `matchMedia` simulado; sem ele vale o desktop).
 Coluna Tarefas no celular: `dev-center-mobile.test.ts` (funções puras) e `tasks-pane-mobile.test.tsx` (busca à
 vista, folhas de filtros e quota, motivo e coluna em texto, rolagem ao voltar da mesa e o desktop intacto).
+
+Troca de mesa e Saída (OPE-188): `timeline-cache.test.ts` (LRU e esquecer), `stream-view.test.ts` (progressivo na
+primeira visita, troca no `ready`), `use-event-stream.test.tsx` (saída guardada na hora, reconexão sem piscar),
+`event-stream-server.test.ts` (`reset` → histórico → `ready` → ao vivo, abortar, só existência da mesa), `hub.test.ts`
+(cursor), `realtime-invalidation.test.ts` e `dev-center-realtime.test.tsx` (invalidação sem cancelar e outra mesa
+só desatualizada), `timeline-virtual.test.tsx` (virtualização acima de 50) e `dev-center-switch.test.tsx` (voltar a
+mesas já vistas sem skeleton nem "Carregando a saída…").
 
 `__tests__/features/agentic/` (prompts, regras, linha do tempo (dedupe por id), filtros, fila (`queue`),
 criação da central com o seletor de repositório (`create-central-dialog`), mesas em

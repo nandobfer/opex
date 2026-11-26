@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useRef, type CSSProperties } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { motion, useReducedMotion } from "framer-motion"
 import { Settings2, Workflow } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -128,18 +128,17 @@ export function DevCenterPage({ taskId }: { taskId: string | null }) {
             )}
             <div className={cn("flex min-h-0 min-w-0 flex-1 flex-col", !taskId && "max-lg:hidden")} data-testid="dev-center-workbench-pane">
                 {central ? (
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.div
-                            key={`${central.id}-${taskId ?? ""}`}
-                            initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            exit={{ opacity: 0, y: reduceMotion ? 0 : -4 }}
-                            transition={{ duration: 0.15, ease: "easeOut" }}
-                            className="flex min-h-0 min-w-0 flex-1 flex-col"
-                        >
-                            <WorkbenchPane central={central} taskId={taskId} scopeName={allSelected ? null : central.projectName} backHref={taskId ? DEV_CENTER_PATH : null} />
-                        </motion.div>
-                    </AnimatePresence>
+                    // Trocar de mesa remonta só pela tarefa (a central resolvida depois não remonta) e não espera a
+                    // saída da anterior: a mesa nova entra na hora, com o que já está no cache (OPE-188).
+                    <motion.div
+                        key={taskId ?? ""}
+                        initial={{ opacity: 0, y: reduceMotion ? 0 : 6 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.15, ease: "easeOut" }}
+                        className="flex min-h-0 min-w-0 flex-1 flex-col"
+                    >
+                        <WorkbenchPane central={central} taskId={taskId} scopeName={allSelected ? null : central.projectName} backHref={taskId ? DEV_CENTER_PATH : null} />
+                    </motion.div>
                 ) : (
                     <Skeleton className="h-96" />
                 )}

@@ -12,10 +12,12 @@ const BOTTOM_THRESHOLD = 80
  *
  * O componente chama `stickToBottom` depois de cada mudança de conteúdo (aqui, a cada mudança do
  * objeto `timeline`), o que cobre qualquer item que cresça — inclusive os que estão no meio da
- * lista, como o fim de um turno.
+ * lista, como o fim de um turno. `contentRef` (o bloco interno da rolagem) também prende ao fim quando
+ * a altura muda sem nova `timeline` — ex.: a lista virtualizada medindo os itens depois do desenho.
  */
 export function useStickToBottom(threshold = BOTTOM_THRESHOLD) {
     const scrollRef = useRef<HTMLDivElement>(null)
+    const contentRef = useRef<HTMLDivElement>(null)
     const stickRef = useRef(true)
     const [atBottom, setAtBottom] = useState(true)
 
@@ -51,5 +53,13 @@ export function useStickToBottom(threshold = BOTTOM_THRESHOLD) {
         return () => element.removeEventListener("scroll", compute)
     }, [compute])
 
-    return { scrollRef, atBottom, stickToBottom, scrollToBottom }
+    useEffect(() => {
+        const content = contentRef.current
+        if (!content || typeof ResizeObserver === "undefined") return
+        const observer = new ResizeObserver(() => stickToBottom())
+        observer.observe(content)
+        return () => observer.disconnect()
+    }, [stickToBottom])
+
+    return { scrollRef, contentRef, atBottom, stickToBottom, scrollToBottom }
 }

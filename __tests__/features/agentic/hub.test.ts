@@ -2,14 +2,65 @@ import { describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 const deleteMany = vi.hoisted(() => vi.fn(async () => ({ deletedCount: 1 })))
-vi.mock('@/lib/db/models/Agentic', () => ({ AgenticEvent: { deleteMany, insertMany: vi.fn(async () => []) } }))
+const cursor = vi.hoisted(() => ({
+  docs: [] as { seq: number; ts: Date; payload: unknown }[],
+  close: vi.fn(async () => undefined),
+  batchSize: 0,
+}))
+const find = vi.hoisted(() =>
+  vi.fn(() => ({
+    sort: () => ({
+      lean: () => ({
+        cursor: ({ batchSize }: { batchSize: number }) => {
+          cursor.batchSize = batchSize
+          return {
+            close: cursor.close,
+            async *[Symbol.asyncIterator]() {
+              yield* cursor.docs
+            },
+          }
+        },
+      }),
+    }),
+  })),
+)
+vi.mock('@/lib/db/models/Agentic', () => ({ AgenticEvent: { deleteMany, find, insertMany: vi.fn(async () => []) } }))
 vi.mock('@/lib/logger', () => ({ logger: { error: vi.fn() } }))
 
-import { coalesceEvents, dropIdlePrWatchEvents, publishWorkbenchEvent, subscribeWorkbench } from '@/features/agentic/server/hub'
+import { coalesceEvents, dropIdlePrWatchEvents, publishWorkbenchEvent, streamWorkbenchEvents, subscribeWorkbench } from '@/features/agentic/server/hub'
 
 const ts = '2026-10-09T12:00:00.000Z'
 
 describe('hub da mesa', () => {
+  it('OPE-188: streamWorkbenchEvents lê o histórico por cursor em lotes, em ordem, e fecha o cursor', async () => {
+    cursor.docs = [
+      { seq: 1, ts: new Date(ts), payload: { type: 'notice', level: 'info', message: 'a' } },
+      { seq: 2, ts: new Date(ts), payload: { type: 'text', text: 'b' } },
+    ]
+    const events = []
+    for await (const event of streamWorkbenchEvents('wb-cursor')) events.push(event)
+    expect(find).toHaveBeenCalledWith({ workbenchId: 'wb-cursor' })
+    expect(cursor.batchSize).toBeGreaterThan(0)
+    expect(events).toEqual([
+      { type: 'notice', level: 'info', message: 'a', seq: 1, ts },
+      { type: 'text', text: 'b', seq: 2, ts },
+    ])
+    expect(cursor.close).toHaveBeenCalled()
+  })
+
+  it('OPE-188: streamWorkbenchEvents para quando o stream fecha (e fecha o cursor)', async () => {
+    cursor.close.mockClear()
+    cursor.docs = [1, 2, 3].map((seq) => ({ seq, ts: new Date(ts), payload: { type: 'text', text: String(seq) } }))
+    let open = true
+    const events = []
+    for await (const event of streamWorkbenchEvents('wb-cursor', () => open)) {
+      events.push(event)
+      open = false
+    }
+    expect(events).toHaveLength(1)
+    expect(cursor.close).toHaveBeenCalled()
+  })
+
   it('coalesceEvents junta textos consecutivos com o seq do último pedaço', () => {
     const merged = coalesceEvents([
       { type: 'text', text: 'a', seq: 1, ts },

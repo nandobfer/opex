@@ -22,7 +22,7 @@ import { centralSettingsPath, AGENTIC_CENTRALS_HREF } from "../../constants"
 import { ALL_CENTRALS_ID } from "../../dev-center-central"
 import { DEFAULT_DEV_CENTER_FILTERS, DEV_CENTER_FILTERS_KEY, devCenterFiltersSchema, filterCentralTasks } from "../../dev-center-filters"
 import { activeDevCenterFilterChips } from "../../dev-center-filter-chips"
-import { useCentralsTaskState } from "../../hooks/useAgentic"
+import { useCentralsTaskState, usePrefetchWorkbench } from "../../hooks/useAgentic"
 import { useCompactWorkbench } from "../../hooks/useCompactWorkbench"
 import { activeTaskIndex } from "../../dev-center-mobile"
 import { centralsByProject } from "../../dev-center-product"
@@ -103,6 +103,7 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
     const virtualizer = useVirtualizer({ count: tasks.length, getScrollElement: () => scrollRef.current, estimateSize: () => ROW_HEIGHT, getItemKey: (index) => tasks[index]?.id ?? index, overscan: 8 })
     const reduceMotion = useReducedMotion()
     const compact = useCompactWorkbench()
+    const prefetchWorkbench = usePrefetchWorkbench()
     // Voltar da mesa no celular: a coluna estava escondida (`display: none`) e a rolagem se perde; a lista
     // rola até a tarefa que estava aberta, centralizada, quando a coluna reaparece.
     const lastActiveRef = useRef<string | null>(activeTaskId)
@@ -176,8 +177,20 @@ export function TasksPane({ central, centrals, activeTaskId, onSelectCentral, cl
                             <div className="relative w-full" style={{ height: virtualizer.getTotalSize() }}>
                                 {virtualizer.getVirtualItems().map((row) => {
                                     const task = tasks[row.index]!
+                                    // Pré-busca da mesa (OPE-188): só tarefas com mesa, ao parar o mouse em cima ou focar a linha.
+                                    const warm = stages.has(task.id) && task.id !== activeTaskId
                                     return (
-                                        <div key={task.id} ref={virtualizer.measureElement} data-index={row.index} role="listitem" className="absolute inset-x-0 px-1.5 py-0.5" style={{ transform: `translateY(${row.start}px)` }}>
+                                        <div
+                                            key={task.id}
+                                            ref={virtualizer.measureElement}
+                                            data-index={row.index}
+                                            role="listitem"
+                                            className="absolute inset-x-0 px-1.5 py-0.5"
+                                            style={{ transform: `translateY(${row.start}px)` }}
+                                            onPointerEnter={warm ? () => prefetchWorkbench.schedule(task.id) : undefined}
+                                            onPointerLeave={warm ? prefetchWorkbench.cancel : undefined}
+                                            onFocus={warm ? () => prefetchWorkbench.prefetch(task.id) : undefined}
+                                        >
                                             <TaskRow
                                                 task={task}
                                                 column={columns.get(task.columnId)}

@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { useStickToBottom } from "../../hooks/useStickToBottom"
 import { latestPrWatch, type TimelineState } from "../../timeline"
 import { PrWatchCountdown, type PrWatchCountdownProps } from "./PrWatchCountdown"
-import { TimelineItemView } from "./TimelineItemView"
+import { TimelineList } from "./TimelineList"
 
 /**
  * Saída da IA ao vivo; acompanha o fim enquanto o usuário não rolar para cima. `footer` entra no fim
@@ -16,7 +16,7 @@ import { TimelineItemView } from "./TimelineItemView"
  * PR aberto e parada, a contagem até a próxima verificação do PR.
  */
 export function Timeline({ timeline, running, footer = null, footerKey = null, prWatch = null }: { timeline: TimelineState; running: boolean; footer?: ReactNode; footerKey?: string | null; prWatch?: PrWatchCountdownProps | null }) {
-    const { scrollRef, atBottom, stickToBottom, scrollToBottom } = useStickToBottom()
+    const { scrollRef, contentRef, atBottom, stickToBottom, scrollToBottom } = useStickToBottom()
     const reduceMotion = useReducedMotion()
     const latestCheckKey = latestPrWatch(timeline.items)?.key ?? null
 
@@ -29,6 +29,7 @@ export function Timeline({ timeline, running, footer = null, footerKey = null, p
     return (
         <div className="relative flex min-h-0 flex-1 flex-col">
             <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3" aria-live="polite" aria-busy={running}>
+                <div ref={contentRef}>
                 {!timeline.loaded ? (
                     <p className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Loader2 className="h-4 w-4 animate-spin" aria-hidden /> Carregando a saída…
@@ -38,15 +39,7 @@ export function Timeline({ timeline, running, footer = null, footerKey = null, p
                         <MessageSquareDashed className="h-4 w-4" aria-hidden /> {running ? "Aguardando o agente…" : "Nenhuma saída ainda."}
                     </p>
                 ) : (
-                    <ol className="space-y-3">
-                        <AnimatePresence initial={false}>
-                            {timeline.items.map((item) => (
-                                <motion.li key={item.key} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.18 }}>
-                                    <TimelineItemView item={item} latestPrWatch={item.key === latestCheckKey} />
-                                </motion.li>
-                            ))}
-                        </AnimatePresence>
-                    </ol>
+                    <TimelineList items={timeline.items} scrollRef={scrollRef} latestCheckKey={latestCheckKey} />
                 )}
                 <AnimatePresence>
                     {running && timeline.loaded && (
@@ -70,6 +63,7 @@ export function Timeline({ timeline, running, footer = null, footerKey = null, p
                         </motion.div>
                     )}
                 </AnimatePresence>
+                </div>
             </div>
             <AnimatePresence>
                 {!atBottom && (

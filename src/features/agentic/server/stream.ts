@@ -1,13 +1,15 @@
+import { logger } from "@/lib/logger"
 import type { WorkbenchEvent, WorkbenchStreamLine } from "../types"
-import { flushWorkbenchEvents, listWorkbenchEvents, subscribeWorkbench } from "./hub"
-import { getWorkbench } from "./workflow"
+import { flushWorkbenchEvents, streamWorkbenchEvents, subscribeWorkbench } from "./hub"
+import { assertWorkbenchExists } from "./workflow"
 
 const PING_MS = 15_000
 
 /**
  * Stream NDJSON de uma execução longa (mesa ou refinamento): assina o barramento (guardando o que
- * chega), grava o pendente, lê tudo do banco e só então repassa os eventos ao vivo com `seq` maior
- * que o último lido. `verify` confere a existência da execução (404 antes de abrir o stream).
+ * chega), grava o pendente, manda `reset`, escreve o histórico do banco conforme o cursor lê, fecha o
+ * histórico com `ready` e só então repassa os eventos ao vivo com `seq` maior que o último lido.
+ * `verify` confere a existência da execução (404 antes de abrir o stream).
  */
 export async function openEventStream(id: string, signal: AbortSignal, verify?: (id: string) => Promise<unknown>): Promise<Response> {
     if (verify) await verify(id)
@@ -52,9 +54,18 @@ export async function openEventStream(id: string, signal: AbortSignal, verify?: 
 
             await flushWorkbenchEvents(id)
             write({ type: "reset" })
-            for (const event of await listWorkbenchEvents(id)) forward(event)
+            try {
+                for await (const event of streamWorkbenchEvents(id, () => open && !signal.aborted)) forward(event)
+            } catch (error) {
+                // Falha ao ler o histórico: fecha o stream (o cliente reconecta e relê, mantendo a saída exibida).
+                logger.warn({ err: error, id }, "[agentic] Falha ao ler o histórico da saída")
+                cleanup()
+                return
+            }
+            if (!open) return
             for (const event of queued) forward(event)
             queued.length = 0
+            write({ type: "ready" })
             live = true
         },
         cancel() {
@@ -70,7 +81,7 @@ export async function openEventStream(id: string, signal: AbortSignal, verify?: 
     })
 }
 
-/** Stream da mesa de trabalho: exige que a mesa exista. */
+/** Stream da mesa de trabalho: exige que a mesa exista (só a existência; o DTO vem do `by-task`). */
 export function openWorkbenchStream(id: string, signal: AbortSignal): Promise<Response> {
-    return openEventStream(id, signal, getWorkbench)
+    return openEventStream(id, signal, assertWorkbenchExists)
 }

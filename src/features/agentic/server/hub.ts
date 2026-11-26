@@ -155,6 +155,23 @@ export async function listWorkbenchEvents(workbenchId: string): Promise<Workbenc
     return docs.map((doc) => ({ ...(doc.payload as WorkbenchEventPayload), seq: doc.seq, ts: new Date(doc.ts).toISOString() }) as WorkbenchEvent)
 }
 
+/** Lote do cursor do histórico (o stream escreve conforme lê, sem esperar a mesa inteira). */
+const HISTORY_BATCH = 200
+
+/** Eventos gravados em ordem, lidos por cursor; `isOpen` falso encerra a leitura (e o cursor). */
+export async function* streamWorkbenchEvents(workbenchId: string, isOpen: () => boolean = () => true): AsyncGenerator<WorkbenchEvent> {
+    await dbConnect()
+    const cursor = AgenticEvent.find({ workbenchId }).sort({ seq: 1 }).lean().cursor({ batchSize: HISTORY_BATCH })
+    try {
+        for await (const doc of cursor) {
+            if (!isOpen()) return
+            yield { ...(doc.payload as WorkbenchEventPayload), seq: doc.seq, ts: new Date(doc.ts).toISOString() } as WorkbenchEvent
+        }
+    } finally {
+        await cursor.close().catch(() => undefined)
+    }
+}
+
 export function markWorkbenchActive(workbenchId: string, controller: AbortController): void {
     hub.active.set(workbenchId, controller)
 }

@@ -332,7 +332,8 @@ export type WorkbenchEventPayload =
 
 export type WorkbenchEvent = WorkbenchEventPayload & { seq?: number; ts: string }
 
-export type WorkbenchStreamLine = WorkbenchEvent | { type: "reset" } | { type: "ping"; ts: string }
+/** `reset` abre a carga; `ready` fecha o histórico gravado (o que vem depois é ao vivo). */
+export type WorkbenchStreamLine = WorkbenchEvent | { type: "reset" } | { type: "ready" } | { type: "ping"; ts: string }
 
 /** Tipo da mesa (OPE-172). */
 export type WorkbenchKind = "repo" | "plugin"

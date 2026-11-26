@@ -10,6 +10,7 @@ import type { ForkAction } from "../fork-logic"
 import { optimisticModelChoice } from "../logic"
 import type { FormReplyInput, ModelOverrideInput, PermissionReplyInput } from "../schemas"
 import type { TimelineState } from "../timeline"
+import { dropTimelineCache } from "../timeline-cache"
 import type { ForkDto, WorkbenchDto } from "../types"
 import { agenticKey } from "./useAgentic"
 import { useEventStream } from "./useEventStream"
@@ -167,6 +168,7 @@ export function useDiscardFork(workbenchId: string) {
             return fork
         },
         onSuccess: (fork) => {
+            dropTimelineCache(fork.id)
             queryClient.setQueryData<ForkDto[]>(forksKey(workbenchId), (current) => (current ?? []).filter((item) => item.id !== fork.id))
             toast.success(`Fork ${fork.number} descartado`)
         },

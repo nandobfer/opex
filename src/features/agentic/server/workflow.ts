@@ -173,6 +173,13 @@ export async function getWorkbench(id: string): Promise<WorkbenchDto> {
     return workbenchDto(doc)
 }
 
+/** Confere só a existência da mesa (o stream da saída não precisa do DTO; o `by-task` já reconcilia). */
+export async function assertWorkbenchExists(id: string): Promise<void> {
+    assertId(id)
+    await dbConnect()
+    if (!(await AgenticWorkbench.exists({ _id: id }))) throw new DomainError(404, "Mesa de trabalho não encontrada", "WORKBENCH_NOT_FOUND")
+}
+
 export async function getWorkbenchByTask(taskId: string): Promise<WorkbenchDto | null> {
     await dbConnect()
     const doc = await AgenticWorkbench.findOne({ taskId }).lean()

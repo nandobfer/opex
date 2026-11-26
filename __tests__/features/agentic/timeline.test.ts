@@ -6,6 +6,11 @@ const ts = '2026-10-09T12:00:00.000Z'
 const run = (lines: WorkbenchStreamLine[]): TimelineState => lines.reduce(applyTimelineLine, INITIAL_TIMELINE)
 
 describe('applyTimelineLine', () => {
+  it('OPE-188: ready (fim do histórico) não muda a saída', () => {
+    const state = run([{ type: 'reset' }, { type: 'text', text: 'x', seq: 1, ts }])
+    expect(applyTimelineLine(state, { type: 'ready' })).toBe(state)
+  })
+
   it('reset marca carregado; textos seguidos viram um bloco', () => {
     const state = run([{ type: 'reset' }, { type: 'turn', stage: 'planning', title: 'Planejando', agent: 'plan', model: null, seq: 1, ts }, { type: 'text', text: 'Ol', seq: 2, ts }, { type: 'text', text: 'á', seq: 3, ts }])
     expect(state.loaded).toBe(true)

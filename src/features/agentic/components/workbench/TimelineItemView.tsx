@@ -1,5 +1,6 @@
 "use client"
 
+import { memo } from "react"
 import { format } from "date-fns"
 import { AlertTriangle, Bot, CheckCircle2, CircleSlash, Info, ShieldQuestion, User, XCircle } from "lucide-react"
 import { Markdown } from "@/components/ui/markdown"
@@ -25,8 +26,13 @@ const NOTICE_STYLE = {
     error: { icon: XCircle, className: "text-destructive" },
 } as const
 
-/** Um item da saída da mesa (turno, texto do agente, ferramenta, aviso, pedido…). */
-export function TimelineItemView({ item, latestPrWatch = false }: { item: TimelineItem; latestPrWatch?: boolean }) {
+/**
+ * Um item da saída da mesa (turno, texto do agente, ferramenta, aviso, pedido…). Memorizado: o redutor
+ * preserva a identidade dos itens que não mudaram, então só o item alterado volta a desenhar (OPE-188).
+ */
+export const TimelineItemView = memo(TimelineItemContent)
+
+function TimelineItemContent({ item, latestPrWatch = false }: { item: TimelineItem; latestPrWatch?: boolean }) {
     switch (item.kind) {
         case "turn":
             return (
