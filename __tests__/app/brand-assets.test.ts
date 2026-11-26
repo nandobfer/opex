@@ -21,6 +21,12 @@ describe('identidade visual do Opex', () => {
     expect(icon.colorType).toBe(6) // RGBA: preserva transparência no tema da aba.
   })
 
+  it('disponibiliza o apple-touch-icon opaco de 180 × 180 na convenção do App Router (PWA)', () => {
+    const icon = readPng('src/app/apple-icon.png')
+    expect(icon.width).toBe(180)
+    expect(icon.height).toBe(180)
+  })
+
   it('preserva a logo completa horizontal e transparente como asset público', () => {
     const logo = readPng('public/opex-logo.png')
     expect(logo.width).toBeGreaterThan(logo.height)

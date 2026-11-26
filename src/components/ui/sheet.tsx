@@ -7,6 +7,7 @@ import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 import { usePortalContainer } from "@/components/ui/portal-container"
+import { SAFE_AREA_SHEET } from "@/components/ui/safe-area"
 
 const Sheet = SheetPrimitive.Root
 
@@ -36,12 +37,19 @@ const sheetVariants = cva(
   {
     variants: {
       side: {
-        top: "inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top",
-        bottom:
+        top: cn("inset-x-0 top-0 border-b data-[state=closed]:slide-out-to-top data-[state=open]:slide-in-from-top", SAFE_AREA_SHEET.top),
+        bottom: cn(
           "inset-x-0 bottom-0 border-t data-[state=closed]:slide-out-to-bottom data-[state=open]:slide-in-from-bottom",
-        left: "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
-        right:
+          SAFE_AREA_SHEET.bottom,
+        ),
+        left: cn(
+          "inset-y-0 left-0 h-full w-3/4 border-r data-[state=closed]:slide-out-to-left data-[state=open]:slide-in-from-left sm:max-w-sm",
+          SAFE_AREA_SHEET.side,
+        ),
+        right: cn(
           "inset-y-0 right-0 h-full w-3/4 border-l data-[state=closed]:slide-out-to-right data-[state=open]:slide-in-from-right sm:max-w-sm",
+          SAFE_AREA_SHEET.side,
+        ),
       },
     },
     defaultVariants: {

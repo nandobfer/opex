@@ -14,6 +14,18 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   logo Opex para legibilidade em tamanho pequeno. O Next inclui o ícone automaticamente nos
   metadados de todas as páginas, inclusive login e portal. O mesmo símbolo é usado como logo da
   sidebar (topo), em `public/opex-mark.png`; a logo completa fica em `public/opex-logo.png`.
+- `src/app/apple-icon.png` (OPE-196): `apple-touch-icon` 180 × 180 opaco, também por convenção de arquivo.
+  Como as convenções têm prioridade sobre `metadata.icons`, o layout raiz não declara `icons`.
+- Layout raiz e PWA (OPE-196, ver `modules/pwa.md`): `metadata.applicationName`, `appleWebApp`
+  (`capable`, título "Opex", barra `black`), `viewport` (`viewportFit: "cover"`, `themeColor` =
+  `PWA_BACKGROUND`) e o `ServiceWorkerRegistrar`. `src/app/offline/page.tsx` é a página offline,
+  fora da casca.
+- **Safe areas** (`src/components/ui/safe-area.ts`): com `viewport-fit=cover`, o app instalado vai até
+  as bordas do aparelho. A raiz da casca (`AppShell`, `SAFE_AREA_PADDING`), a gaveta do celular e a
+  tela cheia do chat (`SAFE_AREA_Y`), as folhas (`Sheet`, `SAFE_AREA_SHEET`), a barra de lote das
+  Tarefas (`SAFE_AREA_FLOATING_BOTTOM`) e os toasts no celular (`SAFE_AREA_TOAST_MOBILE_OFFSET`) reservam
+  os insets. No desktop e no navegador comum os insets valem 0. Elemento novo fixo numa borda usa
+  essas constantes.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/dashboard/page.tsx`: **Dashboards** — página inicial do app, **sem item no menu**:
   a logo no topo da barra leva a ela (ver `modules/dashboard.md`).

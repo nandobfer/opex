@@ -88,7 +88,14 @@ URL). Token inválido leva ao `/login` com aviso.
   dono, pelo token de sistema com o escopo `mcp:owner` (ver `maddox-agent.md`);
 - `/api/openapi.json` e `/api/docs` — só o contrato OpenAPI, nenhum dado;
 - `/api/engramind/webhook` (exato) — eventos do Engramind, autenticados só pela assinatura HMAC
-  (`Engramind-Signature`) com o segredo do webhook da integração (ver `engramind.md`).
+  (`Engramind-Signature`) com o segredo do webhook da integração (ver `engramind.md`);
+- `/manifest.webmanifest`, `/sw.js` e `/offline` (exatos) — PWA (OPE-196): o Chrome busca o manifest e
+  o service worker sem cookie e a página offline não tem dado (ver `pwa.md`). Os ícones `.png` já ficam
+  fora do `matcher` do middleware. Sub-rotas (`/offline/x`) continuam exigindo sessão.
+
+O cookie de sessão continua **de sessão** (sem `maxAge`, decisão do dono na OPE-196): no app instalado
+do Android ele costuma sobreviver ao fechar e reabrir, mas some se o sistema encerrar o Chrome, e aí o
+app abre em `/login`.
 
 ### API pública por token de sistema — escopos
 
