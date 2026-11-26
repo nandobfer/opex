@@ -48,8 +48,10 @@ interface Turn { id: string; instance: string; chatId: string; ownerJid: string;
 export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLid = null, token, message, ownerAnswer }: Turn) {
     // As chamadas de IA do turno (mídia, decisão do assunto e resposta) são gravadas com o token como assunto: a decisão
     // leva a soma, que vira o custo da execução nas métricas.
+    // Ids das partes enviadas: o registro guarda para o selo "Secretário" da aba Conversas (OPE-197).
+    const sentIds: string[] = []
     const decide = async (decision: SecretaryDecision, reason: string, topic?: string | null) =>
-        recordDecision(instance, chatId, message, decision, reason, topic, ownerAnswer !== undefined, await costBySubject(token).catch(() => undefined))
+        recordDecision(instance, chatId, message, decision, reason, topic, ownerAnswer !== undefined, await costBySubject(token).catch(() => undefined), sentIds)
     const state = await SecretaryConversation.findOneAndUpdate({ _id: id, token }, { $set: { pending: [] } }).lean()
     if (!state) {
         await decide("grouped", "Outra mensagem chegou na janela de agrupamento.")
@@ -121,7 +123,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
             if (!await current()) break
             if (settings.human.typing) await evolution.sendPresence(instance, { number: message.chatJid, presence: "composing", delay: typingMs(part) })
             if (!await current()) break
-            await sendSecretaryText(instance, message.chatJid, part)
+            sentIds.push(await sendSecretaryText(instance, message.chatJid, part))
             if (++sent === 1 && settings.human.markRead) {
                 await evolution.markAsRead(instance, messages.map((item) => ({ id: item.id, remoteJid: item.chatJid, fromMe: false })))
             }

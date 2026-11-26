@@ -4,16 +4,19 @@ Agente que lê as mensagens que o dono recebe no WhatsApp (integração `evoluti
 quando a conversa atende aos critérios, responde **como o próprio dono** (nunca se identifica como assistente).
 Tem memórias próprias no Engramind, aprende sozinho e pergunta ao dono o que não sabe (OPE-192).
 
-Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|simulacao|personalidade|memorias|conversas|avisos>`.
+Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|decisoes|simulacao|personalidade|memorias|conversas|avisos>`
+(links das seções por `secretarySectionPath` em `links.ts`).
 Página de métricas: `/agente-secretario` (Visão geral, Histórico e Memórias).
 O custo da Visão geral inclui turno, análise e decisões de assunto (modelo de texto ou JEV), mas não Simulação.
 O painel separa **Mensagens em pausa** (mensagens barradas) de **Intervenções do dono** (mensagens do dono
 registradas como assunção da conversa no WhatsApp).
 
 Código: `src/features/secretary-agent/` — puros: `constants.ts`, `schemas.ts`, `criteria.ts`, `personality.ts`,
-`criteria-describe.ts`, `jev-subjects.ts`, `conversation-id.ts`, `split.ts`, `cost.ts`, `limits.ts`, `owner-reply.ts`;
+`criteria-describe.ts`, `jev-subjects.ts`, `conversation-id.ts`, `split.ts`, `cost.ts`, `limits.ts`, `owner-reply.ts`,
+`decision-filters.ts`, `chat-timeline.ts`, `chat-attachments.ts`;
 servidor em `server/` (`settings`, `models`, `inbound`, `turn`, `plan-reply`, `decide-subject`, `budget`, `simulate`,
-`media`, `ai`, `owner-questions`, `personality`, `analysis`, `conversations`, `memory-queue`, `metrics`); telas em `components/`. Rotas em `src/app/api/secretary/**` e
+`media`, `ai`, `owner-questions`, `personality`, `analysis`, `conversations`, `memory-queue`, `metrics`, `decisions`,
+`inbox`, `chat-events`); telas em `components/`. Rotas em `src/app/api/secretary/**` e
 `src/app/api/ai/features/secretary-agent`.
 
 Fora do escopo (refinamento): modo Sugerir, Apresentação, horário de atuação e "pedir decisão".
@@ -82,12 +85,33 @@ Validação: "Só os escolhidos" exige ao menos uma conversa e "Só os assuntos 
   origem/feature `secretary-decision`, que conta no orçamento diário. O tópico (ou o nome do assunto que bateu, no
    JEV) alimenta "assuntos mais frequentes".
    O JEV pode ser selecionado em “Outro modelo ou o JEV” quando sua integração está conectada.
-- **Registro de decisões** (`secretary_decisions`, `GET /api/secretary/decisions?jid=`): a decisão original é mantida
-  quando o turno é retomado após a resposta do dono (a retomada tem registro próprio). Decisões: respondeu,
-  ignorou, pausado, assunto bloqueado (também quando o assunto não é um dos liberados), limite
-  atingido, só observar, perguntou ao dono, desligado, agrupada, descartada, erro.
+- O **Registro de decisões** saiu daqui para a aba Decisões (OPE-197), porque crescia sem limite.
 - Seleção de contatos/grupos com foto e busca (`ConversationPickerField`, com "Sincronizar contatos e conversas" ao
-  lado quando a lista está vazia).
+  lado quando a lista está vazia). **Os escolhidos ficam no topo da lista de opções** (OPE-197, decisões do dono de
+  26/11/2026): D7 vale para todos os seletores de contato (o `ConversationPicker` compartilhado: Etapa 1, Simulação,
+  Personalidade, Análise e operações da Evolution, e o filtro Conversa da aba Decisões, pelo `pinSelected` do
+  `CadastroSearchPicker`, que por padrão continua desligado nos outros filtros do app); D8: reordena **ao vivo**
+  (marcar leva o item ao topo na hora) e, com busca, os escolhidos que casam vêm antes (`pinFirst` do `SearchPicker`).
+
+## Decisões (aba Decisões)
+
+Registro de decisões (`secretary_decisions`) em aba própria, logo depois de Critérios (OPE-197).
+
+- `GET /api/secretary/decisions?jid&decision&from&to&page&limit` (só o dono, `decisionListQuerySchema`): conversas e
+  decisões em CSV (o `jid` único antigo continua valendo), período ISO (dia inteiro no fuso do navegador) e página
+  (50 por padrão, máximo 100), mais recentes primeiro, com `total` e `totalPages`; parâmetro inválido é 400.
+- Tela: `ListFilters` com **Conversa** (`CadastroSearchPicker` com busca, escolhidos no topo), **Decisão** e
+  **Período** (`PresetDateRangeFilter`), Limpar e o total; filtros na URL (`conversas`, `decisoes`, `de`, `ate`);
+  `InfiniteListView` (rolagem infinita, "Carregar mais" de reserva, skeleton, vazio com "Atualizar decisões", vazio
+  filtrado e erro) e virtualização acima de 50. A linha mantém o conteúdo do antigo card: decisão, contato, motivo e
+  data/hora. `secretary-decision-recorded` recarrega a lista.
+- **Sem campo de busca** (decisão do dono D10, 26/11/2026, no planejamento da OPE-197, plano v1): a descrição da issue
+  pedia "um campo de busca no card"; passou a valer só Conversa, Decisão e Período (D9), porque o seletor de
+  conversa, que tem busca, atende o pedido.
+- A decisão original é mantida quando o turno é retomado após a resposta do dono (a retomada tem registro próprio).
+  Decisões: respondeu, ignorou, pausado, assunto bloqueado (também quando o assunto não é um dos liberados), limite
+  atingido, só observar, perguntou ao dono, desligado, agrupada, descartada, erro. O registro de "respondeu" (e das
+  frases de espera) guarda os ids das partes enviadas (`messageIds`), usados pelo selo "Secretário" da aba Conversas.
 
 ## Simulação (aba Simulação)
 
@@ -263,11 +287,54 @@ Toda mensagem que o agente envia ao dono (conversa consigo mesmo) usa a formata�
 
 ## Conversas (aba Conversas)
 
-Lista das conversas com foto e o estado do agente (ativo, pausado até…, nunca responder, aguardando o dono),
-virtualizada acima de 50. Ações: pausar (pelo tempo da pausa configurado), retomar, "Nunca responder"/"Voltar a
-responder" (entra ou sai de `criteria.audience.blocked`) e abrir as memórias. Sem conversas, o estado vazio mostra
-"Nenhuma conversa ainda." com o botão "Sincronizar contatos e conversas" (`EvolutionSyncAction`); sem instância
-escolhida, um link para a aba Instância da integração.
+Conversa de verdade no molde do **Atendimento** do Zaturno CRM (OPE-197), adaptada ao Opex e **sem os recursos de
+CRM** (modelos da Meta, interativas, janela de 24 h, atribuir/assumir/transferir, Bolsão, opt-out, painel do
+cliente, campanha, vincular contato, seleção em lote, filtros de filial/responsável/número, "Nova conversa" e a
+transcrição sob demanda do áudio, que depende do recurso de transcrição do Zaturno). Componentes em
+`components/conversations/`.
+
+- **Layout**: card na altura visível da tela (mínimo 480 px), lista à esquerda (340/380 px) e conversa à direita; no
+  celular, uma de cada vez, com Voltar. A conversa aberta e os filtros ficam na URL (`conversa=<id>`, `busca`, `filtro`,
+  `secretario`); a troca de conversa é animada e, sem nenhuma aberta, aparece "Selecione uma conversa".
+- **Lista** (`GET /api/secretary/conversations`, cache `evolution_contacts`): foto, nome, horário da última mensagem no
+  padrão do WhatsApp, prévia com o ícone do tipo, **não lidas do WhatsApp**, selo do estado do Secretário (pausado
+  até…, nunca responder, aguardando o dono) e o menu ⋮ com as ações; busca por nome ou número (fuse.js), chips
+  **Todas / Não lidas** e o filtro **Secretário** por estado (equivalente ao "Com o agente" do Atendimento);
+  virtualizada acima de 50. Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
+  (`EvolutionSyncAction`; sem instância escolhida, o link para a aba Instância da integração).
+- **Ações** (decisão do dono D4, 26/11/2026): Pausar/Retomar (pelo tempo da pausa configurado), Nunca responder/Voltar
+  a responder (entra ou sai de `criteria.audience.blocked`, com confirmação ao bloquear) e Abrir memórias ficam **no
+  cabeçalho do chat e num menu em cada item da lista**, com resposta otimista e reversão com toast em falha.
+- **Linha do tempo** (`GET /api/secretary/conversations/[chatId]/messages?page=`): as mensagens vêm da Evolution sob
+  demanda (50 por página, sem cópia no Opex; ver `evolution-api.md`, "Conversa"), com divisores de data, balões (texto,
+  foto/vídeo com visualizador em tela cheia, áudio com player e velocidade, documento com baixar, localização, contatos,
+  citação com salto até a mensagem, reações, editada, apagada, autor em grupo e status de envio/entrega/leitura) e
+  "Carregar mensagens anteriores". A mídia vem de `GET …/messages/[messageId]/media` (binário, `private`).
+- **O Secretário na linha do tempo** (decisão do dono D3): as decisões da conversa (`secretary_decisions`, a partir da
+  mensagem mais antiga da página) aparecem como **pílulas** entre as mensagens ("Secretário · Respondeu: motivo") e as
+  mensagens enviadas por ele levam o selo **"Secretário"** (`agentMessageIds`: `messageIds` do registro do turno, o
+  `sentMessageId` das perguntas ao dono e, para o que foi enviado antes da OPE-197, o `secretary_sent` dos últimos
+  7 dias; mais antigas ficam sem selo; a mensagem de teste da integração, `origin: "test"`, nunca leva).
+- **Envio pelo dono** (decisão D1, "completo sem CRM"; `POST …/messages`): texto com emoji (`emoji-picker-react`, a
+  mesma biblioteca do Atendimento, sob demanda e em pt-BR), Enter envia e Shift+Enter quebra a linha; responder
+  citando; reagir (seis rápidas e o seletor; tocar na atual remove); anexos (fotos e vídeos, documento, câmera, áudio)
+  com prévia, legenda e arrastar-soltar/colar; mensagem de voz gravada pelo `MediaRecorder` do navegador (a Evolution
+  converte); localização (nome, endereço e coordenadas ou link do Google Maps) e contato (do cache de contatos do
+  WhatsApp, até 10). Texto, reação, localização e contato vão em JSON (`chatSendSchema`, o mesmo na tela e na rota);
+  mídia e voz em `multipart/form-data` (`chatMediaFieldsSchema` + regras de arquivo). Envio otimista: o balão entra na
+  hora (fila `chat-outbox`, fora do cache para sobreviver aos recarregamentos), troca pelo id real e, em falha, mostra
+  "Reenviar" e um toast; reação otimista volta em falha. Auditoria (`AgenteSecretario`, "enviar pela aba Conversas") e
+  log só com o tipo e a conversa, nunca o conteúdo. Sem `<form>` no compositor e nos diálogos (a aba fica dentro do
+  formulário do editor de IA).
+- **Pausa ao enviar** (decisão D2): o envio pela tela **não** grava `secretary_sent`; ele volta pelo webhook como
+  `fromMe` e pausa a conversa como a resposta pelo celular (entra em "Intervenções do dono"). Na conversa consigo
+  mesmo, vale como resposta a uma pergunta pendente, igual ao celular.
+- **Lidas** (decisão D6): a lista mostra as não lidas do WhatsApp, mas abrir ou ler a conversa no Opex **nunca**
+  marca como lida.
+- **Paleta** (decisão D5): tokens do tema escuro do Opex, balão do dono na primária (sem os tokens `wa-*` do Zaturno).
+- **Tempo real**: `secretary-chat-updated` (`{ chatId }`) recarrega a lista (no máximo a cada 3 s) e a conversa aberta
+  (`useSecretaryChatRealtime`, fora do assinante geral da aba); `secretary-decision-recorded` e
+  `secretary-conversation-updated` recarregam as pílulas e o estado.
 
 ## Pelo Agente Opex (OPE-200)
 
@@ -324,6 +391,7 @@ serviço `server/agent-tools.ts`, com as funções puras `settings-patch.ts` (pa
 ## Tempo real (`private-app`)
 
 `secretary-decision-recorded` (`{ chatId }`), `secretary-conversation-updated` (`{ chatId }`),
+`secretary-chat-updated` (`{ chatId }`, mensagem nova/atualizada ou não lidas na aba Conversas),
 `secretary-notices-updated` (`{ pending }`), `secretary-personality-updated` (`{ versionId }`),
 `secretary-analysis-updated` (`{ id }`) e `ai-feature-updated` da configuração.
 

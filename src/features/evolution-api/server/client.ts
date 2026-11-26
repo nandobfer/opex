@@ -125,6 +125,7 @@ export function toDomainError(error: unknown): never {
 }
 
 const inst = (name: string) => encodeURIComponent(name)
+const quoted = (id?: string) => (id ? { quoted: { key: { id } } } : {})
 /** Resposta que o Opex não usa (só o status HTTP importa). */
 const anyPayload = z.unknown()
 
@@ -161,6 +162,32 @@ export const evolution = {
         evolutionCall("POST", `/message/sendText/${inst(name)}`, evolutionSentSchema, {
             label: "Enviar texto",
             body: { number: input.number, text: input.text, ...(input.delay ? { delay: input.delay } : {}), ...(input.quotedId ? { quoted: { key: { id: input.quotedId } } } : {}) },
+            ...options,
+        }),
+    /** Foto, vídeo ou documento em base64 (aba Conversas do Secretário, OPE-197). */
+    sendMedia: (name: string, input: { number: string; mediatype: "image" | "video" | "document"; mimetype: string; base64: string; fileName: string; caption?: string; quotedId?: string }, options?: CallOptions) =>
+        evolutionCall("POST", `/message/sendMedia/${inst(name)}`, evolutionSentSchema, {
+            label: "Enviar mídia",
+            timeoutMs: 120_000,
+            body: { number: input.number, mediatype: input.mediatype, mimetype: input.mimetype, media: input.base64, fileName: input.fileName, ...(input.caption ? { caption: input.caption } : {}), ...quoted(input.quotedId) },
+            ...options,
+        }),
+    /** Áudio como mensagem de voz (a Evolution converte para OGG/Opus). */
+    sendWhatsAppAudio: (name: string, input: { number: string; base64: string; quotedId?: string }, options?: CallOptions) =>
+        evolutionCall("POST", `/message/sendWhatsAppAudio/${inst(name)}`, evolutionSentSchema, { label: "Enviar áudio", timeoutMs: 120_000, body: { number: input.number, audio: input.base64, ...quoted(input.quotedId) }, ...options }),
+    /** Reação (`reaction: ""` remove a do dono). */
+    sendReaction: (name: string, input: { remoteJid: string; id: string; fromMe: boolean; reaction: string }, options?: CallOptions) =>
+        evolutionCall("POST", `/message/sendReaction/${inst(name)}`, evolutionSentSchema, { label: "Reagir", body: { key: { remoteJid: input.remoteJid, fromMe: input.fromMe, id: input.id }, reaction: input.reaction }, ...options }),
+    sendLocation: (name: string, input: { number: string; latitude: number; longitude: number; name?: string; address?: string; quotedId?: string }, options?: CallOptions) =>
+        evolutionCall("POST", `/message/sendLocation/${inst(name)}`, evolutionSentSchema, {
+            label: "Enviar localização",
+            body: { number: input.number, latitude: input.latitude, longitude: input.longitude, name: input.name ?? "", address: input.address ?? "", ...quoted(input.quotedId) },
+            ...options,
+        }),
+    sendContact: (name: string, input: { number: string; contacts: { name: string; number: string }[]; quotedId?: string }, options?: CallOptions) =>
+        evolutionCall("POST", `/message/sendContact/${inst(name)}`, evolutionSentSchema, {
+            label: "Enviar contato",
+            body: { number: input.number, contact: input.contacts.map((item) => ({ fullName: item.name, wuid: item.number, phoneNumber: item.number })), ...quoted(input.quotedId) },
             ...options,
         }),
     sendPresence: (name: string, input: { number: string; presence: "composing" | "paused" | "available"; delay: number }, options?: CallOptions) =>

@@ -49,6 +49,14 @@ describe("handleIncomingMessage", () => {
         expect(mocks.turn).not.toHaveBeenCalled()
     })
 
+    it("OPE-197 (D2): o envio pela aba Conversas (sem secretary_sent) volta como fromMe e pausa como o celular", async () => {
+        // O envio da teste-mensagem da integração fica em secretary_sent; o envio pela tela, não.
+        mocks.sentIds.add("opex:TESTE")
+        await handleIncomingMessage("opex", msg({ fromMe: true, id: "ENVIADA-PELA-TELA" }))
+        expect(decisions()).toEqual(["paused"])
+        expect(mocks.decision.mock.calls[0]?.[1]).toMatchObject({ $set: { reason: "O dono assumiu a conversa pelo WhatsApp." } })
+    })
+
     it("mensagem enviada pelo próprio agente não pausa", async () => {
         mocks.sentIds.add("opex:M1")
         await handleIncomingMessage("opex", msg({ fromMe: true }))

@@ -174,6 +174,13 @@ describe("runSecretaryTurn", () => {
         expect(decisions()).toEqual(["replied"])
     })
 
+    it("OPE-197 (D3): o registro \"respondeu\" guarda os ids das partes enviadas, para o selo Secretário", async () => {
+        mocks.send.mockResolvedValueOnce("P1").mockResolvedValueOnce("P2")
+        await turn()
+        expect(mocks.decide.mock.calls.at(-1)?.[3]).toBe("replied")
+        expect(mocks.decide.mock.calls.at(-1)?.[8]).toEqual(["P1", "P2"])
+    })
+
     it("descarta a resposta quando o dono assume no meio do turno", async () => {
         mocks.currentAfter = 1
         await turn()

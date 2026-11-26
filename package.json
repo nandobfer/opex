@@ -62,6 +62,7 @@
     "date-fns": "^4.3.0",
     "diff": "^9.0.0",
     "dotenv": "^17.2.3",
+    "emoji-picker-react": "^4.22.3",
     "framer-motion": "^12.34.0",
     "fuse.js": "^7.1.0",
     "html-to-image": "1.11.11",
