@@ -60,7 +60,7 @@ vi.mock('@/features/opex-agent/components/chat/OpexDraftChat', async () => {
   return { OpexDraftChat: () => <div data-testid={`OpexDraftChat-${useOpexScope().agent.id}`} /> }
 })
 vi.mock('@/features/opex-agent/components/OpexSessionTabs', () => ({ OpexSessionTabs: () => null }))
-vi.mock('@/features/opex-agent/components/OpexSessionsPanel', () => ({ OpexSessionsPanel: () => null }))
+vi.mock('@/features/opex-agent/components/OpexSessionsPanel', () => ({ OpexSessionsPanel: () => <div data-testid="sessions-panel" /> }))
 
 import { AgentChatNavItem } from '@/features/opex-agent/components/agents/AgentChatNavItem'
 import { AppSidebar } from '@/features/layout/components/AppSidebar'
@@ -285,6 +285,57 @@ describe('item único dos agentes de chat', () => {
       } finally {
         window.innerWidth = width
       }
+    })
+
+    it('tecla segurada (repeat) cancela o navegador mas não repete a ação', async () => {
+      mocks.sessions.opex = [{ id: 's1', status: 'idle', title: 'Antiga' }]
+      window.localStorage.setItem(OPEX_TABS, JSON.stringify({ open: ['s1'], active: 's1' }))
+      renderItem()
+      // Fechado: a repetição não abre o painel.
+      expect(press({ ctrlKey: true, repeat: true }).defaultPrevented).toBe(true)
+      expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('false')
+      // Aberto numa sessão: a repetição não troca para a "Nova sessão".
+      fireEvent.click(screen.getByTestId('agent-nav-item'))
+      expect(await screen.findByTestId('OpexChat-opex')).toBeTruthy()
+      expect(press({ ctrlKey: true, repeat: true }).defaultPrevented).toBe(true)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(screen.getByTestId('OpexChat-opex')).toBeTruthy()
+      expect(JSON.parse(window.localStorage.getItem(OPEX_TABS) ?? 'null')).toEqual({ open: ['s1'], active: 's1' })
+    })
+
+    it('durante a composição de texto (IME) o atalho não é tratado', async () => {
+      renderItem()
+      const event = press({ ctrlKey: true, isComposing: true })
+      expect(event.defaultPrevented).toBe(false)
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('false')
+    })
+
+    it('evento já tratado por outro componente (defaultPrevented) não abre o painel', async () => {
+      renderItem()
+      const claim = (event: Event) => event.preventDefault()
+      document.addEventListener('keydown', claim)
+      try {
+        press({ ctrlKey: true }, document.body)
+        await new Promise((resolve) => setTimeout(resolve, 20))
+        expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('false')
+        expect(screen.queryByTestId('OpexDraftChat-opex')).toBeNull()
+      } finally {
+        document.removeEventListener('keydown', claim)
+      }
+    })
+
+    it('com a lista de sessões aberta: o atalho fecha a lista e mostra a "Nova sessão"', async () => {
+      mocks.sessions.opex = [{ id: 's1', status: 'idle', title: 'Antiga' }]
+      window.localStorage.setItem(OPEX_TABS, JSON.stringify({ open: ['s1'], active: 's1' }))
+      renderItem()
+      fireEvent.click(screen.getByTestId('agent-nav-item'))
+      expect(await screen.findByTestId('OpexChat-opex')).toBeTruthy()
+      fireEvent.click(screen.getByRole('button', { name: 'Todas as sessões' }))
+      expect(await screen.findByTestId('sessions-panel')).toBeTruthy()
+      press({ ctrlKey: true })
+      expect(await screen.findByTestId('OpexDraftChat-opex')).toBeTruthy()
+      await waitFor(() => expect(screen.queryByTestId('sessions-panel')).toBeNull())
     })
 
     it('portal com só o Opex ligado: abre o Opex', async () => {
