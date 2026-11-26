@@ -169,6 +169,7 @@ describe('página', () => {
       useEnvironmentEnvValues: stub,
     }))
     vi.doMock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [], isLoading: false }) }))
+    vi.doMock('@/features/environments/hooks/useEnvironmentCompose', () => ({ useEnvironmentCompose: stub, useComposeRevision: stub, useSaveCompose: stub, useRestoreCompose: stub }))
     const { EnvironmentsPage } = await import('@/features/environments/components/EnvironmentsPage')
     render(<EnvironmentsPage />)
     const builder = screen.getByText('Builder do servidor')
@@ -176,6 +177,7 @@ describe('página', () => {
     expect(builder.compareDocumentPosition(server) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     vi.doUnmock('@/features/environments/hooks/useEnvironments')
     vi.doUnmock('@/features/agentic/hooks/useAgentic')
+    vi.doUnmock('@/features/environments/hooks/useEnvironmentCompose')
     vi.doUnmock('@/features/environments/hooks/useEnvironmentsBuilder')
   })
 })

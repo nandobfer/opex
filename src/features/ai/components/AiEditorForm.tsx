@@ -11,6 +11,7 @@ import { GeneralCard } from "@/features/integrations/components/detail/GeneralCa
 import { IntegrationTabs } from "@/features/integrations/components/tabs/IntegrationTabs"
 import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
 import { AI_TAB_ALIASES, AI_TABS, type AiTab } from "../constants"
+import { SecretaryAgentTab } from "@/features/secretary-agent/components/SecretaryAgentTab"
 import { useAiFeatureRealtime } from "../hooks/useAi"
 import { AiProvidersTab } from "./AiProvidersTab"
 import { OrcamentistaTab } from "./orcamentista/OrcamentistaTab"
@@ -92,6 +93,7 @@ export function AiEditorForm({ def, data, draft, setDraft, dirty, pending, onSav
                 {tab === "agente-mentor" && <MentorAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "agente-arquiteto" && <ArchitectAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
                 {tab === "rotineiros" && <RoutineAgentsTab key={resetKey} />}
+                {tab === "agente-secretario" && <SecretaryAgentTab key={resetKey} onDirtyChange={setTabDirty} />}
             </IntegrationTabs>
         </motion.form>
     )

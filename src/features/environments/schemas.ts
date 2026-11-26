@@ -1,5 +1,7 @@
 import { z } from "zod"
 import { PORTAL_ENVIRONMENT_ACTIONS } from "./constants"
+import { composeContentProblem } from "./managed-compose"
+import { resourceLimitsShape, swapNeedsMemory } from "./resource-limits"
 
 /** Caminho relativo seguro (sem `..`, sem começar por `/` ou `-`). */
 const SAFE_RELATIVE = /^(?![-/])(?!.*(?:^|\/)\.\.(?:\/|$))[A-Za-z0-9_.@+\-/]+$/
@@ -21,6 +23,8 @@ export const refSchema = z.string().trim().min(1, "Informe a ref").max(200).rege
 export const relativeFileSchema = z.string().trim().min(1).max(300).regex(SAFE_RELATIVE, "Use um caminho relativo à pasta, sem \"..\"")
 export const absoluteDirSchema = z.string().trim().min(2).max(400).regex(SAFE_ABSOLUTE, "Caminho absoluto inválido")
 export const ENV_KEY_PATTERN = /^[A-Za-z_][A-Za-z0-9_]{0,99}$/
+/** Limite do campo de texto do compose (o limite real, em bytes, é conferido por `composeContentProblem`). */
+const COMPOSE_INPUT_MAX_CHARS = 400_000
 export const envKeySchema = z.string().trim().regex(ENV_KEY_PATTERN, "Nome de variável inválido")
 
 export const centralSourceSchema = z.object({
@@ -44,7 +48,23 @@ export const adoptedSourceSchema = z.object({
     pullOnRedeploy: z.boolean(),
 })
 
-export const environmentSourceSchema = z.discriminatedUnion("kind", [centralSourceSchema, adoptedSourceSchema])
+/**
+ * Compose gerenciado (OPE-191): o `docker-compose.yml` é escrito no Opex e versionado em
+ * `environment_compose_versions`; os arquivos ficam no servidor, na pasta do ambiente. `composeVersion`
+ * (revisão vigente) e `composeUpdatedAt` são gravados só pelo serviço de revisões: o valor que vier na
+ * entrada é ignorado.
+ */
+export const managedSourceSchema = z.object({
+    kind: z.literal("managed"),
+    projectName: projectNameSchema,
+    /** Vazio = todos os serviços do compose. */
+    services: z.array(serviceSchema).max(30),
+    composeVersion: z.number().int().min(1),
+    /** ISO da gravação da revisão vigente. */
+    composeUpdatedAt: z.string().optional(),
+})
+
+export const environmentSourceSchema = z.discriminatedUnion("kind", [centralSourceSchema, managedSourceSchema, adoptedSourceSchema])
 export type EnvironmentSource = z.infer<typeof environmentSourceSchema>
 
 /**
@@ -52,6 +72,28 @@ export type EnvironmentSource = z.infer<typeof environmentSourceSchema>
  * variável). Pelas ferramentas do Agente Opex, valor vazio também mantém o salvo; pela tela, grava vazio.
  */
 export const envVarInputSchema = z.object({ key: envKeySchema, value: z.string().max(10_000), keep: z.boolean().optional() })
+
+/** Limites de um serviço (modo "Por serviço"); serviço sem linha fica sem limite. */
+export const serviceLimitsSchema = z.object({ service: serviceSchema, ...resourceLimitsShape }).superRefine((value, ctx) => swapNeedsMemory(value, ctx))
+export type ServiceLimits = z.infer<typeof serviceLimitsSchema>
+
+/**
+ * Limites de recursos do ambiente (OPE-193), aplicados no deploy pelo override: `shared` = os mesmos
+ * valores para cada serviço; `service` = uma linha por serviço. Vazio = sem limite.
+ */
+export const environmentLimitsSchema = z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("shared"), ...resourceLimitsShape }).superRefine((value, ctx) => swapNeedsMemory(value, ctx)),
+    z
+        .object({ mode: z.literal("service"), services: z.array(serviceLimitsSchema).max(30) })
+        .superRefine((value, ctx) => {
+            const names = value.services.map((item) => item.service)
+            if (new Set(names).size !== names.length) ctx.addIssue({ code: "custom", path: ["services"], message: "Serviços repetidos" })
+        }),
+])
+export type EnvironmentLimits = z.infer<typeof environmentLimitsSchema>
+export const LIMIT_MODES = ["shared", "service"] as const
+export type LimitMode = (typeof LIMIT_MODES)[number]
+export const DEFAULT_ENVIRONMENT_LIMITS: EnvironmentLimits = { mode: "shared", memoryGb: null, cpus: null, swapGb: null }
 
 export const environmentInputSchema = z
     .object({
@@ -63,6 +105,10 @@ export const environmentInputSchema = z
         healthUrl: z.union([z.url("URL de saúde inválida").max(300), z.literal("")]),
         buildOn: z.enum(MACHINES),
         runOn: z.enum(MACHINES),
+        /** YAML do compose gerenciado: só na criação (vira a v1); depois, pelas revisões. */
+        compose: z.string().max(COMPOSE_INPUT_MAX_CHARS).optional(),
+        /** `null` = nunca configurado (o Editar mostra os aplicados no host); objeto vazio = configurado sem limite. */
+        limits: environmentLimitsSchema.nullable(),
     })
     .superRefine((value, ctx) => {
         const keys = value.env.map((item) => item.key)
@@ -72,6 +118,33 @@ export const environmentInputSchema = z
         if (problem) ctx.addIssue({ code: "custom", path: ["buildOn"], message: problem })
     })
 export type EnvironmentInput = z.infer<typeof environmentInputSchema>
+
+/**
+ * Criação (POST e formulário Novo): a origem gerenciada exige o compose válido — decisão do dono na
+ * OPE-191: o ambiente gerenciado sempre nasce com a v1.
+ */
+export const environmentCreateSchema = environmentInputSchema.superRefine((value, ctx) => {
+    if (value.source.kind !== "managed") return
+    const problem = composeContentProblem(value.compose ?? "")
+    if (problem) ctx.addIssue({ code: "custom", path: ["compose"], message: problem.message })
+})
+
+/** Corpo de `PUT /api/environments/[id]/compose` (nova revisão). */
+export const composeSaveSchema = z.object({
+    content: z.string().max(COMPOSE_INPUT_MAX_CHARS, "O compose é grande demais"),
+    note: z.string().trim().max(200, "Nota com até 200 caracteres").optional(),
+})
+export type ComposeSaveInput = z.infer<typeof composeSaveSchema>
+
+/** Corpo de `POST /api/environments/[id]/compose/restore`. */
+export const composeRestoreSchema = z.object({ version: z.number().int().min(1) })
+
+/**
+ * Corpo de `POST /api/environments/compose-services` ("Ler compose" do formulário). `environmentId` só no
+ * compose gerenciado: os serviços vêm da revisão vigente guardada em `environment_compose_versions`.
+ */
+export const composeServicesInputSchema = z.object({ source: environmentSourceSchema, environmentId: z.string().trim().min(1).optional() })
+export type ComposeServicesInput = z.infer<typeof composeServicesInputSchema>
 
 /** Combinação de máquinas impossível para a origem (puro; `null` = ok). */
 export function placementProblem(source: Pick<EnvironmentSource, "kind"> & { machine?: Machine }, buildOn: Machine, runOn: Machine): string | null {
@@ -115,17 +188,13 @@ export const builderNameSchema = z
 export const environmentsBuilderSchema = z
     .object({
         name: builderNameSchema,
-        memoryGb: z.number("Informe um número").min(0.5, "Mínimo de 0,5 GiB").max(4096).nullable(),
-        cpus: z.number("Informe um número").min(0.1, "Mínimo de 0,1 CPU").max(512).nullable(),
-        swapGb: z.number("Informe um número").min(0, "Use 0 ou mais").max(4096).nullable(),
+        ...resourceLimitsShape,
         /** Builder atual do host (`--use`): as prévias das mesas também o usam. */
         useAsDefault: z.boolean(),
         /** `--allow-insecure-entitlement=network.host` no BuildKit. */
         allowNetworkHost: z.boolean(),
     })
-    .superRefine((value, ctx) => {
-        if (value.swapGb !== null && value.memoryGb === null) ctx.addIssue({ code: "custom", path: ["swapGb"], message: "Defina a RAM para limitar o swap" })
-    })
+    .superRefine((value, ctx) => swapNeedsMemory(value, ctx))
 export type EnvironmentsBuilder = z.infer<typeof environmentsBuilderSchema>
 
 export const BUILDER_ACTIONS = ["create", "start", "stop", "recreate", "delete"] as const

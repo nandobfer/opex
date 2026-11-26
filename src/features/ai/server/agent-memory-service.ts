@@ -83,6 +83,8 @@ export interface ResolvedList {
     clientId: string | null
     /** Slug do agente rotineiro (`routine-specific`). */
     routineSlug?: string | null
+    /** Conversa do Agente Secretário (`secretary-conversation`). */
+    conversationId?: string | null
     channel: string
     /** Nome da central/cliente (nome do canal criado sob demanda). */
     scopeName: string | null
@@ -97,6 +99,15 @@ export async function resolveList(agentId: string, rawScope?: string | MemoryLis
     const central = scope.centralId?.trim() || null
     const client = scope.clientId?.trim() || null
     const routine = scope.routineSlug?.trim() || null
+    const conversation = scope.conversationId?.trim() || null
+    if (def.scope !== "conversation" && conversation) throw new DomainError(400, `A lista "${def.title}" não é de uma conversa`, "CONVERSATION_NOT_ALLOWED")
+    if (def.scope === "conversation") {
+        if (!conversation) throw new DomainError(400, `Informe a conversa da lista "${def.title}"`, "CONVERSATION_REQUIRED")
+        const channel = memoryChannelOf(agent, { conversationId: conversation })
+        if (!channel) throw new DomainError(404, "Conversa não encontrada", "CONVERSATION_NOT_FOUND")
+        const { conversationLabel } = await import("@/features/secretary-agent/server/conversation-labels")
+        return { agent, centralId: null, clientId: null, conversationId: conversation, channel, scopeName: await conversationLabel(conversation) }
+    }
     if (def.scope !== "routine" && routine) throw new DomainError(400, `A lista "${def.title}" não é de um agente rotineiro`, "ROUTINE_NOT_ALLOWED")
     if (def.scope === "routine") {
         if (!routine) throw new DomainError(400, `Informe o agente rotineiro da lista "${def.title}"`, "ROUTINE_REQUIRED")

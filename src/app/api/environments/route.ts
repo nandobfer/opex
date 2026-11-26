@@ -1,7 +1,7 @@
 import { created, ok } from "@/lib/api/responses"
 import { parseBody, withRoute } from "@/lib/api/route"
 import { getLocalUser } from "@/lib/local-user"
-import { environmentInputSchema } from "@/features/environments/schemas"
+import { environmentCreateSchema } from "@/features/environments/schemas"
 import { createEnvironment, getEnvironment, listEnvironments } from "@/features/environments/server/service"
 
 export const runtime = "nodejs"
@@ -12,9 +12,9 @@ export const GET = withRoute(async () => {
     return ok(await listEnvironments())
 })
 
-/** POST /api/environments — cria um ambiente (sem implantar). */
+/** POST /api/environments — cria um ambiente (sem implantar); o compose gerenciado vem em `compose` e vira a v1. */
 export const POST = withRoute(async ({ req }) => {
-    const body = await parseBody(req, environmentInputSchema)
+    const body = await parseBody(req, environmentCreateSchema)
     if (!body.ok) return body.response
     const env = await createEnvironment(body.data, getLocalUser().id)
     return created(await getEnvironment(String(env._id)))

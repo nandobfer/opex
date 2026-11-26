@@ -63,6 +63,7 @@ export const AGENT_REALTIME_EVENTS: Record<AgentId, readonly string[]> = {
     revisor: [PR_REVIEW_UPDATED_EVENT, AGENTIC_UPDATED_EVENT],
     mentor: [MENTOR_UPDATED_EVENT],
     rotineiros: [ROUTINE_RUN_UPDATED_EVENT],
+    secretario: ["secretary-decision-recorded", "secretary-conversation-updated"],
 }
 
 const DEBOUNCE_MS = 1000

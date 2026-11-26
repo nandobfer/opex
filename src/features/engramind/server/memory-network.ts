@@ -77,6 +77,20 @@ export async function archiveMemoryChannel(slug: string): Promise<boolean> {
     }
 }
 
+/**
+ * Se o agente de memórias existe no Engramind (`opex/<identidade>`): `AGENT_NOT_FOUND` vira `exists: false`; outros
+ * erros (Engramind fora, não configurado) sobem para a tela mostrar o erro com "Tentar novamente".
+ */
+export async function agentMemoryStatus(consumer: MemoryIdentity): Promise<{ exists: boolean; disabled: boolean }> {
+    try {
+        const agent = await engramindCall<EngramindAgent>("GET", { path: `/v1/agents/${enc(agentRef(consumer))}` })
+        return { exists: true, disabled: Boolean(agent.disabled_at) }
+    } catch (error) {
+        if (engramindCodeOf(error) === "AGENT_NOT_FOUND") return { exists: false, disabled: false }
+        throw error
+    }
+}
+
 async function ensureAgent(consumer: MemoryIdentity, target: EngramindTarget): Promise<"exists" | "created"> {
     try {
         const agent = await engramindCall<EngramindAgent>("GET", { path: `/v1/agents/${enc(agentRef(consumer))}` }, { target })

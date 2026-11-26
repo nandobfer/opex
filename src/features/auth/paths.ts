@@ -18,6 +18,8 @@
  *   contrato, nenhum dado;
  * - o **webhook do Engramind** (`/api/engramind/webhook`, exato), autenticado só pela assinatura
  *   HMAC (`Engramind-Signature`) com o segredo do webhook da integração;
+ * - o **webhook da Evolution API** (`/api/evolution/webhook`, exato), autenticado só pelo header
+ *   `x-opex-webhook-secret` com o segredo do webhook da integração;
  * - a **entrada do portal** (`/cliente`, exato): resolve o token (`?t=`), mostra a seleção de
  *   cliente do usuário logado ou deixa o middleware decidir. As sub-rotas do portal exigem sessão.
  *
@@ -44,6 +46,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
     "/api/docs",
     // Webhook do Engramind: autenticado só pela assinatura (ver `src/features/engramind/server/webhook.ts`).
     "/api/engramind/webhook",
+    // Webhook da Evolution API (OPE-192): autenticado só pelo header com o segredo (ver `src/features/evolution-api/server/webhook.ts`).
+    "/api/evolution/webhook",
     // MCP "Mesa do Opex" (OPE-178): segredo derivado + escopo pela sessão do OpenCode (ver `features/agentic/server/workbench-mcp`).
     "/api/agentic/mcp",
 ]

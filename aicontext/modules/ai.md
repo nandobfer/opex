@@ -514,6 +514,21 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   originais em `ai_usage_log_reconciliations`, auditoria `UsoIA/IMPORTAR`; atualização condicionada
   a métricas/lote ausentes permite retomada sem sobrescrever métricas reais nem repetir o rateio.
 
+## Aba "Agente Secretário" (`?aba=agente-secretario`, OPE-192)
+
+Agente que responde no WhatsApp do dono com a personalidade dele. Entra em `AI_TABS` e no `AGENT_CATALOG` logo
+depois do Maddox (ícone `MessagesSquare`, rótulo "Secretário"). Sub-abas por `secao`: Geral, Critérios,
+Simulação, Personalidade, Memórias, Conversas e Avisos (contador de perguntas pendentes). Provedores só de
+`OPEX_PROVIDER_IDS` (quem decide o assunto aceita também o JEV); feature `secretary-agent` em `ai_feature_settings` (`GET/PUT /api/ai/features/secretary-agent`).
+Consumo com origem `secretary-agent` (`secretary-decision` na decisão do assunto, `secretary-analysis` na análise
+de personalidade e `secretary-simulation` na Simulação); para provedores que não
+informam custo, o custo é estimado pela tabela de preços da aba Geral. A chave `secretario` entra no aprendizado
+autônomo (`selfMemorySettingsSchema`). Detalhes em `modules/secretary-agent.md`.
+
+As seções de memórias dos agentes (`MemoryUniverseSection`) passam a identidade ao `AgentUniverseCard`: agente
+ainda não cadastrado no Engramind mostra o botão "Cadastrar agente no Engramind" no lugar do universo (rotas
+`/api/ai/memories/agents/[consumer]` e `/provision`; ver `engramind.md`).
+
 ## Contas dos providers do OpenCode (aba Contas, OPE-90)
 
 Equivale ao TUI (Providers → provider → adicionar/selecionar conta), pelo `@opencode/client` 2.x

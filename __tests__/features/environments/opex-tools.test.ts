@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   envs: [] as Record<string, unknown>[],
   createEnvironment: vi.fn(async (input: Record<string, unknown>) => ({ _id: 'e9', ...input })),
-  updateEnvironment: vi.fn(async (id: string, input: { env: { key: string }[] }) => ({ _id: id, slug: 'loja', env: input.env })),
+  updateEnvironment: vi.fn(async (id: string, input: { env: { key: string }[]; limits?: unknown }) => ({ _id: id, slug: 'loja', env: input.env, limits: input.limits })),
   runEnvironmentAction: vi.fn(async (_id: string, input: { action: string }) => ({ deployId: input.action === 'deploy' || input.action === 'move' ? 'd1' : null, output: input.action === 'logs' ? '\u001b[32mapp | ok\u001b[0m\napp | linha 2\n' : null })),
   deleteEnvironment: vi.fn(async () => undefined),
   getDeploy: vi.fn(),
@@ -32,16 +32,35 @@ vi.mock('@/features/environments/server/service', () => ({
   createEnvironment: mocks.createEnvironment,
   updateEnvironment: mocks.updateEnvironment,
   getDeploy: mocks.getDeploy,
+  getEnvironment: async () => LIST_ITEM,
   listEnvironments: async () => ({
-    items: [
-      { id: 'e1', name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, envKeys: ['TOKEN'], ports: [8080], healthUrl: null, buildOn: 'server', runOn: 'pc', deployedOn: { buildOn: 'server', runOn: 'pc' }, deployedVersion: '1.2.0', lastDeploy: null, services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '8080', cpu: null, memory: null, version: '1.3.0' }], createdAt: '', updatedAt: '' },
-    ],
+    items: [LIST_ITEM],
     unmanaged: [{ machine: 'server', projectName: 'crm', workingDir: '/srv/crm', configFiles: ['/srv/crm/docker-compose.yml'], git: true, containers: 2, running: 2 }],
     pcAvailable: true,
     pcReason: null,
     checkedAt: '2026-10-28T12:00:00.000Z',
   }),
 }))
+const LIST_ITEM = {
+  id: 'e1',
+  name: 'Loja',
+  slug: 'loja',
+  source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' },
+  envKeys: ['TOKEN'],
+  ports: [8080],
+  healthUrl: null,
+  buildOn: 'server',
+  runOn: 'pc',
+  limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 },
+  limitsConfigured: true,
+  deployedLimits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 },
+  deployedOn: { buildOn: 'server', runOn: 'pc' },
+  deployedVersion: '1.2.0',
+  lastDeploy: null,
+  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '8080', cpu: null, memory: null, version: '1.3.0', limits: { memoryGb: 4, swapGb: null, cpus: 2 } }],
+  createdAt: '',
+  updatedAt: '',
+}
 vi.mock('@/features/environments/server/deploy', () => ({ runEnvironmentAction: mocks.runEnvironmentAction, deleteEnvironment: mocks.deleteEnvironment }))
 vi.mock('@/features/environments/server/registry', () => ({ runRegistryCleanup: mocks.runRegistryCleanup, getRegistryStatus: async () => ({ running: true, port: 5050, detail: 'No ar' }) }))
 vi.mock('@/features/environments/server/opex-notice', () => ({ notifyOpexRegistryCleanup: mocks.notifyRegistry }))
@@ -59,8 +78,10 @@ const run = (name: string, input: unknown) => find(name).execute(find(name).inpu
 const loja = { _id: 'e1', name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, env: [{ key: 'TOKEN', value: { c: 'segredo' } }], ports: [8080], healthUrl: null, buildOn: 'server', runOn: 'server', deployedOn: { buildOn: 'server', runOn: 'server' } }
 const adotado = { ...loja, _id: 'e2', slug: 'crm', source: { kind: 'adopted', machine: 'server', workingDir: '/srv/crm', configFiles: ['/srv/crm/docker-compose.yml'], projectName: 'crm', git: true, pullOnRedeploy: false } }
 
+const minio = { ...loja, _id: 'e3', slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 2 } }
+
 beforeEach(() => {
-  mocks.envs = [loja, adotado]
+  mocks.envs = [loja, adotado, minio]
   vi.clearAllMocks()
 })
 
@@ -108,7 +129,7 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
   it('lista agrupada por máquina com estado, versão e serviços no ar', async () => {
     const out = (await run('list_environments', {})) as { servidor: unknown[]; pc: Record<string, unknown>[]; naoGerenciados: number }
     expect(out.servidor).toHaveLength(0)
-    expect(out.pc[0]).toMatchObject({ slug: 'loja', estado: 'No ar', servicosNoAr: '1/1', versao: 'v1.3.0' })
+    expect(out.pc[0]).toMatchObject({ slug: 'loja', estado: 'No ar', servicosNoAr: '1/1', versao: 'v1.3.0', limites: 'RAM 4 GiB · swap padrão · 2 CPUs' })
     expect(out.naoGerenciados).toBe(1)
   })
 
@@ -126,11 +147,59 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     expect(mocks.updateEnvironment).toHaveBeenCalledWith('e1', expect.objectContaining({ name: 'Loja', ports: [8080], source: expect.objectContaining({ ref: 'release' }), env: [{ key: 'TOKEN', value: '' }, { key: 'NOVA', value: 'x' }] }), 'local')
   })
 
+  it('limites (OPE-193): detalhe com salvos, aplicados e divergência; criar e editar aceitam `limits` (substitui)', async () => {
+    const detail = (await run('get_environment', { environment: 'loja' })) as { limites: Record<string, unknown>; servicos: Record<string, unknown>[] }
+    expect(detail.limites).toMatchObject({ salvos: 'RAM 8 GiB · swap padrão · 2 CPUs', aplicados: 'RAM 4 GiB · swap padrão · 2 CPUs', diferem: true })
+    expect(detail.servicos[0]).toMatchObject({ servico: 'app', limites: 'RAM 4 GiB · swap padrão · 2 CPUs' })
+
+    const limits = { mode: 'service', services: [{ service: 'app', memoryGb: 2, swapGb: 0, cpus: 1.5 }] }
+    const out = await run('update_environment', { environment: 'loja', limits })
+    expect(mocks.updateEnvironment).toHaveBeenCalledWith('e1', expect.objectContaining({ limits, ports: [8080] }), 'local')
+    expect(out).toMatchObject({ limites: 'app: RAM 2 GiB · sem swap · 1,5 CPUs' })
+    expect(find('update_environment').summarize!({ environment: 'loja', limits } as never)).toContain('limits')
+    // Sem `limits`, mantém os salvos: documento sem o campo continua "nunca configurado" (null).
+    await run('update_environment', { environment: 'loja', ports: [9090] })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ limits: null }), 'local')
+    mocks.envs = [{ ...mocks.envs[0]!, limits: { mode: 'shared', memoryGb: 3, swapGb: null, cpus: null } }]
+    await run('update_environment', { environment: 'loja', ports: [9090] })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ limits: { mode: 'shared', memoryGb: 3, swapGb: null, cpus: null } }), 'local')
+    // Swap sem RAM é recusado como na tela.
+    expect(() => find('update_environment').input.parse({ environment: 'loja', limits: { mode: 'shared', memoryGb: null, swapGb: 1, cpus: null } })).toThrow(/Defina a RAM/)
+
+    await run('create_environment', { name: 'Nova', centralId: 'c1', limits: { mode: 'shared', memoryGb: 1, swapGb: null, cpus: null } })
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: { mode: 'shared', memoryGb: 1, swapGb: null, cpus: null } }), 'local')
+    await run('create_environment', { name: 'Outra', centralId: 'c1' })
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: null }), 'local')
+  })
+
   it('deploy volta na hora com o id e pede o aviso na sessão; adotado não aceita outra ref', async () => {
     const out = await run('deploy_environment', { environment: 'loja' })
     expect(out).toMatchObject({ deployId: 'd1', status: 'running', ref: 'main' })
     expect(mocks.runEnvironmentAction).toHaveBeenCalledWith('e1', { action: 'deploy', ref: '' }, 'local', 'host-runner', { notifyOpexSessionId: 's1' })
     await expect(run('deploy_environment', { environment: 'crm', ref: 'dev' })).rejects.toThrow(/adotado/)
+    await expect(run('deploy_environment', { environment: 'minio', ref: 'dev' })).rejects.toThrow(/Só a origem central aceita outra ref/)
+  })
+
+  it('compose gerenciado (OPE-191): cria com o YAML (v1), exige o compose e edita só projeto e serviços', async () => {
+    const compose = 'services:\n  minio:\n    image: minio/minio\n'
+    const out = await run('create_environment', { name: 'MinIO', kind: 'managed', compose })
+    expect(out).toMatchObject({ slug: 'minio', compose: 'v1' })
+    expect(mocks.createEnvironment).toHaveBeenCalledWith(expect.objectContaining({ slug: 'minio', compose, source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 } }), 'local')
+    expect(find('create_environment').summarize!({ name: 'MinIO', kind: 'managed', compose } as never)).toBe('Criar o ambiente MinIO (compose gerenciado v1)')
+    await expect(run('create_environment', { name: 'MinIO', kind: 'managed' })).rejects.toThrow(/exige o `compose`/)
+    await expect(run('create_environment', { name: 'MinIO', kind: 'managed', compose, centralId: 'c1' })).rejects.toThrow(/não se aplicam/)
+    await expect(run('create_environment', { name: 'Loja' })).rejects.toThrow(/centralId/)
+
+    await run('update_environment', { environment: 'minio', projectName: 'minio-2', services: ['minio'] })
+    expect(mocks.updateEnvironment).toHaveBeenCalledWith('e3', expect.objectContaining({ source: { kind: 'managed', projectName: 'minio-2', services: ['minio'], composeVersion: 2 } }), 'local')
+    await expect(run('update_environment', { environment: 'minio', ref: 'main' })).rejects.toThrow(/Compose gerenciado/)
+  })
+
+  it('compose gerenciado na saída: origem com a revisão vigente, a implantada e o aviso de compose novo', async () => {
+    const { environmentRow, deployView } = await import('@/features/environments/opex-format')
+    const env = { id: 'e3', name: 'MinIO', slug: 'minio', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 3 }, envKeys: [], ports: [], healthUrl: null, buildOn: 'server', runOn: 'server', deployedOn: { buildOn: 'server', runOn: 'server' }, deployedVersion: null, deployedComposeVersion: 2, lastDeploy: null, services: [], createdAt: '', updatedAt: '' } as const
+    expect(environmentRow(env as never)).toMatchObject({ origem: 'gerenciado (v3)', composeImplantado: 'v2', composeNaoImplantado: true })
+    expect(deployView({ id: 'd', kind: 'deploy', status: 'success', ref: null, commit: null, buildOn: 'server', runOn: 'server', error: null, startedAt: '', finishedAt: null, durationMs: null, version: null, skipBuild: false, resumed: false, composeVersion: 2 })).toMatchObject({ compose: 'v2' })
   })
 
   it('erro legível: ambiente desconhecido', async () => {

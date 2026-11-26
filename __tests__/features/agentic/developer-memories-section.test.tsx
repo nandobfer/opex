@@ -19,6 +19,8 @@ vi.mock('@/lib/api', () => ({
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }))
 vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: () => false, acquireChannel: vi.fn(), releaseChannel: vi.fn() }))
+// Agente cadastrado no Engramind: o universo aparece (o estado "Cadastrar agente" tem teste próprio).
+vi.mock('@/features/ai/hooks/useAgentProvision', () => ({ useAgentMemoryStatus: () => ({ data: { exists: true, disabled: false } }), useProvisionAgent: () => ({ mutate: vi.fn() }) }))
 
 import { DeveloperMemoriesSection } from '@/features/agentic/components/DeveloperMemoriesSection'
 

@@ -24,7 +24,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -78,7 +78,7 @@ describe('catálogo de integrações', () => {
   })
 
   it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada), anexos abandonados (30 min), resumo diário dos agentes (1 h) e quota do OpenCode (1 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', 'command-code-usage-refresh', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup'])
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', 'command-code-usage-refresh', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup', 'engramind-pending-writes'])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })

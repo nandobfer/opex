@@ -14,6 +14,7 @@ segue o fluxo de trabalho; `navLabel` (sidebar e aba) não leva "Agente", `title
 |---|---|---|---|---|
 | Opex | `/agente-opex` | `agente-opex` | cliente | Visão geral, Histórico, Memórias |
 | Maddox | `/agente-maddox` | `agente-maddox` | cliente | Visão geral, Histórico, Memórias |
+| Secretário (OPE-192) | `/agente-secretario` | `agente-secretario` | período | Visão geral (respostas, conversas atendidas, pausas, perguntas ao dono, custo real ou estimado; execuções = decisões de `secretary_decisions`, com o assunto classificado), Histórico, Memórias |
 | Orçamentista | `/agente-orcamentista` | `orcamentista` | cliente, repositório, margem | Visão geral, Histórico |
 | Catalogador | `/agente-catalogador` | `catalogador` | cliente, repositório | Visão geral, Histórico |
 | Refinador | `/agente-refinador` | `refinar-tarefa` | cliente, repositório | Visão geral, Histórico |

@@ -7,6 +7,7 @@ import {
     environmentInputSchema,
     environmentsSettingsSchema,
     envVarInputSchema,
+    environmentLimitsSchema,
     MACHINE_LABELS,
     MACHINES,
     projectNameSchema,
@@ -17,6 +18,7 @@ import {
     type EnvironmentInput,
 } from "@/features/environments/schemas"
 import type { IEnvironment } from "@/features/environments/server/models"
+import { environmentLimitsOf, environmentLimitsText } from "@/features/environments/resource-limits"
 import { moveWarning, slugify } from "@/features/environments/view"
 import { builderView, deployView, environmentDetailView, environmentsListView, mergeBuilderPatch, mergeEnvironmentPatch, mergeSettingsPatch, redactEnvValues, stripAnsi, tailLines } from "@/features/environments/opex-format"
 
@@ -64,12 +66,15 @@ async function resolve(ref: string): Promise<IEnvironment> {
 const environment = z.string().trim().min(1).max(100).describe("Id ou slug do ambiente (de list_environments)")
 const machine = z.enum(MACHINES).describe("server = Servidor; pc = PC (pelo Builder Machine)")
 const envVars = z.array(envVarInputSchema).max(100).describe("Variáveis extras (gravadas cifradas; o valor nunca é lido de volta)")
+const limits = environmentLimitsSchema.describe(
+    'Limites de recursos (valem no próximo deploy): { mode: "shared", memoryGb, cpus, swapGb } = os mesmos para cada serviço, ou { mode: "service", services: [{ service, memoryGb, cpus, swapGb }] } = por serviço (serviço sem linha = sem limite). memoryGb em GiB (mín. 0,5), cpus com fração (mín. 0,1), swapGb = swap ALÉM da RAM (null = padrão do Docker, 0 = sem swap; exige memoryGb). null = sem limite. Substitui os limites salvos inteiros.',
+)
 const LOG_LINES_DEFAULT = 200
 const DEPLOY_LOG_LINES_DEFAULT = 80
 
 /** Valores do formulário a partir do ambiente salvo (variáveis com valor vazio = mantém o salvo). */
 function inputOf(env: IEnvironment): EnvironmentInput {
-    return { name: env.name, slug: env.slug, source: env.source, env: env.env.map((item) => ({ key: item.key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn }
+    return { name: env.name, slug: env.slug, source: env.source, env: env.env.map((item) => ({ key: item.key, value: "" })), ports: env.ports, healthUrl: env.healthUrl ?? "", buildOn: env.buildOn, runOn: env.runOn, limits: env.limits ?? null }
 }
 
 const tool = <I>(def: Omit<Parameters<typeof defineTool<I>>[0], "group">) => defineTool<I>({ ...def, group: "environments" })
@@ -77,9 +82,11 @@ const tool = <I>(def: Omit<Parameters<typeof defineTool<I>>[0], "group">) => def
 const createInput = z.object({
     name: z.string().trim().min(2).max(80),
     slug: slugSchema.optional().describe("Omitido: sugerido pelo nome"),
-    centralId: z.string().trim().min(1).describe("Id da central de desenvolvimento (list_centrals)"),
-    ref: refSchema.optional().describe("Branch, tag ou commit (padrão main)"),
-    composeFile: relativeFileSchema.optional().describe("Arquivo do compose relativo ao repositório (padrão docker-compose.yml)"),
+    kind: z.enum(["central", "managed"]).optional().describe("Origem: central (padrão; código do repositório de uma central) ou managed (compose gerenciado: o docker-compose.yml é escrito e versionado no Opex; exige `compose`)"),
+    centralId: z.string().trim().min(1).optional().describe("Origem central: id da central de desenvolvimento (list_centrals), obrigatório"),
+    compose: z.string().max(400_000).optional().describe("Origem managed: YAML completo do docker-compose.yml (obrigatório; vira a revisão v1). Os serviços usam `image:` (sem `build`)."),
+    ref: refSchema.optional().describe("Só origem central: branch, tag ou commit (padrão main)"),
+    composeFile: relativeFileSchema.optional().describe("Só origem central: arquivo do compose relativo ao repositório (padrão docker-compose.yml)"),
     services: z.array(serviceSchema).max(30).optional().describe("Serviços a subir (vazio = todos)"),
     projectName: projectNameSchema.optional().describe("Nome do projeto do compose (padrão: o slug)"),
     env: envVars.optional(),
@@ -87,6 +94,7 @@ const createInput = z.object({
     healthUrl: z.string().trim().max(300).optional().describe("URL de saúde esperada no fim do deploy"),
     buildOn: machine.optional().describe("Onde fazer o build (padrão server)"),
     runOn: machine.optional().describe("Onde executar (padrão server)"),
+    limits: limits.optional(),
 })
 
 const updateInput = z.object({
@@ -96,7 +104,7 @@ const updateInput = z.object({
     centralId: z.string().trim().min(1).optional().describe("Só origem central"),
     ref: refSchema.optional().describe("Só origem central: ref salva (\"Última de <ref>\")"),
     composeFile: relativeFileSchema.optional().describe("Só origem central"),
-    services: z.array(serviceSchema).max(30).optional().describe("Só origem central"),
+    services: z.array(serviceSchema).max(30).optional().describe("Só origem central ou compose gerenciado"),
     projectName: projectNameSchema.optional(),
     pullOnRedeploy: z.boolean().optional().describe("Só adotado com git: git pull no redeploy"),
     env: z
@@ -108,12 +116,17 @@ const updateInput = z.object({
     healthUrl: z.string().trim().max(300).optional().describe("Vazio remove"),
     buildOn: machine.optional(),
     runOn: machine.optional(),
+    limits: limits.optional(),
 })
 type UpdateInput = z.infer<typeof updateInput>
 
 function sourcePatch(current: EnvironmentInput["source"], input: UpdateInput): EnvironmentInput["source"] {
     if (current.kind === "central") {
         return { ...current, centralId: input.centralId ?? current.centralId, ref: input.ref ?? current.ref, composeFile: input.composeFile ?? current.composeFile, services: input.services ?? current.services, projectName: input.projectName ?? current.projectName }
+    }
+    if (current.kind === "managed") {
+        if (input.centralId || input.ref || input.composeFile || input.pullOnRedeploy !== undefined) throw new Error("Compose gerenciado: central, ref, arquivo do compose e git pull não se aplicam (o compose se edita na tela, botão Compose)")
+        return { ...current, services: input.services ?? current.services, projectName: input.projectName ?? current.projectName }
     }
     if (input.centralId || input.ref || input.composeFile || input.services) throw new Error("Ambiente adotado: central, ref, arquivo do compose e serviços não se aplicam (a pasta é a do projeto adotado)")
     return { ...current, projectName: input.projectName ?? current.projectName, pullOnRedeploy: input.pullOnRedeploy ?? current.pullOnRedeploy }
@@ -137,7 +150,7 @@ export const environmentTools = [
         name: "get_environment",
         label: "Ver ambiente",
         risk: "read",
-        description: "Detalhe de um ambiente: origem (central/ref/compose/serviços ou pasta adotada), máquinas de build e execução, onde está no ar, nomes das variáveis (nunca os valores), URL de saúde, serviços com CPU/RAM/versão e o último deploy.",
+        description: "Detalhe de um ambiente: origem (central/ref/compose/serviços ou pasta adotada), máquinas de build e execução, onde está no ar, nomes das variáveis (nunca os valores), URL de saúde, limites de RAM/CPU/swap (salvos, aplicados no host e se diferem: os salvos valem no próximo deploy), serviços com CPU/RAM/versão/limites e o último deploy.",
         input: z.object({ environment }),
         execute: async (input) => {
             const env = await resolve(input.environment)
@@ -149,24 +162,33 @@ export const environmentTools = [
         label: "Criar ambiente",
         risk: "write",
         description:
-            "Cria um ambiente com origem numa central de desenvolvimento (para projetos já em execução use adopt_project). Não implanta: depois use deploy_environment. Build e execução em máquinas diferentes usam o registry local.",
+            "Cria um ambiente com origem numa central de desenvolvimento (`kind: central`, padrão) ou com o compose gerenciado (`kind: managed`: o YAML em `compose` vira a revisão v1; para serviços de terceiros sem repositório, com `image:`). Para projetos já em execução use adopt_project. Não implanta: depois use deploy_environment. Build e execução em máquinas diferentes usam o registry local.",
         input: createInput,
-        summarize: (input) => `Criar o ambiente ${input.name}${envKeys(input)}`,
+        summarize: (input) => `Criar o ambiente ${input.name}${input.kind === "managed" ? " (compose gerenciado v1)" : ""}${envKeys(input)}`,
         redact: (input) => redactEnvValues(input),
         execute: async (input, context) => {
             const slug = input.slug ?? slugify(input.name)
+            const managed = input.kind === "managed"
+            if (managed && (input.centralId || input.ref || input.composeFile)) throw new Error("Compose gerenciado: central, ref e arquivo do compose não se aplicam")
+            if (managed && !input.compose?.trim()) throw new Error("Compose gerenciado exige o `compose` (YAML do docker-compose.yml)")
+            if (!managed && !input.centralId) throw new Error("Origem central exige o `centralId` (list_centrals)")
+            if (!managed && input.compose) throw new Error("`compose` só vale para `kind: managed`")
             const parsed = environmentInputSchema.parse({
                 name: input.name,
                 slug,
-                source: { kind: "central", centralId: input.centralId, ref: input.ref ?? "main", composeFile: input.composeFile ?? "docker-compose.yml", services: input.services ?? [], projectName: input.projectName ?? slug },
+                source: managed
+                    ? { kind: "managed", projectName: input.projectName ?? slug, services: input.services ?? [], composeVersion: 1 }
+                    : { kind: "central", centralId: input.centralId, ref: input.ref ?? "main", composeFile: input.composeFile ?? "docker-compose.yml", services: input.services ?? [], projectName: input.projectName ?? slug },
+                ...(managed ? { compose: input.compose } : {}),
                 env: input.env ?? [],
                 ports: input.ports ?? [],
                 healthUrl: input.healthUrl ?? "",
                 buildOn: input.buildOn ?? "server",
                 runOn: input.runOn ?? "server",
+                limits: input.limits ?? null,
             })
             const env = await (await service()).createEnvironment(parsed, context.actorId)
-            return { id: String(env._id), slug: env.slug, nome: env.name, criado: true, proximoPasso: "Implante com deploy_environment quando o usuário pedir." }
+            return { id: String(env._id), slug: env.slug, nome: env.name, criado: true, ...(managed ? { compose: "v1" } : {}), proximoPasso: "Implante com deploy_environment quando o usuário pedir." }
         },
     }),
     tool({
@@ -175,7 +197,7 @@ export const environmentTools = [
         risk: "write",
         confirmByDefault: true,
         description:
-            "Edita um ambiente: só os campos enviados mudam. `env` é a lista completa das variáveis (as ausentes saem; valor vazio mantém o salvo). Trocar slug ou projeto exige o ambiente derrubado. A nova configuração vale no próximo deploy.",
+            "Edita um ambiente: só os campos enviados mudam. `env` é a lista completa das variáveis (as ausentes saem; valor vazio mantém o salvo). `limits` substitui os limites de RAM/CPU/swap. Trocar slug ou projeto exige o ambiente derrubado. A nova configuração vale no próximo deploy (Reiniciar não aplica limites).",
         input: updateInput,
         summarize: (input) => {
             const fields = Object.keys(input).filter((key) => key !== "environment" && key !== "env")
@@ -186,10 +208,10 @@ export const environmentTools = [
             const saved = await resolve(input.environment)
             const current = inputOf(saved)
             const next = environmentInputSchema.parse(
-                mergeEnvironmentPatch(current, { name: input.name, slug: input.slug, source: sourcePatch(current.source, input), env: input.env, ports: input.ports, healthUrl: input.healthUrl, buildOn: input.buildOn, runOn: input.runOn }),
+                mergeEnvironmentPatch(current, { name: input.name, slug: input.slug, source: sourcePatch(current.source, input), env: input.env, ports: input.ports, healthUrl: input.healthUrl, buildOn: input.buildOn, runOn: input.runOn, limits: input.limits }),
             )
             const env = await (await service()).updateEnvironment(String(saved._id), next, context.actorId)
-            return { id: String(env._id), slug: env.slug, atualizado: true, variaveis: env.env.map((item) => item.key) }
+            return { id: String(env._id), slug: env.slug, atualizado: true, variaveis: env.env.map((item) => item.key), limites: environmentLimitsText(environmentLimitsOf(env.limits)) }
         },
     }),
     tool({
@@ -210,12 +232,12 @@ export const environmentTools = [
         label: "Deploy/Redeploy",
         risk: "destructive",
         description:
-            "Implanta (ou reimplanta) o ambiente em segundo plano. Sem `ref`, usa a ref salva da central (\"Última de <ref>\"); com `ref`, outra branch, tag ou commit (só origem central; adotado refaz o build da pasta). Volta na hora com o deployId: o resultado chega sozinho nesta conversa quando terminar — não fique consultando; use get_environment_deploy só se o usuário pedir o andamento.",
+            "Implanta (ou reimplanta) o ambiente em segundo plano. Sem `ref`, usa a ref salva da central (\"Última de <ref>\"); com `ref`, outra branch, tag ou commit (só origem central; adotado refaz o build da pasta; compose gerenciado implanta a revisão vigente do compose). Volta na hora com o deployId: o resultado chega sozinho nesta conversa quando terminar — não fique consultando; use get_environment_deploy só se o usuário pedir o andamento.",
         input: z.object({ environment, ref: refSchema.optional().describe("Outra ref (omitido = a ref salva)") }),
         summarize: (input) => `${input.ref ? `Implantar ${input.ref} no` : "Redeploy do"} ambiente ${input.environment}`,
         execute: async (input, context) => {
             const env = await resolve(input.environment)
-            if (input.ref && env.source.kind !== "central") throw new Error("Ambiente adotado não aceita outra ref: o redeploy refaz o build da pasta do projeto (com git pull, se ligado). Chame sem `ref`.")
+            if (input.ref && env.source.kind !== "central") throw new Error("Só a origem central aceita outra ref: o adotado refaz o build da pasta do projeto (com git pull, se ligado) e o compose gerenciado implanta a revisão vigente. Chame sem `ref`.")
             const { runEnvironmentAction } = await deploys()
             const { runEnvHost } = await settingsModule()
             const result = await runEnvironmentAction(String(env._id), { action: "deploy", ref: input.ref ?? "" }, context.actorId, runEnvHost, { notifyOpexSessionId: contextSessionId(context) })

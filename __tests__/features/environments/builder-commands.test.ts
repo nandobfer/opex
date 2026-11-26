@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  appliedLimits,
   builderCreateCommand,
   builderDeleteCommand,
   builderDeployEnsureCommand,
@@ -10,12 +9,12 @@ import {
   builderStopCommand,
   builderUpdateCommand,
   cpuModeOf,
-  limitsDiffer,
   needsRecreate,
   parseBuilderStatus,
   unknownFlags,
 } from '@/features/environments/builder-commands'
-import { builderConfirmText, builderNotices, limitsText } from '@/features/environments/builder-view'
+import { builderConfirmText, builderNotices } from '@/features/environments/builder-view'
+import { appliedLimits, limitsDiffer, limitsText } from '@/features/environments/resource-limits'
 import { buildCommand, upCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
 import { deploySteps } from '@/features/environments/pipeline'
 import { DEFAULT_ENVIRONMENTS_SETTINGS, environmentsBuilderSchema, type EnvironmentsBuilder, type Machine } from '@/features/environments/schemas'

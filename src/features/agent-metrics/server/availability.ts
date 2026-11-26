@@ -21,6 +21,8 @@ export async function agentAvailability(agent: AgentId): Promise<AgentAvailabili
     try {
         const settings = await import("@/features/ai/server/settings")
         switch (agent) {
+            case "secretario":
+                return (await import("@/features/secretary-agent/server/settings")).secretaryAvailability()
             case "opex":
                 return (await (await import("@/features/opex-agent/server/settings")).getOpexSettings()).availability
             case "maddox":
