@@ -438,6 +438,15 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
   timeline (ver "Saída ao vivo"), então voltar a uma mesa já vista mostra tudo na hora e atualiza por
   trás. **Pré-busca:** parar o mouse (120 ms) ou focar uma tarefa com mesa na coluna Tarefas busca a
   mesa (`usePrefetchWorkbench`, respeita o `staleTime`; o stream não é pré-buscado).
+  **Consultas secundárias da mesa não foram adiadas (decisão registrada):** forks, builds, agendamento do
+  PR, detalhe da tarefa e arquivos disparam juntos na montagem, em paralelo com o stream, e nenhum
+  deles bloqueia o primeiro conteúdo (o skeleton espera só o `by-task`; a Saída espera só o stream ou
+  o cache). Adiá-las atrasaria os rótulos das abas (`Forks (N)`, `Build (N)`) sem ganho medido. Medição
+  (26/11/2026, mesa de 5,4 MB / 4.603 eventos / 1.347 itens, localhost): `by-task` 16 ms; `reset` 15 ms;
+  histórico inteiro 266 ms em 153 pedaços. O gargalo era o navegador: desenhar os 1.347 itens custa
+  ~200–250 ms (`renderToStaticMarkup`) e o código antigo redesenhava a lista inteira a cada pedaço;
+  a janela virtual custa ~3 ms. O stream sai sem compressão (5,4 MB; ~1,36 MB com gzip) — pendência
+  fora desta tarefa (o gzip precisaria de flush por linha para não segurar o ao vivo).
 - **Tempo real (OPE-124)**: a Central se atualiza sozinha, sem recarregar e sem polling. `DevCenterPage`
   monta `useAgenticRealtime` (`agentic-updated` → consultas `["agentic"]`: mesas, fila e mesa aberta;
   `tasks-updated` → fila) e `useTasksRealtime` (`tasks-updated` → lista de tarefas e detalhe das

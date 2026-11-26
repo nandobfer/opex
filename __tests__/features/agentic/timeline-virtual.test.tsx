@@ -51,4 +51,25 @@ describe('Timeline (virtualização)', () => {
     height.mockRestore()
     rect.mockRestore()
   })
+
+  it('revisão F4: só o item novo anima, uma vez — nem a saída pronta nem a remontagem (≤50 → >50) reanimam', () => {
+    const height = vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(600)
+    const rect = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ x: 0, y: 0, top: 0, left: 0, right: 300, bottom: 72, width: 300, height: 72, toJSON: () => ({}) })
+    const animated = (container: HTMLElement) => [...container.querySelectorAll('[data-animated]')].map((el) => el.textContent?.trim())
+    const list = items(60)
+    // Primeira visita progressiva: a lista monta com 1 item (o que já estava pronto não anima).
+    const { container, rerender } = render(<Timeline timeline={state(list.slice(0, 1))} running={false} />)
+    expect(animated(container)).toEqual([])
+    rerender(<Timeline timeline={state(list.slice(0, 2))} running={false} />)
+    expect(animated(container)).toEqual(['aviso 1'])
+    rerender(<Timeline timeline={state(list.slice(0, 50))} running={false} />)
+    // 60 itens: a lista vira virtualizada e remonta as linhas da janela (início da lista) — as já
+    // exibidas (inclusive as que animaram ao chegar) não animam de novo.
+    rerender(<Timeline timeline={state(list)} running={false} />)
+    const visible = [...container.querySelectorAll('[data-timeline-item]')].map((el) => el.textContent?.trim())
+    expect(visible).toContain('aviso 1')
+    expect(animated(container)).toEqual([])
+    height.mockRestore()
+    rect.mockRestore()
+  })
 })

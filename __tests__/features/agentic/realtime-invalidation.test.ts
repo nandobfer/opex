@@ -23,6 +23,13 @@ describe('isOtherWorkbenchQuery', () => {
     expect(isOtherWorkbenchQuery(['agentic', 'workbench', 't2'], { workbenchId: 'w1', taskId: null })).toBe(false)
   })
 
+  it('revisão F1: mesa em fila (vaga ou build) não é "de outra mesa": a posição depende das demais', () => {
+    expect(isOtherWorkbenchQuery(['agentic', 'workbench', 't2'], target, { slotQueue: { position: 2 }, buildQueuePosition: null })).toBe(false)
+    expect(isOtherWorkbenchQuery(['agentic', 'workbench', 't2'], target, { slotQueue: null, buildQueuePosition: 3 })).toBe(false)
+    expect(isOtherWorkbenchQuery(['agentic', 'workbench', 't2'], target, { slotQueue: null, buildQueuePosition: null })).toBe(true)
+    expect(isOtherWorkbenchQuery(['agentic', 'workbench', 't2'], target, null)).toBe(true)
+  })
+
   it('forks e builds pelo id da mesa', () => {
     expect(isOtherWorkbenchQuery(['agentic', 'forks', 'w1'], target)).toBe(false)
     expect(isOtherWorkbenchQuery(['agentic', 'forks', 'w2'], target)).toBe(true)

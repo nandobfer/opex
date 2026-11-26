@@ -503,8 +503,8 @@ export function useAgenticRealtime(): void {
                 void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY] }, { cancelRefetch: false })
                 return
             }
-            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY], predicate: (query) => !isOtherWorkbenchQuery(query.queryKey, target) }, { cancelRefetch: false })
-            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY], predicate: (query) => isOtherWorkbenchQuery(query.queryKey, target), refetchType: "none" })
+            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY], predicate: (query) => !isOtherWorkbenchQuery(query.queryKey, target, query.state.data) }, { cancelRefetch: false })
+            void queryClient.invalidateQueries({ queryKey: [AGENTIC_QUERY_KEY], predicate: (query) => isOtherWorkbenchQuery(query.queryKey, target, query.state.data), refetchType: "none" })
         }
         // A fila muda quando tarefas mudam de coluna (mesmo sem abrir mesa): recarrega só a fila.
         const queueHandler = () => void queryClient.invalidateQueries({ queryKey: agenticKey("queue") }, { cancelRefetch: false })

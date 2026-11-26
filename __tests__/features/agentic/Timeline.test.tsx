@@ -110,6 +110,35 @@ describe('Timeline (scroll)', () => {
     expect(layout.scrollTop).toBe(1300)
   })
 
+  it('OPE-188: a altura do conteúdo mudando sem nova timeline (medição da lista virtual) prende ao fim; rolado para cima, não', () => {
+    const callbacks: (() => void)[] = []
+    vi.stubGlobal(
+      'ResizeObserver',
+      vi.fn(function (callback: () => void) {
+        callbacks.push(callback)
+        return { observe: vi.fn(), disconnect: vi.fn(), unobserve: vi.fn() }
+      }),
+    )
+    try {
+      const { container } = render(<Timeline timeline={state([text('x1', 'a')])} running />)
+      const element = scrollContainer(container)
+      const layout = stubLayout(element, { scrollHeight: 1000, clientHeight: 200 })
+      expect(callbacks).toHaveLength(1)
+      layout.scrollTop = 800
+      layout.scrollHeight = 1500
+      callbacks[0]!()
+      expect(layout.scrollTop).toBe(1500)
+
+      layout.scrollTop = 0
+      fireEvent.scroll(element)
+      layout.scrollHeight = 1900
+      callbacks[0]!()
+      expect(layout.scrollTop).toBe(0)
+    } finally {
+      vi.unstubAllGlobals()
+    }
+  })
+
   it('voltar para perto do fim esconde o botão (limiar de 80px)', () => {
     const { container } = render(<Timeline timeline={state([text('x1', 'a')])} running />)
     const element = scrollContainer(container)

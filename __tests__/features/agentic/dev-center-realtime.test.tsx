@@ -85,14 +85,21 @@ describe('DevCenterPage em tempo real', () => {
     expect(keys()).toEqual([[AGENTIC_QUERY_KEY], [AGENTIC_QUERY_KEY]])
     // OPE-188: a busca em andamento (ex.: a mesa abrindo) não é cancelada; as consultas de outra mesa só
     // ficam desatualizadas (sem refazer agora).
-    const [[refetch, refetchOptions], [stale]] = invalidate.mock.calls as [{ predicate: (query: { queryKey: unknown[] }) => boolean }, unknown][]
+    type Query = { queryKey: unknown[]; state: { data: unknown } }
+    const [[refetch, refetchOptions], [stale]] = invalidate.mock.calls as [{ predicate: (query: Query) => boolean }, unknown][]
     expect(refetchOptions).toEqual({ cancelRefetch: false })
     expect(stale).toMatchObject({ refetchType: 'none' })
-    const other = { queryKey: agenticKey('workbench', 't2') as unknown as unknown[] }
-    const same = { queryKey: agenticKey('workbench', 't1') as unknown as unknown[] }
+    const other: Query = { queryKey: agenticKey('workbench', 't2') as unknown as unknown[], state: { data: { slotQueue: null, buildQueuePosition: null } } }
+    const same: Query = { queryKey: agenticKey('workbench', 't1') as unknown as unknown[], state: { data: undefined } }
     expect(refetch.predicate(same)).toBe(true)
     expect(refetch.predicate(other)).toBe(false)
     expect((stale as typeof refetch).predicate(other)).toBe(true)
+    // Revisão F1: a mesa aberta em fila (posição #2) é refeita quando OUTRA mesa avança/libera a vaga.
+    const queued: Query = { queryKey: agenticKey('workbench', 't2') as unknown as unknown[], state: { data: { slotQueue: { position: 2 }, buildQueuePosition: null } } }
+    const building: Query = { queryKey: agenticKey('workbench', 't2') as unknown as unknown[], state: { data: { slotQueue: null, buildQueuePosition: 1 } } }
+    expect(refetch.predicate(queued)).toBe(true)
+    expect(refetch.predicate(building)).toBe(true)
+    expect((stale as typeof refetch).predicate(queued)).toBe(false)
   })
 
   it('OPE-188: evento sem mesa (configuração) recarrega tudo, sem cancelar a busca em andamento', () => {

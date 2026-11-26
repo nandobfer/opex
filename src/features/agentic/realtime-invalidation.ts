@@ -19,10 +19,21 @@ export function workbenchEventTarget(payload: unknown): WorkbenchEventTarget | n
 const BY_TASK = new Set(["workbench"])
 const BY_WORKBENCH = new Set(["forks", "builds"])
 
-export function isOtherWorkbenchQuery(queryKey: readonly unknown[], target: WorkbenchEventTarget): boolean {
+/**
+ * A mesa em fila (vaga ou build) mostra a posição, que muda quando OUTRA mesa avança/libera: ela
+ * continua sendo refeita a cada evento.
+ */
+function waitsInQueue(data: unknown): boolean {
+    if (typeof data !== "object" || data === null) return false
+    const workbench = data as { slotQueue?: unknown; buildQueuePosition?: unknown }
+    return (workbench.slotQueue !== null && workbench.slotQueue !== undefined) || typeof workbench.buildQueuePosition === "number"
+}
+
+/** `data`: o que a consulta tem no cache (a mesa por tarefa em fila não conta como "de outra mesa"). */
+export function isOtherWorkbenchQuery(queryKey: readonly unknown[], target: WorkbenchEventTarget, data?: unknown): boolean {
     const [, kind, id] = queryKey
     if (typeof kind !== "string" || typeof id !== "string") return false
-    if (BY_TASK.has(kind)) return target.taskId !== null && id !== target.taskId
+    if (BY_TASK.has(kind)) return target.taskId !== null && id !== target.taskId && !waitsInQueue(data)
     if (BY_WORKBENCH.has(kind)) return id !== target.workbenchId
     return false
 }
