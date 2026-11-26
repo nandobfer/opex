@@ -62,7 +62,7 @@ vi.mock("@/features/secretary-agent/server/models", () => {
     }
 })
 
-import { answerNotice, askOwner, discardNotice, handleOwnerReply } from "@/features/secretary-agent/server/owner-questions"
+import { answerNotice, askOwner, discardNotice, handleOwnerReply, sendOwnerText, sendSecretaryText } from "@/features/secretary-agent/server/owner-questions"
 
 const trigger = { id: "T", chatJid: "5531999999999@s.whatsapp.net", text: "você vai?" } as ParsedMessage
 function question(id: string, sentMessageId: string, ownerRevision: Date | null = null) {
@@ -89,6 +89,13 @@ describe("perguntar ao dono", () => {
         expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ contactName: "Grupo da família", author: "João", excerpt: text }))
         // OPE-199 (R1): contato em negrito, linha em branco e o trecho como citação do WhatsApp.
         expect(mocks.sendText).toHaveBeenCalledWith("opex", { number: OWNER, text: "❓ *Grupo da família* (João): Você vai?\n\n> Oi, estamos combinando a festa.\n> [áudio]\n> Você vai no sábado?" })
+    })
+
+    it("texto livre ao dono é convertido para o formato do WhatsApp; o envio cru (contatos) fica literal", async () => {
+        await sendOwnerText("opex", OWNER, "**x** e [a](https://u)")
+        expect(mocks.sendText).toHaveBeenLastCalledWith("opex", { number: OWNER, text: "*x* e a (https://u)" })
+        await sendSecretaryText("opex", "5531999999999@s.whatsapp.net", "**x** e [a](https://u)")
+        expect(mocks.sendText).toHaveBeenLastCalledWith("opex", { number: "5531999999999@s.whatsapp.net", text: "**x** e [a](https://u)" })
     })
 
     it("pergunta em Markdown chega ao dono no formato do WhatsApp e o trecho do contato fica literal", async () => {

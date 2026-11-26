@@ -187,10 +187,13 @@ Toda mensagem que o agente envia ao dono (conversa consigo mesmo) usa a formata�
 
 - **R1, pergunta ao dono** (`ownerQuestionMessage`): `❓ *Contato* (Autor): pergunta`, uma linha em branco e o
   trecho do contato como citação do WhatsApp (`> ` em cada linha; linha vazia do trecho vira `>`). Sem trecho, só a
-  primeira linha; o autor (grupo) fica sem negrito. O trecho citado é o texto literal do contato (não é convertido).
+  primeira linha; o autor (grupo) fica sem negrito. Dentro do negrito, o nome do contato tem quebras de linha
+  trocadas por espaço, as pontas aparadas e `*`, `_` e `~` removidos (o WhatsApp não tem escape e eles quebrariam o
+  negrito); se não sobrar nada, o nome vai aparado e sem negrito. O trecho citado é o texto literal do contato (não é convertido).
 - **R2, pergunta escrita pelo modelo**: o prompt pede o campo `question` no formato do WhatsApp (`*negrito*`,
   `_itálico_`, `~riscado~`, ```` ```mono``` ````) e, antes do envio, a pergunta passa por `markdownToWhatsApp`:
-  `**x**`/`__x__` → `*x*`, `***x***` → `*_x_*`, `~~x~~` → `~x~`, título `#` → linha em negrito, `[texto](url)` →
+  `**x**`/`__x__` → `*x*`, `***x***` → `*_x_*`, `~~x~~` → `~x~`, título `#` → linha em negrito (só os `#` de fechamento
+  precedidos por espaço saem: `# C#` vira `*C#*`), `[texto](url)` →
   `texto (url)` (só a URL quando o texto é a própria URL), lista `* `/`+ ` → `- `, separadores `---` removidos e
   linhas em branco em excesso reduzidas. Código (cercado ou em linha) não é convertido; o bloco cercado perde só a
   etiqueta de linguagem. O que já está no formato do WhatsApp (`*x*`, `_x_`, `~x~`, `> `, listas `- `/`1. `) fica igual.

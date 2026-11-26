@@ -11,7 +11,8 @@
 const CODE = /```[\s\S]*?```|`[^`\n]+`/g
 const PLACEHOLDER = /\u0000(\d+)\u0000/g
 const RULE_LINE = /^\s{0,3}([-*_])(?:\s*\1){2,}\s*$/
-const HEADING = /^\s{0,3}#{1,6}\s+(.+?)\s*#*\s*$/
+// Só os `#` de fechamento precedidos por espaço saem (`# C#` mantém o `#` colado ao texto).
+const HEADING = /^\s{0,3}#{1,6}\s+(.+?)(?:\s+#+)?\s*$/
 const STAR_LIST = /^(\s*)[*+]\s+/
 const LINK = /!?\[([^\]]*)\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g
 
@@ -61,8 +62,17 @@ export function whatsAppQuote(text: string): string {
     return normalized.split("\n").map((line) => (line.trim() ? `> ${line.trimEnd()}` : ">")).join("\n")
 }
 
+/**
+ * Nome do contato dentro do negrito: quebras de linha viram espaço, as pontas são aparadas e `*`, `_` e `~` saem,
+ * porque o WhatsApp não tem escape e eles quebrariam o negrito. Se não sobrar nada, o nome vai aparado e sem negrito.
+ */
+function boldContactName(name: string): string {
+    const plain = name.replace(/[*_~]/g, "").replace(/\s+/g, " ").trim()
+    return plain ? `*${plain}*` : name.replace(/\s+/g, " ").trim()
+}
+
 /** Pergunta ao dono (R1): contato em negrito, autor do grupo entre parênteses e o trecho citado após uma linha em branco. */
 export function ownerQuestionMessage(input: { contactName: string; author?: string; question: string; excerpt?: string }): string {
     const quote = input.excerpt ? whatsAppQuote(input.excerpt) : ""
-    return `❓ *${input.contactName}*${input.author ? ` (${input.author})` : ""}: ${markdownToWhatsApp(input.question)}${quote ? `\n\n${quote}` : ""}`
+    return `❓ ${boldContactName(input.contactName)}${input.author ? ` (${input.author})` : ""}: ${markdownToWhatsApp(input.question)}${quote ? `\n\n${quote}` : ""}`
 }

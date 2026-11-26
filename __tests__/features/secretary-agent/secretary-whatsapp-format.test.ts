@@ -11,6 +11,8 @@ describe("markdownToWhatsApp (OPE-199)", () => {
     it("títulos viram uma linha em negrito", () => {
         expect(markdownToWhatsApp("# Título")).toBe("*Título*")
         expect(markdownToWhatsApp("## **Título** ##")).toBe("*Título*")
+        expect(markdownToWhatsApp("# Migrar para C#")).toBe("*Migrar para C#*")
+        expect(markdownToWhatsApp("# C#")).toBe("*C#*")
     })
 
     it("links e imagens viram texto com a URL", () => {
@@ -70,6 +72,13 @@ describe("ownerQuestionMessage (OPE-199, R1)", () => {
 
     it("sem trecho, só a primeira linha", () => {
         expect(ownerQuestionMessage({ contactName: "Ana", question: "Você vai?", excerpt: "" })).toBe("❓ *Ana*: Você vai?")
+    })
+
+    it("nome do contato com marcadores, quebra de linha ou espaços nas pontas não quebra o negrito", () => {
+        expect(ownerQuestionMessage({ contactName: "Pizzaria *Top*", question: "Peço?" })).toBe("❓ *Pizzaria Top*: Peço?")
+        expect(ownerQuestionMessage({ contactName: " Ana ", question: "Vai?" })).toBe("❓ *Ana*: Vai?")
+        expect(ownerQuestionMessage({ contactName: "Ana\n~Maria_", question: "Vai?" })).toBe("❓ *Ana Maria*: Vai?")
+        expect(ownerQuestionMessage({ contactName: "***", question: "Vai?" })).toBe("❓ ***: Vai?")
     })
 
     it("pergunta em Markdown é convertida", () => {
