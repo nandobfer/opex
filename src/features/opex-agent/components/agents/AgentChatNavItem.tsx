@@ -16,6 +16,8 @@ import { useOpexRealtime, useOpexSessions } from "../../hooks/useOpexSessions"
 import { useOpexJobNotifications } from "../../hooks/useOpexJobs"
 import { OpexUploadsProvider } from "../../hooks/useOpexUploads"
 import { onOpenOpexSession } from "../../open-session"
+import { ignoresGlobalShortcut, isNewSessionShortcut } from "../../constants"
+import { OPEX_DRAFT_TAB } from "../../hooks/useOpexTabs"
 import { OpexScopeProvider, useOpexScope, type OpexClientUiScope } from "../OpexScopeProvider"
 import { AgentChatPanel } from "./AgentChatPanel"
 import { AgentChatIcon } from "./AgentChatIcon"
@@ -56,7 +58,8 @@ export type AgentChatNavItemVariant = "sidebar" | "header"
  * Item **único** dos agentes de chat na barra lateral (dono e portal): abre o último agente escolhido
  * num popover ancorado no item (no celular, tela cheia). O cabeçalho troca entre o Agente Opex e o
  * Agente Maddox, e o item acompanha (nome, ícone e cor). Ponto pulsando: alguma sessão de qualquer
- * agente respondendo ou aguardando confirmação. Atalhos: Ctrl+Shift+O (Opex) e Ctrl+Shift+M (Maddox).
+ * agente respondendo ou aguardando confirmação. Atalhos: Ctrl+Shift+O (Opex), Ctrl+Shift+M (Maddox) e
+ * Ctrl+O (agente selecionado na "Nova sessão", OPE-198).
  */
 export function AgentChatNavItem({ collapsed = false, client, initial, variant = "sidebar" }: AgentChatNavItemProps) {
     return (
@@ -99,7 +102,8 @@ function AgentChatNavItemContent({ collapsed, variant }: { collapsed: boolean; v
     const { available, active, setActive, scopes, colors, busy } = useAgentSwitch()
     const [open, setOpen] = useState(false)
     const [maximized, setMaximized] = useState(false)
-    const [focusSessionId, setFocusSessionId] = useState<string | null>(null)
+    // Aba a ativar no painel do agente ativo: id de sessão ou a "Nova sessão" (`OPEX_DRAFT_TAB`).
+    const [focusTab, setFocusTab] = useState<string | null>(null)
     const [visited, setVisited] = useState<ChatAgentId[]>([])
     const reduceMotion = useReducedMotion() ?? false
     const viewport = useViewport()
@@ -115,7 +119,7 @@ function AgentChatNavItemContent({ collapsed, variant }: { collapsed: boolean; v
         if (!opexAvailable) return
         return onOpenOpexSession((sessionId) => {
             setActive("opex")
-            setFocusSessionId(sessionId)
+            setFocusTab(sessionId)
             setOpen(true)
         })
     }, [opexAvailable, setActive])
@@ -123,6 +127,15 @@ function AgentChatNavItemContent({ collapsed, variant }: { collapsed: boolean; v
     useEffect(() => {
         if (!available.length) return
         const onKey = (event: KeyboardEvent) => {
+            if (isNewSessionShortcut(event)) {
+                if (!active || ignoresGlobalShortcut(event)) return
+                event.preventDefault()
+                if (event.repeat) return
+                setActive(active)
+                setFocusTab(OPEX_DRAFT_TAB)
+                setOpen(true)
+                return
+            }
             const target = available.find((id) => scopes[id].agent.isShortcut(event))
             if (!target) return
             event.preventDefault()
@@ -169,8 +182,8 @@ function AgentChatNavItemContent({ collapsed, variant }: { collapsed: boolean; v
                                 maximized={mobile || maximized}
                                 onToggleMaximize={mobile ? undefined : () => setMaximized((value) => !value)}
                                 onClose={() => setOpen(false)}
-                                focusSessionId={isActive ? focusSessionId : null}
-                                onFocused={() => setFocusSessionId(null)}
+                                focusTab={isActive ? focusTab : null}
+                                onFocused={() => setFocusTab(null)}
                             />
                         </motion.div>
                     </OpexScopeProvider>

@@ -10,8 +10,8 @@ export interface AgentChatPanelProps {
     maximized: boolean
     onToggleMaximize?: () => void
     onClose: () => void
-    /** Sessão a ativar ao abrir (ex.: "Abrir sessão" de um job). */
-    focusSessionId?: string | null
+    /** Aba a ativar ao abrir: sessão (ex.: "Abrir sessão" de um job) ou a "Nova sessão" (`OPEX_DRAFT_TAB`, Ctrl+O). */
+    focusTab?: string | null
     onFocused?: () => void
 }
 
@@ -21,10 +21,10 @@ export interface AgentChatPanelProps {
  * vem do escopo (`OpexScopeProvider`): rotas, eventos, abas e cor mudam, a interface é a mesma. O corpo
  * (`AgentChatBody`) também serve à conversa com um agente rotineiro (OPE-160).
  */
-export function AgentChatPanel({ maximized, onToggleMaximize, onClose, focusSessionId, onFocused }: AgentChatPanelProps) {
+export function AgentChatPanel({ maximized, onToggleMaximize, onClose, focusTab, onFocused }: AgentChatPanelProps) {
     const { agent } = useOpexScope()
     const update = useUpdateOpexSession()
-    const chat = useAgentChat({ focusSessionId, onFocused })
+    const chat = useAgentChat({ focusTab, onFocused })
     const { active, activeSession, draftModel, setDraftModel } = chat
     const sessionModel: SessionModelChoice | null = !agent.modelPicker
         ? null

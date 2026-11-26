@@ -100,7 +100,7 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   ver `modules/host-metrics.md`. O `AppLayoutShell` e o `ClientePortalShell` usam, com o
   **item único dos agentes de chat** (`AgentChatNavItem`): abre o último agente escolhido (Agente
   Opex ou Agente Maddox) num popover, com a troca no cabeçalho; nome, ícone e cor acompanham o agente
-  ativo (Ctrl+Shift+O / Ctrl+Shift+M) — ver `modules/opex-agent.md` e `modules/maddox-agent.md`. No
+  ativo (Ctrl+Shift+O / Ctrl+Shift+M; Ctrl+O abre o selecionado na "Nova sessão", OPE-198) — ver `modules/opex-agent.md` e `modules/maddox-agent.md`. No
   portal, o item fica sempre montado e aparece quando algum dos dois está ligado para o cliente, inclusive
   quando o dono liga em tempo real (sem recarregar); sem nenhum, o rodapé vazio com o divisor some
   (`empty:hidden` na lista do rodapé).

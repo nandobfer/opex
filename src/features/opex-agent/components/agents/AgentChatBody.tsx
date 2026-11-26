@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import type { OpexSessionDto } from "../../types"
 import { useOpexSessions } from "../../hooks/useOpexSessions"
@@ -18,35 +18,44 @@ type DraftModel = { model: string; variant: string | null } | null
  * `OpexScopeProvider`. Compartilhado entre o popover do Agente Opex/Maddox e a conversa com um agente
  * rotineiro (OPE-160): cada um monta o próprio cabeçalho sobre o mesmo corpo (`AgentChatBody`).
  */
-export function useAgentChat(options: { focusSessionId?: string | null; onFocused?: () => void } = {}) {
-    const { focusSessionId, onFocused } = options
+export function useAgentChat(options: { focusTab?: string | null; onFocused?: () => void } = {}) {
+    const { focusTab, onFocused } = options
     const sessions = useOpexSessions()
     const { tabs, ready, open, close, activate, startDraft } = useOpexTabs(sessions.data)
     usePruneComposerDrafts(sessions.data)
     const [listOpen, setListOpen] = useState(false)
     const [draftModel, setDraftModel] = useState<DraftModel>(null)
+    // Cada "Nova sessão" (botão ou Ctrl+O) devolve o foco ao campo, mesmo com o rascunho já ativo.
+    const [draftFocus, setDraftFocus] = useState(0)
     const byId = useMemo(() => new Map((sessions.data ?? []).map((session) => [session.id, session])), [sessions.data])
     const active = tabs.active ?? OPEX_DRAFT_TAB
 
-    useEffect(() => {
-        if (!focusSessionId || !ready || !sessions.data) return
-        if (sessions.data.some((session) => session.id === focusSessionId)) open(focusSessionId)
-        onFocused?.()
-    }, [focusSessionId, ready, sessions.data, open, onFocused])
-
-    const activeSession: OpexSessionDto | null = active === OPEX_DRAFT_TAB ? null : (byId.get(active) ?? null)
-    const newSession = () => {
+    const newSession = useCallback(() => {
         startDraft()
         setListOpen(false)
-    }
-    return { sessions, tabs, ready, open, close, activate, active, activeSession, byId, listOpen, setListOpen, toggleList: () => setListOpen((value) => !value), newSession, draftModel, setDraftModel }
+        setDraftFocus((value) => value + 1)
+    }, [startDraft])
+
+    useEffect(() => {
+        if (!focusTab || !ready) return
+        // Pedido único do item (Ctrl+O, OPE-198), consumido e limpo logo abaixo (`onFocused`): é o mesmo
+        // "Nova sessão" do botão, e o painel pode nem estar montado quando o pedido nasce.
+        // eslint-disable-next-line react-hooks/set-state-in-effect
+        if (focusTab === OPEX_DRAFT_TAB) newSession()
+        else if (!sessions.data) return
+        else if (sessions.data.some((session) => session.id === focusTab)) open(focusTab)
+        onFocused?.()
+    }, [focusTab, ready, sessions.data, open, onFocused, newSession])
+
+    const activeSession: OpexSessionDto | null = active === OPEX_DRAFT_TAB ? null : (byId.get(active) ?? null)
+    return { sessions, tabs, ready, open, close, activate, active, activeSession, byId, listOpen, setListOpen, toggleList: () => setListOpen((value) => !value), newSession, draftFocus, draftModel, setDraftModel }
 }
 
 export type AgentChatState = ReturnType<typeof useAgentChat>
 
 /** Abas das sessões, o chat da aba ativa (ou a "Nova sessão") e a lista de sessões. */
 export function AgentChatBody({ chat }: { chat: AgentChatState }) {
-    const { ready, tabs, active, byId, activate, close, open, draftModel, setDraftModel, listOpen, setListOpen, newSession } = chat
+    const { ready, tabs, active, byId, activate, close, open, draftModel, setDraftModel, draftFocus, listOpen, setListOpen, newSession } = chat
     return (
         <>
             <div className="border-b bg-muted/30 pt-1.5">{ready && <OpexSessionTabs open={tabs.open} active={active} sessions={byId} onActivate={activate} onClose={close} />}</div>
@@ -57,6 +66,7 @@ export function AgentChatBody({ chat }: { chat: AgentChatState }) {
                         {!ready ? null : active === OPEX_DRAFT_TAB ? (
                             <OpexDraftChat
                                 model={draftModel}
+                                focusKey={draftFocus}
                                 onCreated={(sessionId) => {
                                     setDraftModel(null)
                                     open(sessionId)

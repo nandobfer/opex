@@ -191,6 +191,110 @@ describe('item único dos agentes de chat', () => {
     await waitFor(() => expect(screen.getByTestId('agent-nav-item').textContent).toContain('Agente Opex'))
   })
 
+  describe('OPE-198: Ctrl+O abre o agente selecionado na "Nova sessão"', () => {
+    const OPEX_TABS = 'opex:opex-agent:tabs:v1'
+    const MADDOX_TABS = 'opex:maddox-agent:tabs:v1'
+    const press = (init: KeyboardEventInit, target: EventTarget = window) => {
+      const event = new KeyboardEvent('keydown', { key: 'o', bubbles: true, cancelable: true, ...init })
+      fireEvent(target, event)
+      return event
+    }
+
+    it('fechado, com o Maddox selecionado: abre o Maddox no rascunho e cancela o "Abrir arquivo" do navegador', async () => {
+      window.localStorage.setItem('opex:chat-agent:active:v1', JSON.stringify('maddox'))
+      renderItem()
+      expect(screen.queryByTestId('agent-panel-maddox')).toBeNull()
+      const event = press({ ctrlKey: true })
+      expect(event.defaultPrevented).toBe(true)
+      const panel = await screen.findByTestId('agent-panel-maddox')
+      expect(within(panel).getByTestId('OpexDraftChat-maddox')).toBeTruthy()
+      expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('true')
+    })
+
+    it('com uma sessão aberta: troca para a "Nova sessão" e a sessão anterior continua na aba', async () => {
+      mocks.sessions.opex = [{ id: 's1', status: 'idle', title: 'Antiga' }]
+      window.localStorage.setItem(OPEX_TABS, JSON.stringify({ open: ['s1'], active: 's1' }))
+      renderItem()
+      fireEvent.click(screen.getByTestId('agent-nav-item'))
+      expect(await screen.findByTestId('OpexChat-opex')).toBeTruthy()
+      press({ ctrlKey: true })
+      expect(await screen.findByTestId('OpexDraftChat-opex')).toBeTruthy()
+      expect(screen.queryByTestId('OpexChat-opex')).toBeNull()
+      expect(JSON.parse(window.localStorage.getItem(OPEX_TABS) ?? 'null')).toEqual({ open: ['s1'], active: 'draft' })
+      // Aberto, o atalho não fecha o painel.
+      press({ ctrlKey: true })
+      expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('true')
+    })
+
+    it('⌘+O também vale, com o popover fechado e uma sessão do Maddox ativa', async () => {
+      window.localStorage.setItem('opex:chat-agent:active:v1', JSON.stringify('maddox'))
+      mocks.sessions.maddox = [{ id: 'm1', status: 'idle', title: 'x' }]
+      window.localStorage.setItem(MADDOX_TABS, JSON.stringify({ open: ['m1'], active: 'm1' }))
+      renderItem()
+      press({ metaKey: true })
+      expect(await screen.findByTestId('OpexDraftChat-maddox')).toBeTruthy()
+      expect(JSON.parse(window.localStorage.getItem(MADDOX_TABS) ?? 'null')).toEqual({ open: ['m1'], active: 'draft' })
+    })
+
+    it('Ctrl+Shift+O continua abrindo e fechando o Opex, sem virar nova sessão', async () => {
+      mocks.sessions.opex = [{ id: 's1', status: 'idle', title: 'Antiga' }]
+      window.localStorage.setItem(OPEX_TABS, JSON.stringify({ open: ['s1'], active: 's1' }))
+      renderItem()
+      press({ key: 'O', ctrlKey: true, shiftKey: true })
+      expect(await screen.findByTestId('OpexChat-opex')).toBeTruthy()
+      press({ key: 'O', ctrlKey: true, shiftKey: true })
+      await waitFor(() => expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('false'))
+    })
+
+    it('dentro de um editor (CodeMirror do modo Vim) o Ctrl+O fica com o editor', () => {
+      renderItem()
+      const editor = document.createElement('div')
+      editor.className = 'cm-editor'
+      const content = document.createElement('div')
+      editor.appendChild(content)
+      document.body.appendChild(editor)
+      try {
+        const event = press({ ctrlKey: true }, content)
+        expect(event.defaultPrevented).toBe(false)
+        expect(screen.getByTestId('agent-nav-item').getAttribute('aria-expanded')).toBe('false')
+      } finally {
+        editor.remove()
+      }
+    })
+
+    it('num campo de texto comum o atalho dispara', async () => {
+      renderItem()
+      const input = document.createElement('textarea')
+      document.body.appendChild(input)
+      try {
+        expect(press({ ctrlKey: true }, input).defaultPrevented).toBe(true)
+        expect(await screen.findByTestId('OpexDraftChat-opex')).toBeTruthy()
+      } finally {
+        input.remove()
+      }
+    })
+
+    it('celular estreito: abre o diálogo de tela cheia na "Nova sessão"', async () => {
+      const width = window.innerWidth
+      window.innerWidth = 500
+      try {
+        render(<AgentChatNavItem variant="header" />, { wrapper })
+        press({ ctrlKey: true })
+        const dialog = await screen.findByRole('dialog', { name: 'Agente Opex' })
+        expect(within(dialog).getByTestId('OpexDraftChat-opex')).toBeTruthy()
+      } finally {
+        window.innerWidth = width
+      }
+    })
+
+    it('portal com só o Opex ligado: abre o Opex', async () => {
+      const client: OpexClientUiScope = { clientId: 'c1', clientName: 'ACME', userId: 'u1', userName: 'ana', isAdmin: false, http: { get: vi.fn(async () => new Promise(() => {})) } as never }
+      renderItem({ client, initial: { opex: true, maddox: false } })
+      press({ ctrlKey: true })
+      expect(await screen.findByTestId('OpexDraftChat-opex')).toBeTruthy()
+    })
+  })
+
   it('ponto de atividade: aparece no item e no botão do outro agente quando ele está respondendo', async () => {
     mocks.sessions.maddox = [{ id: 's1', status: 'running', title: 'x' }]
     renderItem()

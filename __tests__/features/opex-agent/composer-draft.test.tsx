@@ -145,6 +145,26 @@ describe('OpexComposer com rascunho por aba', () => {
     expect(field().value).toBe('Sobre isto:')
   })
 
+  it('OPE-198: mudar o focusKey devolve o foco ao campo já montado', () => {
+    const props = { onSend: vi.fn(), attachments: { items: [], onFiles: vi.fn(), onRetry: vi.fn(), onRemove: vi.fn() }, onStop: vi.fn(), running: false, sending: false, stopping: false }
+    const view = render(
+      <>
+        <button type="button">fora</button>
+        <OpexComposer {...props} focusKey={0} />
+      </>,
+    )
+    expect(document.activeElement).toBe(field())
+    screen.getByRole('button', { name: 'fora' }).focus()
+    expect(document.activeElement).not.toBe(field())
+    view.rerender(
+      <>
+        <button type="button">fora</button>
+        <OpexComposer {...props} focusKey={1} />
+      </>,
+    )
+    expect(document.activeElement).toBe(field())
+  })
+
   it('sem draftId nada é guardado', () => {
     render(composer())
     type('solto')
@@ -257,6 +277,29 @@ describe('fechar e reabrir o popover não perde o texto', () => {
     await closed()
     await openPopover()
     expect(field().value).toBe('veja o arquivo')
+  })
+
+  it('OPE-198: Ctrl+O com a "Nova sessão" já ativa mantém o texto e devolve o foco ao campo', async () => {
+    renderItem()
+    await openPopover()
+    type('rascunho')
+    screen.getByRole('button', { name: 'Nova sessão' }).focus()
+    expect(document.activeElement).not.toBe(field())
+    fireEvent.keyDown(window, { key: 'o', ctrlKey: true })
+    await waitFor(() => expect(document.activeElement).toBe(field()))
+    expect(field().value).toBe('rascunho')
+  })
+
+  it('OPE-198: Ctrl+O numa sessão aberta mostra o campo da "Nova sessão" com foco', async () => {
+    mocks.sessions.opex = [{ id: 's1', status: 'idle', title: 'um' }]
+    window.localStorage.setItem(OPEX_TABS_STORAGE_KEY, JSON.stringify({ open: ['s1'], active: 's1' }))
+    renderItem()
+    await openPopover()
+    await screen.findByTestId('chat-s1')
+    fireEvent.keyDown(field(), { key: 'o', ctrlKey: true })
+    await waitFor(() => expect(screen.queryByTestId('chat-s1')).toBeNull())
+    await waitFor(() => expect(document.activeElement).toBe(field()))
+    expect(mocks.create).not.toHaveBeenCalled()
   })
 
   it('enviar na "Nova sessão": ao reabrir o campo está vazio', async () => {

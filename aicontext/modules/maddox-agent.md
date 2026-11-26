@@ -30,7 +30,8 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
 - **Ponto pulsando** no item: alguma sessão de **qualquer** agente respondendo ou aguardando
   confirmação (na cor do agente ocupado; o ativo tem prioridade).
 - **Atalhos**: **Ctrl+Shift+M** (⌘+Shift+M) abre/fecha no Maddox; **Ctrl+Shift+O** continua do Agente
-  Opex. Com o popover aberto em outro agente, o atalho troca de agente.
+  Opex. Com o popover aberto em outro agente, o atalho troca de agente. **Ctrl+O** (OPE-198) abre o agente
+  selecionado — inclusive o Maddox — na "Nova sessão" (ver `modules/opex-agent.md`).
 - **Engrenagem** no cabeçalho (só no app do dono): leva à configuração do agente ativo
   (`/integracoes/ia?aba=agente-maddox` ou `?aba=agente-opex`) e fecha o popover.
 - Celular (< 768 px): tela cheia, como o Agente Opex.

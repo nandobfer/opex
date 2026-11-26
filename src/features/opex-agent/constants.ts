@@ -279,3 +279,23 @@ export const OPEX_TABS_STORAGE_KEY = "opex:opex-agent:tabs:v1"
 export function isOpexShortcut(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">): boolean {
     return (event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === "o"
 }
+
+export const NEW_SESSION_SHORTCUT_LABEL = "Ctrl+O"
+
+/** Atalho global da nova sessão (OPE-198): Ctrl+O (⌘+O no Mac), sem Shift nem Alt. */
+export function isNewSessionShortcut(event: Pick<KeyboardEvent, "key" | "ctrlKey" | "metaKey" | "shiftKey" | "altKey">): boolean {
+    return (event.ctrlKey || event.metaKey) && !event.shiftKey && !event.altKey && event.key.toLowerCase() === "o"
+}
+
+/** Editores que dão sentido próprio aos atalhos de teclado (CodeMirror do modo Vim ou marcados à mão). */
+const SHORTCUT_EDITOR_SELECTOR = '.cm-editor, [data-shortcut-scope="editor"]'
+
+/**
+ * O atalho global fica com quem já tratou o evento, com a composição de texto (IME) em andamento e
+ * com editores que têm o próprio significado para ele (ex.: Ctrl+O do Vim).
+ */
+export function ignoresGlobalShortcut(event: Pick<KeyboardEvent, "defaultPrevented" | "isComposing" | "target">): boolean {
+    if (event.defaultPrevented || event.isComposing) return true
+    const target = event.target as { closest?: (selector: string) => unknown } | null
+    return typeof target?.closest === "function" && Boolean(target.closest(SHORTCUT_EDITOR_SELECTOR))
+}
