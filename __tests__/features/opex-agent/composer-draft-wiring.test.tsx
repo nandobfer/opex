@@ -27,6 +27,13 @@ vi.mock('@/features/opex-agent/hooks/useOpexStream', () => ({ useOpexStream: () 
 vi.mock('@/features/opex-agent/hooks/useOpexUploads', () => ({
   useOpexUploads: () => ({ items: [], ready: [], enqueue: vi.fn(), retry: vi.fn(), remove: vi.fn(), clearSent: vi.fn() }),
 }))
+// A faixa "Observando…" consulta a rota de observações: rede mockada (o rascunho não depende dela).
+vi.mock('@/features/opex-agent/hooks/useOpexWatches', () => ({
+  useOpexSessionWatches: () => ({ data: [], isLoading: false }),
+  useCancelOpexWatch: () => ({ mutate: vi.fn(), isPending: false }),
+  useOpexWatchesRealtime: () => {},
+  activeWatches: () => [],
+}))
 vi.mock('@/features/opex-agent/hooks/useOpexSettings', () => ({
   useOpexView: () => ({ data: { availability: { available: true, reason: null }, files: { maxPerMessage: 5, maxSizeMb: 10 } }, isLoading: false }),
 }))
