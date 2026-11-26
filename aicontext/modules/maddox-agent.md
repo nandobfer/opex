@@ -165,7 +165,7 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
   validação das mesas, conferidos no catálogo; trocar o modelo padrão preserva a lista); subagente de título e resumo (também pelo OpenCode; vazio = o do agente);
   instruções e as do título, com **Restaurar padrão**; card **Arquivos no chat**; card das
   **Ferramentas do Opex no OpenCode** (endereço e situação dos MCPs).
-- **Ferramentas**: árvore das ferramentas do Opex (catálogo do dono **sem jobs** e sem `issue_engramind_token` — `MADDOX_EXCLUDED_TOOLS`, que depende do "Ver token" do card do Agente Opex), com seleção e
+- **Ferramentas**: árvore das ferramentas do Opex (catálogo do dono **sem jobs nem observação de eventos** — `MADDOX_EXCLUDED_GROUPS` = `jobs`, `watches` (OPE-194: a observação acorda uma conversa do Agente Opex) — e sem `issue_engramind_token` — `MADDOX_EXCLUDED_TOOLS`, que depende do "Ver token" do card do Agente Opex), com seleção e
   **"Pede confirmação"** próprios, independentes do Agente Opex.
 - **Memórias** (Engramind, OPE-104): chave **Aprendizado autônomo** do Maddox, **Memórias do Opex**
   (`app-global`, de todos os agentes), **Memórias globais**, **Memórias do dono** e **Memórias do
@@ -186,7 +186,7 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
 
 `orcamento_clients.maddoxAgent` (`{ enabled, disabledTools }`), `GET/PUT
 /api/integrations/orcamentos/clients/[id]/maddox-agent`. Interruptor **desligado por padrão**
-(clientes existentes ficam sem o Maddox) e a árvore das ferramentas do portal (sem jobs). Com o
+(clientes existentes ficam sem o Maddox) e a árvore das ferramentas do portal (sem jobs nem observação de eventos). Com o
 Maddox ligado, a tela avisa que os usuários também usam as ferramentas nativas do OpenCode. Salvar é
 auditado (`ClienteOrcamentoMaddoxAgent`) e publica `maddox-client-config-updated` em `private-app` e
 `private-client-{clientId}`; desligar interrompe os turnos em andamento do cliente.

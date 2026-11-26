@@ -1,5 +1,5 @@
 import { applyLiveLine, startLiveMessage } from "../live-message"
-import type { OpexLiveMessage, OpexStreamLine } from "../types"
+import type { OpexLiveMessage, OpexMessageKind, OpexMessageWatchRef, OpexStreamLine } from "../types"
 
 /**
  * Barramento em memória dos turnos do Agente Opex (um processo Node, em `globalThis` para sobreviver
@@ -13,13 +13,15 @@ type Listener = (line: OpexStreamLine) => void
 export interface OpexFollowUp {
     /** Texto enviado ao modelo. */
     text: string
-    kind: "message" | "confirmation" | "job" | "notice"
+    kind: OpexMessageKind
     /** Texto exibido no chat (padrão: o próprio `text`). */
     display?: string
     /** Arquivos enviados antes (`POST …/files`) que vão nesta mensagem. */
     fileIds?: string[]
     /** Job agendado que disparou a mensagem (o fim do turno conclui o job). */
     job?: { id: string; title: string }
+    /** Observações que acordaram o agente (`kind: "event"`, OPE-194): o início do turno as marca como entregues. */
+    watch?: OpexMessageWatchRef
     /**
      * Plugins com a prévia ligada no navegador que originou o turno (OPE-172): o turno seguinte e a
      * confirmação resolvem as ferramentas de plugin no mesmo canal (preview ou stable).
@@ -113,6 +115,12 @@ export function takeFollowUp(sessionId: string): OpexFollowUp | null {
 /** O job está na fila de alguma sessão (esperando o turno atual terminar)? */
 export function hasQueuedJob(jobId: string): boolean {
     for (const queue of hub.queues.values()) if (queue.some((item) => item.job?.id === jobId)) return true
+    return false
+}
+
+/** A observação está na fila de alguma sessão (esperando o turno atual terminar)? */
+export function hasQueuedWatch(watchId: string): boolean {
+    for (const queue of hub.queues.values()) if (queue.some((item) => item.watch?.ids.includes(watchId))) return true
     return false
 }
 

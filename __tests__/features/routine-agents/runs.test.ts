@@ -21,7 +21,10 @@ const holder = vi.hoisted(() => ({
   events: [] as { event: string; payload: Record<string, unknown> }[],
   opexSettings: { disabledTools: [] as string[], confirmationOverrides: {} as Record<string, boolean> },
   opexSkills: [] as { name: string; description: string }[],
+  /** Fato das observações do Agente Opex (OPE-194) gravado pelo fim da execução. */
+  watchSettled: vi.fn(async (...args: unknown[]) => void args),
 }))
+vi.mock('@/features/opex-agent/server/watch-events', () => ({ watchRoutineRunSettled: holder.watchSettled }))
 vi.mock('@/features/opex-agent/server/skills/service', () => ({
   existingSkillNames: async (names: string[]) => new Set(names.filter((name) => holder.opexSkills.some((skill) => skill.name === name))),
 }))
@@ -259,6 +262,8 @@ describe('hibernação e confirmação', () => {
     await flush()
     await cancelRoutineRun(runId, 'local')
     expect(run(runId).status).toBe('canceled')
+    // Observações do Agente Opex (OPE-194): o fato do fim da execução é gravado antes de o fecho terminar.
+    expect(holder.watchSettled).toHaveBeenCalledWith(expect.objectContaining({ id: runId, status: 'canceled' }))
     await expect(cancelRoutineRun(runId, 'local')).rejects.toMatchObject({ code: 'ROUTINE_RUN_FINISHED' })
   })
 })

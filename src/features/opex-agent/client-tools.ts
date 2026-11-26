@@ -10,7 +10,7 @@ import type { CheckBranch } from "@/lib/check-tree"
  * valem quando o dono as liga para o cliente (`opexAgent.enabledOptInTools`).
  */
 
-export const OPEX_CLIENT_TOOL_GROUPS = ["context", "tasks", "previews", "files", "dashboard", "environments", "finance", "users", "jobs"] as const
+export const OPEX_CLIENT_TOOL_GROUPS = ["context", "tasks", "previews", "files", "dashboard", "environments", "finance", "users", "jobs", "watches"] as const
 export type OpexClientToolGroup = (typeof OPEX_CLIENT_TOOL_GROUPS)[number]
 
 export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label: string; description: string; adminOnly?: boolean; optIn?: boolean }> = {
@@ -23,6 +23,11 @@ export const OPEX_CLIENT_TOOL_GROUP_LABELS: Record<OpexClientToolGroup, { label:
     finance: { label: "Financeiro", description: "Faturamento por repositório, horas e serviços no período", adminOnly: true },
     users: { label: "Usuários", description: "Usuários do cliente: listar, editar e remover vínculos", adminOnly: true },
     jobs: { label: "Jobs agendados", description: "Agendar prompts para o agente executar sozinho mais tarde (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar os do próprio usuário", optIn: true },
+    watches: {
+        label: "Observação de eventos",
+        description: "Observar uma tarefa do cliente, um job do usuário ou o deploy de um ambiente e ser acordado uma vez quando o evento acontecer; listar e cancelar as observações do usuário",
+        optIn: true,
+    },
 }
 
 export type OpexClientToolRisk = "read" | "write" | "destructive"
@@ -74,6 +79,9 @@ export const OPEX_CLIENT_TOOLS: readonly OpexClientToolMeta[] = [
     { name: "schedule_job", group: "jobs", label: "Agendar job", hint: "Agenda um prompt para o agente executar sozinho", risk: "write", optIn: true },
     { name: "update_job", group: "jobs", label: "Editar job", hint: "Altera um job ainda agendado do usuário", risk: "write", optIn: true },
     { name: "cancel_job", group: "jobs", label: "Cancelar job", hint: "Cancela um job agendado do usuário", risk: "destructive", optIn: true },
+    { name: "watch_event", group: "watches", label: "Observar evento", hint: "Assina um evento e acorda o agente quando ele acontecer", risk: "write", optIn: true },
+    { name: "list_watches", group: "watches", label: "Listar observações", hint: "Observações ativas e encerradas do usuário", risk: "read", optIn: true },
+    { name: "cancel_watch", group: "watches", label: "Cancelar observação", hint: "Cancela uma observação ativa do usuário", risk: "write", optIn: true },
 ]
 
 export function findOpexClientTool(name: string): OpexClientToolMeta | undefined {

@@ -6,6 +6,10 @@ const mocks = vi.hoisted(() => ({
   notifyQueue: vi.fn(),
   pushIssues: vi.fn(),
   afterTasks: [] as Promise<unknown>[],
+  /** Observações do Agente Opex (OPE-194). */
+  watchMoved: vi.fn(async () => {}),
+  watchArchived: vi.fn(async () => {}),
+  watchDeleted: vi.fn(async () => {}),
   /** Colunas do padrão global do desenvolvimento agêntico (OPE-79). */
   settingsColumns: { queue: null as string | null, onStart: null as string | null, onPr: null as string | null, onDone: null as string | null },
   models: {} as Record<string, { docs: unknown[]; create: (doc: Record<string, unknown>) => Promise<{ _id: string }>; aggregate: (...args: unknown[]) => Promise<unknown[]> }>,
@@ -22,6 +26,7 @@ vi.mock('@/features/agentic/server/queue', () => ({ notifyTasksColumnChanged: mo
 vi.mock('@/features/agentic/server/settings', () => ({ loadAgenticSettings: async () => ({ settings: { columns: mocks.settingsColumns } }) }))
 vi.mock('@/features/github/server/issue-links', () => ({ issueRefsFor: async () => new Map() }))
 vi.mock('@/features/github/server/task-sync', () => ({ pushTasksToIssues: mocks.pushIssues }))
+vi.mock('@/features/opex-agent/server/watch-events', () => ({ watchTaskMoved: mocks.watchMoved, watchTaskArchived: mocks.watchArchived, watchTargetDeleted: mocks.watchDeleted }))
 vi.mock('@/lib/db/models/DevTask', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   mocks.models.devTask = memoryModel()
@@ -173,6 +178,41 @@ describe('editar, mover e arquivar', () => {
     await Promise.all(mocks.afterTasks)
     expect(mocks.notifyQueue).toHaveBeenCalledTimes(1)
     expect(mocks.notifyQueue).toHaveBeenCalledWith([a.id])
+  })
+})
+
+describe('observações do Agente Opex (OPE-194)', () => {
+  it('mudar de coluna, arquivar e excluir avisam as observações da tarefa; mover para a mesma coluna não', async () => {
+    const pid = await seedProject({ closedColumnKey: 'done' })
+    const a = await create(pid)
+    await moveTask(a.id, { targetColumn: 'done' }, 'local')
+    expect(mocks.watchMoved).toHaveBeenCalledWith({ id: a.id, code: 'GO-1', projectId: pid }, 'todo', 'done')
+    mocks.watchMoved.mockClear()
+    await moveTask(a.id, { targetColumn: 'done', order: 0 }, 'local')
+    await setTaskArchived(a.id, true, 'local')
+    await vi.waitFor(() => expect(mocks.watchArchived).toHaveBeenCalledWith({ id: a.id, code: 'GO-1' }))
+    expect(mocks.watchMoved).not.toHaveBeenCalled()
+    await deleteTask(a.id, 'local')
+    await vi.waitFor(() => expect(mocks.watchDeleted).toHaveBeenCalledWith('task', a.id, 'GO-1'))
+  })
+
+  it('editar a tarefa trocando a coluna (formulário → PATCH) grava o mesmo fato, com o projeto efetivo; sem trocar a coluna, não', async () => {
+    const pid = await seedProject({ closedColumnKey: 'done' })
+    const other = await seedProject({ name: 'outro', sigla: 'OT', repo: 'o/ot' })
+    const a = await create(pid)
+    mocks.watchMoved.mockClear()
+    await updateTask(a.id, { title: 'Só o título', columnId: 'todo' }, 'local')
+    expect(mocks.watchMoved).not.toHaveBeenCalled()
+    await updateTask(a.id, { columnId: 'done', projectId: other }, 'local')
+    // A fonte espera a gravação do fato antes de responder.
+    expect(mocks.watchMoved).toHaveBeenCalledWith({ id: a.id, code: 'GO-1', projectId: other }, 'todo', 'done')
+  })
+
+  it('falha das observações não derruba a mudança de coluna', async () => {
+    const pid = await seedProject()
+    const a = await create(pid)
+    mocks.watchMoved.mockRejectedValueOnce(new Error('fora do ar'))
+    await expect(moveTask(a.id, { targetColumn: 'doing' }, 'local')).resolves.toMatchObject({ columnId: 'doing' })
   })
 })
 

@@ -396,8 +396,24 @@ async function failDeploy(envId: string, deployId: string, recorder: Recorder, e
 
 async function finishDeploy(deployId: string, status: "success" | "failed", error: string | null, log: string, commit: string | null, tag: string | null): Promise<void> {
     await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { status, error, log: clipLog(log), commit, imageTag: tag, finishedAt: new Date(), checkpoint: null } })
+    await recordDeployWatchFact(deployId, status, error)
     emitDeploy(deployId, { type: "status", status, error })
     await notifyOpexIfAsked(deployId)
+}
+
+/**
+ * Observações do Agente Opex (OPE-194) no ambiente do deploy: o fato fica gravado logo depois do fim do
+ * deploy (só com observação no ambiente); o disparo segue em segundo plano. Nunca segura o deploy.
+ */
+async function recordDeployWatchFact(deployId: string, status: "success" | "failed", error: string | null): Promise<void> {
+    try {
+        const deploy = await EnvironmentDeploy.findById(deployId).select({ environmentId: 1 }).lean<Pick<IEnvironmentDeploy, "environmentId">>()
+        if (!deploy?.environmentId) return
+        const { watchDeployFinished } = await import("@/features/opex-agent/server/watch-events")
+        await watchDeployFinished(String(deploy.environmentId), { status, error })
+    } catch (err) {
+        envLog.warn({ err: err instanceof Error ? err.message : err, deployId }, "[environments] Falha ao avisar as observações do Agente Opex")
+    }
 }
 
 /** Deploy pedido pelo Agente Opex: o resultado entra sozinho na sessão (falha só vai para o log). */

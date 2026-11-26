@@ -92,6 +92,7 @@ export function useSendOpexMessage(sessionId: string) {
                 role: "user",
                 kind: "message",
                 job: null,
+                watch: null,
                 text,
                 files,
                 parts: [],

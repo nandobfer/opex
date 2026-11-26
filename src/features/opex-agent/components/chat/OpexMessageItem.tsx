@@ -2,7 +2,7 @@
 
 import { memo, useState } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { AlarmClock, AlertTriangle, Bell, Brain, ChevronRight, CircleSlash, RotateCw, ShieldCheck } from "lucide-react"
+import { AlarmClock, AlertTriangle, Bell, Brain, ChevronRight, CircleSlash, RotateCw, ShieldCheck, Zap, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Markdown } from "@/components/ui/markdown"
 import { cn } from "@/lib/utils"
@@ -14,18 +14,23 @@ import { useOpexScope } from "../OpexScopeProvider"
 
 const bubble = { initial: { opacity: 0, y: 8 }, animate: { opacity: 1, y: 0 }, transition: { duration: 0.2, ease: "easeOut" as const } }
 
+/** Mensagens do sistema exibidas como pílula central (decisão de confirmação, aviso e notificação de evento). */
+const SYSTEM_PILL_ICONS: Partial<Record<OpexMessageDto["kind"], LucideIcon>> = { confirmation: ShieldCheck, notice: Bell, event: Zap }
+
+function SystemPill({ message, icon: Icon }: { message: OpexMessageDto; icon: LucideIcon }) {
+    return (
+        <motion.div {...bubble} className="flex justify-center pb-3">
+            <span className="inline-flex max-w-[90%] items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1 text-[11px] text-muted-foreground" data-testid={`opex-${message.kind}-pill`} title={message.text}>
+                <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden />
+                <span className="truncate">{message.text}</span>
+            </span>
+        </motion.div>
+    )
+}
+
 export function UserMessage({ message }: { message: OpexMessageDto }) {
-    if (message.kind === "confirmation" || message.kind === "notice") {
-        const Icon = message.kind === "notice" ? Bell : ShieldCheck
-        return (
-            <motion.div {...bubble} className="flex justify-center pb-3">
-                <span className="inline-flex max-w-[90%] items-center gap-1.5 rounded-full border bg-muted/40 px-3 py-1 text-[11px] text-muted-foreground" data-testid={`opex-${message.kind}-pill`}>
-                    <Icon className="h-3 w-3 shrink-0 text-primary" aria-hidden />
-                    <span className="truncate">{message.text}</span>
-                </span>
-            </motion.div>
-        )
-    }
+    const pillIcon = SYSTEM_PILL_ICONS[message.kind]
+    if (pillIcon) return <SystemPill message={message} icon={pillIcon} />
     return (
         <motion.div {...bubble} className="flex flex-col items-end gap-1.5 pb-3">
             {message.kind === "job" && (

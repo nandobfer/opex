@@ -321,8 +321,12 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
   (`runJobNow`), 404 rotina não salva, 409 em execução, falha da rotina → 200 `ok:false`.
   Auditado (`execucaoManual`, `resultado`, `mensagem`, `duracaoMs`).
 - **Página em abas** (`CronsEditorForm`): **Geral** (agendador, URL base interna, cron secret e
-  documentação), **Rotinas** (lista) e **Jobs** (`OpexJobsTab`: prompts agendados do Agente Opex, do
-  dono e dos usuários do portal — ver `modules/opex-agent.md`, "Jobs"; sempre presente).
+  documentação), **Rotinas** (lista), **Jobs** (`OpexJobsTab`: prompts agendados do Agente Opex, do
+  dono e dos usuários do portal — ver `modules/opex-agent.md`, "Jobs"; sempre presente) e **Observações**
+  (`OpexWatchesTab`, `?aba=observacoes`, OPE-194: eventos que o Agente Opex observa para acordar — ver
+  `modules/opex-agent.md`, "Observação de eventos"; sempre presente).
+- Depois dos jobs, o tick roda as **observações do Agente Opex** (`runDueOpexWatches`, import dinâmico): vencidas,
+  entregas perdidas e as disparadas pendentes (inclusive as reservadas por uma prévia do Opex).
 - Depois dos jobs, o tick confere o túnel da **Builder Machine** (`runLocalDockerHealth`, só com a
   integração ativa, no máximo 1×/min; reabre o túnel caído — ver `modules/builder-machine.md`).
 - **Jobs do Agente Opex** rodam no fim de cada tick (`runDueOpexJobs`, import dinâmico com

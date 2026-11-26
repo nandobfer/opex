@@ -17,7 +17,6 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Skeleton } from "@/components/ui/skeleton"
 import { useCancelOpexJob, useOpexJobs, useOpexJobsRealtime, useSaveOpexJob } from "../../hooks/useOpexJobs"
 import { useOpexRealtime, useOpexSessions } from "../../hooks/useOpexSessions"
 import { useOpexSettings } from "../../hooks/useOpexSettings"
@@ -25,6 +24,7 @@ import { jobToInput, type OpexJobDto, type OpexJobFilter, type OpexJobOriginFilt
 import { OpexJobDialog, type OpexJobDialogMode } from "./OpexJobDialog"
 import { OpexJobRow } from "./OpexJobRow"
 import { OpexJobsFilters } from "./OpexJobsFilters"
+import { AgentScheduledSkeleton } from "../scheduled/AgentScheduledRow"
 
 const EMPTY_TEXT: Record<OpexJobFilter, string> = {
     scheduled: "Nenhum job agendado",
@@ -99,11 +99,7 @@ export function OpexJobsTab() {
                     </AnimatePresence>
                     <OpexJobsFilters filter={filter} origin={origin} clientId={clientId} onFilter={setFilter} onOrigin={setOrigin} onClient={setClientId} />
                     {jobs.isPending ? (
-                        <div className="space-y-2" aria-busy="true">
-                            {[0, 1, 2].map((item) => (
-                                <Skeleton key={item} className="h-20 w-full" />
-                            ))}
-                        </div>
+                        <AgentScheduledSkeleton />
                     ) : jobs.isError ? (
                         <ErrorState title="Não foi possível carregar os jobs" onRetry={() => void jobs.refetch()} />
                     ) : jobs.data.length === 0 ? (

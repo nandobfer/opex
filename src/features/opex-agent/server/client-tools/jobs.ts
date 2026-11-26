@@ -31,7 +31,7 @@ export const clientJobTools = [
         label: "Agendar job",
         risk: "write",
         description:
-            "Agenda um prompt para você mesmo executar uma vez: agora, daqui a um tempo ou numa data e hora de Brasília (a hora atual está no contexto do turno). No horário, o prompt chega como mensagem na sessão escolhida e você executa sozinho, com as mesmas ferramentas e limites do usuário; ele recebe um aviso ao terminar.",
+            "Agenda um prompt para você mesmo executar uma vez: agora, daqui a um tempo ou numa data e hora de Brasília (a hora atual está no contexto do turno). No horário, o prompt chega como mensagem na sessão escolhida e você executa sozinho, com as mesmas ferramentas e limites do usuário; ele recebe um aviso ao terminar. Não use para observar/reverificar algo de tempos em tempos: use watch_event (quando estiver disponível), que acorda você quando o evento acontecer.",
         input: jobScheduleInput,
         summarize: summarizeSchedule,
         async execute(input, context) {

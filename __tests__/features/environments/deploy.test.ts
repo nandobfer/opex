@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   exclusive: vi.fn(async <T,>(run: () => Promise<T>) => run()),
   publish: vi.fn(async () => {}),
   queueFollowUp: vi.fn(async () => {}),
+  /** Fato das observações do Agente Opex (OPE-194). */
+  watchDeploy: vi.fn(async () => {}),
   audit: vi.fn<(entry: { antes?: Record<string, unknown>; depois?: Record<string, unknown> }) => Promise<undefined>>(async () => undefined),
 }))
 
@@ -36,6 +38,7 @@ vi.mock('@/features/agentic/server/build-queue', () => ({ runExclusiveBuild: moc
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: {} }))
 vi.mock('@/features/local-docker/server/models', () => ({ LocalDockerPreview: {} }))
 vi.mock('@/features/opex-agent/server/runner', () => ({ queueFollowUp: mocks.queueFollowUp }))
+vi.mock('@/features/opex-agent/server/watch-events', () => ({ watchDeployFinished: mocks.watchDeploy }))
 
 import { Environment, EnvironmentComposeVersion, EnvironmentDeploy } from '@/features/environments/server/models'
 import { deleteEnvironment, runEnvironmentAction, startDeploy } from '@/features/environments/server/deploy'
@@ -461,6 +464,14 @@ describe('aviso ao Agente Opex no fim do deploy', () => {
     mocks.queueFollowUp.mockRejectedValueOnce(new Error('sessão apagada'))
     await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host().run, wait: true, notifyOpexSessionId: 's1' })
     expect(deploys.docs.map((deploy) => deploy.status)).toEqual(['success', 'success'])
+  })
+
+  it('o fim do deploy grava o fato das observações do ambiente antes de terminar; falha nele não muda o deploy', async () => {
+    const env = await createEnvironment(input(), 'local')
+    mocks.watchDeploy.mockRejectedValueOnce(new Error('banco fora'))
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run: host().run, wait: true })
+    expect(mocks.watchDeploy).toHaveBeenCalledWith(String(env._id), { status: 'success', error: null })
+    expect(deploys.docs.map((deploy) => deploy.status)).toEqual(['success'])
   })
 })
 

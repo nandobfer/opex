@@ -5,7 +5,7 @@ import { recordAiConsumption } from "@/lib/ai/consumption"
 import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
-import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CLIENT_JOBS_INSTRUCTION, OPEX_CONSUMPTION_ORIGIN, type OpexProviderId } from "../constants"
+import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CLIENT_JOBS_INSTRUCTION, OPEX_CLIENT_WATCH_INSTRUCTION, OPEX_CONSUMPTION_ORIGIN, OPEX_WATCH_INSTRUCTION, type OpexProviderId } from "../constants"
 import { redactToolCalls } from "../history"
 import { closeRunningTools, partsText } from "../live-message"
 import type { OpexAgentSettings } from "../schemas"
@@ -37,24 +37,26 @@ const INTERRUPTED = "Interrompido pelo usuário"
 
 /**
  * Estável entre os turnos: o raciocínio assinado e o cache do provedor dependem do prompt de sistema.
- * No portal, a dica de jobs só entra com o grupo "Jobs agendados" ligado para o cliente.
+ * No portal, a dica de jobs só entra com o grupo "Jobs agendados" ligado para o cliente. A dica de
+ * observação de eventos (OPE-194) só entra com o grupo "Observação de eventos" ligado no turno.
  */
 export function instructionsFor(
     settings: OpexAgentSettings,
     scope: OpexServerScope,
     memories = "",
-    options: { jobs?: boolean; selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null; skills?: readonly OpexSkillCatalogItem[] } = {},
+    options: { jobs?: boolean; watches?: boolean; selfMemory?: boolean; memoryRead?: boolean; counts?: { titles: number; overflow: number } | null; skills?: readonly OpexSkillCatalogItem[] } = {},
 ): string {
     const read = options.memoryRead ?? false
     const write = options.selfMemory ?? false
     const self = read || write ? selfMemoryInstructions("opex", memoryTurnOf(scope), { counts: options.counts, read, write }) : ""
     if (scope.kind === "owner") {
         const skills = skillsCatalogBlock(options.skills ?? [])
-        return [settings.instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories), ...(self ? [self] : []), ...(skills ? [skills] : [])].join("\n")
+        const instructions = options.watches ? `${settings.instructions}\n${OPEX_WATCH_INSTRUCTION}` : settings.instructions
+        return [instructions, "", `Dono do app: ${getLocalUser().name}. A data e a hora de cada turno vêm ao fim da mensagem do usuário.`, memoriesSection(memories), ...(self ? [self] : []), ...(skills ? [skills] : [])].join("\n")
     }
     const role = scope.actor.isAdmin ? "administrador do cliente" : "usuário do cliente"
     return [
-        options.jobs ? `${DEFAULT_OPEX_CLIENT_INSTRUCTIONS}\n${OPEX_CLIENT_JOBS_INSTRUCTION}` : DEFAULT_OPEX_CLIENT_INSTRUCTIONS,
+        [DEFAULT_OPEX_CLIENT_INSTRUCTIONS, ...(options.jobs ? [OPEX_CLIENT_JOBS_INSTRUCTION] : []), ...(options.watches ? [OPEX_CLIENT_WATCH_INSTRUCTION] : [])].join("\n"),
         "",
         `Cliente em escopo: ${scope.actor.client.name}. Usuário: ${scope.actor.displayName} (${role}).`,
         "A data e a hora de cada turno vêm ao fim da mensagem do usuário.",
@@ -132,11 +134,7 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
         if (followUp.fileIds?.length) throw new DomainError(400, "A conversa com o agente rotineiro não aceita anexos", "ROUTINE_CHAT_FILES_UNSUPPORTED")
         const { routineChatTurnModel } = await import("@/features/routine-agents/server/chat/turn")
         model = await routineChatTurnModel(scope)
-    } else {
-        const availability = await opexAvailability(settings)
-        if (!availability.available) throw new DomainError(409, availability.reason ?? "O Agente Opex não está disponível", "OPEX_UNAVAILABLE")
-        model = { provider: settings.main.provider!, model: settings.main.model!, variant: settings.main.variant, temperature: settings.main.temperature, maxOutputTokens: settings.main.maxOutputTokens }
-    }
+    } else model = await opexTurnModel(settings)
     await loadSession(sessionId, scope)
     const now = new Date()
     const claimed = await OpexSession.findOneAndUpdate(
@@ -169,16 +167,52 @@ async function startTurn(sessionId: string, followUp: OpexFollowUp, actorId: str
         role: "user",
         kind: followUp.kind,
         ...(followUp.job ? { job: followUp.job } : {}),
+        ...(followUp.watch ? { watch: followUp.watch } : {}),
         text,
         files,
         parts: [],
         modelMessages: JSON.stringify([{ role: "user", content }]),
         status: "complete",
     })
+    // Observações: a mensagem fica anotada nelas, que continuam "delivering" até o turno gravar a resposta.
+    const watch = followUp.watch ? { ids: followUp.watch.ids, messageId: userId.toString() } : null
+    if (watch) await recordWatchDelivery(watch)
     await publishSessionUpdated(sessionId)
     const userText = files.length ? `${text}${text ? "\n" : ""}(arquivos: ${files.map((file) => file.name).join(", ")})` : text
-    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, model, actorId, scope, userText, jobId: followUp.job?.id ?? null })
+    void executeTurn({ sessionId, assistantId, seq: claimed.nextSeq + 1, controller, settings, model, actorId, scope, userText, jobId: followUp.job?.id ?? null, watch })
     return toMessageDto(userDoc.toObject() as IOpexMessage & { _id: Types.ObjectId })
+}
+
+/** Modelo do turno do Agente Opex (dono ou portal), com a disponibilidade conferida. */
+async function opexTurnModel(settings: OpexAgentSettings): Promise<TurnModel> {
+    const availability = await opexAvailability(settings)
+    if (!availability.available) throw new DomainError(409, availability.reason ?? "O Agente Opex não está disponível", "OPEX_UNAVAILABLE")
+    return { provider: settings.main.provider!, model: settings.main.model!, variant: settings.main.variant, temperature: settings.main.temperature, maxOutputTokens: settings.main.maxOutputTokens }
+}
+
+/**
+ * Retoma o turno de uma notificação de sistema cuja mensagem já foi gravada mas cujo turno não terminou (o
+ * processo caiu entre gravar e responder): roda o turno com a MESMA mensagem, na posição reservada para a
+ * resposta dela, sem gravar outra mensagem. Sessão respondendo: "busy" (a recuperação tenta no tick seguinte).
+ */
+export async function resumeWatchTurn(sessionId: string, message: { id: string; seq: number; text: string }, ids: string[], scope: OpexServerScope): Promise<"started" | "busy"> {
+    await opexDb()
+    if (isTurnActive(sessionId)) return "busy"
+    if (scope.kind === "client") await assertClientOpexEnabled(scope.actor)
+    const settings = (await loadOpexSettings()).settings
+    const model = await opexTurnModel(settings)
+    // Reconcilia a sessão presa em "respondendo" pelo processo que caiu.
+    await loadSession(sessionId, scope)
+    const claimed = await OpexSession.findOneAndUpdate({ _id: sessionId, status: { $ne: "running" } }, { $set: { status: "running", lastError: null, lastMessageAt: new Date() } }, { new: false }).lean()
+    if (!claimed || isTurnActive(sessionId)) return "busy"
+    const assistantId = new Types.ObjectId()
+    const controller = new AbortController()
+    beginTurn(sessionId, assistantId.toString(), controller)
+    const watch = { ids, messageId: message.id }
+    await recordWatchDelivery(watch)
+    await publishSessionUpdated(sessionId)
+    void executeTurn({ sessionId, assistantId, seq: message.seq + 1, controller, settings, model, actorId: actorIdOf(scope), scope, userText: message.text, jobId: null, watch })
+    return "started"
 }
 
 export async function sendMessage(sessionId: string, input: { text: string; fileIds?: string[] }, actorId: string, scope: OpexServerScope = OWNER_SCOPE): Promise<OpexMessageDto> {
@@ -192,7 +226,22 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
         enqueueFollowUp(sessionId, followUp)
         return
     }
-    const failJob = (reason: string) => (followUp.job ? settleJobTurn(followUp.job.id, { status: "error", error: reason, pendingConfirmation: false }) : Promise.resolve())
+    // Notificação de observações que esperou na fila: entrega de novo pelo serviço, com o escopo e o alcance
+    // dos alvos revalidados e o texto remontado (o texto da fila pode estar velho).
+    if (followUp.kind === "event" && followUp.watch) {
+        try {
+            const { redeliverQueuedWatches } = await import("./watches")
+            await redeliverQueuedWatches(sessionId, followUp.watch.ids)
+        } catch (error) {
+            log.error({ err: error, sessionId, watchIds: followUp.watch.ids }, "[opex] falha ao entregar a notificação da fila; nova tentativa no tick")
+        }
+        return
+    }
+    const failJob = (reason: string) =>
+        Promise.all([
+            followUp.job ? settleJobTurn(followUp.job.id, { status: "error", error: reason, pendingConfirmation: false }) : undefined,
+            followUp.watch ? settleWatchDelivery(followUp.watch.ids, { failed: reason }) : undefined,
+        ]).then(() => undefined)
     // O escopo é reconstruído da sessão gravada (nunca do pedido): o dono continua dono e o usuário
     // do portal tem o vínculo e o papel revalidados antes do turno.
     const session = await loadSessionRaw(sessionId).catch(() => null)
@@ -202,6 +251,11 @@ export async function queueFollowUp(sessionId: string, followUp: OpexFollowUp): 
     }
     // Sessão do Agente Maddox (ex.: aviso de fim de deploy pedido por ele): o turno roda no OpenCode.
     if (session.agent === "maddox") {
+        // Observações são só do Agente Opex (recusadas na criação): nunca acordam uma sessão do Maddox.
+        if (followUp.kind === "event") {
+            await failJob("A sessão não é do Agente Opex")
+            return
+        }
         const { queueMaddoxFollowUp } = await import("@/features/maddox-agent/server/runner")
         await queueMaddoxFollowUp(sessionId, followUp)
         return
@@ -237,6 +291,49 @@ export async function sendJobMessage(sessionId: string, followUp: OpexFollowUp &
         if (!(error instanceof DomainError) || error.code !== "OPEX_SESSION_BUSY") throw error
         enqueueFollowUp(sessionId, followUp)
         return "queued"
+    }
+}
+
+/**
+ * Notificação de sistema de observações (OPE-194): roda já ou, com a sessão respondendo, entra na fila e
+ * roda quando o turno atual terminar. Erros (agente indisponível, sessão inexistente) sobem para quem entrega.
+ */
+export async function sendWatchMessage(sessionId: string, followUp: OpexFollowUp & { kind: "event"; watch: { ids: string[]; label: string } }, scope: OpexServerScope = OWNER_SCOPE): Promise<"started" | "queued"> {
+    await opexDb()
+    if (isTurnActive(sessionId)) {
+        enqueueFollowUp(sessionId, followUp)
+        return "queued"
+    }
+    try {
+        await startTurn(sessionId, followUp, actorIdOf(scope), scope)
+        return "started"
+    } catch (error) {
+        if (!(error instanceof DomainError) || error.code !== "OPEX_SESSION_BUSY") throw error
+        enqueueFollowUp(sessionId, followUp)
+        return "queued"
+    }
+}
+
+/**
+ * Observações (import tardio: o serviço depende deste runner): a mensagem gravada fica anotada (o turno vai
+ * começar), o turno que gravou a resposta as encerra, e a falha ao continuar as devolve para "disparada".
+ */
+async function recordWatchDelivery(watch: { ids: string[]; messageId: string }): Promise<void> {
+    try {
+        const { recordWatchMessage } = await import("./watches")
+        await recordWatchMessage(watch.ids, watch.messageId)
+    } catch (error) {
+        log.error({ err: error, watchIds: watch.ids }, "[opex] falha ao anotar a mensagem nas observações")
+    }
+}
+
+async function settleWatchDelivery(ids: string[], outcome: { messageId: string } | { failed: string }): Promise<void> {
+    try {
+        const { markWatchesWoken, releaseWatches } = await import("./watches")
+        if ("messageId" in outcome) await markWatchesWoken(ids, outcome.messageId)
+        else await releaseWatches(ids, outcome.failed)
+    } catch (error) {
+        log.error({ err: error, watchIds: ids }, "[opex] falha ao registrar a entrega das observações")
     }
 }
 
@@ -279,6 +376,8 @@ interface TurnArgs {
     userText: string
     /** Job agendado que disparou o turno. */
     jobId: string | null
+    /** Observações que acordaram o agente (OPE-194): encerradas só quando o turno grava a resposta. */
+    watch?: { ids: string[]; messageId: string } | null
 }
 
 /**
@@ -357,7 +456,7 @@ async function prepareOpexTurn(args: TurnArgs): Promise<PreparedChatTurn> {
             tools,
             overrides,
             lookup,
-            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts, skills: skills.catalog }),
+            instructions: instructionsFor(settings, scope, memory.block, { jobs: tools.some((tool) => tool.group === "jobs"), watches: tools.some((tool) => tool.group === "watches"), selfMemory: memory.write, memoryRead: memory.read, counts: memory.counts, skills: skills.catalog }),
             history,
             toolContext,
             notices: memory.notice ? [memory.notice] : [],
@@ -582,6 +681,8 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
     endTurn(sessionId, controller, { type: "turn-end", messageId: assistantId.toString(), status, error })
     await publishSessionUpdated(sessionId)
     if (args.jobId) await settleJobTurn(args.jobId, { status, error, pendingConfirmation })
+    // O turno acordado gravou a resposta: só agora as observações viram acordadas.
+    if (args.watch) await settleWatchDelivery(args.watch.ids, { messageId: args.watch.messageId })
 
     const routine = agentOf(scope) === "routine"
     if (outcome.usage) {

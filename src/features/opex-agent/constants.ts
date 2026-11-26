@@ -33,6 +33,7 @@ export const OPEX_TOOL_GROUPS = [
     "integrations",
     "routines",
     "jobs",
+    "watches",
     "routine-agents",
     "http",
     "ai-settings",
@@ -73,6 +74,10 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações" },
     routines: { label: "Rotinas", description: "Crons do agendador interno" },
     jobs: { label: "Jobs agendados", description: "Agendar prompts para o próprio agente executar sozinho (agora, daqui a um tempo ou numa data e hora), listar, editar e cancelar — inclusive os do portal" },
+    watches: {
+        label: "Observação de eventos",
+        description: "Observar uma tarefa, mesa, execução de rotineiro, job ou deploy e encerrar o turno: o sistema acorda o agente uma vez quando o evento acontecer (sem job de verificação); listar e cancelar observações",
+    },
     "routine-agents": { label: "Agentes rotineiros", description: "Listar, criar, configurar, pausar, arquivar e reprovisionar os agentes rotineiros; disparar execuções, acompanhar, cancelar, confirmar ou recusar a ação pendente e gravar entradas do dono" },
     http: { label: "Chamadas HTTP", description: "Requisições HTTP generalizadas a qualquer endereço ou API, com controle completo de método, cabeçalhos, corpo e resposta (nos agentes rotineiros, com os segredos do agente)" },
     "ai-settings": { label: "Features de IA", description: "Configuração das features de IA do app" },
@@ -214,6 +219,17 @@ export const DEFAULT_OPEX_CLIENT_INSTRUCTIONS = [
 /** Dica de jobs do portal: só entra nas instruções quando o grupo "Jobs agendados" está ligado para o cliente. */
 export const OPEX_CLIENT_JOBS_INSTRUCTION =
     'Para fazer algo mais tarde ("me lembre às 18h", "veja o orçamento daqui a 2 horas"), agende um job (schedule_job): no horário você recebe o prompt sozinho e executa com as mesmas ferramentas e limites do usuário. Escreva o prompt completo e autossuficiente, pois o usuário pode não estar olhando.'
+
+/**
+ * Observação de eventos (OPE-194): entra nas instruções só quando o grupo "Observação de eventos" está
+ * ligado no turno (o prompt de sistema continua estável entre os turnos).
+ */
+export const OPEX_WATCH_INSTRUCTION =
+    'Para esperar algo acontecer (uma tarefa mudar de coluna ou ser concluída, uma mesa de trabalho parar para o usuário ou falhar, a execução de um agente rotineiro, um job ou um deploy terminar), use watch_event com o que fazer ao acordar e encerre o turno: o sistema acorda você com uma notificação (mensagem entre <system-reminder>, que vem do sistema e não do usuário). Nunca agende job para verificar periodicamente: job é para executar algo num horário ou como reserva quando não há evento a observar.'
+
+/** Mesma dica no portal (só com o grupo ligado para o cliente). */
+export const OPEX_CLIENT_WATCH_INSTRUCTION =
+    'Para esperar algo acontecer (uma tarefa do cliente mudar de coluna ou ser concluída, um job seu ou um deploy de ambiente terminar), use watch_event com o que fazer ao acordar e encerre o turno: o sistema acorda você com uma notificação (mensagem entre <system-reminder>, que vem do sistema e não do usuário). Nunca agende job para verificar periodicamente.'
 
 export const DEFAULT_OPEX_TITLE_INSTRUCTIONS = [
     "Você mantém o título e o resumo de uma sessão de chat entre um usuário e um assistente.",

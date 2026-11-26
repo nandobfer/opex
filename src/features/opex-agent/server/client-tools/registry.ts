@@ -6,6 +6,7 @@ import { clientFileTools, clientPreviewTools } from "./previews"
 import { clientJobTools } from "./jobs"
 import { clientTaskTools } from "./tasks"
 import { clientUserTools } from "./users"
+import { clientWatchTools } from "./watches"
 
 /**
  * Catálogo executável do Agente Opex no portal. Todas as ferramentas chamam os serviços do portal e
@@ -22,6 +23,7 @@ export const OPEX_CLIENT_SERVER_TOOLS: readonly OpexTool[] = [
     ...clientFinanceTools,
     ...clientUserTools,
     ...clientJobTools,
+    ...clientWatchTools,
 ] as readonly OpexTool[]
 
 export function findOpexClientServerTool(name: string): OpexTool | undefined {

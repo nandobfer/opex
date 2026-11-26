@@ -463,6 +463,16 @@ describe('runner no portal do cliente', () => {
     expect(instructionsFor(settings as never, scope)).not.toContain('schedule_job')
     expect(instructionsFor(settings as never, scope, '', { jobs: true })).toContain('schedule_job')
   })
+
+  it('a dica de observação de eventos (OPE-194) só entra com o grupo ligado, no dono e no portal', () => {
+    const scope = { kind: 'client', actor: clientActor } as never
+    expect(instructionsFor(settings as never, scope)).not.toContain('watch_event')
+    expect(instructionsFor(settings as never, scope, '', { watches: true })).toContain('watch_event')
+    expect(instructionsFor(settings as never, { kind: 'owner' })).not.toContain('watch_event')
+    const owner = instructionsFor(settings as never, { kind: 'owner' }, '', { watches: true })
+    expect(owner).toContain('watch_event')
+    expect(owner).toContain('Nunca agende job para verificar periodicamente')
+  })
 })
 
 describe('prévia de plugin no turno do dono (OPE-172)', () => {

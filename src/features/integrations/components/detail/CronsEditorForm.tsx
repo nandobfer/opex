@@ -2,11 +2,12 @@
 
 import { useMemo, type Dispatch, type SetStateAction } from "react"
 import { motion } from "framer-motion"
-import { AlarmClock, CalendarClock, Settings2 } from "lucide-react"
+import { AlarmClock, CalendarClock, Eye, Settings2 } from "lucide-react"
 import { INTEGRATION_CRON_JOBS, type IntegrationDef, type PublicFieldValue } from "@/lib/integrations/catalog"
 import type { IntegrationDetailDto } from "@/features/integrations/types"
 import { useIntegration } from "@/features/integrations/hooks/useIntegrations"
 import { OpexJobsTab } from "@/features/opex-agent/components/jobs/OpexJobsTab"
+import { OpexWatchesTab } from "@/features/opex-agent/components/watches/OpexWatchesTab"
 import { ApiDocsCard } from "./ApiDocsCard"
 import { CronJobsCard } from "./CronJobsCard"
 import { DetailActions } from "./DetailActions"
@@ -31,19 +32,20 @@ interface CronsEditorFormProps {
     onExplore: () => void
 }
 
-const CRONS_TABS = ["geral", "rotinas", "jobs"] as const
+const CRONS_TABS = ["geral", "rotinas", "jobs", "observacoes"] as const
 type CronsTab = (typeof CRONS_TABS)[number]
 
 const TABS: IntegrationTabDef<CronsTab>[] = [
     { id: "geral", label: "Geral", icon: Settings2 },
     { id: "rotinas", label: "Rotinas", icon: CalendarClock },
     { id: "jobs", label: "Jobs", icon: AlarmClock },
+    { id: "observacoes", label: "Observações", icon: Eye },
 ]
 
 /**
  * Página da integração Crons em abas: **Geral** (agendador, URL interna, secret e documentação) e
- * **Rotinas** (lista das rotinas agendadas, com busca) e **Jobs** (prompts agendados do Agente Opex,
- * do dono e do portal). Trocar de aba com alterações pede descarte.
+ * **Rotinas** (lista das rotinas agendadas, com busca), **Jobs** (prompts agendados do Agente Opex,
+ * do dono e do portal) e **Observações** (eventos que o Agente Opex observa para acordar, OPE-194). Trocar de aba com alterações pede descarte.
  */
 export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo, onExplore }: CronsEditorFormProps) {
     const { tab, requestTab, pendingTab, confirmDiscard, cancelDiscard } = useIntegrationTab<CronsTab>(CRONS_TABS, "geral", dirty, onUndo)
@@ -102,6 +104,7 @@ export function CronsEditorForm({ def, data, draft, setDraft, dirty, pending, on
                     </>
                 )}
                 {tab === "jobs" && <OpexJobsTab />}
+                {tab === "observacoes" && <OpexWatchesTab />}
             </IntegrationTabs>
         </motion.form>
     )

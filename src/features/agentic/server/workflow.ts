@@ -118,6 +118,14 @@ function metricEvent(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId"
 
 async function update(doc: Pick<IAgenticWorkbench, "_id" | "centralId" | "taskId">, set: Record<string, unknown>, extra: Record<string, unknown> = {}): Promise<void> {
     await AgenticWorkbench.updateOne({ _id: doc._id }, { $set: set, ...extra })
+    // Observações do Agente Opex (OPE-194): etapa nova ou execução que falhou/foi interrompida. O fato fica
+    // gravado logo depois da mutação (só com observação na mesa); o disparo segue em segundo plano.
+    const runState = typeof set.runState === "string" ? set.runState : null
+    if (typeof set.stage === "string" || runState === "failed" || runState === "interrupted") {
+        const previousStage = "stage" in doc && typeof (doc as { stage?: unknown }).stage === "string" ? (doc as { stage: string }).stage : null
+        const change = { stage: typeof set.stage === "string" ? set.stage : null, previousStage, runState, error: typeof set.error === "string" ? set.error : null }
+        await import("@/features/opex-agent/server/watch-events").then(({ watchWorkbenchChanged }) => watchWorkbenchChanged(String(doc._id), change)).catch(() => undefined)
+    }
     // Tempo por etapa (Agente Desenvolvedor): cada entrada de etapa fica registrada com o horário.
     if (typeof set.stage === "string") metricEvent(doc, METRIC_EVENT.stageEntered, { stage: set.stage })
     // O apontamento agêntico acompanha o estado da mesa (abre/atualiza/fecha o período).
@@ -2459,6 +2467,7 @@ async function finalizeDeletion(doc: IAgenticWorkbench): Promise<void> {
     // Anexos das mensagens da mesa e dos forks (melhor esforço: falha no storage não segura a exclusão).
     await deleteWorkbenchFiles(id).catch((error) => logger.warn({ err: error, workbenchId: id }, "[agentic] Falha ao remover os anexos da mesa"))
     await AgenticWorkbench.deleteOne({ _id: doc._id })
+    await import("@/features/opex-agent/server/watch-events").then(({ watchTargetDeleted }) => watchTargetDeleted("workbench", id, doc.taskCode)).catch(() => undefined)
     await syncWorkbenchTimer(id)
     await recordAudit({ userId: actorId(), entidade: AGENTIC_AUDIT_WORKBENCH, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { tarefa: doc.taskCode, etapa: doc.stage, limpezaAmbiente: Boolean(doc.deletionRequestedAt) } })
     centralLogger(doc.centralId, doc.taskCode).warn("Mesa de trabalho excluída", { workbenchId: id, limpezaAmbiente: Boolean(doc.deletionRequestedAt) })

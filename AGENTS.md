@@ -189,7 +189,9 @@ sem pedido explícito.
   `private-opex-{clientId}-{userId}` (payload `{ id }`); a resposta ao vivo do chat vai por NDJSON
   (`GET /api/opex/sessions/[id]/stream`), não pelo Pusher. MCPs do agente: `opex-mcp-updated`
   (`{ id }`) em `private-app`. Skills do agente (OPE-153): `opex-skills-updated` (`{ id, action }`) em
-  `private-app`.
+  `private-app`. Observação de eventos (OPE-194): `opex-watch-updated` (`{ id, status, sessionId }`) em `private-app`
+  e, na observação do portal, também em `private-opex-{clientId}-{userId}` (o acordar do agente não depende do
+  Pusher; ver `aicontext/modules/opex-agent.md`, "Observação de eventos").
 - Agente Maddox: `maddox-session-updated` / `maddox-session-deleted` nos mesmos canais das sessões do
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em

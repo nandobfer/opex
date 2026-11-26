@@ -42,4 +42,6 @@ registerMigrations(
     { name: "ensure-routine-chat-session-indexes", run: () => ensureOpexIndexes() },
     // OPE-172: plugins, versões e chave-valor.
     { name: "ensure-plugin-indexes", run: () => ensurePluginIndexes() },
+    // OPE-194: observações de evento do Agente Opex (`opex_watches`), os fatos das transições (`opex_watch_facts`) e a referência `watch.ids` nas mensagens.
+    { name: "ensure-opex-watch-indexes", run: () => ensureOpexIndexes() },
 )

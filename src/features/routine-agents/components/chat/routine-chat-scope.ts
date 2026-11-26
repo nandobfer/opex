@@ -28,6 +28,7 @@ export function routineChatUiScope(agent: { id: string; title: string }, icon: L
         isShortcut: () => false,
         modelPicker: false,
         jobs: false,
+        watches: false,
         attachments: false,
     }
     return { kind: "owner", agent: descriptor, apiBase, http: api, channel: appChannel(), queryPrefix: descriptor.queryPrefix, tabsKey: descriptor.tabsKey, settingsHref: null, clientName: null }

@@ -5,13 +5,13 @@ import { MADDOX_MCP_SERVERS, type MaddoxMcpScope } from "./constants"
 
 /**
  * Catálogos de ferramentas do Opex para o Agente Maddox (módulo PURO). O Maddox usa os mesmos
- * catálogos do Agente Opex — o do dono e o do portal —, **sem os jobs agendados** (fora do escopo do
- * Maddox) e sem os MCPs cadastrados no Agente Opex (o Maddox usa os MCPs do próprio OpenCode). As
+ * catálogos do Agente Opex — o do dono e o do portal —, **sem os jobs agendados nem a observação de
+ * eventos** (dependem de uma conversa do Agente Opex para acordar; fora do escopo do Maddox) e sem os MCPs cadastrados no Agente Opex (o Maddox usa os MCPs do próprio OpenCode). As
  * ferramentas chegam ao OpenCode pelo servidor MCP do Opex com o prefixo do servidor
  * (`opex_app_list_tasks`, `opex_portal_list_tasks`).
  */
 
-export const MADDOX_EXCLUDED_GROUPS: readonly string[] = ["jobs"]
+export const MADDOX_EXCLUDED_GROUPS: readonly string[] = ["jobs", "watches"]
 
 /**
  * Ferramentas do dono fora do Maddox: dependem de um botão do card do Agente Opex que o MCP não tem

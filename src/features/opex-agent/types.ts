@@ -111,13 +111,27 @@ export interface OpexUsageDto {
 
 export type OpexMessageStatus = "complete" | "interrupted" | "error"
 
+export const OPEX_MESSAGE_KINDS = ["message", "confirmation", "job", "notice", "event"] as const
+export type OpexMessageKind = (typeof OPEX_MESSAGE_KINDS)[number]
+
+/** Observações que uma mensagem `event` entregou ao agente. */
+export interface OpexMessageWatchRef {
+    ids: string[]
+    label: string
+}
+
 export interface OpexMessageDto {
     id: string
     role: "user" | "assistant"
-    /** `confirmation`: decisão do usuário sobre uma ação pendente (exibida como nota); `job`: prompt de um job agendado. */
-    kind: "message" | "confirmation" | "job" | "notice"
+    /**
+     * `confirmation`: decisão do usuário sobre uma ação pendente (exibida como nota); `job`: prompt de um job agendado;
+     * `notice`: aviso automático; `event`: notificação do sistema que acordou o agente (observação, OPE-194).
+     */
+    kind: OpexMessageKind
     /** Job que disparou a mensagem (`kind: "job"`). */
     job: { id: string; title: string } | null
+    /** Observações que acordaram o agente (`kind: "event"`). */
+    watch: OpexMessageWatchRef | null
     text: string
     /** Arquivos enviados com a mensagem do usuário. */
     files: OpexFileDto[]

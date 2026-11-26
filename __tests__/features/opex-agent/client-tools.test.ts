@@ -189,7 +189,9 @@ describe('catálogo de ferramentas do portal', () => {
   })
 
   it('jobs são desligados por padrão: só entram quando o dono os liga (enabledOptInTools)', () => {
-    expect(OPEX_CLIENT_OPT_IN_TOOLS).toEqual(['list_jobs', 'schedule_job', 'update_job', 'cancel_job'])
+    // Jobs e observação de eventos (OPE-194) nascem desligados para o cliente.
+    expect(OPEX_CLIENT_OPT_IN_TOOLS).toEqual(['list_jobs', 'schedule_job', 'update_job', 'cancel_job', 'watch_event', 'list_watches', 'cancel_watch'])
+    expect(enabledOpexClientToolNames([], false)).not.toContain('watch_event')
     expect(enabledOpexClientToolNames([], false)).not.toContain('schedule_job')
     expect(enabledOpexClientToolNames([], false, ['schedule_job', 'list_jobs'])).toEqual(expect.arrayContaining(['schedule_job', 'list_jobs']))
     expect(enabledOpexClientToolNames(['schedule_job'], false, [])).not.toContain('schedule_job')

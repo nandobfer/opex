@@ -27,6 +27,7 @@ import { routineAgentTools } from "./routine-agents"
 import { serviceTools } from "./services"
 import { taskTools } from "./tasks"
 import { timeTools } from "./time"
+import { watchTools } from "./watches"
 import { workbenchTools } from "./workbenches"
 
 /** Todas as ferramentas do Agente Opex (nomes únicos; o modelo as vê pelo nome). */
@@ -44,6 +45,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...issueTools,
     ...integrationTools,
     ...jobTools,
+    ...watchTools,
     ...routineAgentTools,
     ...httpTools,
     ...aiSettingsTools,

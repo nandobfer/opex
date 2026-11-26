@@ -76,8 +76,9 @@ Página `/agente-opex` (categoria **Agentes** da sidebar, OPE-122): Visão geral
   dias arquivada** antes de sumir.
 - `archivedAt` também é gravado ao arquivar pela tela (`updateSession`) e zerado ao desarquivar.
 - Nunca entram: sessão respondendo ou aguardando confirmação (só `idle`/`error`), com turno vivo neste
-  processo ou vinculada a um job ativo (`scheduled`, `running` ou `awaiting_confirmation`, por
-  `sessionId`, `originSessionId` ou `resultSessionId`). A condição de arquivar é reconferida na
+  processo, vinculada a um job ativo (`scheduled`, `running` ou `awaiting_confirmation`, por
+  `sessionId`, `originSessionId` ou `resultSessionId`) ou com observação de evento ativa (`watching`, `triggered`
+  ou `delivering`, OPE-194: a sessão é a que vai acordar). A condição de arquivar é reconferida na
   gravação, e a de excluir é relida logo antes da exclusão. Teto de 200 por etapa e execução; falha numa sessão não interrompe as demais.
 
 ## Chat
@@ -173,7 +174,7 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   portal, exceto as **desligadas por padrão**. Guardar as **desligadas** faz ferramenta nova entrar
   ligada; o contexto (`get_portal_overview`) é sempre ativo.
 - **Opt-in** ("Desligado por padrão"): ferramentas com `optIn: true` no catálogo puro
-  (`OPEX_CLIENT_OPT_IN_TOOLS`; hoje o grupo **Jobs agendados**) só valem quando estão em
+  (`OPEX_CLIENT_OPT_IN_TOOLS`; hoje os grupos **Jobs agendados** e **Observação de eventos**) só valem quando estão em
   `opexAgent.enabledOptInTools` (padrão `[]`). `enabledOpexClientToolNames(disabled, isAdmin,
   enabledOptIn)` exige a presença na lista para as opt-in; `saveClientOpexConfig` separa as marcadas
   opt-in em `enabledOptInTools` (as demais seguem em `disabledTools`) e audita `ligadasPorEscolha`.
@@ -202,6 +203,7 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   | Financeiro (**admin**) | `get_finance`, `get_service` |
   | Usuários (**admin**) | `list_users`, `update_user`, `delete_user`* |
   | Jobs agendados (**opt-in**) | `list_jobs`, `schedule_job`, `update_job`, `cancel_job`* — só os jobs do próprio usuário naquele cliente |
+  | Observação de eventos (**opt-in**, OPE-194) | `watch_event`, `list_watches`, `cancel_watch` — só tarefas do cliente, jobs do próprio usuário e deploys dos ambientes do cliente (ver "Observação de eventos") |
 
   `*` destrutivo. Criar usuário e gerar token ficam **fora**: devolvem segredo que não pode chegar
   ao modelo. `update_user` redige a senha. As de admin só entram no turno quando o usuário é
@@ -212,7 +214,8 @@ puro e `server/scope.ts`) decide sessões, canal, abas e catálogo: `owner` (app
   (`decideAction`) também resolve a sessão no escopo e revalida antes de executar. Cada ferramenta
   chama o serviço do portal, que filtra de novo pelo cliente — três camadas independentes.
 - **Instruções** próprias (`DEFAULT_OPEX_CLIENT_INSTRUCTIONS`) + cliente, usuário e papel; a dica
-  de jobs (`OPEX_CLIENT_JOBS_INSTRUCTION`) só entra quando o grupo Jobs está ligado no turno; o
+  de jobs (`OPEX_CLIENT_JOBS_INSTRUCTION`) só entra quando o grupo Jobs está ligado no turno, e a de observação
+  (`OPEX_CLIENT_WATCH_INSTRUCTION`) só com o grupo Observação de eventos ligado; o
   modelo do dono é reaproveitado. Consumo em origens `opex-client-agent` / `opex-client-title`.
 - **Interface**: `OpexScopeProvider` (dono por padrão) fornece `apiBase` (`/opex` ou
   `/cliente/opex`), o axios do portal (`x-client-id`), o canal, a chave do cache e a chave das abas
@@ -290,6 +293,7 @@ risco (os catálogos são distintos).
 | Integrações | `list_integrations`, `get_integration` (sem segredos), `update_integration`* (grava segredos, nunca lê), `test_integration` |
 | Rotinas | `list_routines` (sem o `cronSecret`), `run_routine` |
 | Jobs agendados | `list_jobs` (dono e portal, filtro `origin`), `schedule_job`, `update_job` (só jobs do dono), `cancel_job`* (dono e portal) — ver "Jobs" |
+| Observação de eventos (OPE-194) | `watch_event` (assina e permite encerrar o turno sem job), `list_watches` (desta conversa ou todas, inclusive as do portal), `cancel_watch` (`write`, sem confirmação por padrão) — ver "Observação de eventos". Fora do Maddox, dos tokens e dos agentes rotineiros |
 | Agentes rotineiros (só no dono) | `list_routine_agents`, `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`, `archive_routine_agent`*, `reprovision_routine_agent`, `block_routine_agent_channel`*, `unblock_routine_agent_channel`, `run_routine_agent`, `list_routine_runs`, `cancel_routine_run`*, `confirm_routine_action`, `reject_routine_action`, `add_routine_entry` — os mesmos serviços da aba Rotineiros e das páginas `/agentes-rotineiros`; nenhum DTO traz o token do agente no Engramind. Ver `modules/routine-agents.md` |
 | Features de IA | `get_ai_feature_settings`, `update_ai_feature_settings` |
 | Agente Revisor | `list_pr_reviews`, `get_pr_review`, `request_pr_review`, `rerun_pr_review`, `stop_pr_review`* |
@@ -721,7 +725,14 @@ OpenCode. Sem SSH nem credencial nova. Só no app do dono (o catálogo do portal
 
 Um **job** é um prompt que o agente executa sozinho, **uma única vez**: agora, daqui a X
 minutos/horas/dias ou numa data e hora (horário de Brasília), numa sessão nova (com o título do job)
-ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `jobs.ts` (puro: schema
+ou existente. Vale para o **dono** e para os **usuários do portal**.
+
+**Quando usar job x observação (OPE-194):** job é para **executar algo num horário** ("me lembre às 18h",
+"rode o relatório amanhã") ou como **reserva** quando não há evento a observar (sistema externo sem aviso). Para
+**esperar algo acontecer** no Opex (tarefa mudar de coluna, mesa parar para o usuário, execução de rotineiro, job ou
+deploy terminar), o caminho é a **observação de eventos** (`watch_event`): nunca um job que reverifica de minuto em
+minuto. A descrição de `schedule_job` (dono e portal) e as instruções do agente (`OPEX_WATCH_INSTRUCTION`) dizem isso
+ao modelo. Código: `jobs.ts` (puro: schema
 `opexJobInputSchema`, `resolveRunAt`, rótulos, `jobModelText`), `open-session.ts`, `server/jobs.ts`
 (serviço), `server/tools/jobs.ts` (dono), `server/tools/job-shared.ts` (entradas, visão e resumo compartilhados entre dono e portal), `server/client-tools/jobs.ts`
 (portal), `hooks/useOpexJobs.ts` e `components/jobs/` (`OpexJobsTab`, `OpexJobsFilters`,
@@ -775,6 +786,109 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
   as ferramentas do agente.
 - **Auditoria** na entidade `JobAgenteOpex`: criar, editar, cancelar (`ABORTAR`) e executar
   (`EXECUTAR`, com resultado, sessão, cliente, atraso e duração; ator = dono ou o usuário do job).
+
+## Observação de eventos (notificação de sistema, OPE-194)
+
+O agente **assina um evento, encerra o turno (hiberna) e é acordado uma única vez pelo sistema** quando o evento
+acontece — ou quando a observação vence ou o alvo é excluído —, com uma mensagem de sistema. Substitui o job de
+verificação periódica como caminho de observação. Vale para o **dono** e para o **portal** (grupo opt-in por cliente).
+Código: `watches.ts` (puro: catálogo, schema `opexWatchInputSchema`, `matchesWatch`, `currentSatisfies`, textos),
+`server/watches.ts` (serviço), `server/watch-events.ts` (adaptadores das fontes), `server/tools/watches.ts` (dono),
+`server/tools/watch-shared.ts` (entradas compartilhadas, puro), `server/client-tools/watches.ts` (portal),
+`hooks/useOpexWatches.ts`, `components/chat/OpexSessionWatches.tsx` e `components/watches/`.
+
+- **Por que custa menos que o job de 1 minuto:** o job cria um turno completo por verificação (prompt de sistema,
+  catálogo de ferramentas e histórico da sessão, até ~400 mil caracteres) — uma espera de 2 h são ~120 turnos. Com a
+  observação, assinar é uma chamada de ferramenta dentro de um turno que já acontecia; **enquanto espera, zero tokens**
+  (no servidor só um `exists` indexado nos pontos de transição e uma consulta das vencidas e dos fatos pendentes por minuto); ao acontecer,
+  **um turno**, com um bloco curto de fato objetivo e o combinado (`note`). Observações da mesma sessão disparadas
+  juntas viram um turno só.
+- **Alvos e eventos** (`target.kind` → `event`):
+
+  | Alvo | Eventos | Referência |
+  |---|---|---|
+  | `task` | `done` (coluna de conclusão do projeto, `closedColumnKey`), `column_in` (`values` = chaves de coluna), `column_changed`, `archived` | código, issue (`repo#N`) ou id; no portal, só tarefas do cliente |
+  | `workbench` (só dono) | `waiting_user` (`plan_review`, `spec_ready`, `preview`, `pr_open`, `changes_requested`, `adversarial_blocked`, `done`), `stage_in` (`values` = etapas), `failed` (`runState` `failed`/`interrupted`), `done` | id da mesa ou código da tarefa |
+  | `routine_run` (só dono) | `finished` (`completed`/`error`/`canceled`/`expired`), `status_in` (inclui `awaiting_confirmation`) | id da execução |
+  | `job` | `finished` (`done`/`error`/`awaiting_confirmation`/`canceled`), `status_in` | id; no portal, só os jobs do próprio usuário |
+  | `environment` | `deploy_finished` (`success`/`failed`, o próximo deploy ou mover), `status_in` | id ou slug; no portal, só os ambientes do cliente |
+
+- **Assinar** (`watch_event` → `createOpexWatch`): exige a conversa do Agente Opex do turno (sem sessão — MCP/token — ou
+  sessão do Maddox: 400 `OPEX_WATCH_SESSION_REQUIRED`). Alvo inexistente ou de outro escopo: 404
+  `OPEX_WATCH_TARGET_NOT_FOUND`, nada gravado; alvo fora do portal: 400 `OPEX_WATCH_TARGET_UNSUPPORTED`; coluna
+  inexistente: 400 `OPEX_WATCH_INVALID_VALUES`. O estado atual do alvo é lido antes de gravar: condição já satisfeita
+  devolve `alreadySatisfied` sem criar nada. **Janela da assinatura:** depois de gravar, o alvo é relido; se a condição
+  passou a valer (ou o estado mudou de um jeito que a condição pegaria, `changedInto` — ex.: "qualquer mudança") entre as
+  duas leituras, a observação recém-gravada é apagada e a resposta é `alreadySatisfied`; se a fonte já a disparou nesse
+  meio tempo, segue o caminho normal (acorda). A observação guarda `since` (início): fato anterior a ela não a dispara.
+  A mesma observação ativa na sessão (alvo + condição) é reaproveitada (atualiza a `note`). Limites: **10 ativas por
+  sessão** e **50 por escopo** (dono, ou cada usuário de cliente) — 409 `OPEX_WATCH_LIMIT`. Prazo padrão **24 h**, até
+  **30 dias** (`expiresInHours`). A resposta traz a dica "pode encerrar o turno".
+- **Estados** (`opex_watches.status`): `watching` → `triggered` (reservada pelo evento, pela expiração ou pela
+  exclusão do alvo) → `delivering` (mensagem enviada ou na fila) → `woken` (evento), `expired` (venceu) ou `canceled`
+  (alvo excluído: `error` "O alvo foi excluído"; ou cancelada pelo usuário/agente; ou sessão excluída); `error` quando o
+  escopo do portal é recusado na entrega (usuário, cliente, agente ou grupo desligado — mesmos motivos dos jobs, sem
+  turno) ou quando o **alvo saiu do alcance do usuário do portal** (ex.: a tarefa foi transferida para outro cliente):
+  encerra sem gravar o fato (`event: null`) e sem acordar. `outcome`: `event`, `expired` ou `target_deleted`. Encerrada
+  some 30 dias depois (TTL `purge_ttl`).
+- **Disparo com fato durável** (`opex_watch_facts`): as fontes chamam os adaptadores de `watch-events.ts` **logo depois
+  da mutação** e **esperam** a gravação do fato (`recordWatchFact`: um `exists` indexado das `watching` do alvo e, só
+  com alguma, um insert com os dados brutos e o instante `at` da transição); nunca lançam. Fontes: `moveTask` e
+  `updateTask` com troca de coluna (o formulário de edição, PATCH; com o projeto efetivo), `setTaskArchived` e
+  `deleteTask` (tarefas); `update()` do workflow (etapa nova ou `runState` `failed`/`interrupted`) e `finalizeDeletion`
+  (mesas); `afterSettle` (execuções de rotineiro, final ou aguardando confirmação); `finishJob`/`cancelOpexJob`
+  (jobs); `finishDeploy` (ambientes). O processamento (`processWatchFact`) roda em segundo plano: reserva o fato com
+  lease de 2 min, monta o evento com os nomes (`buildFactEvent`) e chama `notifyWatchEvent`, que reserva cada
+  observação que casa com `findOneAndUpdate({ status: "watching", expiresAt: { $gt: at } })` — **um evento = um
+  acordar**, mesmo repetido, reprocessado ou concorrente, e o **prazo é conferido contra o instante da transição**
+  (evento depois do vencimento não vale, mesmo antes de o tick vencer a observação; evento dentro do prazo processado
+  com atraso vale). Se o processo cair entre a mutação e o disparo, o fato fica pendente (ou com o lease vencido) e o
+  tick o reprocessa (até 5 tentativas). Sem transações no Mongo do Opex, a única janela que resta é a de um processo
+  cair entre a mutação e o insert do fato (as duas gravações seguidas, como a auditoria). O tick
+  (`runDueOpexWatches`, logo depois dos jobs em `runSchedulerTick`) processa primeiro os fatos pendentes, depois as
+  vencidas, as entregas perdidas e as disparadas pendentes — nunca recalcula o estado dos alvos.
+- **Instâncias** (OPE-147): a prévia do Opex grava no mesmo banco e só **reserva**; a **entrega** (turno, hub e
+  stream) acontece só na instância principal — na hora, ou pelo tick (até 1 min) quando o evento nasceu na prévia. O
+  Pusher é só aviso de tela: o disparo independe de cliente conectado.
+- **Alcance no portal:** antes de gravar o fato numa observação do portal, e de novo na entrega (inclusive quando a
+  notificação sai da fila de uma sessão que estava respondendo), o alvo é resolvido no escopo do usuário
+  (`resolveWatchTarget`); fora do alcance, a observação vira `error` sem o fato e sem turno.
+- **Entrega** (`deliverSessionWatches`): agrupa as `triggered` da sessão (`triggered → delivering` com `deliveryKey`),
+  revalida o escopo (portal: ator, agente, `watch_event` ligado e o alcance dos alvos) e envia **uma** mensagem
+  `kind: "event"` com `watch: { ids, label }` por `sendWatchMessage` (sessão livre: começa o turno; respondendo: fila do
+  hub). Ao sair da fila, a notificação **não** usa o texto guardado: volta para `triggered` e é entregue de novo por aqui
+  (`redeliverQueuedWatches`), com tudo revalidado e o texto remontado. O `startTurn` grava a mensagem e só a **anota**
+  nas observações (`recordWatchMessage`, continuam `delivering`); o **fim do turno**, depois de gravar a resposta, as
+  marca como acordadas (`markWatchesWoken`, auditoria `EXECUTAR`). Agente do dono indisponível ou falha ao iniciar:
+  volta para `triggered` e o tick tenta de novo. `delivering` há mais de 2 min sem turno vivo nem fila neste processo
+  (reinício): sem mensagem gravada, volta para `triggered`; com a mensagem e já respondida (há mensagem posterior na
+  sessão), encerra; com a mensagem e **sem resposta**, o tick **retoma o turno com a mesma mensagem**
+  (`resumeWatchTurn`, na posição reservada para a resposta, sem gravar outra mensagem). A mera existência da mensagem
+  não conta como entrega.
+- **Mensagem de sistema**: inspirada no lembrete sintético do OpenCode 2.x (o plugin AFT acorda a sessão com
+  `session.promptAsync` e uma parte `{ type: "text", synthetic: true }` contendo `<system-reminder>…</system-reminder>`,
+  `messageID` reservado, adiamento enquanto a sessão está ocupada e agrupamento das conclusões). No Opex o texto vai
+  ao modelo como mensagem de **usuário** dentro de `<system-reminder>` (Anthropic e Gemini recusam `system` no meio do
+  histórico e mudar as `instructions` quebraria o cache do prompt), com, por observação, `[NOTIFICAÇÃO DO SISTEMA ·
+  observação <id>]`, o fato (o que aconteceu, antes → depois, data), alvo, condição, o combinado (`note`) e "esta
+  mensagem é do sistema … não agende job"; expirada e alvo excluído pedem para avisar o usuário. O histórico não é
+  repetido de propósito: é o normal da sessão, e o `turnContext` (data e hora) continua anexado.
+- **Interface**: a mensagem aparece como **pílula do sistema** (`SystemPill` de `OpexMessageItem`, mesmo padrão de
+  `notice`/`confirmation`, ícone `Zap`, `opex-event-pill`), ex.: "Evento · OPE-12 foi para Concluído", "Observação
+  expirada · OPE-12", "Alvo excluído · mesa OPE-9", "2 notificações do sistema · …". Acima do campo do chat, a faixa
+  **"Observando…"** (`OpexSessionWatches`, só no Agente Opex — flag `watches` do descritor; fora do Maddox e da
+  conversa com rotineiro) lista as ativas da sessão com "expira em …" e o X (confirmação + resposta otimista); a
+  disparada mostra "acordando o agente…". A aba **"Observações"** de `/integracoes/crons?aba=observacoes`
+  (`OpexWatchesTab`, só no dono) lista as do dono e do portal com filtros Ativas/Encerradas/Todas e origem, o
+  combinado, o evento, "Abrir sessão" (só nas do dono) e cancelar. Filtro de origem, linha, selo do portal, "Abrir
+  sessão", erro e skeleton são compartilhados com a aba Jobs (`components/scheduled/`).
+- **Tempo real**: `opex-watch-updated` (`{ id, status, sessionId }`) em `private-app` e, na do portal, também em
+  `private-opex-{clientId}-{userId}`; os hooks só invalidam e relêem.
+- **Auditoria** na entidade `ObservacaoAgenteOpex`: criar, cancelar (`ABORTAR`) e acordar/encerrar (`EXECUTAR`, com o
+  desfecho — `evento`, `expirada`, `alvo excluído` —, alvo, evento, sessão e atraso; ator = dono ou o usuário da
+  observação).
+- **Cascatas**: excluir a sessão cancela as observações dela; excluir o cliente apaga as do cliente; a limpeza por
+  inatividade não toca sessão com observação ativa.
 
 ## Regras de execução
 
@@ -844,6 +958,9 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 | `GET /api/opex/jobs?filter=scheduled\|finished\|all&origin=all\|owner\|client&clientId=&userId=` | Jobs do dono e do portal (agendados por horário; demais do mais recente) |
 | `POST /api/opex/jobs` | Cria `{ title, prompt, sessionId, when, amount?, unit?, date?, time?, sourceJobId? }` (reexecução de job do portal mantém o escopo dele) |
 | `GET/PATCH/DELETE /api/opex/jobs/[id]` | Detalhe; edita (agendado, só job do dono; 403 `OPEX_JOB_CLIENT_READONLY`); cancela (agendado) |
+| `GET /api/opex/watches?filter=active\|finished\|all&origin=&clientId=&userId=&sessionId=` | Observações de evento do dono e do portal (OPE-194) |
+| `GET/DELETE /api/opex/watches/[id]` | Detalhe; cancela (só `watching`; 409 `OPEX_WATCH_NOT_ACTIVE`) |
+| `GET /api/opex/sessions/[id]/watches` | Observações ativas da sessão (faixa "Observando…") |
 | `GET/POST /api/opex/mcp-servers` | MCPs (segredos só pelas chaves); cadastra |
 | `GET/PUT/PATCH/DELETE /api/opex/mcp-servers/[id]` | Detalhe; edita; `{ enabled }`; exclui (e retira dos clientes) |
 | `GET/POST /api/opex/skills[?refresh=1][&versions=0]` | Skills (sem conteúdo, com "Com atualização"; teto de 4 s no GitHub, falha em cache por 1 min; `versions=0` pula a verificação); cria com texto (409 `OPEX_SKILL_NAME_TAKEN`, 413 `OPEX_SKILL_TOO_LARGE`) |
@@ -862,6 +979,7 @@ ou existente. Vale para o **dono** e para os **usuários do portal**. Código: `
 | `POST /api/cliente/opex/sessions/[id]/messages` | `{ text?, fileIds? }` |
 | `POST /api/cliente/opex/sessions/[id]/files` · `POST /api/cliente/opex/files/[id]/complete` · `GET/DELETE /api/cliente/opex/files/[id]` | Mesmo fluxo de arquivos do dono |
 | `GET /api/cliente/opex/sessions/[id]/stream` · `POST …/interrupt` · `POST /api/cliente/opex/actions/[id]` | Resposta ao vivo, parar e confirmar/cancelar |
+| `GET /api/cliente/opex/sessions/[id]/watches` · `DELETE /api/cliente/opex/watches/[id]` | Observações ativas da própria sessão; cancela (só as do próprio usuário; outra é 404) |
 
 Todas exigem `requireClientActor` + `assertClientOpexEnabled`; o dono só entra com `x-client-id`
 (pré-visualização). Não há rotas de jobs no portal (só as ferramentas do agente).
@@ -875,7 +993,7 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
 ## Dados
 
 - Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions` (com `clientId`/`userId` do escopo),
-  `opex_messages` (`kind: "job"` + `job`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`), `opex_skills` (ver "Skills"; índice único em `name`) e `opex_files` (só metadados: sessão, nome, mime,
+  `opex_messages` (`kind: "job"` + `job`; `kind: "event"` + `watch: { ids, label }`, índice esparso em `watch.ids`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_watches` (ver "Observação de eventos"; índices `{status, target.kind, target.id}`, `{status, expiresAt}`, `{sessionId, status}`, `{clientId, userId, createdAt:-1}` e TTL `purge_ttl`; migração `ensure-opex-watch-indexes`), `opex_watch_facts` (fatos das transições observadas: `kind`, `targetId`, `source`, `at`, `status` `pending`/`processing`/`done`/`failed`, lease e tentativas; índices `{status, at}` e TTL `purge_ttl`), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`), `opex_skills` (ver "Skills"; índice único em `name`) e `opex_files` (só metadados: sessão, nome, mime,
   tamanho, `key`/`uploadKey`, `pending`, `ready`, `messageId`). Índices pela migração
   `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`
   (`enabled`, `disabledTools`, `enabledOptInTools`, `enabledMcpServers`).
@@ -883,18 +1001,19 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
 
 ## Código
 
-- Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`,
+- Módulos puros: `constants`, `schemas`, `types`, `files`, `history`, `live-message`, `title`, `watches` (observação de eventos),
   `scope`, `client-tools` (catálogo do portal + `buildOpexClientToolTree`), `tool-tree` (árvore,
   confirmação por ferramenta e migração da configuração antiga), `repo-search` (busca nos snapshots), `host-terminal` (diretórios do terminal do host), `issue-readiness` e `issue-nodes` (entrega, veredito e ranking das issues), `mcp` (MCPs: schemas, nomes, risco e confirmação), `skills`, `skill-source` e `skill-form-schemas` (Skills).
-- `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`,
+- `server/`: `sessions`, `settings`, `hub`, `runner`, `stream`, `titler`, `confirmations`, `watches` e `watch-events` (observação de eventos),
   `tool-runtime`, `files`, `scope`, `client-config`, `repo-tar`, `repo-snapshot`, `host-shell`, `issue-graph`, `server/mcp/` (`connect`, `service`, `tools`), `server/skills/` (`service`, `github`, `size`, `unlink`, `turn`); `server/tools/` (um arquivo por grupo +
   `define`, `helpers`, `json`, `registry`) e `server/client-tools/` (catálogo executável do portal
   + `registry`).
-- `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`,
+- `hooks/`: `useOpexSettings` (+ `useOpexStatus`/`useOpexView`), `useOpexSessions`, `useOpexWatches`,
   `useOpexStream`, `useOpexTabs`, `useOpexUploads`, `useClientOpexAgentConfig`, `useOpexMcpServers`, `useOpexSkills`.
 - `components/`: `agents/` (`AgentChatNavItem`, `AgentChatPanel`, `AgentSwitcherHeader`,
   `AgentSwitchProvider`, `agent-descriptors`), `OpexSessionTabs`, `OpexSessionsPanel`, `OpexStatusDot`,
-  `OpexScopeProvider`, `VirtualStack`; `chat/`, `settings/` (com `settings/mcp/`, `settings/skills/` e `ToolConfirmMeta`) e `settings/client/` (com
+  `OpexScopeProvider`, `VirtualStack`; `chat/` (com `OpexSessionWatches`), `jobs/`, `watches/` (aba Observações),
+  `scheduled/` (peças compartilhadas das abas Jobs e Observações: `AgentOriginFilter`, `AgentScheduledRow`), `settings/` (com `settings/mcp/`, `settings/skills/` e `ToolConfirmMeta`) e `settings/client/` (com
   `ClienteOpexMcpCard`). O campo secreto somente-escrita é `SecretValueInput`
   (`src/components/ui/secret-value-input.tsx`), compartilhado com `SecretField` das Integrações.
 - Pontos de montagem: `AppSidebar` (`footerItems`), `AppShell` (`sidebarFooterItems`),
@@ -914,7 +1033,15 @@ portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (se
 404 entre escopos e canal do Pusher), `tool-settings` (confirmação por ferramenta, árvore e
 migração da configuração antiga), `jobs` (serviço: agendamento, atraso, fila, confirmação, perdidos,
 escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agendado com o agente
-indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal) e `opex-tools-card` (árvore, switch "Pede confirmação" e
+indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal), da observação de eventos (OPE-194) `watches-pure`
+(schema, casamento evento → condição, estado atual, `changedInto` e textos), `watches` (serviço com o runner real e o tick
+real do agendador: assinatura no escopo, `alreadySatisfied`, janela entre leitura e gravação, limites, reaproveitamento,
+um evento = um acordar com o lembrete conferido no que o modelo recebeu, sessão ocupada entregue pelo fim do turno real,
+vencida, prazo pelo instante do fato, fato pendente reprocessado pelo tick, turno retomado com a mesma mensagem, alvo
+excluído, alvo do portal transferido com sessão livre e ocupada, prévia que só reserva, agente indisponível, portal
+desligado, agrupamento e as fontes mesa, rotineiro, job e deploy), `watch-tools` (grupo, riscos, escopo dono x portal e
+fora dos rotineiros) e `watches-ui` (pílula, faixa
+"Observando…" e aba Observações) e `opex-tools-card` (árvore, switch "Pede confirmação" e
 desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas) e `mcp` (nomes, risco, schema, cadastro com segredos cifrados, teste de
 conexão, ferramentas no turno, MCP indisponível, portal, ação confirmada e as ferramentas de gerenciar
 MCPs) e `mcp-ui` (seção MCPs, diálogo, confirmação por ferramenta e card do cliente) e `session-retention` (arquivar/excluir por inatividade, carência do arquivamento, proteções e `archivedAt`) e, das Skills (OPE-153), `skills-pure` (SKILL.md/frontmatter, origem, descoberta, hash, catálogo, janelas e formulário), `skills-service` (criar, nome duplicado, limite técnico sem gravação parcial, instalar várias com duplicada, "Com atualização", atualizar sobrescrevendo edição, GitHub fora e desvínculo D6 — GitHub simulado), `skills-turn` (só ligadas no dono, revalidação ao carregar, seleção do rotineiro e indisponível) e `skills-ui` (lista, filtros, estados, switch, editor com leitura falhando, nome duplicado, remoção com uso e instalação); o `runner` confere que o dono recebe o catálogo e o portal não. Também `__tests__/lib/check-tree.test.ts` e, em `__tests__/features/ai/`, `memories`,

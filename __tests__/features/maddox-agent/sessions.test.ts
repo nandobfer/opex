@@ -29,7 +29,7 @@ vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent
 vi.mock('@/lib/db/models/Opex', () => {
   store.sessions = memoryModel()
   store.messages = memoryModel()
-  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: memoryModel(), OpexJob: memoryModel(), OpexFile: memoryModel() }
+  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: memoryModel(), OpexJob: memoryModel(), OpexFile: memoryModel(), OpexWatch: memoryModel() }
 })
 vi.mock('@/features/auth/server/context', () => ({ clientActorFor: vi.fn(async (userId: string, clientId: string) => ({ userId, client: { _id: clientId } })) }))
 vi.mock('@/lib/ai/catalog', () => ({ listAiModels: async () => {

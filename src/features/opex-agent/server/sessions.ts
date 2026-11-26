@@ -9,7 +9,8 @@ import { normalizeOpexParts } from "../live-message"
 import type { OpexFileDto, OpexMessageDto, OpexSessionDetailDto, OpexSessionDto } from "../types"
 import { forgetSession, isTurnActive } from "./hub"
 import { OWNER_SCOPE, agentOf, sessionFilterOf, type OpexServerScope } from "./scope"
-import { OpexJob, OpexMessage, OpexPendingAction, OpexSession, type IOpexFileRef, type IOpexMessage, type IOpexSession } from "@/lib/db/models/Opex"
+import { OpexJob, OpexMessage, OpexPendingAction, OpexSession, OpexWatch, type IOpexFileRef, type IOpexMessage, type IOpexSession } from "@/lib/db/models/Opex"
+import { OPEX_WATCH_ACTIVE_STATUSES, OPEX_WATCH_RETENTION_MS } from "../watches"
 
 /** Conecta ao banco (os índices das coleções vêm da migração `ensure-opex-indexes`). */
 export async function opexDb(): Promise<void> {
@@ -45,6 +46,7 @@ export function toMessageDto(doc: MessageDoc): OpexMessageDto {
         role: doc.role,
         kind: doc.kind ?? "message",
         job: doc.job ?? null,
+        watch: doc.watch ?? null,
         text: doc.text ?? "",
         files: (doc.files ?? []).map(toFileDto),
         parts: normalizeOpexParts(doc.parts ?? []),
@@ -189,6 +191,7 @@ export async function updateSession(id: string, input: { title?: string; archive
 export async function deleteClientOpexData(clientId: string): Promise<void> {
     await opexDb()
     await OpexJob.deleteMany({ clientId })
+    await OpexWatch.deleteMany({ clientId })
     const sessions = await OpexSession.find({ clientId }).select({ _id: 1, agent: 1, opencodeSessionId: 1 }).lean<Pick<SessionDoc, "_id" | "agent" | "opencodeSessionId">[]>()
     // Métricas dos agentes: a estatística das conversas fica (OPE-122).
     const { preserveConversations } = await import("@/features/agent-metrics/server/conversations")
@@ -223,6 +226,12 @@ export async function purgeSession(
 ): Promise<void> {
     const id = session._id.toString()
     forgetSession(id)
+    // Observações da sessão (OPE-194): não há mais quem acordar.
+    const now = new Date()
+    await OpexWatch.updateMany(
+        { sessionId: session._id, status: { $in: [...OPEX_WATCH_ACTIVE_STATUSES] } },
+        { $set: { status: "canceled", canceledBy: actorId, error: "A sessão foi excluída", purgeAt: new Date(now.getTime() + OPEX_WATCH_RETENTION_MS) } },
+    )
     // Métricas dos agentes: a estatística da conversa fica, marcada como removida (OPE-122).
     const { preserveConversations } = await import("@/features/agent-metrics/server/conversations")
     await preserveConversations([id])
