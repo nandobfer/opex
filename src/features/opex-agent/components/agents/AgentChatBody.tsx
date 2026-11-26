@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import type { OpexSessionDto } from "../../types"
 import { useOpexSessions } from "../../hooks/useOpexSessions"
 import { OPEX_DRAFT_TAB, useOpexTabs } from "../../hooks/useOpexTabs"
+import { usePruneComposerDrafts } from "../../hooks/useComposerDraft"
 import { OpexChat } from "../chat/OpexChat"
 import { OpexDraftChat } from "../chat/OpexDraftChat"
 import { OpexSessionTabs } from "../OpexSessionTabs"
@@ -21,8 +22,8 @@ export function useAgentChat(options: { focusSessionId?: string | null; onFocuse
     const { focusSessionId, onFocused } = options
     const sessions = useOpexSessions()
     const { tabs, ready, open, close, activate, startDraft } = useOpexTabs(sessions.data)
+    usePruneComposerDrafts(sessions.data)
     const [listOpen, setListOpen] = useState(false)
-    const [handoff, setHandoff] = useState<{ sessionId: string; text: string } | null>(null)
     const [draftModel, setDraftModel] = useState<DraftModel>(null)
     const byId = useMemo(() => new Map((sessions.data ?? []).map((session) => [session.id, session])), [sessions.data])
     const active = tabs.active ?? OPEX_DRAFT_TAB
@@ -38,14 +39,14 @@ export function useAgentChat(options: { focusSessionId?: string | null; onFocuse
         startDraft()
         setListOpen(false)
     }
-    return { sessions, tabs, ready, open, close, activate, active, activeSession, byId, listOpen, setListOpen, toggleList: () => setListOpen((value) => !value), newSession, handoff, setHandoff, draftModel, setDraftModel }
+    return { sessions, tabs, ready, open, close, activate, active, activeSession, byId, listOpen, setListOpen, toggleList: () => setListOpen((value) => !value), newSession, draftModel, setDraftModel }
 }
 
 export type AgentChatState = ReturnType<typeof useAgentChat>
 
 /** Abas das sessões, o chat da aba ativa (ou a "Nova sessão") e a lista de sessões. */
 export function AgentChatBody({ chat }: { chat: AgentChatState }) {
-    const { ready, tabs, active, byId, activate, close, open, draftModel, setDraftModel, setHandoff, handoff, listOpen, setListOpen, newSession } = chat
+    const { ready, tabs, active, byId, activate, close, open, draftModel, setDraftModel, listOpen, setListOpen, newSession } = chat
     return (
         <>
             <div className="border-b bg-muted/30 pt-1.5">{ready && <OpexSessionTabs open={tabs.open} active={active} sessions={byId} onActivate={activate} onClose={close} />}</div>
@@ -56,14 +57,13 @@ export function AgentChatBody({ chat }: { chat: AgentChatState }) {
                         {!ready ? null : active === OPEX_DRAFT_TAB ? (
                             <OpexDraftChat
                                 model={draftModel}
-                                onCreated={(sessionId, text) => {
-                                    if (text) setHandoff({ sessionId, text })
+                                onCreated={(sessionId) => {
                                     setDraftModel(null)
                                     open(sessionId)
                                 }}
                             />
                         ) : (
-                            <OpexChat sessionId={active} initialText={handoff?.sessionId === active ? handoff.text : undefined} />
+                            <OpexChat sessionId={active} />
                         )}
                     </motion.div>
                 </AnimatePresence>

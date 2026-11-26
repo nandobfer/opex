@@ -1,6 +1,6 @@
 "use client"
 
-import { forwardRef, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react"
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useLayoutEffect, useRef, useState, type ClipboardEvent, type KeyboardEvent } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { ArrowUp, Loader2, Square } from "lucide-react"
 import { AttachButton, pasteFiles } from "@/components/chat-attachments/AttachButton"
@@ -12,6 +12,7 @@ import { REPLY_PRIORITY } from "@/components/agent-reply/ReplyTargetProvider"
 import { cn } from "@/lib/utils"
 import { OPEX_MESSAGE_MAX } from "../../constants"
 import { useOpexScope } from "../OpexScopeProvider"
+import { useComposerDraft } from "../../hooks/useComposerDraft"
 
 
 export interface OpexComposerHandle {
@@ -41,21 +42,33 @@ interface OpexComposerProps {
     disabledReason?: string | null
     /** Texto inicial (ex.: digitado na "Nova sessão" antes de anexar um arquivo). */
     initialText?: string
+    /** Aba do rascunho guardado no navegador (id da sessão ou a "Nova sessão"); sem ela, nada é guardado. */
+    draftId?: string
 }
 
 const MAX_HEIGHT = 180
 
 /** Campo do chat: Enter envia, Shift+Enter quebra linha; cresce até ~7 linhas. */
-export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(function OpexComposer({ onSend, attachments, onStop, running, sending, stopping, disabledReason, initialText }, ref) {
+export const OpexComposer = forwardRef<OpexComposerHandle, OpexComposerProps>(function OpexComposer({ onSend, attachments, onStop, running, sending, stopping, disabledReason, initialText, draftId }, ref) {
     const agentLabel = useOpexScope().agent.label
-    const [text, setText] = useState(initialText ?? "")
+    const draft = useComposerDraft(draftId)
+    const [text, setTextState] = useState(() => initialText ?? draft.initial)
+    // Toda mudança do campo grava o rascunho da aba: fechar o popover desmonta o chat (OPE-195).
+    const saveDraft = draft.save
+    const setText = useCallback(
+        (value: string) => {
+            setTextState(value)
+            saveDraft(value)
+        },
+        [saveDraft],
+    )
     const textRef = useRef(text)
     useEffect(() => {
         textRef.current = text
     }, [text])
     const textareaRef = useRef<HTMLTextAreaElement>(null)
 
-    useImperativeHandle(ref, () => ({ focus: () => textareaRef.current?.focus(), setText: (value: string) => setText(value), getText: () => textRef.current }), [])
+    useImperativeHandle(ref, () => ({ focus: () => textareaRef.current?.focus(), setText: (value: string) => setText(value), getText: () => textRef.current }), [setText])
 
     useEffect(() => {
         textareaRef.current?.focus({ preventScroll: true })

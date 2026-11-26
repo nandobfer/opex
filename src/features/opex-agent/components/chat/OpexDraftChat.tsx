@@ -1,11 +1,12 @@
 "use client"
 
-import { useRef } from "react"
 import { useOpexView } from "../../hooks/useOpexSettings"
 import { useCreateOpexSession } from "../../hooks/useOpexSessions"
 import { useOpexUploads } from "../../hooks/useOpexUploads"
+import { useMoveComposerDraft } from "../../hooks/useComposerDraft"
+import { OPEX_DRAFT_TAB } from "../../hooks/useOpexTabs"
 import { DEFAULT_OPEX_AGENT_SETTINGS } from "../../schemas"
-import { OpexComposer, type OpexComposerHandle } from "./OpexComposer"
+import { OpexComposer } from "./OpexComposer"
 import { OpexDropZone } from "./OpexDropZone"
 import { OpexEmptyChat } from "./OpexEmptyChat"
 import { OpexUnavailable } from "./OpexChat"
@@ -13,14 +14,15 @@ import { useOpexScope } from "../OpexScopeProvider"
 
 /**
  * Nova sessão ainda não criada: a primeira mensagem cria a sessão e abre a aba dela. Anexar um
- * arquivo também cria a sessão na hora (o envio precisa dela); o texto digitado vai junto para a aba.
+ * arquivo também cria a sessão na hora (o envio precisa dela); o rascunho digitado vai junto para a aba
+ * da sessão criada (OPE-195).
  */
-export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: string, draftText?: string) => void; model?: { model: string; variant: string | null } | null }) {
+export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: string) => void; model?: { model: string; variant: string | null } | null }) {
     const { agent } = useOpexScope()
     const view = useOpexView()
     const create = useCreateOpexSession()
     const uploads = useOpexUploads(null)
-    const composerRef = useRef<OpexComposerHandle>(null)
+    const moveDraft = useMoveComposerDraft()
     const availability = view.data?.availability
     const disabledReason = availability && !availability.available ? (availability.reason ?? `O ${agent.label} não está disponível`) : null
     const limits = view.data?.files ?? DEFAULT_OPEX_AGENT_SETTINGS.files
@@ -28,11 +30,11 @@ export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: str
     const start = (text: string) => create.mutate({ text, model }, { onSuccess: ({ session }) => onCreated(session.id) })
     const attach = (files: File[]) => {
         if (create.isPending) return
-        const draftText = composerRef.current?.getText() ?? ""
         create.mutate({ model }, {
             onSuccess: ({ session }) => {
                 uploads.enqueue(session.id, files, limits)
-                onCreated(session.id, draftText)
+                moveDraft(OPEX_DRAFT_TAB, session.id)
+                onCreated(session.id)
             },
         })
     }
@@ -42,7 +44,6 @@ export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: str
             {disabledReason && <OpexUnavailable reason={disabledReason} />}
             <OpexEmptyChat onPick={start} disabled={Boolean(disabledReason) || create.isPending} />
             <OpexComposer
-                ref={composerRef}
                 onSend={start}
                 attachments={{ items: [], onFiles: attach, onRetry: () => undefined, onRemove: () => undefined, enabled: agent.attachments }}
                 onStop={() => undefined}
@@ -50,6 +51,7 @@ export function OpexDraftChat({ onCreated, model }: { onCreated: (sessionId: str
                 sending={create.isPending}
                 stopping={false}
                 disabledReason={disabledReason}
+                draftId={OPEX_DRAFT_TAB}
             />
         </OpexDropZone>
     )

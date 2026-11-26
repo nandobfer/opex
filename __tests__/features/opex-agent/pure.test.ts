@@ -6,6 +6,8 @@ import { File, FileImage, ListTodo, Wrench } from 'lucide-react'
 import { redactToolCalls, selectHistory, stripPastReasoning, withTurnContext } from '@/features/opex-agent/history'
 import { clampWords, fallbackTitle, parseTitleOutput } from '@/features/opex-agent/title'
 import { closeTab, openTab, pruneTabs, OPEX_DRAFT_TAB } from '@/features/opex-agent/hooks/useOpexTabs'
+import { composerDraftsKey, moveDraft, pruneDrafts, setDraft } from '@/features/opex-agent/hooks/useComposerDraft'
+import { buildAgentUiScope } from '@/features/opex-agent/components/OpexScopeProvider'
 import { reduceStream, splitLines } from '@/features/opex-agent/hooks/useOpexStream'
 import { buildChatItems } from '@/features/opex-agent/components/chat/OpexMessageList'
 import { searchSessions } from '@/features/opex-agent/components/OpexSessionsPanel'
@@ -134,6 +136,43 @@ describe('abas de sessão', () => {
     expect(pruneTabs({ open: ['a', 'b'], active: 'b' }, [{ id: 'a' }])).toEqual({ open: ['a'], active: 'a' })
     const same = { open: ['a'], active: 'a' }
     expect(pruneTabs(same, [{ id: 'a' }])).toBe(same)
+  })
+})
+
+describe('rascunho do campo por aba (OPE-195)', () => {
+  it('grava, sobrescreve e apaga com texto vazio', () => {
+    let drafts = setDraft({}, 'a', 'oi')
+    expect(drafts).toEqual({ a: 'oi' })
+    drafts = setDraft(drafts, 'a', 'olá')
+    expect(drafts).toEqual({ a: 'olá' })
+    expect(setDraft(drafts, 'a', 'olá')).toBe(drafts)
+    expect(setDraft(drafts, 'a', '')).toEqual({})
+    expect(setDraft(drafts, 'b', '')).toBe(drafts)
+  })
+
+  it('leva o rascunho da "Nova sessão" para a sessão criada e não mexe quando a origem está vazia', () => {
+    expect(moveDraft({ [OPEX_DRAFT_TAB]: 'texto', s1: 'velho' }, OPEX_DRAFT_TAB, 's1')).toEqual({ s1: 'texto' })
+    const same = { s1: 'x' }
+    expect(moveDraft(same, OPEX_DRAFT_TAB, 's1')).toBe(same)
+  })
+
+  it('mantém a "Nova sessão" e as sessões existentes e esquece as excluídas', () => {
+    expect(pruneDrafts({ [OPEX_DRAFT_TAB]: 'n', a: '1', b: '2' }, [{ id: 'a' }])).toEqual({ [OPEX_DRAFT_TAB]: 'n', a: '1' })
+    const same = { [OPEX_DRAFT_TAB]: 'n', a: '1' }
+    expect(pruneDrafts(same, [{ id: 'a' }])).toBe(same)
+  })
+
+  it('a chave separa agente, cliente e usuário', () => {
+    const client = (clientId: string, userId: string) => ({ clientId, clientName: 'C', userId, userName: 'U', isAdmin: false, http: {} as never })
+    const keys = [
+      buildAgentUiScope('opex'),
+      buildAgentUiScope('maddox'),
+      buildAgentUiScope('opex', client('c1', 'u1')),
+      buildAgentUiScope('opex', client('c1', 'u2')),
+      buildAgentUiScope('opex', client('c2', 'u1')),
+    ].map((scope) => composerDraftsKey(scope.tabsKey))
+    expect(new Set(keys).size).toBe(keys.length)
+    expect(keys[0]).toBe('opex:opex-agent:tabs:v1:composer-drafts:v1')
   })
 })
 
