@@ -2,6 +2,8 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import type { ReactNode } from 'react'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
@@ -40,6 +42,12 @@ import { OPEX_TABS_STORAGE_KEY } from '@/features/opex-agent/constants'
 const draftsKey = composerDraftsKey(OPEX_TABS_STORAGE_KEY)
 const field = () => screen.getByLabelText('Mensagem para o Agente Opex') as HTMLTextAreaElement
 
+/** O `OpexChat` real tem hooks do TanStack Query (observações de evento, OPE-194). */
+function wrapper({ children }: { children: ReactNode }) {
+  const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>
+}
+
 beforeEach(() => {
   window.localStorage.clear()
   mocks.sessions = []
@@ -48,11 +56,11 @@ afterEach(cleanup)
 
 describe('ligação do rascunho no chat real', () => {
   it('OpexChat: o texto digitado na sessão volta depois de desmontar e montar', () => {
-    const first = render(<OpexChat sessionId="s1" />)
+    const first = render(<OpexChat sessionId="s1" />, { wrapper })
     fireEvent.change(field(), { target: { value: 'continua depois' } })
     expect(JSON.parse(window.localStorage.getItem(draftsKey) ?? '{}')).toEqual({ s1: 'continua depois' })
     first.unmount()
-    render(<OpexChat sessionId="s1" />)
+    render(<OpexChat sessionId="s1" />, { wrapper })
     expect(field().value).toBe('continua depois')
   })
 
