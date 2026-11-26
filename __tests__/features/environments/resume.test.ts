@@ -224,7 +224,8 @@ describe('retomada do deploy depois de o app reiniciar', () => {
     const response = await openDeployStream(id, new AbortController().signal)
     const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
     const startedAt = deploys.docs.find((doc) => doc._id === id)!.startedAt as Date
-    expect(events[0]).toEqual({ type: 'meta', startedAt: startedAt.toISOString(), estimateMs: 4 * 60_000, sampleSize: 3, initial: false })
+    expect(events[0]).toEqual({ type: 'meta', startedAt: startedAt.toISOString(), serverNow: expect.any(String), estimateMs: 4 * 60_000, sampleSize: 3, initial: false })
+    expect(Math.abs(Date.parse(events[0]!.serverNow as string) - Date.now())).toBeLessThan(5_000)
     expect(events[1]).toMatchObject({ type: 'log' })
   })
 

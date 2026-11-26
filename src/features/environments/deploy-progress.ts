@@ -17,6 +17,16 @@ export function formatElapsed(ms: number): string {
     return hours > 0 ? `${hours}:${String(minutes).padStart(2, "0")}:${seconds}` : `${String(minutes).padStart(2, "0")}:${seconds}`
 }
 
+/**
+ * Diferença entre o relógio do navegador e o do servidor (`serverNow` do `meta`), medida ao receber o
+ * evento: o decorrido usa `agora − diferença − início`, então um relógio local adiantado ou atrasado não
+ * distorce a barra. Carimbo inválido vira 0.
+ */
+export function clockSkewMs(serverNow: string, clientNow: number): number {
+    const server = Date.parse(serverNow)
+    return Number.isFinite(server) ? clientNow - server : 0
+}
+
 export interface DeployProgressInput {
     startedAt: string
     estimateMs: number | null

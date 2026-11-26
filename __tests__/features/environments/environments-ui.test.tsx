@@ -256,7 +256,7 @@ describe('barra de progresso do deploy (OPE-202)', () => {
   afterEach(() => vi.useRealTimers())
 
   const START = '2026-11-26T15:00:00.000Z'
-  const meta = (estimateMs: number | null): DeployStreamEvent => ({ type: 'meta', startedAt: START, estimateMs, sampleSize: estimateMs === null ? 0 : 5, initial: false })
+  const meta = (estimateMs: number | null, serverNow = new Date().toISOString()): DeployStreamEvent => ({ type: 'meta', startedAt: START, serverNow, estimateMs, sampleSize: estimateMs === null ? 0 : 5, initial: false })
   /** Stream que entrega os eventos e fica aberto até `finish` (deploy em andamento). */
   function liveStream(events: DeployStreamEvent[]) {
     let push!: (event: DeployStreamEvent) => void
@@ -280,6 +280,22 @@ describe('barra de progresso do deploy (OPE-202)', () => {
     })
     expect(progressbar()!.getAttribute('aria-valuenow')).toBe('36')
     expect(progressbar()!.getAttribute('aria-label')).toMatch(/tempo decorrido sobre a duração prevista/)
+    expect(screen.getByText(/há 01:1\d · restam ~02:0\d/)).toBeTruthy()
+  })
+
+  it.each([
+    ['atrasado 2 min', -120_000],
+    ['adiantado 2 min', 120_000],
+  ])('relógio do navegador %s em relação ao servidor: o decorrido segue o servidor', async (_label, offset) => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const serverNow = new Date(Date.parse(START) + 72_000)
+    vi.setSystemTime(new Date(serverNow.getTime() + offset))
+    liveStream([meta(200_000, serverNow.toISOString())])
+    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    expect(progressbar()!.getAttribute('aria-valuenow')).toBe('36')
     expect(screen.getByText(/há 01:1\d · restam ~02:0\d/)).toBeTruthy()
   })
 

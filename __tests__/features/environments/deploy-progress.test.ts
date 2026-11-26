@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { DEPLOY_PROGRESS_CAP, deployProgress, formatElapsed } from '@/features/environments/deploy-progress'
+import { clockSkewMs, DEPLOY_PROGRESS_CAP, deployProgress, formatElapsed } from '@/features/environments/deploy-progress'
 
 /** Ambientes: barra de progresso da gaveta de deploy — decorrido sobre a estimativa (OPE-202). */
 
@@ -13,6 +13,23 @@ describe('formatElapsed', () => {
     expect(formatElapsed(72_000)).toBe('01:12')
     expect(formatElapsed(3_723_000)).toBe('1:02:03')
     expect(formatElapsed(-5_000)).toBe('00:00')
+  })
+})
+
+describe('clockSkewMs', () => {
+  it('diferença do navegador para o servidor (positiva adiantado, negativa atrasado); carimbo inválido vira 0', () => {
+    expect(clockSkewMs(START, at(120))).toBe(120_000)
+    expect(clockSkewMs(START, at(-120))).toBe(-120_000)
+    expect(clockSkewMs('lixo', at(5))).toBe(0)
+  })
+
+  it('aplicada ao relógio local, o decorrido sai igual ao do servidor', () => {
+    const serverNow = new Date(at(72)).toISOString()
+    for (const offset of [-120_000, 120_000]) {
+      const clientNow = at(72) + offset
+      const now = clientNow - clockSkewMs(serverNow, clientNow)
+      expect(deployProgress({ startedAt: START, estimateMs: 200_000, initial: false, now }).detail).toBe('há 01:12 · restam ~02:08')
+    }
   })
 })
 

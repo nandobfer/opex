@@ -81,7 +81,7 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   volta a entregar eventos zera a contagem), redesenhando o log inteiro ao reconectar.
 - **Barra de progresso do deploy** (OPE-202), entre o cabeçalho do drawer e o terminal, só enquanto o deploy está
   em andamento:
-  - Vem do evento `meta` (`DeployMetaEvent`: `startedAt`, `estimateMs`, `sampleSize`, `initial`), a primeira linha
+  - Vem do evento `meta` (`DeployMetaEvent`: `startedAt`, `serverNow`, `estimateMs`, `sampleSize`, `initial`), a primeira linha
     do NDJSON de um deploy `running` (inclusive quando outro processo conduz o deploy e o stream fecha sem status).
     Deploy já encerrado (aberto pelo Histórico) não recebe `meta`: só o resultado e o log, sem barra. O `meta` chega
     de novo a cada reconexão, e o tempo continua do `startedAt` absoluto.
@@ -97,7 +97,10 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
     trava em 99% e o detalhe vira "há 05:12 · mais que o previsto (~04:00)". Sem estimativa: barra indeterminada
     (segmento correndo; parado com movimento reduzido), sem % nem `aria-valuenow`, só "há 01:12".
   - O relógio é o `useTickingNow` (`src/hooks/`, `useSyncExternalStore`, tick de 250 ms, `null` no servidor): o
-    decorrido é sempre `agora − startedAt`, nunca somado por tick, e segue contando durante "Reconectando…".
+    decorrido é sempre `agora − diferença − startedAt`, nunca somado por tick, e segue contando durante "Reconectando…".
+    A diferença entre o relógio do navegador e o do servidor (`clockSkewMs`, pelo `serverNow` do `meta`) é medida a
+    cada `meta` recebido (inclusive nas reconexões): um dispositivo com o relógio adiantado ou atrasado vê o mesmo
+    decorrido e o mesmo % que o servidor.
   - Ao chegar o status final (Concluído, Falhou ou a desistência por falta de conexão) a barra sai com fade e
     recolhe a altura (Framer Motion); nunca fica parada num % alto. `role="progressbar"` com `aria-label` explicando
     que é tempo decorrido sobre a duração prevista e `aria-valuetext` com o tempo.

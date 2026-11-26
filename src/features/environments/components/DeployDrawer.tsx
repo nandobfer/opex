@@ -6,8 +6,9 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { readNdjson } from "@/lib/ndjson-client"
 import { IntegrationConsole, type IntegrationConsoleHandle } from "@/features/integrations/components/IntegrationConsole"
-import type { DeployMetaEvent, DeployStatus, DeployStreamEvent } from "../types"
-import { DeployProgress } from "./DeployProgress"
+import { clockSkewMs } from "../deploy-progress"
+import type { DeployStatus, DeployStreamEvent } from "../types"
+import { DeployProgress, type DeployProgressMeta } from "./DeployProgress"
 
 /** Log do deploy ao vivo (NDJSON) num drawer com o terminal. */
 export function DeployDrawer({ deployId, title, onClose }: { deployId: string | null; title: string; onClose: () => void }) {
@@ -29,8 +30,9 @@ type LogState = { value: DeployStatus; error: string | null; reconnecting: boole
 function DeployLog({ deployId, title }: { deployId: string; title: string }) {
     const consoleRef = useRef<IntegrationConsoleHandle>(null)
     const [status, setStatus] = useState<LogState>({ value: "running", error: null, reconnecting: false })
-    // Início e estimativa do deploy em andamento (o `meta` chega de novo a cada conexão; o relógio segue o `startedAt`).
-    const [meta, setMeta] = useState<DeployMetaEvent | null>(null)
+    // Início e estimativa do deploy em andamento (o `meta` chega de novo a cada conexão; o relógio segue o `startedAt`,
+    // corrigido pela diferença para o relógio do servidor, medida de novo a cada `meta`).
+    const [meta, setMeta] = useState<DeployProgressMeta | null>(null)
 
     useEffect(() => {
         const controller = new AbortController()
@@ -59,7 +61,7 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
                             setStatus((current) => (current.reconnecting ? { ...current, reconnecting: false } : current))
                         }
                         if (event.type === "meta") {
-                            setMeta(event)
+                            setMeta({ ...event, skewMs: clockSkewMs(event.serverNow, Date.now()) })
                         } else if (event.type === "log") {
                             pending += event.text
                             flush()

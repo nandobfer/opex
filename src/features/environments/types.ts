@@ -140,8 +140,9 @@ export type DeployEvent = { type: "log"; text: string } | { type: "status"; stat
 /**
  * Primeira linha do stream de um deploy em andamento (só o stream envia, não o hub): início absoluto e
  * a duração estimada pelos deploys anteriores do ambiente (`null` sem histórico). Reenviada a cada conexão.
+ * `serverNow` é o instante do servidor ao enviar: a tela corrige o próprio relógio pela diferença.
  */
-export type DeployMetaEvent = { type: "meta"; startedAt: string; estimateMs: number | null; sampleSize: number; initial: boolean }
+export type DeployMetaEvent = { type: "meta"; startedAt: string; serverNow: string; estimateMs: number | null; sampleSize: number; initial: boolean }
 
 /** Linhas que o stream do log entrega ao cliente. */
 export type DeployStreamEvent = DeployEvent | DeployMetaEvent

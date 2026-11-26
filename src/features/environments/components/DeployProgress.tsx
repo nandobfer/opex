@@ -8,9 +8,13 @@ import type { DeployMetaEvent } from "../types"
 /** Tick menor que o segundo exibido: um disparo atrasado não pula um segundo. */
 const DEPLOY_PROGRESS_TICK_MS = 250
 
+/** `meta` recebido com a diferença do relógio local para o do servidor, medida na chegada (`clockSkewMs`). */
+export type DeployProgressMeta = DeployMetaEvent & { skewMs: number }
+
 /** Barra da gaveta de deploy: tempo decorrido (do `startedAt` absoluto) sobre a duração estimada. */
-export function DeployProgress({ meta }: { meta: DeployMetaEvent }) {
-    const now = useTickingNow(DEPLOY_PROGRESS_TICK_MS)
+export function DeployProgress({ meta }: { meta: DeployProgressMeta }) {
+    const clientNow = useTickingNow(DEPLOY_PROGRESS_TICK_MS)
+    const now = clientNow === null ? null : clientNow - meta.skewMs
     if (now === null) return <UsageBar label="Deploy" percent={null} ariaLabel={DEPLOY_PROGRESS_ARIA_LABEL} tone="primary" />
     const view = deployProgress({ startedAt: meta.startedAt, estimateMs: meta.estimateMs, initial: meta.initial, now })
     return (

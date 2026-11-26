@@ -27,7 +27,7 @@ export async function openDeployStream(deployId: string, signal: AbortSignal): P
     let meta: DeployMetaEvent | null = null
     if (final.status === "running") {
         const estimate = await loadDeployEstimate(final)
-        meta = { type: "meta", startedAt: new Date(final.startedAt).toISOString(), estimateMs: estimate.estimateMs, sampleSize: estimate.sampleSize, initial: estimate.initial }
+        meta = { type: "meta", startedAt: new Date(final.startedAt).toISOString(), serverNow: new Date().toISOString(), estimateMs: estimate.estimateMs, sampleSize: estimate.sampleSize, initial: estimate.initial }
     }
     const encoder = new TextEncoder()
     let cleanup = () => {}
@@ -47,7 +47,7 @@ export async function openDeployStream(deployId: string, signal: AbortSignal): P
                 write(event)
                 if (event.type === "status" && event.status !== "running") close()
             }) : null
-            if (meta) write(meta)
+            if (meta) write({ ...meta, serverNow: new Date().toISOString() })
             if (!live) {
                 write({ type: "log", text: final.log })
                 if (final.status !== "running") write({ type: "status", status: final.status, error: final.error })
