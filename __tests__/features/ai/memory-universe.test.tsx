@@ -18,6 +18,8 @@ vi.mock('@engramind/client/react', () => ({
     return <div data-testid="agent-universe" />
   },
 }))
+// Agente cadastrado no Engramind: o universo aparece (o estado "Cadastrar agente" tem teste próprio).
+vi.mock('@/features/ai/hooks/useAgentProvision', () => ({ useAgentMemoryStatus: () => ({ data: { exists: true, disabled: false } }), useProvisionAgent: () => ({ mutate: vi.fn() }) }))
 vi.mock('@/features/engramind/components/OpexEngramindProvider', () => ({ OpexEngramindProvider: ({ children }: { children: React.ReactNode }) => <>{children}</> }))
 vi.mock('@/features/ai/hooks/useMemories', () => ({
   useMemoriesRealtime: () => {},

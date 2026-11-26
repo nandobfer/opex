@@ -3,6 +3,7 @@
  * `@engramind/client` recebe o mapa pronto (`channelLabels` do provider) e mostra a sigla no lugar do id.
  */
 import { AI_AGENTS } from "@/features/ai/agents"
+import { conversationIdOfJid } from "@/features/secretary-agent/conversation-id"
 import type { ChannelLabel } from "@engramind/client/react"
 
 /** Prefixo dos canais por central do agente desenvolvedor (`…/central/<centralId>`). */
@@ -41,6 +42,24 @@ export function clientChannelLabels(clients: readonly { id: string; name?: strin
         if (!title) continue
         labels.set(`${CLIENT_CHANNEL_PREFIXES[0]}${client.id}`, { title, hint: `Memórias do cliente ${title} · Agente Opex` })
         labels.set(`${CLIENT_CHANNEL_PREFIXES[1]}${client.id}`, { title, hint: `Memórias do cliente ${title} · Agente Maddox` })
+    }
+    return labels
+}
+
+/** Prefixo dos canais por conversa do Agente Secretário (`agentes/secretario/conversas/<id>`, OPE-192). */
+export const SECRETARY_CONVERSATION_PREFIX = `${AI_AGENTS["secretary-conversation"].channel}/`
+
+/**
+ * Rótulos dos canais por conversa do Agente Secretário (OPE-192): o título é o nome do contato ou grupo e a
+ * dica, o número (a lib não mostra foto no rótulo; a foto fica na aba Conversas e nos seletores).
+ */
+export function secretaryChannelLabels(contacts: readonly { jid: string; name: string; number: string | null; isGroup: boolean }[]): Map<string, ChannelLabel> {
+    const labels = new Map<string, ChannelLabel>()
+    for (const contact of contacts) {
+        const id = conversationIdOfJid(contact.jid)
+        const title = contact.name.trim()
+        if (!id || !title) continue
+        labels.set(`${SECRETARY_CONVERSATION_PREFIX}${id}`, { title, hint: contact.isGroup ? `Grupo · Agente Secretário` : `+${contact.number ?? ""} · Agente Secretário` })
     }
     return labels
 }

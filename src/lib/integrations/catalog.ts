@@ -18,7 +18,7 @@
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind", "evolution-api"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -213,6 +213,8 @@ export const OPENCODE_GO_USAGE_JOB_ID = "opencode-go-usage-refresh"
 export const COMMAND_CODE_USAGE_JOB_ID = "command-code-usage-refresh"
 /** Lê CPU, RAM, swap e disco da máquina do OpenCode (RPC do opencode-htop ou shell) e avisa a tela quando muda. */
 export const HOST_METRICS_JOB_ID = "host-metrics-refresh"
+/** Engramind (OPE-192): reprocessa as gravações de memória que ficaram na fila com o Engramind fora do ar. */
+export const ENGRAMIND_PENDING_WRITES_JOB_ID = "engramind-pending-writes"
 /** Ambientes: mantém as últimas tags de cada ambiente no registry e roda o garbage-collect. */
 export const ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID = "environments-registry-cleanup"
 /** Exclui as sessões do servidor OpenCode sem interação há X dias (nunca as vinculadas ao Opex nem as em execução). */
@@ -397,6 +399,13 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         schedule: { type: "daily", time: "05:00" },
         enabled: false,
         retentionDays: DEFAULT_SESSION_RETENTION_DAYS,
+    },
+    {
+        id: ENGRAMIND_PENDING_WRITES_JOB_ID,
+        label: "Reprocessar memórias pendentes do Engramind",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 1 },
+        enabled: true,
     },
 ]
 
@@ -826,6 +835,26 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             { key: "adminToken", label: "Token admin", description: "Token eng.tk_… admin com read+write+delete (o de bootstrap é trocado por um próprio do Opex)", required: true },
             { key: "webhookSecret", label: "Segredo do webhook", description: "Gerado pelo Opex e registrado no app opex; nunca exibido", group: "card" },
             { key: "appToken", label: "Token do app opex", description: "Token eng.tk_… kind app emitido pelo Opex para provisionar os agentes de memórias (OPE-117); nunca exibido", group: "card" },
+        ],
+    },
+    {
+        // OPE-192: WhatsApp pela Evolution API (ver aicontext/modules/evolution-api.md). Sem `env`: o
+        // pré-preenchimento vem do ambiente `evolution-api` (lido no servidor, a chave nunca vai ao navegador).
+        id: "evolution-api",
+        name: "Evolution API",
+        description: "WhatsApp pela Evolution API: instância, pareamento por QR code ou código, webhook e operações",
+        defaultEnvironment: "interno",
+        streamsDebugOverPusher: true,
+        publicFields: [
+            { key: "internalUrl", label: "URL interna", description: "Endereço que o servidor do Opex alcança (rede evolution-network)", kind: "url", placeholder: "http://evolution-api:8080", required: true },
+            { key: "publicUrl", label: "URL pública", description: "Endereço público da Evolution, usado nos links e no Manager (/manager)", kind: "url", placeholder: "https://evolution.exemplo.com" },
+            { key: "defaultInstance", label: "Instância padrão", description: "Nome da instância do WhatsApp usada pelo Opex", kind: "text", placeholder: "opex" },
+            { key: "version", label: "Versão", description: "Versão da Evolution informada pelo ambiente (o teste confere a versão real)", kind: "text", placeholder: "2.3.8" },
+            { key: "webhookUrl", label: "URL do webhook", description: "URL de entrada do Opex registrada na instância", kind: "url", group: "card" },
+        ],
+        secretFields: [
+            { key: "apiKey", label: "Chave global", description: "AUTHENTICATION_API_KEY da Evolution (cifrada; nunca exibida)", required: true },
+            { key: "webhookSecret", label: "Segredo do webhook", description: "Gerado pelo Opex e enviado pela Evolution no header do webhook; nunca exibido", group: "card" },
         ],
     },
 ]

@@ -26,11 +26,16 @@ services:
       OPEX_PREVIEW: ${OPEX_PREVIEW:-}
       OPEX_PREVIEW_URL: ${OPEX_PREVIEW_URL:-}
     networks:
-      - mongodb-network
-      - soketi-network
-      - minio-network
+      mongodb-network: {}
+      soketi-network: {}
+      minio-network: {}
       # Rede compartilhada dos MCPs em container (Playwright MCP na porta 8931).
-      - mcp
+      mcp: {}
+      # Evolution API (OPE-192): o Opex chama http://evolution-api:8080 e a Evolution entrega o webhook
+      # em http://opex-<PORT>:<PORT> (alias próprio por porta: `app` é genérico na rede compartilhada).
+      evolution-network:
+        aliases:
+          - opex-${PORT:?defina PORT no .env}
     deploy:
       resources:
         limits:
@@ -111,4 +116,6 @@ networks:
   minio-network:
     external: true
   mcp:
+    external: true
+  evolution-network:
     external: true

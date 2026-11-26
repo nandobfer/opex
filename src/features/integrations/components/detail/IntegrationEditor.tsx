@@ -18,6 +18,7 @@ import { aiProviderOfIntegration } from "@/lib/ai/providers"
 import { AiProviderEditorForm } from "@/features/ai/components/AiProviderEditorForm"
 import { BuilderMachineEditorForm } from "@/features/local-docker/components/BuilderMachineEditorForm"
 import { EngramindEditorForm } from "@/features/engramind/components/integration/EngramindEditorForm"
+import { EvolutionEditorForm } from "@/features/evolution-api/components/EvolutionEditorForm"
 import { CronsEditorForm } from "./CronsEditorForm"
 import { EditorForm } from "./EditorForm"
 import { ExplorerPane } from "./ExplorerPane"
@@ -167,6 +168,8 @@ export function IntegrationEditor({ id, data }: { id: IntegrationId; data: Integ
                             onUndo={() => setDraft(draftFrom(data))}
                             onExplore={() => setExploring(true)}
                         />
+                    ) : id === "evolution-api" ? (
+                        <EvolutionEditorForm key="form" def={def} data={data} draft={draft} setDraft={setDraft} dirty={dirty} pending={mutation.isPending} onSave={save} onUndo={() => setDraft(draftFrom(data))} />
                     ) : id === "builder_machine" ? (
                         // Builder Machine: ponto de montagem — ver aicontext/modules/builder-machine.md.
                         <BuilderMachineEditorForm

@@ -62,6 +62,10 @@ export function listScopeFor(context: Pick<SelfMemoryContext, "turn">, agentId: 
         if (!clientId) throw new DomainError(400, `Informe o clientId da lista "${def.title}"`, "CLIENT_REQUIRED")
         return { clientId }
     }
+    if (def.scope === "conversation") {
+        if (context.turn.kind !== "conversation" || !context.turn.conversationId) throw new DomainError(400, "Este turno não tem conversa", "CONVERSATION_REQUIRED")
+        return { conversationId: context.turn.conversationId }
+    }
     return {}
 }
 

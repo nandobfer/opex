@@ -119,6 +119,6 @@ describe('memórias do Agente Arquiteto', () => {
   })
 
   it('o aprendizado autônomo salvo antes do arquiteto existir ganha o padrão sem mudar os demais', () => {
-    expect(withSelfMemoryDefaults({ opex: false, maddox: true, adversario: false, desenvolvedor: true })).toEqual({ opex: false, maddox: true, adversario: false, arquiteto: true, desenvolvedor: true })
+    expect(withSelfMemoryDefaults({ opex: false, maddox: true, adversario: false, desenvolvedor: true })).toEqual({ opex: false, maddox: true, adversario: false, arquiteto: true, desenvolvedor: true, secretario: true })
   })
 })

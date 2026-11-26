@@ -6,7 +6,7 @@ import { isAdoptionStale } from '@/features/engramind/agent-activity'
 const mocks = vi.hoisted(() => ({
   aggregate: vi.fn(async (_pipeline: unknown[]) => [] as { _id: string; total: number; last7d: number; lastWriteAt: Date | null }[]),
   deliveries: vi.fn(async () => [] as unknown[]),
-  settings: { opex: true, maddox: false, adversario: true, arquiteto: true, desenvolvedor: true },
+  settings: { opex: true, maddox: false, adversario: true, arquiteto: true, desenvolvedor: true, secretario: true },
   agents: [] as { slug: string; created_at: string }[],
 }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
@@ -25,7 +25,7 @@ const daysAgo = (days: number) => new Date(NOW.getTime() - days * 24 * 3600_000)
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.agents = []
-  mocks.settings = { opex: true, maddox: false, adversario: true, arquiteto: true, desenvolvedor: true }
+  mocks.settings = { opex: true, maddox: false, adversario: true, arquiteto: true, desenvolvedor: true, secretario: true }
 })
 
 describe('aviso de adoção (14 dias)', () => {
@@ -54,7 +54,7 @@ describe('adoção por agente', () => {
 
   it('zero explícito: agente sem gravações volta com 0, sem data e sem entrega', async () => {
     const rows = await listAgentActivity(NOW)
-    expect(rows.map((row) => row.agent)).toEqual(['opex', 'maddox', 'adversario', 'arquiteto', 'desenvolvedor', 'mentor'])
+    expect(rows.map((row) => row.agent)).toEqual(['opex', 'maddox', 'adversario', 'arquiteto', 'desenvolvedor', 'secretario', 'mentor'])
     expect(rows.find((row) => row.agent === 'opex')).toMatchObject({ total: 0, last7d: 0, lastWriteAt: null, delivery: null })
     expect(rows.find((row) => row.agent === 'mentor')!.selfMemory).toBeNull()
   })

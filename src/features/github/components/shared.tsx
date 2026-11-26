@@ -4,19 +4,12 @@ import type { CSSProperties } from "react"
 import { Github, Lock } from "lucide-react"
 import { TooltipIconButton } from "@/components/ui/tooltip-icon-button"
 import { cn } from "@/lib/utils"
+import { AvatarLabel, LabelAvatar } from "@/components/ui/avatar-label"
 import type { GithubRepoLabelData } from "../types"
 
 /** Avatar do GitHub (imagem pública) com inicial como reserva. */
 export function GithubAvatar({ login, avatarUrl, className }: { login: string; avatarUrl?: string | null; className?: string }) {
-    return avatarUrl ? (
-        // Avatares vêm de avatars.githubusercontent.com (sem otimização do Next: app local).
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={avatarUrl} alt="" className={cn("h-5 w-5 shrink-0 rounded-full bg-muted", className)} loading="lazy" />
-    ) : (
-        <span className={cn("flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[10px] font-semibold uppercase text-muted-foreground", className)} aria-hidden>
-            {login.slice(0, 1)}
-        </span>
-    )
+    return <LabelAvatar name={login} image={avatarUrl} className={className} />
 }
 
 export function GithubUserLabel({ login, name, avatarUrl }: { login: string; name?: string | null; avatarUrl?: string | null }) {
@@ -45,18 +38,7 @@ export function GithubRepoLabel({
     /** Estilo do `org/repo` (ex.: cor `#RRGGBB` da central em Tarefas). */
     nameStyle?: CSSProperties
 }) {
-    return (
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-            <GithubAvatar login={repo.fullName} avatarUrl={repo.ownerAvatarUrl} />
-            <span className="min-w-0 flex-1">
-                <span className={cn("block truncate font-medium", nameClassName)} style={nameStyle} data-testid="github-repo-name">
-                    {repo.fullName}
-                </span>
-                {repo.description && <span className="block truncate text-xs text-muted-foreground">{repo.description}</span>}
-            </span>
-            {repo.private && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Privado" />}
-        </span>
-    )
+    return <AvatarLabel title={repo.fullName} image={repo.ownerAvatarUrl} subtitle={repo.description} nameClassName={nameClassName} nameStyle={nameStyle} testId="github-repo-name" badge={repo.private && <Lock className="h-3 w-3 shrink-0 text-muted-foreground" aria-label="Privado" />} />
 }
 
 /** Link para abrir a issue no GitHub sem abrir o card/linha. Com `number`, mostra `#N` ao lado do ícone. */

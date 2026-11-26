@@ -198,6 +198,11 @@ const testEngramind: IntegrationTester = async (context) => {
     return run(context)
 }
 
+const testEvolution: IntegrationTester = async (context) => {
+    const { testEvolution: run } = await import("@/features/evolution-api/server/tester")
+    return run(context)
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -217,4 +222,5 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     storage_s3: testStorage,
     builder_machine: testBuilderMachine,
     engramind: testEngramind,
+    "evolution-api": testEvolution,
 }

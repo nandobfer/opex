@@ -63,6 +63,7 @@ export interface IntegrationConfigMap {
     /** Builder Machine: ativação e a chave privada colada pelo usuário (a configuração fica nas coleções `local_docker_*`). */
     builder_machine: { active: boolean; sshPrivateKey?: string }
     engramind: { baseUrl?: string; opexPublicUrl?: string; environmentId?: string; adminToken?: string; webhookSecret?: string }
+    "evolution-api": { internalUrl?: string; publicUrl?: string; defaultInstance?: string; version?: string; webhookUrl?: string; apiKey?: string; webhookSecret?: string }
 }
 
 export type SecretSource = "db" | "env" | "none"

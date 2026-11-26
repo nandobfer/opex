@@ -395,6 +395,15 @@ const SOURCES: Record<AgentId, (from: Date) => Promise<RunDoc[]>> = {
     revisor: reviewerRuns,
     mentor: mentorRuns,
     rotineiros: routineRuns,
+    secretario: async (from) => {
+        const { SecretaryDecisionRecord, secretaryDb } = await import("@/features/secretary-agent/server/models")
+        await secretaryDb()
+        return (await SecretaryDecisionRecord.find({ at: { $gte: from } }).lean()).map((doc) => ({
+            ...base, agent: "secretario", dedupKey: `secretario:${doc._id}`, kind: "secretary-decision", refId: doc._id,
+            title: doc.reason, startedAt: doc.at, finishedAt: doc.at, ok: doc.decision !== "error", error: doc.decision === "error" ? doc.reason : null,
+            costUsd: doc.costUsd ?? null, durationMs: null, data: { decision: doc.decision, chatId: doc.chatId },
+        }))
+    },
 }
 
 /** Sincroniza as execuções dos agentes a partir de `from` (padrão: tudo). Devolve quantas gravou. */

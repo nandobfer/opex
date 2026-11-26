@@ -302,6 +302,14 @@ no **modo gestor** (`mode="manager"`, visão Apps x canais e alcance global), pe
   `agentes/desenvolvedor/global` e o canal da central (`memoryUniverseOf`, `src/features/ai/memory-universe.ts`).
   Rótulos no `OpexEngramindProvider`: siglas das centrais (`centralChannelLabels`) e nomes dos clientes nos
   canais `agentes/{opex|maddox}/clientes/<id>` (`clientChannelLabels`, `useOrcamentoClients`).
+- **Cadastrar agente no universo (OPE-192)**: com `consumer` (as seções de memórias dos agentes do Opex passam a
+  identidade), o `AgentUniverseCard` confere se o agente existe (`GET /api/ai/memories/agents/[consumer]`, só o
+  dono: `agentMemoryStatus`, `AGENT_NOT_FOUND` vira `exists: false`). Sem o agente, mostra no lugar do universo o
+  estado "Agente não encontrado no Engramind" (a lib só tem o aviso, sem ação) com o botão **Cadastrar agente no
+  Engramind** (`POST /api/ai/memories/agents/[consumer]/provision`, que roda o passo "Memórias dos agentes" —
+  `ensureAgentMemoryNetwork`, idempotente e auditado). Sucesso: toast e recarga da existência e das consultas da lib
+  (o universo aparece); passo `failed`: a mensagem e "Tentar novamente". Agente desativado mostra o aviso e o link
+  para Identidades, sem o botão (reativar é ação de gestão). Os rotineiros não passam `consumer`.
 - **Altura da rede de `/engramind` (OPE-151, lib ≥ 0.9.0):** `EngramindNetwork fill="viewport"`. O bloco da
   rede (trilha, filtros e canvas) **ocupa a altura visível da área que rola**: canvas = `<main>.clientHeight`
   − padding de cima e de baixo do `<main>` (a folga em relação a `100dvh`, `visibleScrollHeight`) − a altura da
@@ -1012,6 +1020,24 @@ inativa (`403 OWNER_MEMORY_PROTECTED`). Auditoria `MemoriaAgente` com texto, ori
 (`agente:<consumidor>`), sem segredos; `GET /api/ai/memories/meta` dá limites, categorias, migração
 pendente, disponibilidade e memórias fora do contexto. O resumo é o título do Redator (primeira frase
 enquanto `title_state = pending`).
+
+### Fila de pendências (OPE-192, `server/pending-writes.ts`)
+
+Com o Engramind fora do ar (`ENGRAMIND_UNREACHABLE`, `PROXY_MASKED`, `DATABASE_UNAVAILABLE`, `REQUEST_TIMEOUT`,
+`MIGRATIONS_PENDING`), a gravação de memória de um agente que usa a fila (hoje o Agente Secretário: criar,
+editar e ativar/desativar) vai para `engramind_pending_writes`. Criações usam `<canal>:<hash do texto>` para
+deduplicar; edições usam `<canal>:<id da memória>:<id da operação>` para preservar alterações sucessivas.
+A ferramenta devolve `pendente:<chave>`. A rotina interna `engramind-pending-writes`
+(1 min, Crons) reprocessa as mais antigas primeiro, para no primeiro sinal de que o Engramind segue fora e descarta
+(com log) a pendência que o Engramind recusa por regra. Nunca guarda token.
+
+### Agente Secretário (OPE-192)
+
+Consumidor `secretario` (identidade `opex/secretario`) com as listas `secretary-global`
+(`agentes/secretario/global`) e `secretary-conversation` (escopo `conversation`,
+`agentes/secretario/conversas/<id>`; id por `conversationIdOfJid`). Assina só `agentes/secretario/*`: não lê as
+Memórias do Opex. Os canais das conversas aparecem no universo com o nome do contato/grupo
+(`secretaryChannelLabels`, número na dica). Ver `modules/secretary-agent.md`.
 
 ### Aprendizado autônomo ("Memória própria")
 
