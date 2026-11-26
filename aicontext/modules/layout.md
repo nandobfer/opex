@@ -22,9 +22,11 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   fora da casca.
 - **Safe areas** (`src/components/ui/safe-area.ts`): com `viewport-fit=cover`, o app instalado vai até
   as bordas do aparelho. A raiz da casca (`AppShell`, `SAFE_AREA_PADDING`), a gaveta do celular e a
-  tela cheia do chat (`SAFE_AREA_Y`), as folhas (`Sheet`, `SAFE_AREA_SHEET`), a barra de lote das
-  Tarefas (`SAFE_AREA_FLOATING_BOTTOM`) e os toasts no celular (`SAFE_AREA_TOAST_MOBILE_OFFSET`) reservam
-  os insets. No desktop e no navegador comum os insets valem 0. Elemento novo fixo numa borda usa
+  tela cheia do chat (`SAFE_AREA_Y`), as folhas (`Sheet`, `SAFE_AREA_SHEET`, aplicada depois do
+  `className` do chamador para um padding dele não descartá-la), a barra de lote das Tarefas
+  (`SAFE_AREA_FLOATING_BOTTOM`), os logs maximizados da central (`SAFE_AREA_INSET_4`), a imagem ampliada do
+  chat (`SAFE_AREA_INSET_6`) e os toasts no celular (`SAFE_AREA_TOAST_MOBILE_OFFSET`) reservam os insets.
+  Testes em `__tests__/components/safe-area.test.tsx`. No desktop e no navegador comum os insets valem 0. Elemento novo fixo numa borda usa
   essas constantes.
 - `src/app/login/page.tsx`: tela inicial de login, **fora do shell** (ver `modules/auth.md`).
 - `src/app/(app)/dashboard/page.tsx`: **Dashboards** — página inicial do app, **sem item no menu**:

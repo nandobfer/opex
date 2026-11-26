@@ -11,11 +11,21 @@ export const SAFE_AREA_PADDING =
 /** Painel fixo de altura total (gaveta do menu, tela cheia do chat): topo e base. */
 export const SAFE_AREA_Y = "pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
 
-/** Folhas (`Sheet`): o respiro padrão (`p-6`) ou o inset, o que for maior. */
+/** Painel fixo com margem nas quatro bordas (`inset-4`/`inset-6`): a margem ou o inset, o que for maior. */
+export const SAFE_AREA_INSET_4 =
+    "top-[max(1rem,env(safe-area-inset-top))] right-[max(1rem,env(safe-area-inset-right))] bottom-[max(1rem,env(safe-area-inset-bottom))] left-[max(1rem,env(safe-area-inset-left))]"
+export const SAFE_AREA_INSET_6 =
+    "top-[max(1.5rem,env(safe-area-inset-top))] right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.5rem,env(safe-area-inset-left))]"
+
+/**
+ * Folhas (`Sheet`): o respiro padrão (`p-6`) ou o inset, o que for maior. O `SheetContent` aplica a
+ * classe **depois** do `className` do chamador, para um padding dele (`p-0`, `p-4`) não descartá-la.
+ */
 export const SAFE_AREA_SHEET = {
     top: "pt-[max(1.5rem,env(safe-area-inset-top))]",
     bottom: "pb-[max(1.5rem,env(safe-area-inset-bottom))]",
-    side: "pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+    left: "pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]",
+    right: "pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]",
 } as const
 
 /** Barra flutuante presa à base (`bottom-6` + o inset inferior). */

@@ -93,9 +93,10 @@ URL). Token inválido leva ao `/login` com aviso.
   o service worker sem cookie e a página offline não tem dado (ver `pwa.md`). Os ícones `.png` já ficam
   fora do `matcher` do middleware. Sub-rotas (`/offline/x`) continuam exigindo sessão.
 
-O cookie de sessão continua **de sessão** (sem `maxAge`, decisão do dono na OPE-196): no app instalado
-do Android ele costuma sobreviver ao fechar e reabrir, mas some se o sistema encerrar o Chrome, e aí o
-app abre em `/login`.
+O cookie de sessão continua **de sessão**, sem `maxAge`. O dono decidiu assim no planejamento da OPE-196,
+ao responder "Manter como está" à pergunta sobre a validade do cookie (plano aprovado, versão 1). No app
+instalado do Android ele costuma sobreviver ao fechar e reabrir, mas some se o sistema encerrar o Chrome, e
+aí o app abre em `/login`.
 
 ### API pública por token de sistema — escopos
 

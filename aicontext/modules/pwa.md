@@ -76,8 +76,25 @@ evento `online` também recarrega sozinho.
 
 - **Safe areas**: `viewport-fit=cover` e as constantes de `src/components/ui/safe-area.ts` (ver `layout.md`).
 - **Botão voltar do Android**: volta o histórico (navegação do Next e diálogos com URL); na raiz, fecha o app.
-- **Sessão**: o cookie continua de sessão (decisão do dono). Logado, fechar e reabrir mantém a sessão enquanto o
-  Chrome não for encerrado pelo sistema. Deslogado, o app abre em `/login`.
+- **Sessão**: o cookie continua de sessão, sem `maxAge`. O dono decidiu assim no planejamento da OPE-196, ao
+  responder "Manter como está" à pergunta sobre a validade do cookie; a decisão está registrada no plano
+  aprovado (versão 1, seções 1 e 7). Logado, fechar e reabrir mantém a sessão enquanto o Chrome não for
+  encerrado pelo sistema. Se o Android encerrar o Chrome, o app abre em `/login`; o critério de aceite "fechar
+  e reabrir mantém a sessão" vale com essa ressalva aceita pelo dono. Deslogado, o app abre em `/login`.
+- **Testes das safe areas**: `__tests__/components/safe-area.test.tsx` fixa os insets na casca, na gaveta, nas
+  folhas (inclusive com padding do chamador), na barra de lote, nos logs maximizados e na imagem ampliada.
+
+## Verificação visual pendente
+
+A implementação foi conferida por testes e pelo servidor de desenvolvimento (rotas públicas e cabeçalhos do
+HTML). Ainda falta conferir num aparelho Android, pelo domínio com HTTPS:
+
+- Lighthouse ou o painel Application do DevTools mostrando o app como instalável, sem erros de manifest;
+- instalação pelo Chrome ("Instalar app"), ícone maskable sem corte e splash no tema escuro;
+- safe areas com notch e barra de gestos (casca, gaveta, folhas, toasts, barra de lote, chat em tela cheia,
+  logs maximizados e imagem ampliada);
+- botão voltar do Android (navegação, diálogos com URL e gaveta);
+- sessão ao fechar e reabrir o app, página offline sem rede e troca de versão depois de um deploy.
 
 ## Requisitos e limites
 
