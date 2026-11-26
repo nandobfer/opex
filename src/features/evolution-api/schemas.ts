@@ -52,3 +52,38 @@ export type CheckNumberInput = z.infer<typeof checkNumberSchema>
 
 export const contactKindSchema = z.enum(["contacts", "groups", "chats"])
 export type ContactKind = z.infer<typeof contactKindSchema>
+
+/**
+ * Envio pela aba Conversas do Secretário (OPE-197): texto, reação, localização e contato em JSON (o mesmo schema na
+ * tela e na rota). Foto, vídeo, documento e voz vão em `multipart/form-data` (`chatMediaFieldsSchema`).
+ */
+const messageIdSchema = z.string().trim().min(1).max(200)
+const quotedIdSchema = messageIdSchema.optional()
+export const chatLocationSchema = z.object({
+    type: z.literal("location"),
+    latitude: z.number().min(-90).max(90),
+    longitude: z.number().min(-180).max(180),
+    name: z.string().trim().max(200, "Máximo de 200 caracteres").optional(),
+    address: z.string().trim().max(300, "Máximo de 300 caracteres").optional(),
+    quotedId: quotedIdSchema,
+})
+export const chatTextSchema = z.object({ type: z.literal("text"), text: z.string().trim().min(1, "Escreva a mensagem").max(4096, "Máximo de 4096 caracteres"), quotedId: quotedIdSchema })
+export const chatSendSchema = z.discriminatedUnion("type", [
+    chatTextSchema,
+    z.object({ type: z.literal("reaction"), messageId: messageIdSchema, fromMe: z.boolean(), emoji: z.string().max(16) }),
+    chatLocationSchema,
+    z.object({
+        type: z.literal("contact"),
+        contacts: z.array(z.object({ name: z.string().trim().min(1, "Informe o nome").max(120), number: phoneNumberSchema })).min(1, "Escolha um contato").max(10),
+        quotedId: quotedIdSchema,
+    }),
+])
+export type ChatSendInput = z.infer<typeof chatSendSchema>
+
+/** Campos do multipart de mídia (o arquivo vem em `file`). */
+export const chatMediaFieldsSchema = z.object({
+    voice: z.enum(["0", "1"]).optional().transform((value) => value === "1"),
+    caption: z.string().trim().max(1024, "Legenda de no máximo 1024 caracteres").optional(),
+    quotedId: quotedIdSchema,
+})
+export type ChatMediaFields = z.infer<typeof chatMediaFieldsSchema>

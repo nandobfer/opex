@@ -2,7 +2,7 @@
 
 import type { LucideIcon } from "lucide-react"
 import { ChevronDown, X } from "lucide-react"
-import { useMemo } from "react"
+import { useCallback, useMemo } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { SearchPicker } from "@/components/ui/search-picker"
@@ -29,6 +29,11 @@ interface CadastroSearchPickerProps {
     pluralNoun?: string
     icon?: LucideIcon
     className?: string
+    /**
+     * Escolhidos no topo da lista, ao vivo (OPE-197, seletores de contato). Padrão `false`: os demais filtros mantêm
+     * a ordem recebida.
+     */
+    pinSelected?: boolean
 }
 
 const SEARCH_KEYS = ["label", "value", "description", "path"]
@@ -38,9 +43,10 @@ const SEARCH_KEYS = ["label", "value", "description", "path"]
  * o fundo do card, resumo ("Todos" / o rótulo / "3 slots"), botão de limpar e, com `parent`/`depth`,
  * opções em árvore — sem busca recuadas por nível; com busca, cada resultado no seu caminho.
  */
-export function CadastroSearchPicker({ options, selected, onSelect, "aria-label": ariaLabel, placeholder = "Todos", searchPlaceholder = "Buscar...", pluralNoun = "selecionados", icon: Icon, className }: CadastroSearchPickerProps) {
+export function CadastroSearchPicker({ options, selected, onSelect, "aria-label": ariaLabel, placeholder = "Todos", searchPlaceholder = "Buscar...", pluralNoun = "selecionados", icon: Icon, className, pinSelected = false }: CadastroSearchPickerProps) {
     const tree = options.some((option) => option.parent !== undefined)
     const byValue = useMemo(() => new Map(options.map((option) => [option.value, option])), [options])
+    const isSelected = useCallback((option: CadastroSearchPickerOption) => selected.includes(option.value), [selected])
     const toggle = (value: string) => onSelect(selected.includes(value) ? selected.filter((item) => item !== value) : [...selected, value])
     const summary = selected.length === 0 ? placeholder : selected.length === 1 ? (byValue.get(selected[0]!)?.label ?? selected[0]) : `${selected.length} ${pluralNoun}`
 
@@ -52,6 +58,7 @@ export function CadastroSearchPicker({ options, selected, onSelect, "aria-label"
                 getParentKey={tree ? (option) => option.parent ?? null : undefined}
                 getDepth={tree ? (option) => option.depth ?? 0 : undefined}
                 selectedKeys={selected}
+                pinFirst={pinSelected ? isSelected : undefined}
                 closeOnPick={false}
                 onPick={(option) => toggle(option.value)}
                 searchKeys={SEARCH_KEYS}

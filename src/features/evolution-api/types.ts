@@ -80,6 +80,9 @@ export interface EvolutionContactDto {
     pictureUrl: string | null
     isGroup: boolean
     lastMessageAt: string | null
+    /** Prévia da última mensagem e não lidas do WhatsApp (aba Conversas do Secretário, OPE-197). */
+    lastMessage?: { text: string; kind: string; fromMe: boolean } | null
+    unreadCount?: number
 }
 
 export interface EvolutionNumberCheckDto {

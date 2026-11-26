@@ -6,26 +6,21 @@ import { framerMotionMock } from "../helpers/framer-motion"
 const mocks = vi.hoisted(() => ({ query: vi.fn(), refetch: vi.fn() }))
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("@/features/evolution-api/hooks/useEvolution", () => ({ useEvolution: mocks.query, useEvolutionAction: () => ({ mutate: vi.fn() }) }))
-vi.mock("@/features/secretary-agent/components/criteria/DecisionModelCard", () => ({ DecisionModelCard: () => null }))
 
-import { DecisionLog } from "@/features/secretary-agent/components/CriteriaTab"
-import { NoticesTab } from "@/features/secretary-agent/components/ConversationTabs"
+// O registro de decisões saiu da aba Critérios para a aba Decisões (OPE-197): estados em secretary-decisions-tab.test.tsx.
+import { NoticesTab } from "@/features/secretary-agent/components/NoticesTab"
 
 afterEach(() => { cleanup(); vi.resetAllMocks() })
 
-it("mostra skeletons, depois estados vazios com ação de atualizar", () => {
+it("mostra skeletons, depois estado vazio com ação de atualizar", () => {
     mocks.query.mockReturnValue({ isPending: true })
-    const view = () => <><DecisionLog contacts={[]} /><NoticesTab /></>
-    const { rerender } = render(view())
-    expect(screen.getByRole("status", { name: "Carregando decisões" })).toBeTruthy()
+    const { rerender } = render(<NoticesTab />)
     expect(screen.getByRole("status", { name: "Carregando avisos" })).toBeTruthy()
-    mocks.query.mockImplementation((path: string) => ({ data: path.endsWith("notices") ? { pending: 0, items: [] } : [], refetch: mocks.refetch }))
-    rerender(view())
-    expect(screen.getByText("Nenhuma decisão registrada.")).toBeTruthy()
+    mocks.query.mockImplementation(() => ({ data: { pending: 0, items: [] }, refetch: mocks.refetch }))
+    rerender(<NoticesTab />)
     expect(screen.getByText("Nenhum aviso registrado.")).toBeTruthy()
-    fireEvent.click(screen.getByRole("button", { name: "Atualizar decisões" }))
     fireEvent.click(screen.getByRole("button", { name: "Atualizar avisos" }))
-    expect(mocks.refetch).toHaveBeenCalledTimes(2)
+    expect(mocks.refetch).toHaveBeenCalledTimes(1)
 })
 
 it("apresenta nome, foto, autor e trecho no aviso", () => {

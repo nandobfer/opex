@@ -25,9 +25,11 @@ export const SECRETARY_CONVERSATION_EVENT = "secretary-conversation-updated"
 export const SECRETARY_NOTICES_EVENT = "secretary-notices-updated"
 export const SECRETARY_PERSONALITY_EVENT = "secretary-personality-updated"
 export const SECRETARY_ANALYSIS_EVENT = "secretary-analysis-updated"
+/** Mensagem nova, atualizada ou não lidas de uma conversa (aba Conversas, OPE-197): `{ chatId }`. */
+export const SECRETARY_CHAT_EVENT = "secretary-chat-updated"
 
 /** Sub-abas em `/integracoes/ia?aba=agente-secretario&secao=…`. */
-export const SECRETARY_SECTIONS = ["geral", "criterios", "simulacao", "personalidade", "memorias", "conversas", "avisos"] as const
+export const SECRETARY_SECTIONS = ["geral", "criterios", "decisoes", "simulacao", "personalidade", "memorias", "conversas", "avisos"] as const
 export type SecretarySection = (typeof SECRETARY_SECTIONS)[number]
 
 export const SECRETARY_MODES = ["reply", "observe"] as const
