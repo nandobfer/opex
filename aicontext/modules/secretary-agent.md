@@ -180,6 +180,26 @@ Sem fila nem worker: o webhook chama `handleIncomingMessage` (em `runAfterRespon
   e listado em Avisos **uma vez por janela**; retoma sozinho na janela seguinte.
 - Contador de pendentes na aba (evento `secretary-notices-updated`).
 
+### Formato das mensagens ao dono (OPE-199)
+
+Toda mensagem que o agente envia ao dono (conversa consigo mesmo) usa a formatação do WhatsApp, nunca Markdown
+(módulo puro `whatsapp-format.ts`). Decisões do dono em 26/11/2026:
+
+- **R1, pergunta ao dono** (`ownerQuestionMessage`): `❓ *Contato* (Autor): pergunta`, uma linha em branco e o
+  trecho do contato como citação do WhatsApp (`> ` em cada linha; linha vazia do trecho vira `>`). Sem trecho, só a
+  primeira linha; o autor (grupo) fica sem negrito. O trecho citado é o texto literal do contato (não é convertido).
+- **R2, pergunta escrita pelo modelo**: o prompt pede o campo `question` no formato do WhatsApp (`*negrito*`,
+  `_itálico_`, `~riscado~`, ```` ```mono``` ````) e, antes do envio, a pergunta passa por `markdownToWhatsApp`:
+  `**x**`/`__x__` → `*x*`, `***x***` → `*_x_*`, `~~x~~` → `~x~`, título `#` → linha em negrito, `[texto](url)` →
+  `texto (url)` (só a URL quando o texto é a própria URL), lista `* `/`+ ` → `- `, separadores `---` removidos e
+  linhas em branco em excesso reduzidas. Código (cercado ou em linha) não é convertido; o bloco cercado perde só a
+  etiqueta de linguagem. O que já está no formato do WhatsApp (`*x*`, `_x_`, `~x~`, `> `, listas `- `/`1. `) fica igual.
+- **R3, avisos de texto fixo** (limite por hora, orçamento diário, pedido para citar a pergunta): o texto continua o
+  mesmo; só passam pelo conversor no envio (`sendOwnerText`).
+- O aviso guardado (`secretary_notices`: `text` e `excerpt`) continua cru e a aba Avisos não muda.
+- **Não muda**: as respostas aos contatos e grupos saem como o modelo escreveu (personalidade do dono), por
+  `sendSecretaryText`, sem conversão.
+
 ## Personalidade (aba Personalidade)
 
 - Blocos fixos (Identidade; Tom e formalidade; Vocabulário, gírias e expressões; Emojis, risadas e pontuação;

@@ -15,6 +15,7 @@ import { SECRETARY_AUDIT_ENTITY, SECRETARY_NOTICES_EVENT } from "../constants"
 import type { SecretarySettings } from "../schemas"
 import { safeErr, secretaryLog } from "./log"
 import { ASK_QUOTE_MESSAGE, resolveOwnerReply } from "../owner-reply"
+import { markdownToWhatsApp, ownerQuestionMessage } from "../whatsapp-format"
 import { secretaryInference } from "./ai"
 import { SecretaryConversation, SecretaryNotice, SecretarySent, secretaryDb, type Notice } from "./models"
 import { loadSecretarySettings } from "./settings"
@@ -24,6 +25,11 @@ export async function sendSecretaryText(instance: string, jid: string, text: str
     const sent = await evolution.sendText(instance, { number: jid, text })
     await SecretarySent.updateOne({ _id: `${instance}:${sent.key.id}` }, { $setOnInsert: { sentAt: new Date() } }, { upsert: true })
     return sent.key.id
+}
+
+/** Texto livre para o dono (conversa consigo mesmo): sai no formato do WhatsApp, nunca em Markdown (OPE-199). */
+export async function sendOwnerText(instance: string, ownerJid: string, text: string) {
+    return sendSecretaryText(instance, ownerJid, markdownToWhatsApp(text))
 }
 
 export async function publishNotices() {
@@ -43,7 +49,7 @@ export async function askOwner(input: { instance: string; ownerJid: string; chat
     const excerpt = text.trim().slice(0, 500)
     await SecretaryNotice.create({ _id: id, instance, chatId, jid: message.chatJid, kind: "question", status: "pending", text: question, excerpt, author, contactName, at: new Date(), trigger: message, ownerRevision })
     try {
-        const sentMessageId = await sendSecretaryText(instance, ownerJid, `❓ ${contactName}${author ? ` (${author})` : ""}: ${question}${excerpt ? `\n\n${excerpt}` : ""}`)
+        const sentMessageId = await sendSecretaryText(instance, ownerJid, ownerQuestionMessage({ contactName, author, question, excerpt }))
         await SecretaryNotice.updateOne({ _id: id }, { $set: { sentMessageId } })
     } finally {
         await publishNotices()
@@ -54,7 +60,7 @@ export async function handleOwnerReply(instance: string, ownerJid: string, messa
     const notices = await SecretaryNotice.find({ instance, status: "pending", kind: "question" }).select("sentMessageId").lean()
     const resolution = resolveOwnerReply(message, notices.map((question) => ({ id: question._id, sentMessageId: question.sentMessageId ?? null })))
     if (resolution.kind === "answer") await answerNotice(resolution.questionId, message.text, getLocalUser().id)
-    if (resolution.kind === "ask-quote") await sendSecretaryText(instance, ownerJid, ASK_QUOTE_MESSAGE(resolution.pending))
+    if (resolution.kind === "ask-quote") await sendOwnerText(instance, ownerJid, ASK_QUOTE_MESSAGE(resolution.pending))
 }
 
 /** Uma resposta em andamento sem conclusão há mais que isso (processo reiniciado) pode ser respondida de novo. */

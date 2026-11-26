@@ -87,7 +87,15 @@ describe("perguntar ao dono", () => {
         const text = "Oi, estamos combinando a festa.\n[áudio]\nVocê vai no sábado?"
         await askOwner({ instance: "opex", ownerJid: OWNER, chatId: "g-123", message, text, question: "Você vai?", ownerRevision: null })
         expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ contactName: "Grupo da família", author: "João", excerpt: text }))
-        expect(mocks.sendText).toHaveBeenCalledWith("opex", { number: OWNER, text: `❓ Grupo da família (João): Você vai?\n\n${text}` })
+        // OPE-199 (R1): contato em negrito, linha em branco e o trecho como citação do WhatsApp.
+        expect(mocks.sendText).toHaveBeenCalledWith("opex", { number: OWNER, text: "❓ *Grupo da família* (João): Você vai?\n\n> Oi, estamos combinando a festa.\n> [áudio]\n> Você vai no sábado?" })
+    })
+
+    it("pergunta em Markdown chega ao dono no formato do WhatsApp e o trecho do contato fica literal", async () => {
+        await askOwner({ instance: "opex", ownerJid: OWNER, chatId: "5531999999999", message: { ...trigger, pushName: "Ana" }, text: "**urgente** mesmo", question: "Confirmo o **sábado** com [Ana](https://x.com)?", ownerRevision: null })
+        const sent = (mocks.sendText.mock.calls[0] as unknown as [string, { text: string }])[1].text
+        expect(sent).toContain(": Confirmo o *sábado* com Ana (https://x.com)?\n\n> **urgente** mesmo")
+        expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ text: "Confirmo o **sábado** com [Ana](https://x.com)?", excerpt: "**urgente** mesmo" }))
     })
     it("resposta citada resolve a pergunta citada, grava a memória, audita e retoma a conversa depois", async () => {
         mocks.notices = [question("q1", "m1"), question("q2", "m2")]
@@ -121,7 +129,7 @@ describe("perguntar ao dono", () => {
         mocks.notices = [question("q1", "m1"), question("q2", "m2")]
         await handleOwnerReply("opex", OWNER, reply({}))
         expect(mocks.notices.every((notice) => notice.status === "pending")).toBe(true)
-        expect(mocks.sendText).toHaveBeenCalledWith("opex", expect.objectContaining({ number: OWNER, text: expect.stringContaining("citando") }))
+        expect(mocks.sendText).toHaveBeenCalledWith("opex", expect.objectContaining({ number: OWNER, text: "Tenho 2 perguntas esperando resposta. Responda citando a pergunta (deslize a mensagem para o lado) para eu saber a qual você está respondendo." }))
     })
 
     it("falha ao aprender devolve a pergunta para pendente e permite responder de novo", async () => {

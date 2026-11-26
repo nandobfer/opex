@@ -13,7 +13,7 @@ import { randomDelayMs, typingMs } from "../split"
 import { spentTodayUsd } from "./budget"
 import { recordDecision } from "./inbound"
 import { SecretaryConversation, SecretaryDecisionRecord, SecretaryNotice } from "./models"
-import { askOwner, publishNotices, sendSecretaryText } from "./owner-questions"
+import { askOwner, publishNotices, sendOwnerText, sendSecretaryText } from "./owner-questions"
 import { loadPersonality } from "./personality"
 import { planSecretaryReply } from "./plan-reply"
 import { costBySubject } from "./run-cost"
@@ -77,7 +77,7 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         if (limit.blocked && (limit.kind === "budget" || settings.mode === "reply")) {
             if (settings.mode === "reply" && await current()) {
                 const notice = await SecretaryNotice.updateOne({ _id: limit.windowKey! }, { $setOnInsert: { instance, chatId, jid: message.chatJid, kind: limit.kind, status: "info", text: limit.reason, at: now } }, { upsert: true })
-                if (notice.upsertedCount) { await publishNotices(); await sendSecretaryText(instance, ownerJid, limit.reason!) }
+                if (notice.upsertedCount) { await publishNotices(); await sendOwnerText(instance, ownerJid, limit.reason!) }
             }
             return await decide("limit-reached", limit.reason!)
         }

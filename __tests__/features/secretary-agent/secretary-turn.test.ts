@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
     decisionsById: new Map<string, string>(),
     costsById: new Map<string, number | undefined>(),
     send: vi.fn(async () => "S1"),
+    sendOwner: vi.fn(async () => "S2"),
     askOwner: vi.fn(),
     markAsRead: vi.fn(),
     presence: vi.fn(),
@@ -52,7 +53,7 @@ vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubje
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@/features/secretary-agent/server/media", () => ({ readTurnMedia: mocks.readMedia }))
 vi.mock("@/features/secretary-agent/server/personality", () => ({ loadPersonality: async () => ({ snapshot: { base: { blocks: [] }, variants: [] } }) }))
-vi.mock("@/features/secretary-agent/server/owner-questions", () => ({ askOwner: mocks.askOwner, publishNotices: vi.fn(), sendSecretaryText: mocks.send }))
+vi.mock("@/features/secretary-agent/server/owner-questions", () => ({ askOwner: mocks.askOwner, publishNotices: vi.fn(), sendSecretaryText: mocks.send, sendOwnerText: mocks.sendOwner }))
 vi.mock("@/features/secretary-agent/server/models", () => ({
     SecretaryConversation: {
         findOneAndUpdate: () => ({ lean: async () => mocks.state }),
@@ -209,8 +210,23 @@ describe("runSecretaryTurn", () => {
         await turn()
         mocks.noticeUpsert.mockResolvedValueOnce({ upsertedCount: 0 })
         await turn()
-        expect(mocks.send).toHaveBeenCalledTimes(1)
+        // O aviso vai ao dono pelo envio no formato do WhatsApp (OPE-199), com o texto de sempre (R3).
+        expect(mocks.sendOwner).toHaveBeenCalledTimes(1)
+        expect(mocks.sendOwner).toHaveBeenCalledWith("opex", "5531988887777@s.whatsapp.net", "Limite de 20 respostas por hora nesta conversa atingido")
+        expect(mocks.send).not.toHaveBeenCalled()
         expect((mocks.noticeUpsert.mock.calls[0] as unknown[])[0]).toMatchObject({ _id: expect.stringMatching(/^limit:5531999999999:/) })
+    })
+
+    it("a resposta ao contato sai literal, sem a conversão do formato do dono (OPE-199)", async () => {
+        mocks.inference.mockResolvedValueOnce({ text: "**ok**, [site](https://x.com)", question: null })
+        await turn()
+        expect(mocks.send).toHaveBeenCalledWith("opex", CONTACT, "**ok**, [site](https://x.com)")
+        expect(mocks.sendOwner).not.toHaveBeenCalled()
+    })
+
+    it("instrui o modelo a escrever a pergunta ao dono no formato do WhatsApp (OPE-199, R2)", async () => {
+        await turn()
+        expect(mocks.inference.mock.calls[0]?.[0].instructions).toContain("A pergunta ao dono (campo question) usa a formatação do WhatsApp")
     })
 
     it("mensagem só de mídia com a leitura desligada não responde pelo marcador", async () => {
