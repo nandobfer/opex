@@ -527,6 +527,8 @@ export async function updateTask(id: string, input: UpdateTaskInput, actorId: st
     if (Object.keys(set).length === 0) return
     if (options.origin && options.origin !== "opex") after.origem = options.origin
     await DevTask.updateOne({ _id: id }, { $set: set })
+    // Edição com troca de coluna (formulário → PATCH): mesmo fato do `moveTask`, com o projeto efetivo.
+    if (columnChanged) await recordTaskWatchFact((events) => events.watchTaskMoved({ id, code: task.code, projectId: (set.projectId as string | undefined) ?? task.projectId }, task.columnId, input.columnId!))
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: before, depois: after })
     if (options.publish !== false) await publishTasksUpdated([id])
     if (options.publish !== false && columnChanged) notifyAgenticQueue([id])
@@ -639,6 +641,8 @@ export async function moveTask(id: string, input: MoveTaskInput, actorId: string
 
     const columnNames = new Map((await getBoard()).columns.map((column) => [column.key, column.name]))
     await DevTask.updateOne({ _id: id }, { $set: { columnId: input.targetColumn, order } })
+    // Observações do Agente Opex (OPE-194): o fato fica gravado logo depois da mudança de coluna.
+    if (input.targetColumn !== task.columnId) await recordTaskWatchFact((events) => events.watchTaskMoved({ id, code: task.code, projectId: task.projectId }, task.columnId, input.targetColumn))
     await recordAudit({
         userId: actorId,
         entidade: TASK_AUDIT_ENTITY,
@@ -650,8 +654,6 @@ export async function moveTask(id: string, input: MoveTaskInput, actorId: string
     if (options.publish !== false) await publishTasksUpdated([id])
     if (options.publish !== false && input.targetColumn !== task.columnId) notifyAgenticQueue([id])
     if (options.origin !== "github" && input.targetColumn !== task.columnId) await syncGithubIssue(id)
-    // Observações do Agente Opex (OPE-194): a tarefa mudou de coluna.
-    if (input.targetColumn !== task.columnId) notifyTaskWatches((events) => events.watchTaskMoved({ id, code: task.code, projectId: task.projectId }, task.columnId, input.targetColumn))
     const updated = await DevTask.findById(id).lean()
     const project = updated ? await Project.findById(updated.projectId).lean() : null
     return updated ? toTaskDto(updated, project) : null
@@ -663,6 +665,7 @@ export async function setTaskArchived(id: string, archive: boolean, actorId: str
     const task = await DevTask.findById(id).lean()
     if (!task) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
     await DevTask.updateOne({ _id: id }, { $set: { archived: archive } })
+    if (archive && !task.archived) await recordTaskWatchFact((events) => events.watchTaskArchived({ id, code: task.code }))
     await recordAudit({
         userId: actorId,
         entidade: TASK_AUDIT_ENTITY,
@@ -672,12 +675,14 @@ export async function setTaskArchived(id: string, archive: boolean, actorId: str
         depois: { codigo: task.code, arquivada: archive },
     })
     if (options.publish !== false) await publishTasksUpdated([id])
-    if (archive && !task.archived) notifyTaskWatches((events) => events.watchTaskArchived({ id, code: task.code }))
 }
 
-/** Observações do Agente Opex (OPE-194): sob demanda, sem bloquear nem derrubar a mutação. */
-function notifyTaskWatches(run: (events: typeof import("@/features/opex-agent/server/watch-events")) => Promise<void>): void {
-    void import("@/features/opex-agent/server/watch-events").then(run).catch(() => undefined)
+/**
+ * Observações do Agente Opex (OPE-194): grava o fato da transição (só com observação no alvo) antes de a
+ * mutação responder — o disparo segue em segundo plano e o tick reprocessa. Nunca derruba a mutação.
+ */
+async function recordTaskWatchFact(run: (events: typeof import("@/features/opex-agent/server/watch-events")) => Promise<void>): Promise<void> {
+    await import("@/features/opex-agent/server/watch-events").then(run).catch(() => undefined)
 }
 
 export async function deleteTask(id: string, actorId: string): Promise<void> {
@@ -686,6 +691,7 @@ export async function deleteTask(id: string, actorId: string): Promise<void> {
     const task = await DevTask.findById(id).lean()
     if (!task) throw new DomainError(404, "Tarefa não encontrada", "TASK_NOT_FOUND")
     await Promise.all([DevTask.deleteOne({ _id: id }), TaskComment.deleteMany({ taskId: id }), TimeLog.deleteMany({ taskId: id })])
+    await recordTaskWatchFact((events) => events.watchTargetDeleted("task", id, task.code))
     const { GithubIssueLink } = await import("@/lib/db/models/Github")
     await GithubIssueLink.updateMany({ taskId: id }, { $unset: { taskId: "" } })
     // Os anexos da tarefa (objetos no storage + registros) somem junto, fora da resposta.
@@ -700,7 +706,6 @@ export async function deleteTask(id: string, actorId: string): Promise<void> {
     })
     await recordAudit({ userId: actorId, entidade: TASK_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { codigo: task.code, titulo: task.title } })
     await publishTasksUpdated([id])
-    notifyTaskWatches((events) => events.watchTargetDeleted("task", id, task.code))
 }
 
 /** Autor de um comentário (origem + nome exibido). */

@@ -391,6 +391,12 @@ async function settleActivation(run: RoutineRunDoc, activation: Activation, resu
 async function afterSettle(run: RoutineRunDoc, actorId: string): Promise<void> {
     const runId = String(run._id)
     const agent = await RoutineAgent.findById(run.agentId).select({ name: 1 }).lean()
+    // Observações do Agente Opex (OPE-194): a execução terminou ou parou aguardando confirmação. O fato fica
+    // gravado antes dos avisos (só com observação na execução); o disparo segue em segundo plano.
+    if (isFinalRunStatus(run.status) || run.status === "awaiting_confirmation") {
+        const settled = { id: runId, agentName: agent?.name || "agente", status: run.status, error: run.error ?? null }
+        await import("@/features/opex-agent/server/watch-events").then(({ watchRoutineRunSettled }) => watchRoutineRunSettled(settled)).catch(() => undefined)
+    }
     await emitRunChange(run, run.status)
     if (isFinalRunStatus(run.status)) {
         const acao = run.status === "canceled" ? AcaoAuditoria.ABORTAR : AcaoAuditoria.EXECUTAR
@@ -398,11 +404,6 @@ async function afterSettle(run: RoutineRunDoc, actorId: string): Promise<void> {
         await publishRunAttention({ id: runId, agentId: String(run.agentId), kind: "finished", status: run.status, agentName: agent?.name })
     } else if (run.status === "awaiting_confirmation") {
         await publishRunAttention({ id: runId, agentId: String(run.agentId), kind: "confirmation", status: run.status, agentName: agent?.name })
-    }
-    // Observações do Agente Opex (OPE-194): a execução terminou ou parou aguardando confirmação.
-    if (isFinalRunStatus(run.status) || run.status === "awaiting_confirmation") {
-        const settled = { id: runId, agentName: agent?.name || "agente", status: run.status, error: run.error ?? null }
-        void import("@/features/opex-agent/server/watch-events").then(({ watchRoutineRunSettled }) => watchRoutineRunSettled(settled)).catch(() => undefined)
     }
     await publishAgentUpdated(String(run.agentId))
     routineLog.info({ runId, status: run.status, tokens: run.tokens }, "[routine-agents] turno da execução encerrado")

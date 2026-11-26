@@ -3,7 +3,7 @@ import { Types } from "mongoose"
 import { clientActorFor } from "@/features/auth/server/context"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
-import { OpexMessage, OpexSession, OpexWatch, type IOpexWatch } from "@/lib/db/models/Opex"
+import { OpexMessage, OpexSession, OpexWatch, OpexWatchFact, type IOpexWatch, type IOpexWatchFact } from "@/lib/db/models/Opex"
 import { OrcamentoClient } from "@/lib/db/models/Orcamento"
 import { User } from "@/lib/db/models/User"
 import { isPreviewInstance } from "@/lib/instance"
@@ -22,6 +22,7 @@ import {
     OPEX_WATCH_RETENTION_MS,
     OPEX_WATCH_TARGET_LABELS,
     OPEX_WATCH_UPDATED_EVENT,
+    changedInto,
     currentSatisfies,
     matchesWatch,
     statusLabel,
@@ -48,6 +49,7 @@ import { assertClientOpexEnabled, enabledClientToolNamesFor } from "./client-con
 import { hasQueuedWatch, isTurnActive } from "./hub"
 import { OWNER_SCOPE, clientOpexScope, sessionFilterOf, type OpexServerScope } from "./scope"
 import { opexDb } from "./sessions"
+import { buildFactEvent } from "./watch-events"
 
 /**
  * Observação de eventos do Agente Opex (OPE-194). Assinatura pela ferramenta `watch_event`; o disparo
@@ -65,6 +67,12 @@ const LOST_AFTER_MS = 2 * 60_000
 const DUE_SESSIONS = 20
 /** Observações vencidas processadas por tick. */
 const EXPIRE_BATCH = 50
+/** Fatos (re)processados por tick, o lease de um processamento e o teto de tentativas. */
+const FACT_BATCH = 50
+const FACT_LEASE_MS = 2 * 60_000
+const FACT_MAX_ATTEMPTS = 5
+/** Motivo de encerrar uma observação do portal cujo alvo saiu do alcance do usuário (o fato não é exposto). */
+const TARGET_OUT_OF_SCOPE = "O alvo não está mais visível para este usuário do portal: a observação foi encerrada sem expor o evento"
 
 const dateFormatter = new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short", timeZone: "America/Sao_Paulo" })
 const formatDate = (date: Date) => dateFormatter.format(date)
@@ -335,10 +343,20 @@ export async function createOpexWatch(input: OpexWatchInput, origin: OpexWatchOr
         condition,
         note: input.note,
         status: "watching",
+        since: now,
         expiresAt,
     })
-    const created = doc.toObject() as WatchDoc
+    let created = doc.toObject() as WatchDoc
     const id = created._id.toString()
+    // Janela entre a leitura inicial e a gravação: a fonte só enxerga observações já gravadas. Uma
+    // transição gravada antes desta releitura aparece aqui; uma depois dela já vê a observação e dispara.
+    const after = await resolveWatchTarget(resolved.target.kind, resolved.target.id, values, scope).catch(() => null)
+    if (after && (currentSatisfies(resolved.target.kind, condition, after.state) || changedInto(resolved.target, condition, resolved.state, after.state))) {
+        const removed = await OpexWatch.deleteOne({ _id: created._id, status: "watching" })
+        if (removed.deletedCount) return { alreadySatisfied: true, target: resolved.target, conditionText, current: after.current }
+        // A fonte disparou primeiro: a observação segue o caminho normal (acorda o agente).
+        created = (await OpexWatch.findById(created._id).lean<WatchDoc>()) ?? created
+    }
     await recordAudit({
         userId: origin.actorId,
         entidade: OPEX_WATCH_AUDIT_ENTITY,
@@ -416,34 +434,89 @@ export async function cancelOpexWatch(id: string, actorId: string, scope: OpexSe
 // ---------------------------------------------------------------------------------------------
 
 /**
- * Ponto de transição: um `find` indexado pelas observando do alvo; só com alguma, monta o fato
- * (`build`) e dispara. Nunca lança (falha vira log): a mutação de quem chamou não pode cair por isso.
+ * Processa um fato gravado pela fonte (`opex_watch_facts`): reserva o fato (lease), monta o evento com os
+ * nomes e dispara. Falha volta o fato para pendente (o tick tenta de novo, até o teto de tentativas). Um
+ * fato reprocessado não acorda de novo: a reserva das observações é atômica.
  */
-export async function notifyWatchTarget(kind: OpexWatchTargetKind, id: string, build: () => Promise<OpexWatchEvent | null> | OpexWatchEvent | null): Promise<void> {
+export async function processWatchFact(id: string, now = new Date()): Promise<void> {
+    await opexDb()
+    const fact = await OpexWatchFact.findOneAndUpdate(
+        { _id: id, $or: [{ status: "pending" }, { status: "processing", leaseUntil: { $lte: now } }] },
+        { $set: { status: "processing", leaseUntil: new Date(now.getTime() + FACT_LEASE_MS) }, $inc: { attempts: 1 } },
+        { new: true },
+    ).lean<IOpexWatchFact>()
+    if (!fact) return
     try {
-        await opexDb()
-        const watching = await OpexWatch.find({ status: "watching", "target.kind": kind, "target.id": id }).lean<WatchDoc[]>()
-        if (!watching.length) return
-        const event = await build()
-        if (event) await notifyWatchEvent(event, watching)
+        const event = await buildFactEvent(fact)
+        if (event) await notifyWatchEvent({ ...event, at: new Date(fact.at) }, undefined, now)
+        await OpexWatchFact.updateOne({ _id: fact._id, status: "processing" }, { $set: { status: "done", leaseUntil: null, error: null, purgeAt: purgeAt(now) } })
     } catch (error) {
-        log.warn({ err: error instanceof Error ? error.message : error, kind, id }, "[opex] falha ao disparar as observações do alvo")
+        const reason = error instanceof Error ? error.message : String(error)
+        const failed = (fact.attempts ?? 1) >= FACT_MAX_ATTEMPTS
+        await OpexWatchFact.updateOne({ _id: fact._id, status: "processing" }, { $set: { status: failed ? "failed" : "pending", leaseUntil: null, error: reason.slice(0, 1000), ...(failed ? { purgeAt: purgeAt(now) } : {}) } })
+        log.warn({ err: reason, factId: id, attempts: fact.attempts, failed }, "[opex] falha ao processar o fato da observação")
     }
+}
+
+/** Fatos pendentes (o processo caiu antes do disparo) ou com o lease vencido, do mais antigo ao mais novo. */
+async function processPendingFacts(now: Date): Promise<void> {
+    const due = await OpexWatchFact.find({ $or: [{ status: "pending" }, { status: "processing", leaseUntil: { $lte: now } }] })
+        .sort({ at: 1 })
+        .limit(FACT_BATCH)
+        .select({ _id: 1 })
+        .lean<{ _id: Types.ObjectId }[]>()
+    for (const fact of due) await processWatchFact(String(fact._id), now)
+}
+
+/**
+ * Portal: o alvo ainda está no alcance do usuário da observação? (A tarefa pode ter ido para outro
+ * cliente, o ambiente saído do cliente.) Devolve o motivo quando não está; o dono sempre alcança.
+ */
+async function clientTargetDenied(doc: WatchDoc, scope?: OpexServerScope): Promise<string | null> {
+    if (!doc.clientId) return null
+    try {
+        const clientScope = scope ?? clientOpexScope(await clientActorFor(doc.userId, doc.clientId))
+        await resolveWatchTarget(doc.target.kind, doc.target.id, [], clientScope)
+        return null
+    } catch {
+        return TARGET_OUT_OF_SCOPE
+    }
+}
+
+/** Encerra uma observação do portal com o alvo fora do alcance, sem gravar o fato nem acordar o agente. */
+async function closeOutOfScope(doc: WatchDoc, from: OpexWatchStatus, now: Date): Promise<void> {
+    const updated = await OpexWatch.findOneAndUpdate(
+        { _id: doc._id, status: from },
+        { $set: { status: "error", event: null, error: TARGET_OUT_OF_SCOPE, deliveryKey: null, purgeAt: purgeAt(now) } },
+        { new: true },
+    ).lean<WatchDoc>()
+    if (!updated) return
+    await recordAudit({ userId: auditActor(doc), entidade: OPEX_WATCH_AUDIT_ENTITY, entidadeId: doc._id.toString(), acao: AcaoAuditoria.EXECUTAR, depois: { resultado: "error", mensagem: TARGET_OUT_OF_SCOPE, alvo: watchTargetText(doc.target) } })
+    log.warn({ watchId: doc._id.toString(), target: doc.target }, "[opex] observação do portal encerrada: alvo fora do alcance do usuário")
+    await publishWatch(updated)
 }
 
 /**
  * Reserva (atômica, `watching → triggered`) as observações que casam com o fato e, fora da prévia,
- * entrega por sessão. Um fato repetido ou concorrente não reserva de novo.
+ * entrega por sessão. Um fato repetido ou concorrente não reserva de novo. O prazo é conferido contra o
+ * instante da transição (`event.at`), dentro da reserva; observação criada depois do fato não dispara.
+ * No portal, o alvo precisa continuar no alcance do usuário antes de o fato entrar na observação.
  */
 export async function notifyWatchEvent(event: OpexWatchEvent, candidates?: WatchDoc[], now = new Date()): Promise<string[]> {
+    const at = event.at ?? now
     const docs = candidates ?? (await OpexWatch.find({ status: "watching", "target.kind": event.kind, "target.id": event.id }).lean<WatchDoc[]>())
     const sessions = new Set<string>()
     const claimedIds: string[] = []
-    const snapshot = { summary: watchEventSummary(event), short: watchEventShort(event), at: now }
+    const snapshot = { summary: watchEventSummary(event), short: watchEventShort(event), at }
     for (const doc of docs) {
+        if (doc.since && new Date(doc.since).getTime() > at.getTime()) continue
         if (!matchesWatch(doc.target, doc.condition, event)) continue
+        if (!event.deleted && (await clientTargetDenied(doc))) {
+            await closeOutOfScope(doc, "watching", now)
+            continue
+        }
         const claimed = await OpexWatch.findOneAndUpdate(
-            { _id: doc._id, status: "watching" },
+            { _id: doc._id, status: "watching", expiresAt: { $gt: at } },
             { $set: { status: "triggered", outcome: event.deleted ? "target_deleted" : "event", event: snapshot, triggeredAt: now } },
             { new: true },
         ).lean<WatchDoc>()
@@ -498,43 +571,62 @@ async function closeWithoutWake(docs: WatchDoc[], status: Extract<OpexWatchStatu
     }
 }
 
+const OWNER_UNAVAILABLE = "O Agente Opex está indisponível: a notificação será entregue quando ele voltar"
+
+/**
+ * Escopo da entrega a partir da sessão gravada: sessão inexistente ou escopo do portal recusado encerram as
+ * observações sem acordar (`closed`); agente do dono indisponível adia (`deferred`). No portal, as
+ * observações por evento cujo alvo saiu do alcance do usuário são encerradas sem expor o fato.
+ */
+async function deliveryScope(sessionId: string, docs: WatchDoc[], now: Date): Promise<{ scope: OpexServerScope; docs: WatchDoc[] } | "closed" | "deferred"> {
+    const session = await OpexSession.findById(new Types.ObjectId(sessionId)).select({ clientId: 1, userId: 1, agent: 1 }).lean<{ clientId?: string | null; userId?: string; agent?: string }>()
+    if (!session || (session.agent && session.agent !== "opex")) {
+        await closeWithoutWake(docs, "canceled", "A conversa do Agente Opex não existe mais", now)
+        return "closed"
+    }
+    if (!session.clientId) {
+        const { ownerAgentReady } = await import("./jobs")
+        return (await ownerAgentReady()) ? { scope: OWNER_SCOPE, docs } : "deferred"
+    }
+    let scope: OpexServerScope
+    try {
+        scope = await clientScopeForDelivery(session.clientId, session.userId ?? "")
+    } catch (error) {
+        await closeWithoutWake(docs, "error", error instanceof Error ? error.message : String(error), now)
+        return "closed"
+    }
+    const visible: WatchDoc[] = []
+    for (const doc of docs) {
+        if ((doc.outcome ?? "event") === "event" && (await clientTargetDenied(doc, scope))) await closeOutOfScope(doc, "delivering", now)
+        else visible.push(doc)
+    }
+    return visible.length ? { scope, docs: visible } : "closed"
+}
+
 /**
  * Entrega as observações disparadas de uma sessão numa única mensagem de sistema (um turno): reserva
- * (`triggered → delivering`), revalida o escopo e envia; com a sessão respondendo, entra na fila. O
- * início do turno marca as observações como acordadas (`markWatchesWoken`).
+ * (`triggered → delivering`), revalida o escopo e o alcance dos alvos e envia; com a sessão respondendo,
+ * entra na fila (que, ao sair, entrega de novo por aqui). O início do turno grava a mensagem nas
+ * observações; o fim do turno as marca como acordadas (`markWatchesWoken`).
  */
 export async function deliverSessionWatches(sessionId: string, now = new Date()): Promise<"sent" | "queued" | "deferred" | "none" | "closed"> {
     const sessionObjectId = new Types.ObjectId(sessionId)
     const pending = await OpexWatch.find({ sessionId: sessionObjectId, status: "triggered" }).select({ _id: 1 }).lean<{ _id: Types.ObjectId }[]>()
     if (!pending.length) return "none"
     const deliveryKey = randomUUID()
-    await OpexWatch.updateMany({ _id: { $in: pending.map((item) => item._id) }, status: "triggered" }, { $set: { status: "delivering", deliveryKey, deliveringAt: now } })
-    const docs = await OpexWatch.find({ deliveryKey, status: "delivering" }).sort({ triggeredAt: 1 }).lean<WatchDoc[]>()
-    if (!docs.length) return "none"
-    const ids = docs.map((doc) => doc._id.toString())
+    await OpexWatch.updateMany({ _id: { $in: pending.map((item) => item._id) }, status: "triggered" }, { $set: { status: "delivering", deliveryKey, deliveringAt: now, messageId: null } })
+    const reserved = await OpexWatch.find({ deliveryKey, status: "delivering" }).sort({ triggeredAt: 1 }).lean<WatchDoc[]>()
+    if (!reserved.length) return "none"
 
-    const session = await OpexSession.findById(sessionObjectId).select({ clientId: 1, userId: 1, agent: 1 }).lean<{ clientId?: string | null; userId?: string; agent?: string }>()
-    if (!session || (session.agent && session.agent !== "opex")) {
-        await closeWithoutWake(docs, "canceled", "A conversa do Agente Opex não existe mais", now)
-        return "closed"
+    const resolved = await deliveryScope(sessionId, reserved, now)
+    if (resolved === "closed") return "closed"
+    if (resolved === "deferred") {
+        // Agente do dono desligado ou sem modelo: espera e o tick entrega depois (como o job do dono).
+        await releaseWatches(reserved.map((doc) => doc._id.toString()), OWNER_UNAVAILABLE)
+        return "deferred"
     }
-    let scope: OpexServerScope
-    if (session.clientId) {
-        try {
-            scope = await clientScopeForDelivery(session.clientId, session.userId ?? "")
-        } catch (error) {
-            await closeWithoutWake(docs, "error", error instanceof Error ? error.message : String(error), now)
-            return "closed"
-        }
-    } else {
-        const { ownerAgentReady } = await import("./jobs")
-        if (!(await ownerAgentReady())) {
-            // Agente do dono desligado ou sem modelo: espera e o tick entrega depois (como o job do dono).
-            await releaseWatches(ids, "O Agente Opex está indisponível: a notificação será entregue quando ele voltar")
-            return "deferred"
-        }
-        scope = OWNER_SCOPE
-    }
+    const { scope, docs } = resolved
+    const ids = docs.map((doc) => doc._id.toString())
     const wake = docs.map(toWake)
     const label = docs.length === 1 ? watchTargetText(docs[0]!.target) : `${docs.length} observações`
     try {
@@ -550,7 +642,30 @@ export async function deliverSessionWatches(sessionId: string, now = new Date())
     }
 }
 
-/** A mensagem que acordou o agente foi gravada: encerra as observações entregues (chamado pelo runner). */
+/**
+ * A mensagem de sistema foi gravada na sessão e o turno vai começar: a observação continua "delivering" com
+ * a mensagem anotada. Só o fim do turno a encerra (`markWatchesWoken`); se o processo cair antes, a
+ * recuperação retoma o turno com a MESMA mensagem.
+ */
+export async function recordWatchMessage(ids: readonly string[], messageId: string, now = new Date()): Promise<void> {
+    await opexDb()
+    const valid = ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id))
+    if (!valid.length || !Types.ObjectId.isValid(messageId)) return
+    await OpexWatch.updateMany({ _id: { $in: valid }, status: "delivering" }, { $set: { messageId: new Types.ObjectId(messageId), deliveringAt: now } })
+}
+
+/**
+ * Uma notificação que esperou na fila (sessão respondendo) vai sair: entrega de novo a partir do banco, com
+ * o escopo e o alcance dos alvos revalidados e o texto remontado (nunca o texto antigo da fila).
+ */
+export async function redeliverQueuedWatches(sessionId: string, ids: readonly string[], now = new Date()): Promise<void> {
+    await opexDb()
+    const valid = ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id))
+    if (valid.length) await OpexWatch.updateMany({ _id: { $in: valid }, status: "delivering" }, { $set: { status: "triggered", deliveryKey: null, deliveringAt: null, messageId: null } })
+    await deliverSessionWatches(sessionId, now)
+}
+
+/** O turno acordado terminou (gravou a resposta): encerra as observações entregues (chamado pelo runner). */
 export async function markWatchesWoken(ids: readonly string[], messageId: string, now = new Date()): Promise<void> {
     await opexDb()
     const docs = await OpexWatch.find({ _id: { $in: ids.filter((id) => Types.ObjectId.isValid(id)) }, status: { $in: ["delivering", "triggered"] } }).lean<WatchDoc[]>()
@@ -595,7 +710,7 @@ export async function releaseWatches(ids: readonly string[], reason: string): Pr
     await opexDb()
     const valid = ids.filter((id) => Types.ObjectId.isValid(id)).map((id) => new Types.ObjectId(id))
     if (!valid.length) return
-    await OpexWatch.updateMany({ _id: { $in: valid }, status: "delivering" }, { $set: { status: "triggered", deliveryKey: null, deliveringAt: null, error: reason.slice(0, 1000) } })
+    await OpexWatch.updateMany({ _id: { $in: valid }, status: "delivering" }, { $set: { status: "triggered", deliveryKey: null, deliveringAt: null, messageId: null, error: reason.slice(0, 1000) } })
 }
 
 /** Vencidas: disparam com o desfecho `expired` (acordam o agente para avisar o usuário). */
@@ -611,15 +726,62 @@ async function expireDueWatches(now: Date): Promise<Set<string>> {
     return sessions
 }
 
-/** "Acordando" sem turno vivo nem fila neste processo há mais de 2 min: o servidor reiniciou no meio. */
+type WakeMessage = { _id: Types.ObjectId; sessionId: Types.ObjectId; seq: number; text: string }
+
+/** Retoma o turno de uma mensagem de sistema já gravada (o processo caiu entre gravar e terminar o turno). */
+async function resumeLostTurn(sessionId: string, message: WakeMessage, docs: WatchDoc[], now: Date): Promise<void> {
+    // Respondida depois (o turno terminou ou a conversa seguiu e o agente já viu a notificação): só encerra.
+    if (await OpexMessage.exists({ sessionId: message.sessionId, seq: { $gt: message.seq } })) {
+        await markWatchesWoken(
+            docs.map((doc) => doc._id.toString()),
+            message._id.toString(),
+            now,
+        )
+        return
+    }
+    const resolved = await deliveryScope(sessionId, docs, now)
+    if (resolved === "closed" || resolved === "deferred") return
+    const ids = resolved.docs.map((doc) => doc._id.toString())
+    try {
+        const { resumeWatchTurn } = await import("./runner")
+        const result = await resumeWatchTurn(sessionId, { id: message._id.toString(), seq: message.seq, text: message.text }, ids, resolved.scope)
+        log.info({ sessionId, watchIds: ids, result }, "[opex] turno da notificação de sistema retomado")
+    } catch (error) {
+        log.warn({ sessionId, watchIds: ids, err: error instanceof Error ? error.message : error }, "[opex] falha ao retomar o turno da notificação; nova tentativa no tick")
+    }
+}
+
+/**
+ * "Acordando" sem turno vivo nem fila neste processo há mais de 2 min (o servidor reiniciou no meio): sem
+ * mensagem gravada, volta para "disparada"; com a mensagem gravada e sem resposta, retoma o turno com ela;
+ * com resposta, encerra. A mera existência da mensagem não conta como entrega.
+ */
 async function recoverLostDeliveries(now: Date): Promise<void> {
     const lost = await OpexWatch.find({ status: "delivering", deliveringAt: { $lte: new Date(now.getTime() - LOST_AFTER_MS) } }).lean<WatchDoc[]>()
-    for (const doc of lost) {
-        const id = doc._id.toString()
-        if (hasQueuedWatch(id) || isTurnActive(doc.sessionId.toString())) continue
-        const message = await OpexMessage.findOne({ "watch.ids": id }).select({ _id: 1 }).lean<{ _id: Types.ObjectId }>()
-        if (message) await markWatchesWoken([id], message._id.toString(), now)
-        else await releaseWatches([id], "A entrega foi interrompida (o servidor reiniciou); nova tentativa")
+    const bySession = new Map<string, WatchDoc[]>()
+    for (const doc of lost) bySession.set(doc.sessionId.toString(), [...(bySession.get(doc.sessionId.toString()) ?? []), doc])
+    for (const [sessionId, docs] of bySession) {
+        if (isTurnActive(sessionId)) continue
+        const byMessage = new Map<string, { message: WakeMessage; docs: WatchDoc[] }>()
+        for (const doc of docs) {
+            const id = doc._id.toString()
+            if (hasQueuedWatch(id)) continue
+            const select = { sessionId: 1, seq: 1, text: 1 }
+            const message = doc.messageId ? await OpexMessage.findById(doc.messageId).select(select).lean<WakeMessage>() : await OpexMessage.findOne({ "watch.ids": id }).select(select).lean<WakeMessage>()
+            if (!message) {
+                await releaseWatches([id], "A entrega foi interrompida (o servidor reiniciou); nova tentativa")
+                continue
+            }
+            const key = message._id.toString()
+            byMessage.set(key, { message, docs: [...(byMessage.get(key)?.docs ?? []), doc] })
+        }
+        for (const group of byMessage.values()) {
+            try {
+                await resumeLostTurn(sessionId, group.message, group.docs, now)
+            } catch (error) {
+                log.error({ err: error, sessionId }, "[opex] falha ao recuperar a entrega das observações")
+            }
+        }
     }
 }
 
@@ -630,6 +792,8 @@ async function recoverLostDeliveries(now: Date): Promise<void> {
  */
 export async function runDueOpexWatches(now = new Date()): Promise<{ expired: number; delivered: number }> {
     await opexDb()
+    // Fatos antes das vencidas: um evento anterior ao prazo, ainda não processado, vale como evento.
+    await processPendingFacts(now)
     const expiredSessions = await expireDueWatches(now)
     await recoverLostDeliveries(now)
     const triggered = await OpexWatch.find({ status: "triggered" }).sort({ triggeredAt: 1 }).select({ sessionId: 1 }).lean<{ sessionId: Types.ObjectId }[]>()

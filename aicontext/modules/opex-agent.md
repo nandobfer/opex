@@ -800,7 +800,7 @@ Código: `watches.ts` (puro: catálogo, schema `opexWatchInputSchema`, `matchesW
 - **Por que custa menos que o job de 1 minuto:** o job cria um turno completo por verificação (prompt de sistema,
   catálogo de ferramentas e histórico da sessão, até ~400 mil caracteres) — uma espera de 2 h são ~120 turnos. Com a
   observação, assinar é uma chamada de ferramenta dentro de um turno que já acontecia; **enquanto espera, zero tokens**
-  (no servidor só um `find` indexado nos pontos de transição e uma consulta das vencidas por minuto); ao acontecer,
+  (no servidor só um `exists` indexado nos pontos de transição e uma consulta das vencidas e dos fatos pendentes por minuto); ao acontecer,
   **um turno**, com um bloco curto de fato objetivo e o combinado (`note`). Observações da mesma sessão disparadas
   juntas viram um turno só.
 - **Alvos e eventos** (`target.kind` → `event`):
@@ -816,35 +816,55 @@ Código: `watches.ts` (puro: catálogo, schema `opexWatchInputSchema`, `matchesW
 - **Assinar** (`watch_event` → `createOpexWatch`): exige a conversa do Agente Opex do turno (sem sessão — MCP/token — ou
   sessão do Maddox: 400 `OPEX_WATCH_SESSION_REQUIRED`). Alvo inexistente ou de outro escopo: 404
   `OPEX_WATCH_TARGET_NOT_FOUND`, nada gravado; alvo fora do portal: 400 `OPEX_WATCH_TARGET_UNSUPPORTED`; coluna
-  inexistente: 400 `OPEX_WATCH_INVALID_VALUES`. O estado atual do alvo é lido **uma vez**: condição já satisfeita
-  devolve `alreadySatisfied` sem criar nada. A mesma observação ativa na sessão (alvo + condição) é reaproveitada
-  (atualiza a `note`). Limites: **10 ativas por sessão** e **50 por escopo** (dono, ou cada usuário de cliente) — 409
-  `OPEX_WATCH_LIMIT`. Prazo padrão **24 h**, até **30 dias** (`expiresInHours`). A resposta traz a dica "pode encerrar
-  o turno".
+  inexistente: 400 `OPEX_WATCH_INVALID_VALUES`. O estado atual do alvo é lido antes de gravar: condição já satisfeita
+  devolve `alreadySatisfied` sem criar nada. **Janela da assinatura:** depois de gravar, o alvo é relido; se a condição
+  passou a valer (ou o estado mudou de um jeito que a condição pegaria, `changedInto` — ex.: "qualquer mudança") entre as
+  duas leituras, a observação recém-gravada é apagada e a resposta é `alreadySatisfied`; se a fonte já a disparou nesse
+  meio tempo, segue o caminho normal (acorda). A observação guarda `since` (início): fato anterior a ela não a dispara.
+  A mesma observação ativa na sessão (alvo + condição) é reaproveitada (atualiza a `note`). Limites: **10 ativas por
+  sessão** e **50 por escopo** (dono, ou cada usuário de cliente) — 409 `OPEX_WATCH_LIMIT`. Prazo padrão **24 h**, até
+  **30 dias** (`expiresInHours`). A resposta traz a dica "pode encerrar o turno".
 - **Estados** (`opex_watches.status`): `watching` → `triggered` (reservada pelo evento, pela expiração ou pela
   exclusão do alvo) → `delivering` (mensagem enviada ou na fila) → `woken` (evento), `expired` (venceu) ou `canceled`
   (alvo excluído: `error` "O alvo foi excluído"; ou cancelada pelo usuário/agente; ou sessão excluída); `error` quando o
   escopo do portal é recusado na entrega (usuário, cliente, agente ou grupo desligado — mesmos motivos dos jobs, sem
-  turno). `outcome`: `event`, `expired` ou `target_deleted`. Encerrada some 30 dias depois (TTL `purge_ttl`).
-- **Disparo**: as fontes chamam os adaptadores de `watch-events.ts` **depois** da mutação gravada e auditada, sob
-  demanda e sem bloquear (`void import(...)`, nunca lançam): `moveTask` (mudança de coluna, único caminho),
-  `setTaskArchived` e `deleteTask` (tarefas); `update()` do workflow (etapa nova ou `runState` `failed`/`interrupted`)
-  e `finalizeDeletion` (mesas); `afterSettle` (execuções de rotineiro, final ou aguardando confirmação);
-  `finishJob`/`cancelOpexJob` (jobs); `finishDeploy` (ambientes). `notifyWatchTarget` faz um `find` indexado das
-  `watching` do alvo e só então monta o fato; `notifyWatchEvent` reserva cada uma que casa com
-  `findOneAndUpdate({ status: "watching" })` — **um evento = um acordar**, mesmo repetido ou concorrente. O tick
-  (`runDueOpexWatches`, logo depois dos jobs em `runSchedulerTick`) só lê as próprias observações: vencidas,
-  entregas perdidas e disparadas pendentes — nunca recalcula o estado dos alvos.
+  turno) ou quando o **alvo saiu do alcance do usuário do portal** (ex.: a tarefa foi transferida para outro cliente):
+  encerra sem gravar o fato (`event: null`) e sem acordar. `outcome`: `event`, `expired` ou `target_deleted`. Encerrada
+  some 30 dias depois (TTL `purge_ttl`).
+- **Disparo com fato durável** (`opex_watch_facts`): as fontes chamam os adaptadores de `watch-events.ts` **logo depois
+  da mutação** e **esperam** a gravação do fato (`recordWatchFact`: um `exists` indexado das `watching` do alvo e, só
+  com alguma, um insert com os dados brutos e o instante `at` da transição); nunca lançam. Fontes: `moveTask` e
+  `updateTask` com troca de coluna (o formulário de edição, PATCH; com o projeto efetivo), `setTaskArchived` e
+  `deleteTask` (tarefas); `update()` do workflow (etapa nova ou `runState` `failed`/`interrupted`) e `finalizeDeletion`
+  (mesas); `afterSettle` (execuções de rotineiro, final ou aguardando confirmação); `finishJob`/`cancelOpexJob`
+  (jobs); `finishDeploy` (ambientes). O processamento (`processWatchFact`) roda em segundo plano: reserva o fato com
+  lease de 2 min, monta o evento com os nomes (`buildFactEvent`) e chama `notifyWatchEvent`, que reserva cada
+  observação que casa com `findOneAndUpdate({ status: "watching", expiresAt: { $gt: at } })` — **um evento = um
+  acordar**, mesmo repetido, reprocessado ou concorrente, e o **prazo é conferido contra o instante da transição**
+  (evento depois do vencimento não vale, mesmo antes de o tick vencer a observação; evento dentro do prazo processado
+  com atraso vale). Se o processo cair entre a mutação e o disparo, o fato fica pendente (ou com o lease vencido) e o
+  tick o reprocessa (até 5 tentativas). Sem transações no Mongo do Opex, a única janela que resta é a de um processo
+  cair entre a mutação e o insert do fato (as duas gravações seguidas, como a auditoria). O tick
+  (`runDueOpexWatches`, logo depois dos jobs em `runSchedulerTick`) processa primeiro os fatos pendentes, depois as
+  vencidas, as entregas perdidas e as disparadas pendentes — nunca recalcula o estado dos alvos.
 - **Instâncias** (OPE-147): a prévia do Opex grava no mesmo banco e só **reserva**; a **entrega** (turno, hub e
   stream) acontece só na instância principal — na hora, ou pelo tick (até 1 min) quando o evento nasceu na prévia. O
   Pusher é só aviso de tela: o disparo independe de cliente conectado.
+- **Alcance no portal:** antes de gravar o fato numa observação do portal, e de novo na entrega (inclusive quando a
+  notificação sai da fila de uma sessão que estava respondendo), o alvo é resolvido no escopo do usuário
+  (`resolveWatchTarget`); fora do alcance, a observação vira `error` sem o fato e sem turno.
 - **Entrega** (`deliverSessionWatches`): agrupa as `triggered` da sessão (`triggered → delivering` com `deliveryKey`),
-  revalida o escopo (portal: ator, agente e `watch_event` ligado) e envia **uma** mensagem `kind: "event"` com
-  `watch: { ids, label }` por `sendWatchMessage` (sessão livre: começa o turno; respondendo: fila do hub). O
-  `startTurn` grava a mensagem e marca as observações (`markWatchesWoken`, auditoria `EXECUTAR`). Agente do dono
-  indisponível ou falha ao iniciar: volta para `triggered` e o tick tenta de novo. `delivering` há mais de 2 min sem
-  turno vivo nem fila neste processo (reinício): se a mensagem com `watch.ids` já existe, fecha; senão, volta para
-  `triggered`.
+  revalida o escopo (portal: ator, agente, `watch_event` ligado e o alcance dos alvos) e envia **uma** mensagem
+  `kind: "event"` com `watch: { ids, label }` por `sendWatchMessage` (sessão livre: começa o turno; respondendo: fila do
+  hub). Ao sair da fila, a notificação **não** usa o texto guardado: volta para `triggered` e é entregue de novo por aqui
+  (`redeliverQueuedWatches`), com tudo revalidado e o texto remontado. O `startTurn` grava a mensagem e só a **anota**
+  nas observações (`recordWatchMessage`, continuam `delivering`); o **fim do turno**, depois de gravar a resposta, as
+  marca como acordadas (`markWatchesWoken`, auditoria `EXECUTAR`). Agente do dono indisponível ou falha ao iniciar:
+  volta para `triggered` e o tick tenta de novo. `delivering` há mais de 2 min sem turno vivo nem fila neste processo
+  (reinício): sem mensagem gravada, volta para `triggered`; com a mensagem e já respondida (há mensagem posterior na
+  sessão), encerra; com a mensagem e **sem resposta**, o tick **retoma o turno com a mesma mensagem**
+  (`resumeWatchTurn`, na posição reservada para a resposta, sem gravar outra mensagem). A mera existência da mensagem
+  não conta como entrega.
 - **Mensagem de sistema**: inspirada no lembrete sintético do OpenCode 2.x (o plugin AFT acorda a sessão com
   `session.promptAsync` e uma parte `{ type: "text", synthetic: true }` contendo `<system-reminder>…</system-reminder>`,
   `messageID` reservado, adiamento enquanto a sessão está ocupada e agrupamento das conclusões). No Opex o texto vai
@@ -973,7 +993,7 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
 ## Dados
 
 - Modelos em `src/lib/db/models/Opex.ts`: `opex_sessions` (com `clientId`/`userId` do escopo),
-  `opex_messages` (`kind: "job"` + `job`; `kind: "event"` + `watch: { ids, label }`, índice esparso em `watch.ids`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_watches` (ver "Observação de eventos"; índices `{status, target.kind, target.id}`, `{status, expiresAt}`, `{sessionId, status}`, `{clientId, userId, createdAt:-1}` e TTL `purge_ttl`; migração `ensure-opex-watch-indexes`), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`), `opex_skills` (ver "Skills"; índice único em `name`) e `opex_files` (só metadados: sessão, nome, mime,
+  `opex_messages` (`kind: "job"` + `job`; `kind: "event"` + `watch: { ids, label }`, índice esparso em `watch.ids`), `opex_pending_actions`, `opex_jobs` (ver "Jobs"), `opex_watches` (ver "Observação de eventos"; índices `{status, target.kind, target.id}`, `{status, expiresAt}`, `{sessionId, status}`, `{clientId, userId, createdAt:-1}` e TTL `purge_ttl`; migração `ensure-opex-watch-indexes`), `opex_watch_facts` (fatos das transições observadas: `kind`, `targetId`, `source`, `at`, `status` `pending`/`processing`/`done`/`failed`, lease e tentativas; índices `{status, at}` e TTL `purge_ttl`), `opex_mcp_servers` (ver "MCPs"; índice único em `slug`), `opex_skills` (ver "Skills"; índice único em `name`) e `opex_files` (só metadados: sessão, nome, mime,
   tamanho, `key`/`uploadKey`, `pending`, `ready`, `messageId`). Índices pela migração
   `ensure-opex-indexes`. A configuração do portal fica em `orcamento_clients.opexAgent`
   (`enabled`, `disabledTools`, `enabledOptInTools`, `enabledMcpServers`).
@@ -1014,10 +1034,13 @@ portal, adminOnly, escopo do ator e prévia sem horas reais), `client-scope` (se
 migração da configuração antiga), `jobs` (serviço: agendamento, atraso, fila, confirmação, perdidos,
 escopo do portal, motivos de erro, filtro de origem, 403 na edição e dono agendado com o agente
 indisponível), `jobs-ui` (aba Jobs, filtros de origem, job do portal), da observação de eventos (OPE-194) `watches-pure`
-(schema, casamento evento → condição, estado atual e textos), `watches` (serviço com o runner real: assinatura no escopo,
-`alreadySatisfied`, limites, reaproveitamento, um evento = um acordar, sessão ocupada na fila, vencida, alvo excluído,
-prévia que só reserva, agente indisponível, entrega perdida, portal desligado, agrupamento e as fontes mesa, rotineiro,
-job e deploy), `watch-tools` (grupo, riscos, escopo dono x portal e fora dos rotineiros) e `watches-ui` (pílula, faixa
+(schema, casamento evento → condição, estado atual, `changedInto` e textos), `watches` (serviço com o runner real e o tick
+real do agendador: assinatura no escopo, `alreadySatisfied`, janela entre leitura e gravação, limites, reaproveitamento,
+um evento = um acordar com o lembrete conferido no que o modelo recebeu, sessão ocupada entregue pelo fim do turno real,
+vencida, prazo pelo instante do fato, fato pendente reprocessado pelo tick, turno retomado com a mesma mensagem, alvo
+excluído, alvo do portal transferido com sessão livre e ocupada, prévia que só reserva, agente indisponível, portal
+desligado, agrupamento e as fontes mesa, rotineiro, job e deploy), `watch-tools` (grupo, riscos, escopo dono x portal e
+fora dos rotineiros) e `watches-ui` (pílula, faixa
 "Observando…" e aba Observações) e `opex-tools-card` (árvore, switch "Pede confirmação" e
 desligadas) e `github` (snapshot, busca, ref de consulta e escritas) e `host-terminal` (diretórios, tempo e execução no host) e `issues` (entrega, veredito, ranking, grafo em lote e escritas de relações) e `create-task-tool` (coluna padrão, especificação técnica, anexos do chat com falha parcial e migração das instruções antigas) e `mcp` (nomes, risco, schema, cadastro com segredos cifrados, teste de
 conexão, ferramentas no turno, MCP indisponível, portal, ação confirmada e as ferramentas de gerenciar

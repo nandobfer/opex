@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  changedInto,
   currentSatisfies,
   formatWatchRemaining,
   matchesWatch,
@@ -83,6 +84,20 @@ describe('currentSatisfies', () => {
     expect(currentSatisfies('workbench', cond('waiting_user'), { stage: 'plan_review' })).toBe(true)
     expect(currentSatisfies('routine_run', cond('finished'), { status: 'running' })).toBe(false)
     expect(currentSatisfies('environment', cond('deploy_finished'), {})).toBe(false)
+  })
+})
+
+describe('changedInto (janela da assinatura)', () => {
+  const target = { kind: 'task' as const, id: 't1', label: 'OPE-12' }
+  it('mudança de coluna entre as leituras casa com "qualquer mudança" e com a coluna escolhida; sem mudança, não', () => {
+    expect(changedInto(target, cond('column_changed'), { columnKey: 'doing' }, { columnKey: 'review' })).toBe(true)
+    expect(changedInto(target, cond('column_in', ['review']), { columnKey: 'doing' }, { columnKey: 'review' })).toBe(true)
+    expect(changedInto(target, cond('column_changed'), { columnKey: 'doing' }, { columnKey: 'doing' })).toBe(false)
+  })
+  it('mesa e status pelo valor novo', () => {
+    expect(changedInto({ kind: 'workbench', id: 'w', label: 'OPE-1' }, cond('waiting_user'), { stage: 'building' }, { stage: 'preview' })).toBe(true)
+    expect(changedInto({ kind: 'job', id: 'j', label: 'J' }, cond('finished'), { status: 'running' }, { status: 'done' })).toBe(true)
+    expect(changedInto({ kind: 'job', id: 'j', label: 'J' }, cond('finished'), { status: 'running' }, { status: 'running' })).toBe(false)
   })
 })
 

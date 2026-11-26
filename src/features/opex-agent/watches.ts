@@ -164,6 +164,8 @@ export interface OpexWatchEvent {
     runState?: string | null
     status?: string | null
     error?: string | null
+    /** Instante da transição (gravado no fato): o prazo da observação é conferido contra ele, não contra a entrega. */
+    at?: Date
 }
 
 /** Estado atual de um alvo (lido UMA vez na assinatura, para não esperar algo que já aconteceu). */
@@ -235,6 +237,28 @@ export function currentSatisfies(kind: OpexWatchTargetKind, condition: Pick<Opex
         case "deploy_finished":
             return false
     }
+}
+
+/**
+ * O estado mudou entre duas leituras do alvo de um jeito que a condição pegaria? Usado na janela da
+ * assinatura (entre a leitura inicial e a gravação), para "qualquer mudança" e eventos de transição
+ * que `currentSatisfies` não enxerga.
+ */
+export function changedInto(target: Pick<OpexWatchTarget, "kind" | "id" | "label">, condition: Pick<OpexWatchCondition, "event" | "values">, before: OpexWatchTargetState, after: OpexWatchTargetState): boolean {
+    const base = { kind: target.kind, id: target.id, label: target.label }
+    const event: OpexWatchEvent =
+        target.kind === "task"
+            ? {
+                  ...base,
+                  from: before.columnKey ? { key: before.columnKey, name: before.columnKey } : null,
+                  to: after.columnKey ? { key: after.columnKey, name: after.columnKey } : null,
+                  done: after.done === true,
+                  archived: !before.archived && after.archived === true,
+              }
+            : target.kind === "workbench"
+              ? { ...base, stage: after.stage ?? null, previousStage: before.stage ?? null, runState: after.runState !== before.runState ? (after.runState ?? null) : null }
+              : { ...base, status: after.status !== before.status ? (after.status ?? null) : null }
+    return matchesWatch(target, condition, event)
 }
 
 /** Rótulo de um status/etapa para os textos. */

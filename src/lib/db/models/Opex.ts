@@ -289,11 +289,14 @@ export interface IOpexWatch {
     status: OpexWatchStatus
     outcome: OpexWatchOutcome | null
     event: { summary: string; short: string; at: Date } | null
+    /** Início da observação: fato anterior a isto não a dispara (o fato pode ser processado atrasado). */
+    since: Date
     expiresAt: Date
     triggeredAt: Date | null
     deliveryKey: string | null
     deliveringAt: Date | null
     wokenAt: Date | null
+    /** Mensagem de sistema gravada na sessão; com a observação ainda "delivering", o turno dela não terminou. */
     messageId: Types.ObjectId | null
     error: string | null
     canceledBy: string | null
@@ -301,6 +304,44 @@ export interface IOpexWatch {
     createdAt: Date
     updatedAt: Date
 }
+
+/**
+ * Fato de uma transição observada (OPE-194) — `opex_watch_facts`: a fonte grava o fato logo depois da
+ * mutação (só quando há observação no alvo) e o processamento dispara as observações. Pendente ou com o
+ * lease vencido, o tick reprocessa: um reinício entre a transição e o disparo não perde o evento.
+ */
+export interface IOpexWatchFact {
+    _id: Types.ObjectId
+    kind: OpexWatchTarget["kind"]
+    targetId: string
+    /** Dados brutos da transição (o fato montado com nomes sai no processamento). */
+    source: Record<string, unknown>
+    at: Date
+    status: "pending" | "processing" | "done" | "failed"
+    leaseUntil: Date | null
+    attempts: number
+    error: string | null
+    purgeAt: Date | null
+    createdAt: Date
+    updatedAt: Date
+}
+
+const OpexWatchFactSchema = new Schema<IOpexWatchFact>(
+    {
+        kind: { type: String, required: true },
+        targetId: { type: String, required: true },
+        source: { type: Schema.Types.Mixed, default: {} },
+        at: { type: Date, required: true },
+        status: { type: String, enum: ["pending", "processing", "done", "failed"], default: "pending" },
+        leaseUntil: { type: Date, default: null },
+        attempts: { type: Number, default: 0 },
+        error: { type: String, default: null },
+        purgeAt: { type: Date, default: null },
+    },
+    { collection: "opex_watch_facts", versionKey: false, timestamps: true, minimize: false },
+)
+OpexWatchFactSchema.index({ status: 1, at: 1 })
+OpexWatchFactSchema.index({ purgeAt: 1 }, { expireAfterSeconds: 0, name: "purge_ttl" })
 
 const OpexWatchSchema = new Schema<IOpexWatch>(
     {
@@ -314,6 +355,7 @@ const OpexWatchSchema = new Schema<IOpexWatch>(
         status: { type: String, enum: ["watching", "triggered", "delivering", "woken", "expired", "canceled", "error"], default: "watching" },
         outcome: { type: String, enum: ["event", "expired", "target_deleted", null], default: null },
         event: { type: Schema.Types.Mixed, default: null },
+        since: { type: Date, default: () => new Date() },
         expiresAt: { type: Date, required: true },
         triggeredAt: { type: Date, default: null },
         deliveryKey: { type: String, default: null },
@@ -498,6 +540,7 @@ if (process.env.NODE_ENV === "development") {
     delete models.OpexMcpServer
     delete models.OpexJob
     delete models.OpexWatch
+    delete models.OpexWatchFact
     delete models.OpexFile
     delete models.OpexSession
     delete models.OpexMessage
@@ -509,6 +552,7 @@ export const OpexMessage: Model<IOpexMessage> = (models.OpexMessage as Model<IOp
 export const OpexFile: Model<IOpexFile> = (models.OpexFile as Model<IOpexFile>) || model<IOpexFile>("OpexFile", OpexFileSchema)
 export const OpexJob: Model<IOpexJob> = (models.OpexJob as Model<IOpexJob>) || model<IOpexJob>("OpexJob", OpexJobSchema)
 export const OpexWatch: Model<IOpexWatch> = (models.OpexWatch as Model<IOpexWatch>) || model<IOpexWatch>("OpexWatch", OpexWatchSchema)
+export const OpexWatchFact: Model<IOpexWatchFact> = (models.OpexWatchFact as Model<IOpexWatchFact>) || model<IOpexWatchFact>("OpexWatchFact", OpexWatchFactSchema)
 export const OpexPendingAction: Model<IOpexPendingAction> =
     (models.OpexPendingAction as Model<IOpexPendingAction>) || model<IOpexPendingAction>("OpexPendingAction", OpexPendingActionSchema)
 export const OpexMcpServer: Model<IOpexMcpServer> = (models.OpexMcpServer as Model<IOpexMcpServer>) || model<IOpexMcpServer>("OpexMcpServer", OpexMcpServerSchema)

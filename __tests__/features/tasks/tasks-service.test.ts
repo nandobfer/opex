@@ -186,7 +186,7 @@ describe('observações do Agente Opex (OPE-194)', () => {
     const pid = await seedProject({ closedColumnKey: 'done' })
     const a = await create(pid)
     await moveTask(a.id, { targetColumn: 'done' }, 'local')
-    await vi.waitFor(() => expect(mocks.watchMoved).toHaveBeenCalledWith({ id: a.id, code: 'GO-1', projectId: pid }, 'todo', 'done'))
+    expect(mocks.watchMoved).toHaveBeenCalledWith({ id: a.id, code: 'GO-1', projectId: pid }, 'todo', 'done')
     mocks.watchMoved.mockClear()
     await moveTask(a.id, { targetColumn: 'done', order: 0 }, 'local')
     await setTaskArchived(a.id, true, 'local')
@@ -194,6 +194,18 @@ describe('observações do Agente Opex (OPE-194)', () => {
     expect(mocks.watchMoved).not.toHaveBeenCalled()
     await deleteTask(a.id, 'local')
     await vi.waitFor(() => expect(mocks.watchDeleted).toHaveBeenCalledWith('task', a.id, 'GO-1'))
+  })
+
+  it('editar a tarefa trocando a coluna (formulário → PATCH) grava o mesmo fato, com o projeto efetivo; sem trocar a coluna, não', async () => {
+    const pid = await seedProject({ closedColumnKey: 'done' })
+    const other = await seedProject({ name: 'outro', sigla: 'OT', repo: 'o/ot' })
+    const a = await create(pid)
+    mocks.watchMoved.mockClear()
+    await updateTask(a.id, { title: 'Só o título', columnId: 'todo' }, 'local')
+    expect(mocks.watchMoved).not.toHaveBeenCalled()
+    await updateTask(a.id, { columnId: 'done', projectId: other }, 'local')
+    // A fonte espera a gravação do fato antes de responder.
+    expect(mocks.watchMoved).toHaveBeenCalledWith({ id: a.id, code: 'GO-1', projectId: other }, 'todo', 'done')
   })
 
   it('falha das observações não derruba a mudança de coluna', async () => {

@@ -44,7 +44,7 @@ vi.mock('@/lib/ai/stream', () => ({
 vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: async () => {} }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', ABORTAR: 'ABORTAR', EXECUTAR: 'EXECUTAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
-vi.mock('@/lib/instance', () => ({ isPreviewInstance: () => mocks.preview }))
+vi.mock('@/lib/instance', () => ({ isPreviewInstance: () => mocks.preview, INSTANCE_ID: 'teste' }))
 vi.mock('@/lib/storage/s3', () => ({ getFileObject: vi.fn(), getUploadUrl: vi.fn(), headFile: vi.fn(), copyFile: vi.fn(), deleteFile: vi.fn(), storageErrorInfo: () => ({ kind: 'unavailable', httpStatus: null, code: null }) }))
 vi.mock('@/features/auth/server/context', () => ({ clientActorFor: mocks.clientActorFor }))
 
@@ -65,13 +65,14 @@ function opexModel() {
     findByIdAndUpdate: (id: string, update: Doc) => base({ _id: id }, update),
   })
 }
-const store = vi.hoisted(() => ({ sessions: null as unknown, messages: null as unknown, jobs: null as unknown, watches: null as unknown, tasks: null as unknown, projects: null as unknown, workbenches: null as unknown, runs: null as unknown, envs: null as unknown }))
+const store = vi.hoisted(() => ({ sessions: null as unknown, messages: null as unknown, jobs: null as unknown, watches: null as unknown, facts: null as unknown, tasks: null as unknown, projects: null as unknown, workbenches: null as unknown, runs: null as unknown, envs: null as unknown }))
 vi.mock('@/lib/db/models/Opex', () => {
   store.sessions = opexModel()
   store.messages = opexModel()
   store.jobs = opexModel()
   store.watches = opexModel()
-  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: opexModel(), OpexFile: opexModel(), OpexJob: store.jobs, OpexWatch: store.watches, OpexMcpServer: opexModel() }
+  store.facts = opexModel()
+  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: opexModel(), OpexFile: opexModel(), OpexJob: store.jobs, OpexWatch: store.watches, OpexWatchFact: store.facts, OpexMcpServer: opexModel() }
 })
 vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: memoryModel() }))
 vi.mock('@/lib/db/models/User', () => ({ User: memoryModel() }))
@@ -127,6 +128,13 @@ vi.mock('@/features/opex-agent/server/tools/context', () => ({ nowContext: () =>
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ enabledOpexTools: () => [], findOpexTool: () => undefined, needsConfirmation: () => false }))
 vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ enabledClientOpexServerTools: () => [], findOpexClientServerTool: () => undefined }))
 vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: async () => ({ catalog: [], tools: [] }) }))
+// Tick do agendador real (`runSchedulerTick`): só os outros ganchos do tick ficam de fora.
+vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ schedulerEnabled: true, jobs: [], cronSecret: '' }), getInternalBaseUrl: async () => 'http://localhost' }))
+vi.mock('@/features/local-docker/server/health', () => ({ runLocalDockerHealth: async () => {} }))
+vi.mock('@/features/environments/server/forwards', () => ({ runEnvironmentsTick: async () => {} }))
+vi.mock('@/features/routine-agents/server/tick', () => ({ runDueRoutineAgents: async () => {} }))
+vi.mock('@/features/plugins/server/service', () => ({ reconcilePluginServers: async () => {} }))
+vi.mock('@/features/plugins/server/crons', () => ({ runPluginCrons: async () => {} }))
 vi.mock('@/features/opex-agent/server/client-config', () => ({
   assertClientOpexEnabled: mocks.assertClientEnabled,
   assertClientToolAllowed: vi.fn(),
@@ -135,7 +143,8 @@ vi.mock('@/features/opex-agent/server/client-config', () => ({
 
 import { cancelOpexWatch, createOpexWatch, listOpexWatches, notifyWatchEvent, runDueOpexWatches } from '@/features/opex-agent/server/watches'
 import { watchDeployFinished, watchJobSettled, watchRoutineRunSettled, watchTargetDeleted, watchTaskMoved, watchWorkbenchChanged } from '@/features/opex-agent/server/watch-events'
-import { beginTurn, endTurn } from '@/features/opex-agent/server/hub'
+import { sendMessage } from '@/features/opex-agent/server/runner'
+import { runSchedulerTick } from '@/features/integrations/scheduler/cron-scheduler'
 import type { OpexServerScope } from '@/features/opex-agent/server/scope'
 import type { OpexWatchInput } from '@/features/opex-agent/watches'
 // Modelos importados sob demanda pelo serviço: carregados aqui para a fábrica do mock popular o `store`.
@@ -144,12 +153,14 @@ import '@/lib/db/models/Project'
 import '@/lib/db/models/Agentic'
 import '@/lib/db/models/RoutineAgent'
 import '@/features/environments/server/models'
+import '@/features/tasks/server/columns'
 
 type Model = ReturnType<typeof opexModel>
 const sessions = () => store.sessions as Model
 const messages = () => store.messages as Model
 const jobs = () => store.jobs as Model
 const watches = () => store.watches as Model
+const facts = () => store.facts as Model
 const tasks = () => store.tasks as ReturnType<typeof memoryModel>
 const projects = () => store.projects as ReturnType<typeof memoryModel>
 const workbenches = () => store.workbenches as ReturnType<typeof memoryModel>
@@ -184,7 +195,7 @@ beforeEach(() => {
   mocks.clientTasks = []
   mocks.clientActorFor.mockImplementation(async () => actor())
   mocks.enabledNames.mockResolvedValue({ names: ['watch_event', 'list_watches'], config: {} })
-  for (const model of [sessions(), messages(), jobs(), watches()]) model.docs.splice(0)
+  for (const model of [sessions(), messages(), jobs(), watches(), facts()]) model.docs.splice(0)
   for (const model of [tasks(), projects(), workbenches(), store.runs as Model, store.envs as Model]) model.docs.splice(0)
   projects().docs.push({ _id: 'p1', closedColumnKey: 'done' })
 })
@@ -256,65 +267,79 @@ describe('assinatura', () => {
   })
 })
 
+const AT = new Date(NOW.getTime() + 60_000)
+const task12 = (id: string) => ({ id, code: 'OPE-12', projectId: 'p1' })
+/** Espera os fatos gravados pelas fontes serem processados (o disparo roda em segundo plano). */
+const settleFacts = () => vi.waitFor(() => expect(facts().docs.every((doc) => doc.status === 'done')).toBe(true), { timeout: 5_000 })
+/** Conteúdo que o modelo (simulado) recebeu em cada chamada. */
+const modelInputs = () => mocks.streamText.mock.calls.map((call) => JSON.stringify((call as [{ messages: unknown }])[0].messages))
+
 describe('disparo e entrega', () => {
-  it('critério de aceite: a tarefa vai para Concluído duas vezes e o agente acorda UMA vez, sem job', async () => {
+  it('critério de aceite: a tarefa vai para Concluído duas vezes e o agente acorda UMA vez, sem job; o modelo recebe o lembrete', async () => {
     const sessionId = await newSession()
     const taskId = await newTask()
     await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
 
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'review', 'done')
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'review', 'done')
-    await vi.waitFor(() => expect(sessions().docs[0]!.status).toBe('idle'), { timeout: 5_000 })
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await settleFacts()
+    // O mesmo fato de novo (reprocessado pelo tick): a reserva atômica não acorda outra vez.
+    await facts().create({ kind: 'task', targetId: taskId, source: { type: 'task_moved', code: 'OPE-12', projectId: 'p1', from: 'review', to: 'done' }, at: AT, status: 'pending', attempts: 0, leaseUntil: null })
+    await runDueOpexWatches(AT)
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
+    await settleFacts()
 
     expect(eventMessages()).toHaveLength(1)
     const message = eventMessages()[0]!
     expect(message).toMatchObject({ role: 'user', text: 'Evento · OPE-12 foi para Concluído', watch: { ids: [String(watchDoc()._id)], label: 'tarefa OPE-12' } })
-    const modelText = JSON.parse(message.modelMessages as string)[0].content as string
-    expect(modelText).toContain('<system-reminder>')
-    expect(modelText).toContain('A tarefa OPE-12 mudou de coluna: "Revisão" → "Concluído" (coluna de conclusão).')
-    expect(modelText).toContain('O que você combinou fazer: Avise o dono que a OPE-12 foi concluída')
-    expect(modelText).toContain('não agende job')
+    // O que chegou ao modelo no turno acordado (não só o que foi gravado).
+    expect(mocks.streamText).toHaveBeenCalledTimes(1)
+    const sent = modelInputs()[0]!
+    expect(sent).toContain('<system-reminder>')
+    expect(sent).toContain('A tarefa OPE-12 mudou de coluna: \\"Revisão\\" → \\"Concluído\\" (coluna de conclusão).')
+    expect(sent).toContain('O que você combinou fazer: Avise o dono que a OPE-12 foi concluída')
+    expect(sent).toContain('não agende job')
     expect(watchDoc()).toMatchObject({ status: 'woken', outcome: 'event', messageId: expect.anything() })
     expect(jobs().docs).toHaveLength(0)
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'ObservacaoAgenteOpex', acao: 'EXECUTAR', depois: expect.objectContaining({ resultado: 'evento' }) }))
   })
 
-  it('mudança que não casa com a condição não acorda', async () => {
+  it('mudança que não casa com a condição não acorda; alvo sem observação não grava fato', async () => {
     const sessionId = await newSession()
     const taskId = await newTask()
+    await watchTaskMoved(task12(taskId), 'doing', 'review', AT)
+    expect(facts().docs).toHaveLength(0)
     await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'doing', 'review')
+    await watchTaskMoved(task12(taskId), 'doing', 'review', AT)
+    await settleFacts()
     expect(watchDoc().status).toBe('watching')
     expect(eventMessages()).toHaveLength(0)
   })
 
-  it('sessão respondendo: a notificação entra na fila e acorda quando o turno termina', async () => {
+  it('sessão respondendo: a notificação espera e o fim do turno real a entrega (sem drenar a fila no teste)', async () => {
     const sessionId = await newSession()
     const taskId = await newTask()
     await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
-    const controller = new AbortController()
-    beginTurn(sessionId, 'm1', controller)
+    let release!: () => void
+    mocks.gate = new Promise<void>((resolve) => (release = resolve))
+    await sendMessage(sessionId, { text: 'Oi' }, 'local')
 
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'review', 'done')
-    expect(watchDoc().status).toBe('delivering')
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await vi.waitFor(() => expect(watchDoc().status).toBe('delivering'), { timeout: 5_000 })
     expect(eventMessages()).toHaveLength(0)
 
-    // O turno atual termina pelo caminho normal: a fila é consumida pelo `finishTurn` de um turno real.
-    endTurn(sessionId, controller, { type: 'turn-end', messageId: 'm1', status: 'complete', error: null })
-    const { queueFollowUp } = await import('@/features/opex-agent/server/runner')
-    const { takeFollowUp } = await import('@/features/opex-agent/server/hub')
-    const next = takeFollowUp(sessionId)
-    expect(next).toMatchObject({ kind: 'event', watch: { label: 'tarefa OPE-12' } })
-    await queueFollowUp(sessionId, next!)
+    release()
     await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
     expect(eventMessages()).toHaveLength(1)
+    expect(mocks.streamText).toHaveBeenCalledTimes(2)
+    expect(modelInputs()[1]).toContain('<system-reminder>')
   })
 
   it('alvo excluído acorda o agente com o desfecho e encerra a observação', async () => {
     const sessionId = await newSession()
     const taskId = await newTask()
     await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
-    await watchTargetDeleted('task', taskId, 'OPE-12')
+    await watchTargetDeleted('task', taskId, 'OPE-12', AT)
     await vi.waitFor(() => expect(watchDoc().status).toBe('canceled'), { timeout: 5_000 })
     expect(watchDoc()).toMatchObject({ outcome: 'target_deleted', error: 'O alvo foi excluído' })
     expect(eventMessages()[0]).toMatchObject({ text: 'Alvo excluído · tarefa OPE-12' })
@@ -325,7 +350,8 @@ describe('disparo e entrega', () => {
     const taskId = await newTask()
     await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
     mocks.preview = true
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'review', 'done')
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await settleFacts()
     expect(watchDoc().status).toBe('triggered')
     expect(eventMessages()).toHaveLength(0)
 
@@ -353,22 +379,12 @@ describe('disparo e entrega', () => {
     const taskId = await newTask()
     await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
     mocks.available = false
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'review', 'done')
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await settleFacts()
     expect(watchDoc().status).toBe('triggered')
     mocks.available = true
     await runDueOpexWatches(NOW)
     await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
-  })
-
-  it('entrega perdida (reinício): volta para "disparada", ou fecha se a mensagem já foi gravada', async () => {
-    const sessionId = await newSession()
-    const lost = await watches().create({ sessionId, status: 'delivering', deliveringAt: new Date(NOW.getTime() - 5 * 60_000), outcome: 'event', clientId: null, userId: 'local', target: { kind: 'task', id: 't', label: 'OPE-1' }, condition: { event: 'done', values: [] }, note: 'n', expiresAt: NOW })
-    const done = await watches().create({ sessionId, status: 'delivering', deliveringAt: new Date(NOW.getTime() - 5 * 60_000), outcome: 'event', clientId: null, userId: 'local', target: { kind: 'task', id: 't2', label: 'OPE-2' }, condition: { event: 'done', values: [] }, note: 'n', expiresAt: NOW })
-    await messages().create({ sessionId, seq: 1, role: 'user', kind: 'event', watch: { ids: [String(done._id)], label: 'x' } })
-    mocks.available = false
-    await runDueOpexWatches(NOW)
-    expect(watches().docs.find((doc) => doc._id === lost._id)).toMatchObject({ status: 'triggered' })
-    expect(watches().docs.find((doc) => doc._id === done._id)).toMatchObject({ status: 'woken' })
   })
 
   it('portal com a observação desligada para o cliente: encerra com erro, sem turno', async () => {
@@ -377,8 +393,8 @@ describe('disparo e entrega', () => {
     mocks.clientTasks = [{ id: taskId, code: 'OPE-12' }]
     await createOpexWatch(taskWatch(), origin(sessionId), clientScope(), NOW)
     mocks.enabledNames.mockResolvedValue({ names: [], config: {} })
-    await watchTaskMoved({ id: taskId, code: 'OPE-12', projectId: 'p1' }, 'review', 'done')
-    expect(watchDoc()).toMatchObject({ status: 'error', error: 'A observação de eventos foi desativada para este cliente' })
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await vi.waitFor(() => expect(watchDoc()).toMatchObject({ status: 'error', error: 'A observação de eventos foi desativada para este cliente' }), { timeout: 5_000 })
     expect(eventMessages()).toHaveLength(0)
   })
 
@@ -389,9 +405,9 @@ describe('disparo e entrega', () => {
     await createOpexWatch(taskWatch({ event: 'column_changed', note: 'Outra' }), origin(sessionId), undefined, NOW)
     mocks.preview = true
     const taskId = String(tasks().docs[0]!._id)
-    await notifyWatchEvent({ kind: 'task', id: taskId, label: 'OPE-12', from: { key: 'doing', name: 'Em andamento' }, to: { key: 'done', name: 'Concluído' }, done: true }, undefined, NOW)
+    await notifyWatchEvent({ kind: 'task', id: taskId, label: 'OPE-12', from: { key: 'doing', name: 'Em andamento' }, to: { key: 'done', name: 'Concluído' }, done: true, at: AT }, undefined, AT)
     mocks.preview = false
-    await runDueOpexWatches(NOW)
+    await runDueOpexWatches(AT)
     await vi.waitFor(() => expect(watches().docs.every((doc) => doc.status === 'woken')).toBe(true), { timeout: 5_000 })
     expect(eventMessages()).toHaveLength(1)
     expect(eventMessages()[0]!.text).toMatch(/^2 notificações do sistema/)
@@ -401,9 +417,10 @@ describe('disparo e entrega', () => {
     const sessionId = await newSession()
     const wb = await workbenches().create({ taskId: 't9', taskCode: 'OPE-9', stage: 'implementing', runState: 'running' })
     await createOpexWatch({ target: { kind: 'workbench', ref: String(wb._id) }, event: 'waiting_user', note: 'Revise a prévia' }, origin(sessionId), undefined, NOW)
-    await watchWorkbenchChanged(String(wb._id), { stage: 'building', previousStage: 'implementing', runState: 'running' })
+    await watchWorkbenchChanged(String(wb._id), { stage: 'building', previousStage: 'implementing', runState: 'running' }, AT)
+    await settleFacts()
     expect(watchDoc().status).toBe('watching')
-    await watchWorkbenchChanged(String(wb._id), { stage: 'preview', previousStage: 'building', runState: 'idle' })
+    await watchWorkbenchChanged(String(wb._id), { stage: 'preview', previousStage: 'building', runState: 'idle' }, AT)
     await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
     expect(eventMessages()[0]!.text).toBe('Evento · mesa OPE-9 em Prévia pronta')
   })
@@ -417,12 +434,14 @@ describe('disparo e entrega', () => {
     await createOpexWatch({ target: { kind: 'job', ref: String(job._id) }, event: 'finished', note: 'Resuma' }, origin(sessionId), undefined, NOW)
     await createOpexWatch({ target: { kind: 'environment', ref: 'prod' }, event: 'deploy_finished', note: 'Confira' }, origin(sessionId), undefined, NOW)
     mocks.preview = true
-    await watchRoutineRunSettled({ id: String(run._id), agentName: 'Vagas', status: 'completed' })
+    await watchRoutineRunSettled({ id: String(run._id), agentName: 'Vagas', status: 'completed' }, AT)
+    await settleFacts()
     expect(watches().docs[0]!.status).toBe('watching')
-    await watchRoutineRunSettled({ id: String(run._id), agentName: 'Vagas', status: 'awaiting_confirmation' })
-    await watchJobSettled({ id: String(job._id), title: 'Relatório', status: 'error', error: 'falhou' })
+    await watchRoutineRunSettled({ id: String(run._id), agentName: 'Vagas', status: 'awaiting_confirmation' }, AT)
+    await watchJobSettled({ id: String(job._id), title: 'Relatório', status: 'error', error: 'falhou' }, AT)
     const envId = String((store.envs as Model).docs[0]!._id)
-    await watchDeployFinished(envId, { status: 'success', error: null })
+    await watchDeployFinished(envId, { status: 'success', error: null }, AT)
+    await settleFacts()
     expect(watches().docs.map((doc) => doc.status)).toEqual(['triggered', 'triggered', 'triggered'])
     expect(watches().docs.map((doc) => (doc.event as { summary: string }).summary)).toEqual([
       'A execução do rotineiro Vagas ficou "Aguardando confirmação".',
@@ -438,5 +457,151 @@ describe('disparo e entrega', () => {
     expect(await listOpexWatches({ filter: 'active' })).toHaveLength(1)
     expect(await listOpexWatches({ filter: 'finished' })).toHaveLength(0)
     expect(await listOpexWatches({ filter: 'all', sessionId: 'a'.repeat(24) })).toHaveLength(0)
+  })
+})
+
+describe('portal: alvo transferido para outro cliente (F1)', () => {
+  it('sessão livre: a observação é encerrada sem gravar o fato nem acordar o agente', async () => {
+    const sessionId = await newSession({ clientId: CLIENT, userId: USER })
+    const taskId = await newTask()
+    mocks.clientTasks = [{ id: taskId, code: 'OPE-12' }]
+    await createOpexWatch(taskWatch(), origin(sessionId), clientScope(), NOW)
+    mocks.clientTasks = [] // o dono passou a tarefa para outro cliente
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await settleFacts()
+    expect(watchDoc()).toMatchObject({ status: 'error', event: null, error: expect.stringContaining('não está mais visível') })
+    expect(eventMessages()).toHaveLength(0)
+    expect(mocks.streamText).not.toHaveBeenCalled()
+  })
+
+  it('sessão ocupada: transferida enquanto esperava na fila, não inicia o turno nem expõe o evento', async () => {
+    const sessionId = await newSession({ clientId: CLIENT, userId: USER })
+    const taskId = await newTask()
+    mocks.clientTasks = [{ id: taskId, code: 'OPE-12' }]
+    await createOpexWatch(taskWatch(), origin(sessionId), clientScope(), NOW)
+    let release!: () => void
+    mocks.gate = new Promise<void>((resolve) => (release = resolve))
+    await sendMessage(sessionId, { text: 'Oi' }, USER, clientScope())
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    await vi.waitFor(() => expect(watchDoc().status).toBe('delivering'), { timeout: 5_000 })
+
+    mocks.clientTasks = []
+    release()
+    await vi.waitFor(() => expect(watchDoc()).toMatchObject({ status: 'error', event: null }), { timeout: 5_000 })
+    expect(eventMessages()).toHaveLength(0)
+    expect(mocks.streamText).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('durabilidade e janelas (F3–F6) pelo tick do agendador', () => {
+  it('o fato fica gravado antes de a fonte responder; reinício antes do disparo: o tick reprocessa e acorda', async () => {
+    const sessionId = await newSession()
+    const taskId = await newTask()
+    await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
+    // O processo cai logo depois de gravar o fato: o processamento em segundo plano nunca roda.
+    await facts().create({ kind: 'task', targetId: taskId, source: { type: 'task_moved', code: 'OPE-12', projectId: 'p1', from: 'review', to: 'done' }, at: AT, status: 'pending', attempts: 0, leaseUntil: null })
+    expect(watchDoc().status).toBe('watching')
+
+    await runSchedulerTick(new Date(AT.getTime() + 60_000))
+    await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
+    expect(facts().docs[0]!.status).toBe('done')
+    expect(eventMessages()).toHaveLength(1)
+  })
+
+  it('a fonte espera a gravação do fato (durável ao retornar)', async () => {
+    const sessionId = await newSession()
+    const taskId = await newTask()
+    await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
+    await watchTaskMoved(task12(taskId), 'review', 'done', AT)
+    expect(facts().docs).toHaveLength(1)
+    expect(facts().docs[0]).toMatchObject({ kind: 'task', targetId: taskId, at: AT })
+    await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
+  })
+
+  it('reinício entre gravar a mensagem e o turno: o tick retoma o turno com a MESMA mensagem', async () => {
+    const sessionId = await newSession()
+    const taskId = await newTask()
+    await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
+    const watchId = String(watchDoc()._id)
+    // Estado deixado pelo processo que caiu: mensagem de sistema gravada, observação "delivering", sessão presa.
+    const message = await messages().create({ sessionId, seq: 1, role: 'user', kind: 'event', text: 'Evento · OPE-12 foi para Concluído', watch: { ids: [watchId], label: 'tarefa OPE-12' }, modelMessages: JSON.stringify([{ role: 'user', content: '<system-reminder>\nEvento: OPE-12\n</system-reminder>' }]), status: 'complete', files: [], parts: [] })
+    Object.assign(watchDoc(), { status: 'delivering', outcome: 'event', deliveringAt: NOW, messageId: message._id, event: { summary: 'x', short: 'x', at: AT } })
+    Object.assign(sessions().docs[0]!, { status: 'running', nextSeq: 3, messageCount: 2 })
+    void taskId
+
+    await runSchedulerTick(new Date(NOW.getTime() + 5 * 60_000))
+    await vi.waitFor(() => expect(watchDoc().status).toBe('woken'), { timeout: 5_000 })
+    expect(eventMessages()).toHaveLength(1)
+    expect(mocks.streamText).toHaveBeenCalledTimes(1)
+    expect(modelInputs()[0]).toContain('<system-reminder>')
+    expect(messages().docs.find((doc) => doc.role === 'assistant')).toMatchObject({ seq: 2 })
+  })
+
+  it('mensagem gravada e já respondida: só encerra; sem mensagem: volta para "disparada"', async () => {
+    const sessionId = await newSession()
+    const base = { sessionId, status: 'delivering', deliveringAt: new Date(NOW.getTime() - 5 * 60_000), outcome: 'event', clientId: null, userId: 'local', condition: { event: 'done', values: [] }, note: 'n', since: NOW, expiresAt: new Date(NOW.getTime() + 3_600_000) }
+    const lost = await watches().create({ ...base, target: { kind: 'task', id: 't', label: 'OPE-1' } })
+    const answered = await watches().create({ ...base, target: { kind: 'task', id: 't2', label: 'OPE-2' } })
+    await messages().create({ sessionId, seq: 1, role: 'user', kind: 'event', watch: { ids: [String(answered._id)], label: 'x' } })
+    await messages().create({ sessionId, seq: 2, role: 'assistant', kind: 'message' })
+    mocks.available = false
+    await runSchedulerTick(NOW)
+    expect(watches().docs.find((doc) => doc._id === lost._id)).toMatchObject({ status: 'triggered' })
+    expect(watches().docs.find((doc) => doc._id === answered._id)).toMatchObject({ status: 'woken' })
+  })
+
+  it('a transição acontece entre a leitura inicial e a gravação: devolve alreadySatisfied e não fica observando', async () => {
+    const sessionId = await newSession()
+    await newTask()
+    const create = watches().create
+    watches().create = async (doc: Doc) => {
+      tasks().docs[0]!.columnId = 'done' // outro pedido move a tarefa enquanto a assinatura grava
+      return create(doc)
+    }
+    try {
+      const result = await createOpexWatch(taskWatch(), origin(sessionId), undefined, NOW)
+      expect(result).toMatchObject({ alreadySatisfied: true, current: 'Coluna atual: "Concluído" (coluna de conclusão).' })
+      expect(watches().docs).toHaveLength(0)
+
+      tasks().docs[0]!.columnId = 'doing'
+      const changed = await createOpexWatch(taskWatch({ event: 'column_changed' }), origin(sessionId), undefined, NOW)
+      expect(changed).toMatchObject({ alreadySatisfied: true })
+      expect(watches().docs).toHaveLength(0)
+    } finally {
+      watches().create = create
+    }
+  })
+
+  it('evento depois do prazo, antes de o tick vencer a observação: não vale como evento', async () => {
+    const sessionId = await newSession()
+    const taskId = await newTask()
+    await createOpexWatch(taskWatch({ expiresInHours: 1 }), origin(sessionId), undefined, NOW)
+    await watchTaskMoved(task12(taskId), 'review', 'done', new Date(NOW.getTime() + 3_600_000 + 20_000))
+    await settleFacts()
+    expect(watchDoc().status).toBe('watching')
+
+    await runSchedulerTick(new Date(NOW.getTime() + 3_600_000 + 60_000))
+    await vi.waitFor(() => expect(watchDoc()).toMatchObject({ status: 'expired', outcome: 'expired' }), { timeout: 5_000 })
+    expect(eventMessages()[0]!.text).toBe('Observação expirada · OPE-12')
+  })
+
+  it('evento dentro do prazo processado com atraso (depois do vencimento) vale como evento', async () => {
+    const sessionId = await newSession()
+    const taskId = await newTask()
+    await createOpexWatch(taskWatch({ expiresInHours: 1 }), origin(sessionId), undefined, NOW)
+    await facts().create({ kind: 'task', targetId: taskId, source: { type: 'task_moved', code: 'OPE-12', projectId: 'p1', from: 'review', to: 'done' }, at: new Date(NOW.getTime() + 30 * 60_000), status: 'pending', attempts: 0, leaseUntil: null })
+
+    await runSchedulerTick(new Date(NOW.getTime() + 2 * 3_600_000))
+    await vi.waitFor(() => expect(watchDoc()).toMatchObject({ status: 'woken', outcome: 'event' }), { timeout: 5_000 })
+    expect(eventMessages()[0]!.text).toBe('Evento · OPE-12 foi para Concluído')
+  })
+
+  it('fato anterior à observação não a dispara', async () => {
+    const sessionId = await newSession()
+    const taskId = await newTask()
+    await createOpexWatch(taskWatch({ event: 'column_changed' }), origin(sessionId), undefined, NOW)
+    await watchTaskMoved(task12(taskId), 'doing', 'review', new Date(NOW.getTime() - 60_000))
+    await settleFacts()
+    expect(watchDoc().status).toBe('watching')
   })
 })

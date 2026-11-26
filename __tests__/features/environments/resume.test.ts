@@ -33,6 +33,7 @@ vi.mock('@/features/agentic/server/centrals', () => ({ loadCentral: async () => 
 vi.mock('@/features/agentic/server/build-queue', () => ({ runExclusiveBuild: async <T,>(run: () => Promise<T>) => run() }))
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: {} }))
 vi.mock('@/features/local-docker/server/models', () => ({ LocalDockerPreview: {} }))
+vi.mock('@/features/opex-agent/server/watch-events', () => ({ watchDeployFinished: async () => {} }))
 
 import { Environment, EnvironmentComposeVersion, EnvironmentDeploy } from '@/features/environments/server/models'
 import { INTERRUPTED_BEFORE_EXECUTION } from '@/features/environments/server/deploy'

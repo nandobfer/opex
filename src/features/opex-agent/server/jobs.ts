@@ -268,9 +268,10 @@ export async function cancelOpexJob(id: string, actorId: string, scope: OpexServ
         { new: true },
     ).lean<IOpexJob>()
     if (!updated) throw new DomainError(409, "Só jobs agendados podem ser cancelados", "OPEX_JOB_NOT_SCHEDULED")
+    // Observações do Agente Opex (OPE-194): fato gravado logo depois do cancelamento.
+    await import("./watch-events").then(({ watchJobSettled }) => watchJobSettled({ id, title: before.title, status: "canceled", error: null })).catch(() => undefined)
     await recordAudit({ userId: actorId, entidade: OPEX_JOB_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ABORTAR, antes: { titulo: before.title, execucao: new Date(before.runAt).toISOString(), cliente: before.clientId ?? null } })
     await publishJob(before, id, "canceled")
-    void import("./watch-events").then(({ watchJobSettled }) => watchJobSettled({ id, title: before.title, status: "canceled", error: null })).catch(() => undefined)
     const [dto] = await toJobDtos([updated])
     return dto!
 }
@@ -284,6 +285,8 @@ async function finishJob(job: IOpexJob, status: Extract<OpexJobStatus, "done" | 
     ).lean<IOpexJob>()
     if (!updated) return
     const id = job._id.toString()
+    // Observações do Agente Opex (OPE-194): fato gravado logo depois do fim do job.
+    await import("./watch-events").then(({ watchJobSettled }) => watchJobSettled({ id, title: job.title, status, error })).catch(() => undefined)
     await recordAudit({
         userId: job.clientId ? job.userId : getLocalUser().id,
         entidade: OPEX_JOB_AUDIT_ENTITY,
@@ -303,8 +306,6 @@ async function finishJob(job: IOpexJob, status: Extract<OpexJobStatus, "done" | 
     await publishJob(job, id, status)
     const payload: OpexJobFinishedPayload = { id, title: job.title, status, sessionId: idOf(updated.resultSessionId), error, origin: job.clientId ? "client" : "owner" }
     await publishJobEvent(job, OPEX_JOB_FINISHED_EVENT, { ...payload })
-    // Observações do Agente Opex (OPE-194): o job terminou.
-    void import("./watch-events").then(({ watchJobSettled }) => watchJobSettled({ id, title: job.title, status, error })).catch(() => undefined)
 }
 
 /** Motivo pt-BR, acionável, para a falha ao reconstruir o ator do portal (jobs e observações). */
