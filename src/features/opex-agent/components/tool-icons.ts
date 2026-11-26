@@ -1,4 +1,4 @@
-import { AlarmClock, Eye, Globe, Repeat, BookOpen, Terminal, Bot, Boxes, Brain, BrainCircuit, Cable, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Palette, Paperclip, Plug, PlugZap, Puzzle, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, Blocks, Hammer, type LucideIcon } from "lucide-react"
+import { AlarmClock, Eye, Globe, Repeat, BookOpen, Terminal, Bot, Boxes, Brain, BrainCircuit, Cable, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Palette, Paperclip, Plug, PlugZap, Puzzle, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, Blocks, Hammer, MessageCircle, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
 import type { OpexClientToolGroup } from "../client-tools"
 import { OPEX_MCP_TOOL_GROUP } from "../mcp"
@@ -33,6 +33,7 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     clients: Users,
     environments: Boxes,
     appearance: Palette,
+    secretary: MessageCircle,
     engramind: Network,
     "opencode-service": Bot,
     "opencode-resources": Puzzle,

@@ -24,6 +24,7 @@ import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { pluginTools } from "./plugins"
 import { previewTools } from "./previews"
 import { routineAgentTools } from "./routine-agents"
+import { secretaryTools } from "./secretary"
 import { serviceTools } from "./services"
 import { taskTools } from "./tasks"
 import { timeTools } from "./time"
@@ -57,6 +58,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...hostTools,
     ...environmentTools,
     ...appearanceTools,
+    ...secretaryTools,
     ...engramindTools,
     ...opencodeServiceTools,
     ...opencodeResourceTools,

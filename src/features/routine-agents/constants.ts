@@ -62,8 +62,10 @@ export const ROUTINE_INTERNAL_TOOL_LABELS: Record<RoutineInternalTool, string> =
  * Grupos de ferramentas do Agente Opex que um agente rotineiro nunca recebe: com eles, um rotineiro
  * confirmaria ações pendentes de outras execuções ou afrouxaria a própria política
  * (`update_routine_agent` com `confirmIrreversible: false`). A observação de eventos (`watches`, OPE-194)
- * acorda uma conversa do Agente Opex, que o rotineiro não tem (ele já hiberna por tempo). Ficam fora da
- * árvore do editor e são descartados (com aviso) pelo motor Opex e na execução de uma ação confirmada.
+ * acorda uma conversa do Agente Opex, que o rotineiro não tem (ele já hiberna por tempo). A configuração do
+ * Agente Secretário (`secretary`, OPE-200) ficou fora dos rotineiros por decisão do dono: liberar com escopo
+ * restrito é uma tarefa futura. Ficam fora da árvore do editor e são descartados (com aviso) pelo motor Opex e
+ * na execução de uma ação confirmada.
  */
-export const ROUTINE_FORBIDDEN_TOOL_GROUPS: readonly string[] = ["routine-agents", "watches"]
+export const ROUTINE_FORBIDDEN_TOOL_GROUPS: readonly string[] = ["routine-agents", "watches", "secretary"]
 export const isRoutineForbiddenToolGroup = (group: string | null | undefined): boolean => Boolean(group && ROUTINE_FORBIDDEN_TOOL_GROUPS.includes(group))
