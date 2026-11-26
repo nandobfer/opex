@@ -3,7 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import type { DeployEvent, EnvironmentDeploySummaryDto, EnvironmentDto, UnmanagedProjectDto } from '@/features/environments/types'
+import type { DeployEvent, DeployStreamEvent, EnvironmentDeploySummaryDto, EnvironmentDto, UnmanagedProjectDto } from '@/features/environments/types'
 
 /** Ambientes: linha com ações, opções de máquina com o PC fechado, mover e não gerenciados. */
 
@@ -249,6 +249,93 @@ describe('log do deploy ao vivo', () => {
       await vi.advanceTimersByTimeAsync(3_000)
     })
     expect(await screen.findByText('Falhou: Sobe no servidor falhou (código 1)')).toBeTruthy()
+  })
+})
+
+describe('barra de progresso do deploy (OPE-202)', () => {
+  afterEach(() => vi.useRealTimers())
+
+  const START = '2026-11-26T15:00:00.000Z'
+  const meta = (estimateMs: number | null): DeployStreamEvent => ({ type: 'meta', startedAt: START, estimateMs, sampleSize: estimateMs === null ? 0 : 5, initial: false })
+  /** Stream que entrega os eventos e fica aberto até `finish` (deploy em andamento). */
+  function liveStream(events: DeployStreamEvent[]) {
+    let push!: (event: DeployStreamEvent) => void
+    let finish!: () => void
+    mocks.readNdjson.mockImplementationOnce(async (_path: string, onEvent: (event: DeployStreamEvent) => void) => {
+      push = onEvent
+      for (const event of events) onEvent(event)
+      await new Promise<void>((resolve) => (finish = resolve))
+    })
+    return { push: (event: DeployStreamEvent) => push(event), finish: () => finish() }
+  }
+  const progressbar = () => screen.queryByRole('progressbar')
+
+  it('em andamento com estimativa: % coerente, decorrido e restante', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(Date.parse(START) + 72_000))
+    liveStream([meta(200_000), { type: 'log', text: 'Build\n' }])
+    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    expect(progressbar()!.getAttribute('aria-valuenow')).toBe('36')
+    expect(progressbar()!.getAttribute('aria-label')).toMatch(/tempo decorrido sobre a duração prevista/)
+    expect(screen.getByText(/há 01:1\d · restam ~02:0\d/)).toBeTruthy()
+  })
+
+  it('sem histórico: barra indeterminada, sem aria-valuenow, só o decorrido', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(Date.parse(START) + 72_000))
+    liveStream([meta(null)])
+    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(300)
+    })
+    expect(progressbar()!.hasAttribute('aria-valuenow')).toBe(false)
+    expect(screen.getByText(/^há 01:1\d$/)).toBeTruthy()
+  })
+
+  it('ao concluir ou falhar a barra sai de cena e o status final continua', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const ok = liveStream([meta(200_000)])
+    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    expect(await screen.findByRole('progressbar')).toBeTruthy()
+    await act(async () => ok.push({ type: 'status', status: 'success', error: null }))
+    expect(screen.getByText('Concluído')).toBeTruthy()
+    expect(progressbar()).toBeNull()
+    cleanup()
+    const bad = liveStream([meta(200_000)])
+    render(<DeployDrawer deployId="d2" title="Loja" onClose={vi.fn()} />)
+    expect(await screen.findByRole('progressbar')).toBeTruthy()
+    await act(async () => bad.push({ type: 'status', status: 'failed', error: 'up -d falhou' }))
+    expect(screen.getByText('Falhou: up -d falhou')).toBeTruthy()
+    expect(progressbar()).toBeNull()
+  })
+
+  it('deploy já encerrado (aberto pelo histórico, sem meta): nenhuma barra', async () => {
+    mocks.readNdjson.mockImplementationOnce(async (_path: string, onEvent: (event: DeployStreamEvent) => void) => {
+      onEvent({ type: 'log', text: 'tudo\n' })
+      onEvent({ type: 'status', status: 'success', error: null })
+    })
+    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    expect(await screen.findByText('Concluído')).toBeTruthy()
+    expect(progressbar()).toBeNull()
+  })
+
+  it('reconexão com um novo meta não zera o relógio (segue o startedAt absoluto)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.setSystemTime(new Date(Date.parse(START) + 72_000))
+    mocks.readNdjson.mockImplementationOnce(async (_path: string, onEvent: (event: DeployStreamEvent) => void) => {
+      onEvent(meta(null))
+      throw new TypeError('network error')
+    })
+    liveStream([meta(null)])
+    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(3_100)
+    })
+    expect(mocks.readNdjson).toHaveBeenCalledTimes(2)
+    expect(screen.getByText(/^há 01:1\d$/)).toBeTruthy()
   })
 })
 

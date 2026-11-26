@@ -79,6 +79,28 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   (o servidor reiniciou) ou o stream fechar sem o status final, o drawer mostra "Reconectando ao
   servidor…" e tenta de novo a cada 3 s por até 3 min **contados desde a queda** (uma conexão que
   volta a entregar eventos zera a contagem), redesenhando o log inteiro ao reconectar.
+- **Barra de progresso do deploy** (OPE-202), entre o cabeçalho do drawer e o terminal, só enquanto o deploy está
+  em andamento:
+  - Vem do evento `meta` (`DeployMetaEvent`: `startedAt`, `estimateMs`, `sampleSize`, `initial`), a primeira linha
+    do NDJSON de um deploy `running` (inclusive quando outro processo conduz o deploy e o stream fecha sem status).
+    Deploy já encerrado (aberto pelo Histórico) não recebe `meta`: só o resultado e o log, sem barra. O `meta` chega
+    de novo a cada reconexão, e o tempo continua do `startedAt` absoluto.
+  - **Estimativa** (`estimateDeployDuration`, `deploy-estimate.ts`; consulta em `server/estimate.ts`): mediana das
+    durações dos 10 deploys mais recentes **com sucesso do próprio ambiente** (nunca de outros) e do mesmo tipo
+    (Deploy/Mover/Apagar) quando há pelo menos 3; senão, dos 10 mais recentes de qualquer tipo do ambiente. Com 1 ou
+    2 amostras a estimativa é "inicial" (o texto avisa "(estimativa inicial)"); sem nenhuma, `estimateMs: null`.
+    Deploys retomados e com build reaproveitado entram na conta. Falha ao ler o histórico vai para o log e o `meta`
+    sai sem estimativa (o stream não cai).
+  - **Tela** (`DeployProgress` sobre a `UsageBar` compartilhada, `tone="primary"`: cor primária fixa, sem faixas de
+    consumo nem pulso): rótulo "Deploy", detalhe "há 01:12 · restam ~02:05" e % = decorrido sobre a estimativa
+    (`deployProgress`, `deploy-progress.ts`; tempo em `mm:ss`, `h:mm:ss` a partir de 1 h). Passou do previsto: o %
+    trava em 99% e o detalhe vira "há 05:12 · mais que o previsto (~04:00)". Sem estimativa: barra indeterminada
+    (segmento correndo; parado com movimento reduzido), sem % nem `aria-valuenow`, só "há 01:12".
+  - O relógio é o `useTickingNow` (`src/hooks/`, `useSyncExternalStore`, tick de 250 ms, `null` no servidor): o
+    decorrido é sempre `agora − startedAt`, nunca somado por tick, e segue contando durante "Reconectando…".
+  - Ao chegar o status final (Concluído, Falhou ou a desistência por falta de conexão) a barra sai com fade e
+    recolhe a altura (Framer Motion); nunca fica parada num % alto. `role="progressbar"` com `aria-label` explicando
+    que é tempo decorrido sobre a duração prevista e `aria-valuetext` com o tempo.
 - **Deploy retomado depois de o app reiniciar** (ex.: o redeploy do próprio my-tasks, em que o
   `up -d` recria o container do app no meio do deploy):
   - Durante o deploy, a cada 5 s, o log e o sinal de vida (`heartbeatAt`, `runnerId` do processo) vão
