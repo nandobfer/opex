@@ -9,10 +9,12 @@ import { ModelSettingsControl } from "./ModelSettingsControl"
 import { MODEL_SOURCE_LABELS } from "./model-settings"
 import { WorkbenchModelSections, pendingRoleOf, pendingText } from "./WorkbenchModelSections"
 
+const FORK_HIDDEN_ROLES = ["adversarial"] as const
+
 /**
  * Modelo do fork na barra do fork: texto do modelo/variante em uso e o botão de configuração com o
  * mesmo popover da mesa, começando por "Este fork" (troca só deste fork) e seguido das etapas da
- * mesa (inclusive o Fork da mesa, base de todos os forks dela). Precedência: fork > mesa > central > global.
+ * mesa (inclusive o Fork da mesa, base de todos os forks dela; sem o Agente Adversário). Precedência: fork > mesa > central > global.
  */
 export function ForkModelSettings({ workbench, fork, buttonClassName }: { workbench: WorkbenchDto; fork: ForkDto; buttonClassName?: string }) {
     const models = useAiModels("opencode")
@@ -50,6 +52,8 @@ export function ForkModelSettings({ workbench, fork, buttonClassName }: { workbe
                 models={models}
                 idPrefix={`fork-models-${fork.id}-workbench`}
                 pendingRole={pendingRoleOf(setWorkbenchModel)}
+                // O fork nunca roda a revisão adversária (decisão do dono, OPE-187).
+                hiddenRoles={FORK_HIDDEN_ROLES}
                 onChange={(role, input) => setWorkbenchModel.mutate({ role, ...input })}
             />
         </ModelSettingsControl>

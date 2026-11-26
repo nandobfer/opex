@@ -1,7 +1,9 @@
 import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
+import type { AdversaryAgent } from "@/features/agentic/logic"
 import { ADVERSARIAL_FEATURE } from "../constants"
+import { adversaryAppliesTo } from "../scope"
 import { DEFAULT_ADVERSARIAL_SETTINGS, adversarialSettingsSchema, type AdversarialSettings } from "../schemas"
 import type { AdversarialSettingsDto } from "../types"
 
@@ -55,23 +57,26 @@ export async function saveAdversarialSettings(input: AdversarialSettings, actorI
 }
 
 /**
- * A mesa desta central passa pelo adversário ao fim da implementação? Agente Adversário ativo e a
- * central no escopo (todas ou as escolhidas). Nunca lança: na dúvida, o fluxo segue sem a revisão.
+ * Agente do Agente Adversário (agente, modelo, variante e fallbacks da aba): base do papel "Agente
+ * Adversário" da mesa (OPE-187). `null` se a configuração não puder ser lida.
  */
-/** Modelo/variante do Agente Adversário para exibir na mesa (`null` se a configuração não puder ser lida). */
-export async function adversaryModel(): Promise<{ model: string | null; variant: string | null } | null> {
+export async function adversaryAgent(): Promise<AdversaryAgent | null> {
     try {
         const { agent } = (await loadAdversarialSettings()).settings
-        return { model: agent.model, variant: agent.model ? agent.variant : null }
+        return { agent: agent.agent ?? null, model: agent.model ?? null, variant: agent.model ? (agent.variant ?? null) : null, fallbacks: agent.fallbacks ?? [] }
     } catch {
         return null
     }
 }
 
+/**
+ * A mesa desta central passa pelo adversário ao fim da implementação? Agente Adversário ativo e a
+ * central no escopo (todas ou as escolhidas). Nunca lança: na dúvida, o fluxo segue sem a revisão.
+ */
 export async function adversaryApplies(centralId: string): Promise<boolean> {
     try {
         const { settings } = await loadAdversarialSettings()
-        return settings.enabled && (settings.scope.all || settings.scope.centralIds.includes(centralId))
+        return adversaryAppliesTo(settings, centralId)
     } catch {
         return false
     }

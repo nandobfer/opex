@@ -6,7 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 
-const mocks = vi.hoisted(() => ({ mutate: vi.fn(), refine: vi.fn(), useTaskDetail: vi.fn(), updateTask: vi.fn(), refinement: vi.fn() }))
+const mocks = vi.hoisted(() => ({ mutate: vi.fn(), refine: vi.fn(), useTaskDetail: vi.fn(), updateTask: vi.fn(), refinement: vi.fn(), adversarial: vi.fn() }))
 
 /** Modelos do catálogo do OpenCode (o popover usa a busca e a variante). */
 const MODELS = [
@@ -63,6 +63,8 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
 }))
 // Agente Refinador (OPE-137): disponível e sem refinamento, salvo quando o caso define outro estado.
 vi.mock('@/features/refinement/hooks/useRefinement', () => ({ useTaskRefinement: mocks.refinement, useRefinementRealtime: vi.fn() }))
+// Agente Adversário (OPE-187): desligado salvo quando o caso define outro estado.
+vi.mock('@/features/adversarial-agent/hooks/useAdversarial', () => ({ useAdversarialSettings: mocks.adversarial }))
 vi.mock('@/features/tasks/hooks/useTasks', () => ({ useTaskDetail: mocks.useTaskDetail, useUpdateTask: () => ({ mutate: mocks.updateTask, isPending: false }) }))
 
 import { StartWorkbench } from '@/features/agentic/components/workbench/StartWorkbench'
@@ -117,9 +119,15 @@ const refinementState = (refinement: Record<string, unknown> | null = null, avai
   data: { refinement, availability: { ...availability, centralId: 'c1', sessionDirectory: '/home/u/app' }, workbench: null, refinerModel: REFINER },
 })
 
+/** Configuração do Agente Adversário na aba dele (só `enabled`, `scope` e `agent` importam aqui). */
+const adversarialSettings = (patch: Record<string, unknown> = {}) => ({
+  data: { settings: { enabled: true, scope: { all: false, centralIds: ['c1'] }, agent: { agent: 'review', model: 'openai/gpt-5', variant: null, fallbacks: [] }, ...patch } },
+})
+
 beforeEach(() => {
   vi.clearAllMocks()
   mocks.refinement.mockReturnValue(refinementState())
+  mocks.adversarial.mockReturnValue(adversarialSettings({ enabled: false }))
 })
 
 describe('StartWorkbench', () => {
@@ -285,6 +293,33 @@ describe('StartWorkbench · modelos (OPE-134)', () => {
 
     fireEvent.click(startButton())
     expect(mocks.mutate).toHaveBeenCalledWith({ centralId: 'c1', taskId: 't1', text: undefined }, expect.anything())
+  })
+
+  it('Agente Adversário aplicável à central (OPE-187): a seção aparece herdando da aba e a escolha vai na abertura', () => {
+    mocks.adversarial.mockReturnValue(adversarialSettings())
+    renderStart()
+    const dialog = openModels()
+    const titles = within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
+    expect(titles).toEqual(['Refinamento', 'Planejamento', 'Implementação', 'Agente Adversário', 'Build e ambiente', 'Pull Request', 'Fork da conversa'])
+    const adversary = section(dialog, 'Agente Adversário')
+    expect(within(adversary).getByText('GPT-5 · do Agente Adversário')).toBeTruthy()
+    fireEvent.click(within(adversary).getByRole('radio', { name: 'Personalizar nesta mesa' }))
+    fireEvent.click(within(adversary).getByRole('button', { name: 'escolher Claude Opus' }))
+
+    fireEvent.click(startButton())
+    expect(mocks.mutate).toHaveBeenCalledWith(
+      { centralId: 'c1', taskId: 't1', text: undefined, modelOverrides: { adversarial: { model: 'anthropic/opus', variant: null } } },
+      expect.anything(),
+    )
+  })
+
+  it('Agente Adversário desligado, fora do escopo da central ou ainda carregando: sem a seção', () => {
+    for (const state of [adversarialSettings({ enabled: false }), adversarialSettings({ scope: { all: false, centralIds: ['c9'] } }), { data: undefined }]) {
+      mocks.adversarial.mockReturnValue(state)
+      const { unmount } = renderStart()
+      expect(within(openModels()).queryByRole('region', { name: 'Agente Adversário' })).toBeNull()
+      unmount()
+    }
   })
 
   it('a escolha é só desta tela: trocar o modelo não grava nada na tarefa', () => {

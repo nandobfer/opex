@@ -120,6 +120,24 @@ describe('runAdversaryRound', () => {
     expect(reviews.docs[0]).toMatchObject({ state: 'done', decision: 'approved' })
   })
 
+  it('OPE-187: com a troca da mesa, o turno usa o modelo e a variante trocados, mantendo agente e fallbacks da aba', async () => {
+    use({ agent: { agent: 'plan', model: 'anthropic/sonnet', variant: 'high', fallbacks: [{ model: 'deepseek/flash', variant: null }] } })
+    mocks.runTurn
+      .mockResolvedValueOnce({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em openai/gpt-5 (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
+      .mockResolvedValueOnce(succeeded(output([finding({ severity: 'low' })])))
+    await runAdversaryRound(input({ modelOverride: { model: 'openai/gpt-5', variant: 'low' } }))
+    const [first, second] = mocks.runTurn.mock.calls.map((call) => call[1])
+    expect(first.agent).toMatchObject({ agent: 'plan', model: 'openai/gpt-5', variant: 'low' })
+    expect(second.agent).toMatchObject({ agent: 'plan', model: 'deepseek/flash' })
+  })
+
+  it('OPE-187: sem troca na mesa, o turno usa o modelo da aba do Agente Adversário', async () => {
+    use({ agent: { agent: 'plan', model: 'anthropic/sonnet', variant: 'high', fallbacks: [] } })
+    mocks.runTurn.mockResolvedValue(succeeded(output([finding({ severity: 'low' })])))
+    await runAdversaryRound(input({ modelOverride: null }))
+    expect(mocks.runTurn.mock.calls[0]![1].agent).toMatchObject({ agent: 'plan', model: 'anthropic/sonnet', variant: 'high' })
+  })
+
   it('OPE-181: limite sem fallback: a rodada falha com o motivo real, não como interrompida', async () => {
     mocks.runTurn.mockResolvedValue({ outcome: 'failed', text: '', message: 'Limite de uso do provedor em anthropic/opus (provider.rate-limit: rate limit)', costUsd: 0, durationMs: 3, failure: 'model', limited: true })
     const outcome = await runAdversaryRound(input())

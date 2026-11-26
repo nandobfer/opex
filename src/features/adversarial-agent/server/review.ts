@@ -6,6 +6,7 @@ import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import { flushWorkbenchEvents, publishWorkbenchEvent } from "@/features/agentic/server/hub"
 import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
+import { applyModelOverride, type ModelOverride } from "@/features/agentic/logic"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { getTask } from "@/features/tasks/server/service"
 import type { TaskDetailDto } from "@/features/tasks/types"
@@ -50,6 +51,8 @@ export interface AdversaryRoundInput {
     signal: AbortSignal
     onStep?: (usage: { costUsd: number; tokens: OpencodeTokenUsage }) => void | Promise<void>
     heartbeat?: () => void | Promise<void>
+    /** Troca de modelo/variante desta mesa (popover "Modelos por etapa" — OPE-187); agente e fallbacks continuam os da aba. */
+    modelOverride?: ModelOverride | null
 }
 
 /** O que a mesa faz depois da rodada. */
@@ -223,7 +226,7 @@ export async function runAdversaryRound(input: AdversaryRoundInput): Promise<Adv
         const opencode = client
         const sid = sessionId
         const result: TurnResult = await runWithFallback(
-            settings.agent,
+            applyModelOverride(settings.agent, input.modelOverride ?? null),
             text,
             (agent, body) =>
                 runAgentTurn(

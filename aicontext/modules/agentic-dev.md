@@ -1278,17 +1278,27 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   configuração** (ícone `Settings2`, "Configurar modelos por etapa"). Não há mais o seletor de modelo nem
   o botão de variante separados (OPE-126).
   - O texto mostra o papel da **etapa atual** (`STAGE_MODEL_ROLE`, tabela abaixo). Na **Revisão adversária**
-    mostra o modelo do **Agente Adversário** (só leitura, `WorkbenchDto.adversarialModel`; configurado na
-    aba Agente Adversário), com o botão disponível. Em **Concluindo** e **Concluída**, e quando a central não
-    pôde ser lida (`models: null`), texto e botão ficam ocultos.
+    mostra o modelo efetivo do **Agente Adversário** nesta mesa, com a origem ("Modelo do Agente Adversário:
+    X, do Agente Adversário | definido nesta mesa"; `models.adversarial`) — desde a OPE-187 não é mais só
+    leitura. Em **Concluindo** e **Concluída**, e quando a central não pôde ser lida (`models: null`), texto e
+    botão ficam ocultos.
 - **Popover "Modelos por etapa"** (`ModelSettingsPopover`, abre acima do botão): cabeçalho "Vale a partir do
-  próximo turno. Precedência: mesa > central > padrão global." e uma seção por etapa — **Planejamento**,
-  **Implementação**, **Build e ambiente**, **Pull Request** e **Fork da conversa** — no padrão da aba Agentes da
-  central (mesmos `AgentRoleSection` e `ModelVariantFields` compartilhados com `AgentRolesCard`/`AgentConfigFields`):
+  próximo turno. Precedência: mesa > central > padrão global." e uma seção por etapa — **Refinamento** (só
+  durante o refinamento, OPE-137), **Planejamento**, **Implementação**, **Agente Adversário** (OPE-187, só quando a
+  revisão adversária se aplica à mesa: Agente Adversário ativo e a central no escopo), **Build e ambiente**, **Pull
+  Request** e **Fork da conversa** — no padrão da aba Agentes da central (mesmos `AgentRoleSection` e
+  `ModelVariantFields` compartilhados com `AgentRolesCard`/`AgentConfigFields`):
   - `OptionTabs` **Padrão da central** / **Personalizar nesta mesa**. No padrão, um resumo do valor herdado com
     a origem ("Claude Opus (high) · da central" ou "· do padrão global"). Personalizado: campos **Modelo**
     (busca do OpenCode) e **Variante (raciocínio)** (só quando o modelo tem variantes). Agente e fallbacks não
     mudam aqui (são os da central).
+  - **Agente Adversário** (OPE-187, decisão do dono): o herdado vem da aba **Agente Adversário** (Integrações ›
+    IA), não da central — `OptionTabs` **Padrão do Agente Adversário** / **Personalizar nesta mesa**, origem
+    "· do Agente Adversário" (`source: "adversary"`), como o Refinamento faz com o Agente Refinador. Precedência
+    real: mesa > aba do Agente Adversário. A troca vale para as próximas rodadas da revisão adversária desta mesa
+    (`adversarialTurn` passa `modelOverrides.adversarial` a `runAdversaryRound`, que aplica `applyModelOverride`
+    sobre o agente da aba); agente, fallbacks, instruções, nível e o momento da revisão continuam os da aba. A
+    seção **não aparece no popover do fork** (o fork nunca roda a revisão — `hiddenRoles` em `ForkModelSettings`).
   - **Grava na hora, por etapa**: escolher modelo ou variante chama `PUT .../model` com o **papel daquela
     seção**; "Personalizar" sozinho só abre os campos (preenchidos com o herdado) e não grava; "Padrão da
     central" numa etapa trocada envia `model: null`. Escolher um modelo **qualquer**, inclusive o mesmo que já
@@ -1296,10 +1306,14 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
     na central, se volta à variante padrão).
   - **Qual etapa é afetada**: badge **Etapa atual** na seção do papel da etapa em que a mesa está; a seção em
     gravação ganha borda/fundo primário e "Alterando" (texto ao vivo "Alterando: <etapa>" para leitores de
-    tela); o toast nomeia o papel ("Modelo da Implementação trocado: vale a partir do próximo turno").
+    tela); o toast nomeia o papel ("Modelo da Implementação trocado: vale a partir do próximo turno"; no Agente
+  Adversário, "Modelo do Agente Adversário trocado: …" e, ao voltar, "…de volta ao padrão do Agente Adversário").
 - **Na etapa inicial da mesa** (`StartWorkbench`, antes de **"Abrir mesa e gerar o plano"** — OPE-134): o
   mesmo controle (`StartWorkbenchModelSettings` sobre `ModelSettingsControl` + `WorkbenchModelSections`), com o
-  texto do modelo do **Plano** e o popover das cinco etapas, **"Etapa atual"** no Planejamento. O controle fica
+  texto do modelo do **Plano** e o popover das etapas (com o Refinamento e, quando a revisão adversária se
+  aplica à central, o **Agente Adversário** — OPE-187), **"Etapa atual"** no Planejamento. A tela lê a aba do
+  Agente Adversário (`useAdversarialSettings`) e decide pela mesma regra pura do servidor (`adversaryAppliesTo`,
+  `adversarial-agent/scope.ts`); enquanto ela carrega, a seção fica oculta. O controle fica
   no início da linha (`mr-auto`) e o botão de abrir à direita (`ml-auto`), na mesma posição relativa da barra
   da mesa.
   - **A escolha é só da tela** (estado local, sem gravar na tarefa): vai como `modelOverrides` no
@@ -1312,7 +1326,7 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
     avisa na mesa ("Modelos escolhidos na abertura: …").
   - Os modelos da tela saem de `draftWorkbenchModels` (`logic.ts`), a mesma regra de `toModelChoice` usada pelo
     servidor: a cada troca local o texto em uso, o herdado e a origem são recalculados.
-  - Payload (`startWorkbenchSchema`): `modelOverrides?: { planning?|implementation?|build?|pr?|fork?:
+  - Payload (`startWorkbenchSchema`): `modelOverrides?: { refinement?|planning?|implementation?|adversarial?|build?|pr?|fork?:
     { model, variant } }` — só modelo próprio (`model` não nulo); papel fora da lista é recusado (400).
 - **Precedência por etapa**: troca da mesa > central (só quando a central personaliza o **modelo** do papel)
   > Configurações Padrão (`resolveAgent` + `applyModelOverride`; origem em `modelSource`, `logic.ts`).
@@ -1329,7 +1343,7 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   |---|---|
   | Planejando, Plano pronto, Mudanças pedidas no PR | Plano (papel Planejamento) |
   | Implementando, Revisão bloqueou | Implementação |
-  | Revisão adversária | modelo do Agente Adversário (só leitura); sem "Etapa atual" |
+  | Revisão adversária | Agente Adversário (troca desta mesa ou o da aba do agente — OPE-187) |
   | Na fila do build, Subindo a prévia, Prévia pronta | Prévia (papel Build e ambiente) |
   | Abrindo o PR, PR aberto, Resolvendo conflitos, Corrigindo o CI, Mergeando o PR, Excluindo a branch remota | Pull Request |
   | Concluindo, Concluída | texto e botão ocultos |
@@ -1352,13 +1366,17 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
 - Resposta otimista com reversão e toast (`useSetWorkbenchModel`, `useSetForkModel`, regra pura
   `optimisticModelChoice`: voltar ao padrão mostra o herdado na hora); auditoria (`MesaDeTrabalho`/`ForkDaMesa`:
   etapa, modelo antes/depois, `trocado`) e `agentic-updated` no Pusher (atualiza mesa e forks).
-- DTO: `WorkbenchDto.models` (5 papéis: `planning`, `implementation`, `build`, `pr`, `fork`) e `ForkDto.model`,
-  cada um `{ model, variant, overridden, inherited, source, inheritedSource }` já resolvido (`source`: `fork` |
-  `workbench` | `central` | `global`); `null` quando a central não pôde ser lida. `WorkbenchDto.adversarialModel`
-  quando o adversário se aplica à mesa. Regras: `applyModelOverride`/`asModelOverride`/`modelSource`/
+- DTO: `WorkbenchDto.models` (papéis `planning`, `implementation`, `build`, `pr`, `fork`, mais `refinement` só no
+  refinamento e `adversarial` só quando o Agente Adversário se aplica à mesa) e `ForkDto.model`, cada um
+  `{ model, variant, overridden, inherited, source, inheritedSource }` já resolvido (`source`: `fork` | `workbench` |
+  `central` | `global` | `refiner` | `adversary`); `null` quando a central não pôde ser lida. O antigo
+  `WorkbenchDto.adversarialModel` (só leitura) saiu na OPE-187: o modelo do Agente Adversário é `models.adversarial`.
+  Regras: `applyModelOverride`/`asModelOverride`/`modelSource`/`roleBaseAgent`/`roleModelSource`/
   `toModelChoice`/`draftWorkbenchModels` (`logic.ts`) e `server/models.ts`.
-- Rotas: `PUT /api/agentic/workbenches/[id]/model` `{ role, model, variant }` (papéis `planning`,
-  `implementation`, `build`, `pr`, `fork`; mesma regra na ferramenta `set_workbench_model` do Agente Opex) e
+- Rotas: `PUT /api/agentic/workbenches/[id]/model` `{ role, model, variant }` (papéis `refinement`, `planning`,
+  `implementation`, `adversarial`, `build`, `pr`, `fork`; mesma regra na ferramenta `set_workbench_model` do Agente
+  Opex). A troca do `adversarial` é gravada mesmo quando o Agente Adversário não se aplica à mesa (decisão do dono,
+  OPE-187): fica oculta na tela e passa a valer se ele for ligado depois para a central. Fork:
   `PUT /api/agentic/workbenches/[id]/forks/[forkId]/model` `{ model, variant }`; `model: null` volta ao padrão.
   `POST /api/agentic/workbenches` aceita `modelOverrides` (etapa inicial, OPE-134).
 

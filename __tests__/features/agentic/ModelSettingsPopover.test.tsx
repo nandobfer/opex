@@ -68,7 +68,13 @@ const models = {
   fork: choice(),
 }
 
-const workbench = (patch: Partial<WorkbenchDto> = {}) => ({ id: 'w1', taskId: 't1', stage: 'plan_review', runState: 'idle', models, adversarialModel: null, ...patch }) as WorkbenchDto
+const workbench = (patch: Partial<WorkbenchDto> = {}) => ({ id: 'w1', taskId: 't1', stage: 'plan_review', runState: 'idle', models, ...patch }) as WorkbenchDto
+
+/** Mesa em que a revisão adversária se aplica (OPE-187): o servidor inclui o papel do Agente Adversário. */
+const adversarialModels = (patch: Partial<ModelChoiceDto> = {}) => ({
+  ...models,
+  adversarial: choice({ model: 'openai/gpt-5', inherited: { model: 'openai/gpt-5', variant: null }, source: 'adversary', inheritedSource: 'adversary', ...patch }),
+})
 
 const open = (name = 'Configurar modelos por etapa') => {
   fireEvent.click(screen.getByRole('button', { name }))
@@ -160,9 +166,9 @@ describe('WorkbenchModelSettings', () => {
     expect(within(dialog).getByText('Alterando: Fork da conversa')).toBeTruthy()
   })
 
-  it('revisão adversária mostra o modelo do Agente Adversário; Concluída e central ilegível ocultam tudo', () => {
-    const { unmount } = render(<WorkbenchModelSettings workbench={workbench({ stage: 'adversarial_review', adversarialModel: { model: 'openai/gpt-5', variant: null } })} />)
-    expect(screen.getByRole('status', { name: /Modelo do Agente Adversário: GPT-5/ })).toBeTruthy()
+  it('revisão adversária mostra o modelo do Agente Adversário com a origem; Concluída e central ilegível ocultam tudo', () => {
+    const { unmount } = render(<WorkbenchModelSettings workbench={workbench({ stage: 'adversarial_review', models: adversarialModels() })} />)
+    expect(screen.getByRole('status', { name: 'Modelo do Agente Adversário: GPT-5, do Agente Adversário' })).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Configurar modelos por etapa' })).toBeTruthy()
     unmount()
     const done = render(<WorkbenchModelSettings workbench={workbench({ stage: 'done' })} />)
@@ -170,6 +176,56 @@ describe('WorkbenchModelSettings', () => {
     done.unmount()
     const unreadable = render(<WorkbenchModelSettings workbench={workbench({ models: null })} />)
     expect(unreadable.container.innerHTML).toBe('')
+  })
+})
+
+describe('WorkbenchModelSettings · Agente Adversário (OPE-187)', () => {
+  it('com a revisão adversária na trilha, o popover traz a seção do Agente Adversário depois da Implementação, herdando da aba do agente', () => {
+    render(<WorkbenchModelSettings workbench={workbench({ models: adversarialModels() })} />)
+    const dialog = open()
+    const titles = within(dialog).getAllByRole('heading', { level: 3 }).map((heading) => heading.textContent)
+    expect(titles).toEqual(['Planejamento', 'Implementação', 'Agente Adversário', 'Build e ambiente', 'Pull Request', 'Fork da conversa'])
+    const adversary = section(dialog, 'Agente Adversário')
+    expect(within(adversary).getByRole('radio', { name: 'Padrão do Agente Adversário' }).getAttribute('aria-checked')).toBe('true')
+    expect(within(adversary).getByText('GPT-5 · do Agente Adversário')).toBeTruthy()
+  })
+
+  it('sem a revisão adversária na mesa, a seção não é oferecida', () => {
+    render(<WorkbenchModelSettings workbench={workbench()} />)
+    expect(within(open()).queryByRole('region', { name: 'Agente Adversário' })).toBeNull()
+  })
+
+  it('personalizar grava o papel adversarial; voltar ao padrão envia model: null', () => {
+    const { unmount } = render(<WorkbenchModelSettings workbench={workbench({ models: adversarialModels() })} />)
+    const adversary = section(open(), 'Agente Adversário')
+    fireEvent.click(within(adversary).getByRole('radio', { name: 'Personalizar nesta mesa' }))
+    fireEvent.click(within(adversary).getByRole('button', { name: 'escolher Claude Opus' }))
+    expect(mocks.setWorkbenchModel).toHaveBeenCalledWith({ role: 'adversarial', model: 'anthropic/opus', variant: null })
+    unmount()
+
+    const overridden = adversarialModels({ model: 'anthropic/opus', overridden: true, source: 'workbench' })
+    render(<WorkbenchModelSettings workbench={workbench({ models: overridden })} />)
+    fireEvent.click(within(section(open(), 'Agente Adversário')).getByRole('radio', { name: 'Padrão do Agente Adversário' }))
+    expect(mocks.setWorkbenchModel).toHaveBeenLastCalledWith({ role: 'adversarial', model: null, variant: null })
+  })
+
+  it('na revisão adversária o texto reflete a troca desta mesa e a seção é a etapa atual', () => {
+    const overridden = adversarialModels({ model: 'anthropic/opus', variant: 'high', overridden: true, source: 'workbench' })
+    render(<WorkbenchModelSettings workbench={workbench({ stage: 'adversarial_review', runState: 'running', models: overridden })} />)
+    const text = screen.getByRole('status', { name: 'Modelo do Agente Adversário: Claude Opus (high), definido nesta mesa' })
+    expect(text.classList.contains('text-primary')).toBe(true)
+    const dialog = open()
+    expect(within(section(dialog, 'Agente Adversário')).getByText('Etapa atual')).toBeTruthy()
+    expect(within(dialog).getAllByText('Etapa atual')).toHaveLength(1)
+  })
+
+  it('a troca em gravação nomeia o Agente Adversário no texto ao vivo', () => {
+    mocks.pending.isPending = true
+    mocks.pending.variables = { role: 'adversarial' }
+    render(<WorkbenchModelSettings workbench={workbench({ models: adversarialModels() })} />)
+    const dialog = open()
+    expect(within(section(dialog, 'Agente Adversário')).getByText('Alterando')).toBeTruthy()
+    expect(within(dialog).getByText('Alterando: Agente Adversário')).toBeTruthy()
   })
 })
 
@@ -191,6 +247,13 @@ describe('ForkModelSettings', () => {
     expect(mocks.setWorkbenchModel).not.toHaveBeenCalled()
     // Só "Este fork" é marcado como atual no popover do fork.
     expect(within(dialog).getAllByText('Etapa atual')).toHaveLength(1)
+  })
+
+  it('o popover do fork não mostra o Agente Adversário, mesmo com a revisão adversária na mesa (OPE-187)', () => {
+    render(<ForkModelSettings workbench={workbench({ models: adversarialModels() })} fork={fork} />)
+    const dialog = open('Configurar modelos do fork e das etapas')
+    expect(within(dialog).queryByRole('region', { name: 'Agente Adversário' })).toBeNull()
+    expect(within(dialog).getByRole('region', { name: 'Implementação' })).toBeTruthy()
   })
 })
 

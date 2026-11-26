@@ -4,7 +4,7 @@ import { REFINEMENT_IN_PROGRESS_REASON } from "@/features/refinement/constants"
 import { normalizeColor } from "@/lib/colors"
 import { centralConfigSchema, DEFAULT_AGENTIC_CI, defaultCentralConfig, type AgentConfig, type AgenticCi, type AgenticColumns, type AgenticPorts, type AgenticSettings, type CentralConfig } from "./schemas"
 
-import type { ModelChoiceDto, ModelSourceDto, WorkbenchKind } from "./types"
+import type { ModelChoiceDto, ModelSourceDto, WorkbenchKind, WorkbenchModelsDto } from "./types"
 
 /** Regras puras do desenvolvimento agêntico (cliente e servidor). */
 
@@ -102,25 +102,48 @@ export function toModelChoice(base: AgentConfig, override: ModelOverride | null,
  * na tela. Usa a mesma regra do servidor (`toModelChoice`) para o texto e o popover; `overrides` é o
  * rascunho local, que só é gravado quando a mesa abre (OPE-134).
  */
-export function draftWorkbenchModels(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, overrides: Partial<Record<WorkbenchModelRole, ModelOverride>>, refiner: RefinerAgent | null = null): Record<WorkbenchModelRole, ModelChoiceDto> {
-    return Object.fromEntries(WORKBENCH_MODEL_ROLES.map((role) => [role, toModelChoice(roleBaseAgent(settings, config, role, refiner), overrides[role] ?? null, roleModelSource(config, role))])) as Record<WorkbenchModelRole, ModelChoiceDto>
+export function draftWorkbenchModels(
+    settings: AgenticSettings,
+    config: Pick<CentralConfig, "agents">,
+    overrides: Partial<Record<WorkbenchModelRole, ModelOverride>>,
+    refiner: RefinerAgent | null = null,
+    adversary: AdversaryAgent | null = null,
+): WorkbenchModelsDto {
+    // O "Agente Adversário" só entra quando a revisão adversária se aplica à mesa (OPE-187).
+    const roles = WORKBENCH_MODEL_ROLES.filter((role) => role !== "adversarial" || adversary)
+    return Object.fromEntries(roles.map((role) => [role, toModelChoice(roleBaseAgent(settings, config, role, refiner, adversary), overrides[role] ?? null, roleModelSource(config, role))])) as WorkbenchModelsDto
 }
 
 /** Modelo do Agente Refinador (aba própria em Integrações › IA): base do papel "Refinamento" da mesa. */
 export type RefinerAgent = Pick<AgentConfig, "agent" | "model" | "variant" | "fallbacks">
 
+/** Agente do Agente Adversário (aba própria em Integrações › IA): base do papel "Agente Adversário" da mesa (OPE-187). */
+export type AdversaryAgent = Pick<AgentConfig, "agent" | "model" | "variant" | "fallbacks">
+
+/** Agente de outra aba (Refinador/Adversário) como base de um papel (`null` = modelo padrão do agente). */
+const externalAgent = (source: RefinerAgent | AdversaryAgent | null): AgentConfig => ({
+    agent: source?.agent ?? null,
+    model: source?.model ?? null,
+    variant: source?.model ? (source.variant ?? null) : null,
+    fallbacks: source?.fallbacks ?? [],
+})
+
 /**
  * Agente base de um papel da mesa: os papéis do Agente Desenvolvedor seguem central/global; o
- * "Refinamento" (OPE-137) usa o Agente Refinador (`null` = ainda não carregado: modelo padrão do agente).
+ * "Refinamento" (OPE-137) usa o Agente Refinador e o "Agente Adversário" (OPE-187) a aba dele
+ * (`null` = ainda não carregado ou ilegível: modelo padrão do agente).
  */
-export function roleBaseAgent(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, role: WorkbenchModelRole, refiner: RefinerAgent | null): AgentConfig {
-    if (role === "refinement") return { agent: refiner?.agent ?? null, model: refiner?.model ?? null, variant: refiner?.model ? (refiner.variant ?? null) : null, fallbacks: refiner?.fallbacks ?? [] }
+export function roleBaseAgent(settings: AgenticSettings, config: Pick<CentralConfig, "agents">, role: WorkbenchModelRole, refiner: RefinerAgent | null, adversary: AdversaryAgent | null = null): AgentConfig {
+    if (role === "refinement") return externalAgent(refiner)
+    if (role === "adversarial") return externalAgent(adversary)
     return resolveAgent(settings, config, role)
 }
 
-/** Origem do modelo de um papel sem troca na mesa (o Refinamento vem sempre do Agente Refinador). */
+/** Origem do modelo de um papel sem troca na mesa (Refinamento e Agente Adversário vêm sempre da aba do agente). */
 export function roleModelSource(config: Pick<CentralConfig, "agents">, role: WorkbenchModelRole): ModelSourceDto {
-    return role === "refinement" ? "refiner" : modelSource(config, role)
+    if (role === "refinement") return "refiner"
+    if (role === "adversarial") return "adversary"
+    return modelSource(config, role)
 }
 
 /**

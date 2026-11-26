@@ -77,6 +77,11 @@ vi.mock('@/features/ai/task-context-prompt', () => ({ buildTaskContextPrompt: vi
 import { AgenticWorkbench } from '@/lib/db/models/Agentic'
 import { DEFAULT_AGENTIC_SETTINGS, defaultCentralConfig } from '@/features/agentic/schemas'
 import { getWorkbench, implement, setWorkbenchModel, startWorkbench } from '@/features/agentic/server/workflow'
+import * as adversaryHook from '@/features/adversarial-agent/server/workflow-hook'
+
+/** Mock global do Agente Adversário (`__tests__/setup.ts`): inativo por padrão. */
+const adversary = adversaryHook as unknown as { adversaryApplies: ReturnType<typeof vi.fn>; adversaryAgent: ReturnType<typeof vi.fn> }
+const ADVERSARY_AGENT = { agent: 'review', model: 'anthropic/opus', variant: 'high', fallbacks: [] }
 
 /**
  * Troca do modelo na mesa: vale só para o papel escolhido, a partir do próximo turno, mantendo o
@@ -126,6 +131,8 @@ const settings = {
 
 beforeEach(() => {
   vi.clearAllMocks()
+  adversary.adversaryApplies.mockResolvedValue(false)
+  adversary.adversaryAgent.mockResolvedValue(null)
   model.docs.length = 0
   mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: defaultCentralConfig('/home/u/app') })
   mocks.repoForProject.mockResolvedValue(null)
@@ -170,6 +177,36 @@ describe('trocar o modelo na mesa', () => {
     expect(dto.models?.planning).toMatchObject({ overridden: false })
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ etapa: 'Fork da conversa', trocado: true }) }))
     expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ message: expect.stringContaining('Modelo do Fork trocado para openai/gpt-5: vale a partir da próxima mensagem dos forks desta mesa') }))
+  })
+
+  it('Agente Adversário (OPE-187): grava a troca da mesa, audita e avisa nomeando o agente; voltar ao padrão remove', async () => {
+    adversary.adversaryApplies.mockResolvedValue(true)
+    adversary.adversaryAgent.mockResolvedValue(ADVERSARY_AGENT)
+    const wb = await workbench()
+    const dto = await setWorkbenchModel(wb._id, { role: 'adversarial', model: 'openai/gpt-5', variant: null })
+
+    expect(model.docs[0]!.modelOverrides).toEqual({ adversarial: { model: 'openai/gpt-5', variant: null } })
+    expect(mocks.assertAgentConfigs).toHaveBeenCalledWith([{ label: 'Modelo do Agente Adversário', config: { agent: null, model: 'openai/gpt-5', variant: null } }], false)
+    expect(dto.models?.adversarial).toMatchObject({ model: 'openai/gpt-5', overridden: true, source: 'workbench', inherited: { model: 'anthropic/opus', variant: 'high' }, inheritedSource: 'adversary' })
+    expect(mocks.recordAudit).toHaveBeenCalledWith(
+      expect.objectContaining({ antes: expect.objectContaining({ etapa: 'Agente Adversário', modelo: 'anthropic/opus (high)', trocado: false }), depois: expect.objectContaining({ modelo: 'openai/gpt-5', trocado: true }) }),
+    )
+    expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ message: 'Modelo do Agente Adversário trocado para openai/gpt-5: vale a partir do próximo turno.' }))
+
+    const back = await setWorkbenchModel(wb._id, { role: 'adversarial', model: null, variant: null })
+    expect(model.docs[0]!.modelOverrides).toEqual({})
+    expect(back.models?.adversarial).toMatchObject({ model: 'anthropic/opus', variant: 'high', overridden: false, source: 'adversary' })
+    expect(mocks.publish).toHaveBeenCalledWith(wb._id, expect.objectContaining({ message: expect.stringContaining('Modelo do Agente Adversário voltou ao padrão (anthropic/opus (high))') }))
+  })
+
+  it('Agente Adversário fora da mesa: a seção não vem no DTO, mas a troca pedida é gravada (decisão do dono)', async () => {
+    adversary.adversaryApplies.mockResolvedValue(false)
+    adversary.adversaryAgent.mockResolvedValue(ADVERSARY_AGENT)
+    const wb = await workbench()
+    expect((await getWorkbench(wb._id)).models).not.toHaveProperty('adversarial')
+    const dto = await setWorkbenchModel(wb._id, { role: 'adversarial', model: 'openai/gpt-5', variant: null })
+    expect(model.docs[0]!.modelOverrides).toEqual({ adversarial: { model: 'openai/gpt-5', variant: null } })
+    expect(dto.models).not.toHaveProperty('adversarial')
   })
 
   it('modelo inexistente no OpenCode não é gravado', async () => {

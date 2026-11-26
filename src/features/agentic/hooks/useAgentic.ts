@@ -322,7 +322,8 @@ export function useSetWorkbenchModel(workbench: WorkbenchDto) {
             setWorkbench(saved)
             const title = WORKBENCH_MODEL_ROLE_LABELS[input.role]
             const when = input.role === "fork" ? "vale a partir da próxima mensagem dos forks" : "vale a partir do próximo turno"
-            toast.success(input.model ? `${title} trocado: ${when}` : `${title} de volta ao padrão da central: ${when}`)
+            const inherited = input.role === "adversarial" ? "padrão do Agente Adversário" : "padrão da central"
+            toast.success(input.model ? `${title} trocado: ${when}` : `${title} de volta ao ${inherited}: ${when}`)
         },
     })
 }
