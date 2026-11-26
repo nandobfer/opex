@@ -632,7 +632,8 @@ export async function runDueOpexWatches(now = new Date()): Promise<{ expired: nu
     await opexDb()
     const expiredSessions = await expireDueWatches(now)
     await recoverLostDeliveries(now)
-    const sessionIds = (await OpexWatch.distinct("sessionId", { status: "triggered" })).map(String).slice(0, DUE_SESSIONS)
+    const triggered = await OpexWatch.find({ status: "triggered" }).sort({ triggeredAt: 1 }).select({ sessionId: 1 }).lean<{ sessionId: Types.ObjectId }[]>()
+    const sessionIds = [...new Set(triggered.map((item) => String(item.sessionId)))].slice(0, DUE_SESSIONS)
     let delivered = 0
     for (const sessionId of sessionIds) {
         try {

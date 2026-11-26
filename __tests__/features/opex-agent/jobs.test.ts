@@ -12,7 +12,11 @@ const mocks = vi.hoisted(() => ({
   clientActorFor: vi.fn(),
   assertClientEnabled: vi.fn(async () => ({ enabled: true, disabledTools: [], enabledOptInTools: [] })),
   enabledNames: vi.fn(async () => ({ names: ['list_tasks', 'list_jobs', 'schedule_job'], config: {} })),
+  watchJobSettled: vi.fn(async () => {}),
 }))
+
+// Observações do Agente Opex (OPE-194): o fim do job avisa quem observa o job.
+vi.mock('@/features/opex-agent/server/watch-events', () => ({ watchJobSettled: mocks.watchJobSettled }))
 
 vi.mock('ai', () => ({
   isLoopFinished: () => () => false,
@@ -181,6 +185,7 @@ describe('jobs do dono', () => {
     expect(eventsOf('opex-job-finished')).toEqual([{ id: job.id, title: 'Resumo dos PRs', status: 'done', sessionId: String(sessions().docs[0]!._id), error: null, origin: 'owner' }])
     expect(mocks.publishToChannels.mock.calls.filter((call) => String((call as unknown[])[1]).startsWith('opex-job'))).toEqual([])
     expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'JobAgenteOpex', acao: 'EXECUTAR', depois: expect.objectContaining({ resultado: 'done' }) }))
+    await vi.waitFor(() => expect(mocks.watchJobSettled).toHaveBeenCalledWith({ id: job.id, title: 'Resumo dos PRs', status: 'done', error: null }))
   })
 
   it('agendado: espera o horário; o tick atrasado executa e registra o atraso', async () => {

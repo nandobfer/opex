@@ -7,7 +7,7 @@ import { memoryModel } from '../../helpers/memory-model'
  * Banco em memória; storage e OpenCode falsos.
  */
 
-const store = vi.hoisted(() => ({ sessions: null as unknown, jobs: null as unknown, messages: null as unknown }))
+const store = vi.hoisted(() => ({ sessions: null as unknown, jobs: null as unknown, messages: null as unknown, watches: null as unknown }))
 const mocks = vi.hoisted(() => ({
   preserveConversations: vi.fn(async (_ids: readonly string[]) => {}),
   audit: vi.fn(async () => {}),
@@ -27,7 +27,8 @@ vi.mock('@/lib/db/models/Opex', () => {
   store.sessions = Object.assign(model, { findByIdAndUpdate: (id: unknown, update: Record<string, unknown>, options: unknown) => model.findOneAndUpdate({ _id: id }, update, options) })
   store.jobs = memoryModel()
   store.messages = memoryModel()
-  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: memoryModel(), OpexJob: store.jobs, OpexFile: memoryModel() }
+  store.watches = memoryModel()
+  return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: memoryModel(), OpexJob: store.jobs, OpexFile: memoryModel(), OpexWatch: store.watches }
 })
 vi.mock('@/features/maddox-agent/server/opencode-session', () => ({ removeOpencodeSession: mocks.removeOpencode, interruptOpencodeSession: vi.fn(async () => {}) }))
 vi.mock('@/features/opex-agent/server/files', () => ({ deleteSessionFiles: mocks.deleteFiles }))
@@ -40,6 +41,7 @@ type Doc = Record<string, unknown> & { _id: unknown }
 const sessions = () => store.sessions as ReturnType<typeof memoryModel>
 const jobs = () => store.jobs as ReturnType<typeof memoryModel>
 const messages = () => store.messages as ReturnType<typeof memoryModel>
+const watches = () => store.watches as ReturnType<typeof memoryModel>
 const docOf = (id: string) => sessions().docs.find((doc) => String((doc as Doc)._id) === id) as Doc | undefined
 
 const NOW = new Date('2026-11-01T12:00:00Z')
@@ -68,6 +70,7 @@ beforeEach(() => {
   sessions().docs.splice(0)
   jobs().docs.splice(0)
   messages().docs.splice(0)
+  watches().docs.splice(0)
 })
 
 describe('cleanupIdleAgentSessions — arquivar', () => {
@@ -100,6 +103,21 @@ describe('cleanupIdleAgentSessions — arquivar', () => {
     expect(docOf(awaiting)?.archived).toBe(false)
     expect(docOf(withJob)?.archived).toBe(false)
     expect(docOf(doneJob)?.archived).toBe(true)
+  })
+
+  it('não toca sessão com observação de evento ativa (OPE-194); a encerrada não protege', async () => {
+    const watching = await session({ lastMessageAt: daysAgo(40) })
+    const delivering = await session({ lastMessageAt: daysAgo(40) })
+    const woken = await session({ lastMessageAt: daysAgo(40) })
+    await watches().create({ status: 'watching', sessionId: watching })
+    await watches().create({ status: 'delivering', sessionId: delivering })
+    await watches().create({ status: 'woken', sessionId: woken })
+
+    await cleanupIdleAgentSessions('opex', 30, NOW)
+
+    expect(docOf(watching)?.archived).toBe(false)
+    expect(docOf(delivering)?.archived).toBe(false)
+    expect(docOf(woken)?.archived).toBe(true)
   })
 
   it('a rotina do Agente Opex não toca o Maddox (e vice-versa); sessão antiga sem `agent` é do Opex', async () => {

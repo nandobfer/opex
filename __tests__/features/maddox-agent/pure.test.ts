@@ -48,6 +48,12 @@ describe('catálogo do Maddox', () => {
     expect(buildMaddoxClientToolTree().some((branch) => branch.id === 'jobs')).toBe(false)
   })
 
+  it('fica sem a observação de eventos (OPE-194), no dono e no portal', () => {
+    expect(maddoxOwnerToolMetas([meta('watch_event', 'watches', 'write'), meta('list_tasks', 'tasks', 'read')]).map((tool) => tool.name)).toEqual(['list_tasks'])
+    expect(MADDOX_CLIENT_TOOL_NAMES).not.toContain('watch_event')
+    expect(buildMaddoxClientToolTree().some((branch) => branch.id === 'watches')).toBe(false)
+  })
+
   it('no portal o contexto fica sempre ligado e as de admin só para o admin', () => {
     const user = enabledMaddoxClientToolNames(['get_portal_overview', 'list_tasks'], false)
     expect(user).toContain('get_portal_overview')

@@ -23,6 +23,8 @@ describe('catálogo real do MCP do Agente Maddox', () => {
     for (const scope of ['owner', 'portal'] as const) {
       const tools = await maddoxMcpCatalog(scope)
       expect(tools.some((tool) => tool.group === 'jobs')).toBe(false)
+      // Observação de eventos (OPE-194) acorda uma conversa do Agente Opex: fora do Maddox e dos tokens.
+      expect(tools.some((tool) => tool.group === 'watches')).toBe(false)
       const examples = raw.paths[`/api/maddox/mcp/${scope}`]!.post.requestBody.content['application/json'].examples
       for (const tool of tools) {
         const args = examples[`call-${tool.name}`]!.value.params!.arguments
