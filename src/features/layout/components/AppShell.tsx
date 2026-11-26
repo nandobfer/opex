@@ -8,6 +8,7 @@ import { useSidebarState } from "../hooks/useSidebarState"
 import { useDrawerFocus } from "../hooks/useDrawerFocus"
 import { useAppScrollCompact } from "../hooks/useAppScrollCompact"
 import { MOBILE_HEADER_OFFSET_CLASS } from "../mobile-header"
+import { SAFE_AREA_PADDING, SAFE_AREA_Y } from "@/components/ui/safe-area"
 import { MobileAppHeader } from "./header/MobileAppHeader"
 import { isActiveHref, pageTransitionKey } from "../navigation"
 import type { NavBadges, NavSectionDef } from "../types"
@@ -104,7 +105,7 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
     )
 
     return (
-        <div className="flex h-dvh overflow-hidden bg-background">
+        <div className={cn("flex h-dvh overflow-hidden bg-background", SAFE_AREA_PADDING)}>
             <a
                 href={`#${APP_SCROLL_CONTAINER_ID}`}
                 className="sr-only focus:not-sr-only focus:fixed focus:left-2 focus:top-2 focus:z-[100] focus:rounded-md focus:bg-card focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-foreground focus:shadow-lg focus:outline-none focus:ring-2 focus:ring-ring"
@@ -132,7 +133,7 @@ export function AppShell({ brand, sections, navLabel, badges, immersiveHrefs = [
                             role="dialog"
                             aria-modal="true"
                             aria-label={navLabel}
-                            className="fixed inset-y-0 left-0 z-50"
+                            className={cn("fixed inset-y-0 left-0 z-50 bg-sidebar", SAFE_AREA_Y)}
                             initial={{ x: reduceMotion ? 0 : -260 }}
                             animate={{ x: 0 }}
                             exit={{ x: reduceMotion ? 0 : -260 }}

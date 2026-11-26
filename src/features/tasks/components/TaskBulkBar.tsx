@@ -15,6 +15,8 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
+import { SAFE_AREA_FLOATING_BOTTOM } from "@/components/ui/safe-area"
+import { cn } from "@/lib/utils"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { BoardColumnView } from "../board"
 import type { TaskPriority } from "../constants"
@@ -60,7 +62,10 @@ export function TaskBulkBar({ tasks, columns, progress, onMove, onPriority, onAr
                         animate={{ opacity: 1, y: 0, scale: 1 }}
                         exit={{ opacity: 0, y: 40, scale: 0.96 }}
                         transition={{ type: "spring", stiffness: 420, damping: 34 }}
-                        className="fixed bottom-6 left-1/2 z-40 w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-primary/40 bg-card/95 shadow-2xl shadow-primary/20 backdrop-blur"
+                        className={cn(
+                            "fixed left-1/2 z-40 w-[min(760px,calc(100vw-2rem))] -translate-x-1/2 overflow-hidden rounded-xl border border-primary/40 bg-card/95 shadow-2xl shadow-primary/20 backdrop-blur",
+                            SAFE_AREA_FLOATING_BOTTOM,
+                        )}
                     >
                         <div className="flex flex-wrap items-center gap-2 px-3 py-2">
                             <span className="mr-1 flex items-center gap-1.5 text-sm font-semibold">

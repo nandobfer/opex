@@ -31,6 +31,18 @@ describe("guarda de acesso", () => {
         }
     })
 
+    it("o PWA (manifest, service worker e página offline) responde sem sessão; nada além disso abre", () => {
+        for (const path of ["/manifest.webmanifest", "/sw.js", "/offline", "/offline/"]) {
+            expect(isPublicPath(path)).toBe(true)
+            expect(resolveAuthDecision(path, null).action).toBe("allow")
+        }
+        for (const path of ["/offline/tarefas", "/sw.js/x", "/manifest.webmanifest/x", "/dashboard", "/tarefas"]) {
+            expect(isPublicPath(path)).toBe(false)
+            expect(resolveAuthDecision(path, null)).toEqual({ action: "redirect", redirectTo: "/login" })
+        }
+        expect(resolveAuthDecision("/api/tasks", null).action).toBe("unauthorized")
+    })
+
     it("sem sessão: página redireciona para /login e API interna responde 401", () => {
         expect(resolveAuthDecision("/tarefas", null)).toEqual({ action: "redirect", redirectTo: "/login" })
         expect(resolveAuthDecision("/api/tasks", null).action).toBe("unauthorized")

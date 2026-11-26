@@ -21,7 +21,10 @@
  * - o **webhook da Evolution API** (`/api/evolution/webhook`, exato), autenticado só pelo header
  *   `x-opex-webhook-secret` com o segredo do webhook da integração;
  * - a **entrada do portal** (`/cliente`, exato): resolve o token (`?t=`), mostra a seleção de
- *   cliente do usuário logado ou deixa o middleware decidir. As sub-rotas do portal exigem sessão.
+ *   cliente do usuário logado ou deixa o middleware decidir. As sub-rotas do portal exigem sessão;
+ * - o **PWA** (OPE-196, exatos): `/manifest.webmanifest`, `/sw.js` e `/offline` — o Chrome busca o
+ *   manifest e o service worker sem cookie, e a página offline não tem dado nenhum. Os ícones (`.png`)
+ *   já ficam fora do `matcher` do middleware.
  *
  * A partir da entrada, a decisão considera o `kind` da sessão (`src/features/auth/session.ts`):
  * - `admin`: app completo **e** o portal (pré-visualização);
@@ -31,6 +34,7 @@
  */
 
 import { BASE_PATH } from "@/lib/base-path"
+import { PWA_PUBLIC_ROUTES } from "@/features/pwa/constants"
 import type { SessionPayload } from "./session"
 
 /** Rotas liberadas sem sessão (comparação exata). */
@@ -50,6 +54,8 @@ export const PUBLIC_ROUTES: readonly string[] = [
     "/api/evolution/webhook",
     // MCP "Mesa do Opex" (OPE-178): segredo derivado + escopo pela sessão do OpenCode (ver `features/agentic/server/workbench-mcp`).
     "/api/agentic/mcp",
+    // PWA (OPE-196): manifest, service worker e página offline (ver `src/features/pwa/constants.ts`).
+    ...PWA_PUBLIC_ROUTES,
 ]
 
 /** Prefixos de rota liberados sem sessão (API pública por token e tick de cron). */

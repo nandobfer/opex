@@ -6,8 +6,8 @@ import { readSessionToken, SESSION_COOKIE_NAME } from "@/features/auth/session"
 /**
  * Guarda de acesso do Opex. Toda página e toda API interna exigem sessão (cookie assinado) criada no
  * login. Ficam suspensas as rotas públicas do app (`/login`, `/api/auth/*`), a entrada do portal
- * (`/cliente`), a API pública por token (`/api/v1/*`) e o tick de cron (`/api/routines/*`) — as
- * regras estão em `src/features/auth/paths.ts`.
+ * (`/cliente`), a API pública por token (`/api/v1/*`), o tick de cron (`/api/routines/*`) e o PWA
+ * (`/manifest.webmanifest`, `/sw.js`, `/offline`) — as regras estão em `src/features/auth/paths.ts`.
  *
  * A decisão considera o **tipo de sessão**: o dono (`kind: "admin"`) passa em tudo; o usuário de
  * cliente (`kind: "client"`) fica restrito ao portal. Resposta da tentativa sem acesso:
