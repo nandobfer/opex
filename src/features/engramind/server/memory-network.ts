@@ -167,7 +167,12 @@ async function findAgentToken(consumer: MemoryIdentity, tokenId: string, target:
 
 /** Token válido do agente (reemite quando falta, não decifra, foi revogado, expirou ou tem outros escopos). Devolve se emitiu. */
 async function ensureToken(consumer: MemoryIdentity, target: EngramindTarget, actorId: string): Promise<boolean> {
-    const stored = (await loadAgentTokens())[consumer]
+    // Lê o mapa inteiro: gravar o caminho `agentTokens.<consumer>` com `$set` falha no Mongo quando o
+    // campo está `null` ("Cannot create field ... in element {agentTokens: null}"), estado em que o
+    // documento fica depois de um upsert de outro campo (o default do schema é `null`). O `$set` do
+    // mapa inteiro cria o objeto.
+    const tokens = await loadAgentTokens()
+    const stored = tokens[consumer]
     const secret = decryptToken(stored)
     if (stored && secret) {
         const token = await findAgentToken(consumer, stored.tokenId, target)
@@ -178,7 +183,7 @@ async function ensureToken(consumer: MemoryIdentity, target: EngramindTarget, ac
     const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "agent", agent: agentRef(consumer), scopes: MEMORY_TOKEN_SCOPES[consumer], label: `Opex · memórias (${consumer})` } }, { target })
     if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token")
     const record: IEngramindAgentToken = { tokenId: issued.token.id, prefix: issued.token.prefix, secret: encryptSecret(issued.secret), issuedAt: new Date() }
-    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { [`agentTokens.${consumer}`]: record } }, { upsert: true })
+    await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { agentTokens: { ...tokens, [consumer]: record } } }, { upsert: true })
     // O anterior (sem segredo legível, por exemplo) deixa de valer.
     if (stored && stored.tokenId !== issued.token.id) await engramindCall("POST", { path: `/v1/tokens/${enc(stored.tokenId)}/revoke`, body: {} }, { target }).catch(() => undefined)
     await auditEngramind(actorId, "bootstrap", AcaoAuditoria.EXECUTAR, { passo: "agent-memories", agente: consumer, tokenPrefix: issued.token.prefix })
