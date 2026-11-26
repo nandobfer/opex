@@ -1,4 +1,4 @@
-import type { ChatMessageDto } from "@/features/evolution-api/chat-message"
+import type { ChatEffects, ChatMessageDto } from "@/features/evolution-api/chat-message"
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
 import type { ConversationAgentState, SecretaryDecision } from "./constants"
 
@@ -38,6 +38,8 @@ export interface TimelineDecisionDto {
 /** Página da linha do tempo: mensagens (mais antigas primeiro), decisões no intervalo e ids enviados pelo Secretário. */
 export interface ChatTimelinePageDto {
     items: ChatMessageDto[]
+    /** Efeitos (reação, edição, apagar) cujo alvo está em outra página. */
+    effects: ChatEffects
     decisions: TimelineDecisionDto[]
     agentMessageIds: string[]
     page: number

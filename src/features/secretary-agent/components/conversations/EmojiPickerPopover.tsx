@@ -2,16 +2,38 @@
 
 import { useState, type ReactNode } from "react"
 import dynamic from "next/dynamic"
-import { EmojiStyle, Theme } from "emoji-picker-react"
-import ptEmojiData from "emoji-picker-react/dist/data/emojis-pt.js"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { Skeleton } from "@/components/ui/skeleton"
 
-/** Seletor de emojis (a mesma biblioteca do Atendimento do Zaturno CRM), carregado sob demanda, em pt-BR e no tema escuro. */
-const Picker = dynamic(() => import("emoji-picker-react").then((module) => ({ default: module.default })), {
-    ssr: false,
-    loading: () => <Skeleton className="h-[340px] w-[300px]" />,
-})
+type PickerProps = { onEmoji: (emoji: string) => void }
+
+/**
+ * Seletor de emojis (a mesma biblioteca do Atendimento do Zaturno CRM), em pt-BR e no tema escuro. A biblioteca e o
+ * dicionário pt entram juntos só quando o seletor abre (nada dela no carregamento da aba).
+ */
+const Picker = dynamic<PickerProps>(
+    () =>
+        Promise.all([import("emoji-picker-react"), import("emoji-picker-react/dist/data/emojis-pt.js")]).then(([library, data]) => {
+            const EmojiPicker = library.default
+            function LoadedPicker({ onEmoji }: PickerProps) {
+                return (
+                    <EmojiPicker
+                        theme={library.Theme.DARK}
+                        emojiStyle={library.EmojiStyle.NATIVE}
+                        emojiData={data.default}
+                        lazyLoadEmojis
+                        searchPlaceholder="Pesquisar emoji"
+                        width={300}
+                        height={340}
+                        previewConfig={{ showPreview: false }}
+                        onEmojiClick={(emoji) => emoji.emoji && onEmoji(emoji.emoji)}
+                    />
+                )
+            }
+            return LoadedPicker
+        }),
+    { ssr: false, loading: () => <Skeleton className="h-[340px] w-[300px]" /> },
+)
 
 interface EmojiPickerPopoverProps {
     trigger: ReactNode
@@ -30,17 +52,8 @@ export function EmojiPickerPopover({ trigger, onSelect, closeOnSelect = false, s
             <PopoverContent side={side} align={align} className="w-auto border-0 p-0 shadow-lg">
                 {open && (
                     <Picker
-                        theme={Theme.DARK}
-                        emojiStyle={EmojiStyle.NATIVE}
-                        emojiData={ptEmojiData}
-                        lazyLoadEmojis
-                        searchPlaceholder="Pesquisar emoji"
-                        width={300}
-                        height={340}
-                        previewConfig={{ showPreview: false }}
-                        onEmojiClick={(data) => {
-                            if (!data.emoji) return
-                            onSelect(data.emoji)
+                        onEmoji={(emoji) => {
+                            onSelect(emoji)
                             if (closeOnSelect) setOpen(false)
                         }}
                     />

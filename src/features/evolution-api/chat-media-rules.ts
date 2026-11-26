@@ -105,3 +105,25 @@ export function validateMediaFile(file: { mimeType: string | null | undefined; f
     if (file.size > rule.maxBytes) return { ok: false, message: `“${file.fileName}” tem ${formatBytes(file.size)}; o limite para ${rule.label.split(" (")[0]!.toLowerCase()} é ${formatBytes(rule.maxBytes)}.` }
     return { ok: true, mediaType, mimeType }
 }
+
+/** Tipos que a rota de mídia serve inline: só imagens rasterizadas, vídeo e áudio (nunca HTML, SVG, PDF etc.). */
+const INLINE_MEDIA = /^(image\/(jpeg|png|webp|gif)|video\/[\w.+-]+|audio\/[\w.+-]+)$/
+
+/**
+ * Cabeçalhos da rota de mídia da aba Conversas. O tipo vem do remetente (documento do WhatsApp), então: `nosniff` e
+ * CSP `sandbox` sempre; inline só para imagem/vídeo/áudio; qualquer outro tipo vira download (`attachment`) como
+ * `application/octet-stream`, para um HTML ou SVG com script nunca rodar na origem do app.
+ */
+export function mediaResponseHeaders(mimetype: string | null | undefined, fileName: string | null, length: number): Record<string, string> {
+    const type = mimetype ? baseMime(mimetype) : ""
+    const inline = INLINE_MEDIA.test(type)
+    const name = fileName ? `; filename*=UTF-8''${encodeURIComponent(fileName)}` : ""
+    return {
+        "content-type": inline ? type : "application/octet-stream",
+        "content-disposition": `${inline ? "inline" : "attachment"}${name}`,
+        "x-content-type-options": "nosniff",
+        "content-security-policy": "sandbox; default-src 'none'",
+        "cache-control": "private, max-age=86400",
+        "content-length": String(length),
+    }
+}

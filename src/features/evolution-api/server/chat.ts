@@ -1,4 +1,4 @@
-import { buildChatMessages, type ChatMessageDto } from "../chat-message"
+import { buildChatPage, type ChatEffects, type ChatMessageDto } from "../chat-message"
 import { CAPTION_MEDIA_TYPES, validateMediaFile } from "../chat-media-rules"
 import type { ChatMediaFields, ChatSendInput } from "../schemas"
 import { evolution, toDomainError } from "./client"
@@ -12,6 +12,8 @@ export const CHAT_PAGE_SIZE = 50
 
 export interface ChatTimelinePage {
     items: ChatMessageDto[]
+    /** Reações, edições e apagamentos cujo alvo está em outra página (o cliente reaplica ao juntar as páginas). */
+    effects: ChatEffects
     page: number
     hasOlder: boolean
 }
@@ -20,7 +22,8 @@ export interface ChatTimelinePage {
 export async function chatTimelinePage(instance: string, jid: string, page: number): Promise<ChatTimelinePage> {
     try {
         const result = await evolution.findMessages(instance, { remoteJid: jid, page, pageSize: CHAT_PAGE_SIZE })
-        return { items: buildChatMessages(result.records), page, hasOlder: result.page < result.pages }
+        const { items, orphanEffects } = buildChatPage(result.records)
+        return { items, effects: orphanEffects, page, hasOlder: result.page < result.pages }
     } catch (error) {
         toDomainError(error)
     }

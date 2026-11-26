@@ -34,20 +34,22 @@ const message = (id: string, patch: Partial<ChatMessageDto> = {}): ChatMessageDt
 
 function renderInbox() {
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
-    return render(
+    const tree = () => (
         <QueryClientProvider client={client}>
             <form onSubmit={submitSpy}>
                 <ConversationsInbox minutes={30} contacts={[]} />
             </form>
-        </QueryClientProvider>,
+        </QueryClientProvider>
     )
+    const view = render(tree())
+    return { ...view, refresh: () => view.rerender(tree()) }
 }
 const submitSpy = vi.fn((event: { preventDefault: () => void }) => event.preventDefault())
 
 beforeEach(() => {
     chatOutbox.reset()
     mocks.rows = [row({}), row({ chatId: "5521988887777", jid: "5521988887777@s.whatsapp.net", name: "Bruno", unreadCount: 0, state: "paused", pausedUntil: "2026-11-26T12:00:00.000Z" })]
-    mocks.page = { page: 1, hasOlder: false, items: [message("Oi Ana"), message("Já vou", { fromMe: true, timestamp: "2026-11-26T10:02:00.000Z" })], decisions: [{ id: "d1", decision: "replied", reason: "Passou nos critérios", at: "2026-11-26T10:01:00.000Z" }], agentMessageIds: ["Já vou"] } satisfies ChatTimelinePageDto
+    mocks.page = { page: 1, hasOlder: false, effects: { reactions: [], edits: [], revoked: [] }, items: [message("Oi Ana"), message("Já vou", { fromMe: true, timestamp: "2026-11-26T10:02:00.000Z" })], decisions: [{ id: "d1", decision: "replied", reason: "Passou nos critérios", at: "2026-11-26T10:01:00.000Z" }], agentMessageIds: ["Já vou"] } satisfies ChatTimelinePageDto
     window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas")
 })
 afterEach(() => {
@@ -103,5 +105,24 @@ describe("aba Conversas como conversa (OPE-197)", () => {
         expect(await screen.findByRole("button", { name: "Reenviar" })).toBeTruthy()
         expect(mocks.toastError).toHaveBeenCalledWith("Não foi possível enviar a mensagem")
         expect(submitSpy).not.toHaveBeenCalled()
+    })
+
+    it("envio com sucesso: o balão temporário some quando a página do servidor traz a mensagem, sem duplicar", async () => {
+        window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas&conversa=5531999999999")
+        mocks.post.mockResolvedValue({ data: { success: true, data: { id: "REAL" } } })
+        const view = renderInbox()
+        const input = screen.getByRole("textbox", { name: "Mensagem" })
+        fireEvent.change(input, { target: { value: "chego às 9" } })
+        await waitFor(() => expect(screen.getByRole("button", { name: "Enviar mensagem" })).toBeTruthy())
+        fireEvent.keyDown(input, { key: "Enter" })
+        expect(await screen.findByText("chego às 9")).toBeTruthy()
+        await waitFor(() => expect(chatOutbox.snapshot()[0]?.realId).toBe("REAL"))
+        expect(screen.getByText("chego às 9").closest("[data-message-id]")?.getAttribute("data-status")).toBe("sent")
+        const current = mocks.page as ChatTimelinePageDto
+        mocks.page = { ...current, items: [...current.items, message("REAL", { fromMe: true, text: "chego às 9", timestamp: "2026-11-26T10:05:00.000Z" })] }
+        view.refresh()
+        await waitFor(() => expect(chatOutbox.snapshot()).toEqual([]))
+        expect(screen.getAllByText("chego às 9")).toHaveLength(1)
+        expect(screen.getByText("chego às 9").closest("[data-message-id]")?.getAttribute("data-message-id")).toBe("REAL")
     })
 })

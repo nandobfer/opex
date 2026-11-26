@@ -1,5 +1,5 @@
 import { differenceInCalendarDays, format, isToday, isYesterday, startOfDay } from "date-fns"
-import type { ChatMessageDto } from "@/features/evolution-api/chat-message"
+import { applyChatEffects, type ChatEffects, type ChatMessageDto } from "@/features/evolution-api/chat-message"
 import type { ConversationAgentState } from "./constants"
 import type { ChatTimelinePageDto, SecretaryConversationDto, TimelineDecisionDto } from "./types"
 
@@ -22,14 +22,19 @@ export function mergeTimelinePages(pages: readonly ChatTimelinePageDto[] | undef
     const messages = new Map<string, ChatMessageDto>()
     const decisions = new Map<string, TimelineDecisionDto>()
     const agentIds = new Set<string>()
+    const effects: ChatEffects = { reactions: [], edits: [], revoked: [] }
     // A página mais recente prevalece (reações e status mais novos).
     for (const page of [...(pages ?? [])].reverse()) {
         for (const item of page.items) messages.set(item.id, item)
         for (const decision of page.decisions) decisions.set(decision.id, decision)
         for (const id of page.agentMessageIds) agentIds.add(id)
+        // Reação, edição ou apagar numa página e o alvo em outra: reaplicados aqui.
+        effects.reactions.push(...(page.effects?.reactions ?? []))
+        effects.edits.push(...(page.effects?.edits ?? []))
+        effects.revoked.push(...(page.effects?.revoked ?? []))
     }
     const byTime = <T extends { timestamp?: string; at?: string }>(a: T, b: T) => (a.timestamp ?? a.at ?? "").localeCompare(b.timestamp ?? b.at ?? "")
-    return { messages: [...messages.values()].sort(byTime), decisions: [...decisions.values()].sort(byTime), agentIds }
+    return { messages: applyChatEffects([...messages.values()].sort(byTime), effects), decisions: [...decisions.values()].sort(byTime), agentIds }
 }
 
 /** Rótulo do divisor de data do WhatsApp: "Hoje", "Ontem" ou dd/mm/aaaa. */

@@ -112,6 +112,8 @@ export function useReactToChatMessage(chatId: string) {
                 ...data,
                 pages: data.pages.map((page) => ({
                     ...page,
+                    // Reação antiga do dono vinda de outra página não pode cobrir a nova.
+                    effects: page.effects && { ...page.effects, reactions: page.effects.reactions.filter((item) => !(item.targetId === message.id && item.reaction.fromMe)) },
                     items: page.items.map((item) => (item.id === message.id ? { ...item, reactions: [...item.reactions.filter((reaction) => !reaction.fromMe), ...(emoji ? [{ emoji, fromMe: true, author: null }] : [])] } : item)),
                 })),
             },

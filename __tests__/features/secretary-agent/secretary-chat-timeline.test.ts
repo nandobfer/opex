@@ -6,7 +6,7 @@ import type { ChatTimelinePageDto } from "@/features/secretary-agent/types"
 const message = (id: string, timestamp: string, fromMe = false): ChatMessageDto => ({
     id, chatJid: "x", fromMe, author: null, authorName: null, timestamp, kind: "text", text: id, media: null, quoted: null, location: null, contacts: [], reactions: [], edited: false, status: null,
 })
-const page = (n: number, items: ChatMessageDto[], decisions: ChatTimelinePageDto["decisions"] = [], agentMessageIds: string[] = []): ChatTimelinePageDto => ({ page: n, items, decisions, agentMessageIds, hasOlder: false })
+const page = (n: number, items: ChatMessageDto[], decisions: ChatTimelinePageDto["decisions"] = [], agentMessageIds: string[] = [], effects: ChatTimelinePageDto["effects"] = { reactions: [], edits: [], revoked: [] }): ChatTimelinePageDto => ({ page: n, items, effects, decisions, agentMessageIds, hasOlder: false })
 
 describe("linha do tempo da aba Conversas (OPE-197)", () => {
     it("junta as páginas sem repetir mensagens nem decisões e em ordem", () => {
@@ -15,6 +15,21 @@ describe("linha do tempo da aba Conversas (OPE-197)", () => {
         expect(merged.messages.map((item) => item.id)).toEqual(["a", "b"])
         expect(merged.decisions).toHaveLength(1)
         expect([...merged.agentIds]).toEqual(["b"])
+    })
+
+    it("reação, edição e apagar numa página valem sobre a mensagem que está em outra página", () => {
+        const target = { ...message("M", "2026-11-26T09:00:00Z"), reactions: [{ emoji: "😂", fromMe: true, author: null }] }
+        const newest = page(1, [message("N", "2026-11-26T11:00:00Z")], [], [], {
+            reactions: [{ targetId: "M", at: "2026-11-26T10:30:00Z", reaction: { emoji: "👍", fromMe: true, author: null } }, { targetId: "M", at: "2026-11-26T10:31:00Z", reaction: { emoji: "❤️", fromMe: false, author: null } }],
+            edits: [{ targetId: "E", at: "2026-11-26T10:40:00Z", text: "certo" }],
+            revoked: ["X"],
+        })
+        const older = page(2, [target, message("E", "2026-11-26T09:01:00Z"), message("X", "2026-11-26T09:02:00Z")])
+        const merged = mergeTimelinePages([newest, older])
+        const byId = new Map(merged.messages.map((item) => [item.id, item]))
+        expect(byId.get("M")!.reactions).toEqual([{ emoji: "👍", fromMe: true, author: null }, { emoji: "❤️", fromMe: false, author: null }])
+        expect(byId.get("E")).toMatchObject({ text: "certo", edited: true })
+        expect(byId.get("X")).toMatchObject({ kind: "deleted", text: "" })
     })
 
     it("D3: pílula da decisão entre as mensagens, selo do Secretário e cauda no primeiro balão de cada lado", () => {

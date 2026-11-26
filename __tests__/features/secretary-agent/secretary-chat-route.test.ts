@@ -124,5 +124,17 @@ it("GET mídia devolve o binário com o tipo", async () => {
     mocks.evolution.mediaBase64.mockResolvedValue({ base64: Buffer.from("png").toString("base64"), mimetype: "image/png", fileName: "a.png" })
     const response = await MEDIA(new NextRequest(`http://localhost/api/secretary/conversations/${chatId}/messages/M/media`), { params: Promise.resolve({ chatId, messageId: "M" }) })
     expect(response.headers.get("content-type")).toBe("image/png")
+    expect(response.headers.get("content-disposition")).toBe("inline; filename*=UTF-8''a.png")
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(response.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'")
     expect(Buffer.from(await response.arrayBuffer()).toString()).toBe("png")
+})
+
+it.each(["text/html", "image/svg+xml", "application/pdf"])("GET mídia com tipo %s do remetente vira download, nunca inline", async (mimetype) => {
+    mocks.evolution.mediaBase64.mockResolvedValue({ base64: Buffer.from("<script>alert(1)</script>").toString("base64"), mimetype, fileName: "x" })
+    const response = await MEDIA(new NextRequest(`http://localhost/api/secretary/conversations/${chatId}/messages/M/media`), { params: Promise.resolve({ chatId, messageId: "M" }) })
+    expect(response.headers.get("content-type")).toBe("application/octet-stream")
+    expect(response.headers.get("content-disposition")).toBe("attachment; filename*=UTF-8''x")
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+    expect(response.headers.get("content-security-policy")).toBe("sandbox; default-src 'none'")
 })

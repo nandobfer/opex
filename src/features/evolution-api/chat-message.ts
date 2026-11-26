@@ -199,42 +199,89 @@ function reactionOf(raw: Raw): { targetId: string; reaction: ChatReactionDto } |
 const reactionAuthor = (reaction: ChatReactionDto) => (reaction.fromMe ? "me" : (reaction.author ?? "contact"))
 
 /**
- * Página da Evolution → mensagens da conversa (mais antigas primeiro): reações agregadas na mensagem alvo (a última
- * de cada autor vale; vazia remove), edição aplicada, revogada vira "Mensagem apagada" e registros técnicos somem.
+ * Efeitos sobre outras mensagens (reação, edição, apagar para todos), em ordem de horário. A paginação pode deixar o
+ * efeito numa página e o alvo em outra: a página devolve os efeitos sem alvo nela (`orphanEffects`) e o cliente os
+ * reaplica ao juntar as páginas (`applyChatEffects`).
  */
-export function buildChatMessages(records: readonly EvolutionMessage[]): ChatMessageDto[] {
+export interface ChatEffects {
+    reactions: { targetId: string; at: string; reaction: ChatReactionDto }[]
+    edits: { targetId: string; at: string; text: string }[]
+    revoked: string[]
+}
+
+const emptyEffects = (): ChatEffects => ({ reactions: [], edits: [], revoked: [] })
+
+function splitRecords(records: readonly EvolutionMessage[]): { messages: ChatMessageDto[]; effects: ChatEffects } {
     const raws = records.map(rawOf).sort((a, b) => timestampOf(a.message).localeCompare(timestampOf(b.message)))
     const messages = new Map<string, ChatMessageDto>()
-    const reactions = new Map<string, Map<string, ChatReactionDto>>()
-    const edits = new Map<string, string>()
-    const revoked = new Set<string>()
+    const effects = emptyEffects()
     for (const raw of raws) {
+        const at = timestampOf(raw.message)
         const reaction = reactionOf(raw)
         if (reaction) {
-            const byAuthor = reactions.get(reaction.targetId) ?? new Map<string, ChatReactionDto>()
-            byAuthor.set(reactionAuthor(reaction.reaction), reaction.reaction)
-            reactions.set(reaction.targetId, byAuthor)
+            effects.reactions.push({ targetId: reaction.targetId, at, reaction: reaction.reaction })
             continue
         }
         const edit = editOf(raw)
         if (edit) {
-            edits.set(edit.id, edit.text)
+            effects.edits.push({ targetId: edit.id, at, text: edit.text })
             continue
         }
         const revoke = revokeOf(raw)
         if (revoke) {
-            revoked.add(revoke)
+            effects.revoked.push(revoke)
             continue
         }
         if (raw.body.protocolMessage || raw.type === "senderKeyDistributionMessage" || raw.type === "messageContextInfo") continue
         messages.set(raw.message.key.id, toDto(raw))
     }
-    return [...messages.values()].map((message) => {
-        if (revoked.has(message.id)) return { ...message, kind: "deleted" as const, text: "", media: null, location: null, contacts: [], quoted: null }
+    return { messages: [...messages.values()], effects }
+}
+
+/**
+ * Aplica os efeitos sobre as mensagens: reações agregadas na mensagem alvo (a última de cada autor vale, por cima das
+ * que a mensagem já tem; vazia remove), a última edição e a revogação ("Mensagem apagada").
+ */
+export function applyChatEffects(messages: readonly ChatMessageDto[], effects: ChatEffects): ChatMessageDto[] {
+    const byTime = <T extends { at: string }>(list: readonly T[]) => [...list].sort((a, b) => a.at.localeCompare(b.at))
+    const reactions = new Map<string, Map<string, ChatReactionDto>>()
+    for (const item of byTime(effects.reactions)) {
+        const byAuthor = reactions.get(item.targetId) ?? new Map<string, ChatReactionDto>()
+        byAuthor.set(reactionAuthor(item.reaction), item.reaction)
+        reactions.set(item.targetId, byAuthor)
+    }
+    const edits = new Map(byTime(effects.edits).map((item) => [item.targetId, item.text]))
+    const revoked = new Set(effects.revoked)
+    return messages.map((message) => {
+        if (revoked.has(message.id)) return { ...message, kind: "deleted" as const, text: "", media: null, location: null, contacts: [], quoted: null, reactions: [] }
         const edited = edits.get(message.id)
-        const list = [...(reactions.get(message.id)?.values() ?? [])].filter((item) => item.emoji)
+        const extra = reactions.get(message.id)
+        let list = message.reactions
+        if (extra) {
+            const merged = new Map(message.reactions.map((reaction) => [reactionAuthor(reaction), reaction]))
+            for (const [author, reaction] of extra) merged.set(author, reaction)
+            list = [...merged.values()].filter((item) => item.emoji)
+        }
+        if (edited === undefined && !extra) return message
         return { ...message, ...(edited !== undefined ? { text: edited, edited: true } : {}), reactions: list }
     })
+}
+
+/** Mensagens de uma página da Evolution (mais antigas primeiro), com os efeitos da própria página aplicados. */
+export function buildChatMessages(records: readonly EvolutionMessage[]): ChatMessageDto[] {
+    return buildChatPage(records).items
+}
+
+/** Página: mensagens com os efeitos aplicados e os efeitos cujo alvo está em outra página. */
+export function buildChatPage(records: readonly EvolutionMessage[]): { items: ChatMessageDto[]; orphanEffects: ChatEffects } {
+    const { messages, effects } = splitRecords(records)
+    const ids = new Set(messages.map((message) => message.id))
+    const orphanEffects: ChatEffects = {
+        reactions: effects.reactions.filter((item) => !ids.has(item.targetId)),
+        edits: effects.edits.filter((item) => !ids.has(item.targetId)),
+        revoked: effects.revoked.filter((id) => !ids.has(id)),
+    }
+    return { items: applyChatEffects(messages, effects), orphanEffects }
 }
 
 /** Texto curto de uma mensagem (prévia da citação ao responder). */

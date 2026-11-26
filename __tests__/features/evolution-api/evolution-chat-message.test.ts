@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildChatMessages, chatMessagePreview, chatStatusOf, vcardNumber } from "@/features/evolution-api/chat-message"
+import { buildChatMessages, buildChatPage, chatMessagePreview, chatStatusOf, vcardNumber } from "@/features/evolution-api/chat-message"
 import type { EvolutionMessage } from "@/features/evolution-api/evolution-dto"
 
 const jid = "5531999999999@s.whatsapp.net"
@@ -46,6 +46,21 @@ describe("buildChatMessages (aba Conversas, OPE-197)", () => {
         ])
         expect(items.map((item) => [item.id, item.kind, item.text, item.edited])).toEqual([["E", "text", "certo", true], ["X", "deleted", "", false]])
         expect(chatMessagePreview(items[1]!)).toBe("Mensagem apagada")
+    })
+
+    it("efeitos com o alvo em outra página saem em orphanEffects (os da própria página, não)", () => {
+        const { items, orphanEffects } = buildChatPage([
+            raw("M", { conversation: "aqui" }),
+            raw("R1", { reactionMessage: { key: { id: "M" }, text: "👍" } }),
+            raw("R2", { reactionMessage: { key: { id: "FORA" }, text: "❤️" } }),
+            raw("P1", { protocolMessage: { type: "MESSAGE_EDIT", key: { id: "FORA2" }, editedMessage: { conversation: "novo" } } }),
+            raw("P2", { protocolMessage: { type: "REVOKE", key: { id: "FORA3" } } }),
+        ])
+        expect(items).toHaveLength(1)
+        expect(items[0]!.reactions).toEqual([{ emoji: "👍", fromMe: false, author: null }])
+        expect(orphanEffects.reactions.map((item) => [item.targetId, item.reaction.emoji])).toEqual([["FORA", "❤️"]])
+        expect(orphanEffects.edits.map((item) => [item.targetId, item.text])).toEqual([["FORA2", "novo"]])
+        expect(orphanEffects.revoked).toEqual(["FORA3"])
     })
 
     it("localização, contato (vCard) e status da Evolution", () => {

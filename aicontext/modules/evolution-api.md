@@ -106,7 +106,12 @@ Parte genérica de WhatsApp da conversa do Secretário (ver `secretary-agent.md`
   mimetype, nome, duração, voz), citação (id, trecho e autor), localização, contatos (número do vCard), reações
   agregadas na mensagem alvo (a última de cada autor vale; vazia remove), edição aplicada, revogada vira "Mensagem
   apagada", status (`SERVER_ACK` enviada, `DELIVERY_ACK` entregue, `READ`/`PLAYED` lida, `ERROR` falha) e registros
-  técnicos fora. Campo ausente vira neutro. O `parseEvolutionMessage` do turno continua separado.
+  técnicos fora. Campo ausente vira neutro. O `parseEvolutionMessage` do turno continua separado. Reação, edição ou
+  apagar cujo alvo está em outra página sai em `effects` da página (`buildChatPage`) e o cliente reaplica ao juntar
+  as páginas (`applyChatEffects`).
+- Rota de mídia (`mediaResponseHeaders`): o tipo vem do remetente, então só imagem JPG/PNG/WEBP/GIF, vídeo e áudio saem
+  inline; qualquer outro (HTML, SVG, PDF…) vai como `application/octet-stream` em `attachment`, sempre com
+  `X-Content-Type-Options: nosniff` e `Content-Security-Policy: sandbox; default-src 'none'`.
 - `chat-media-rules.ts` (puro, cópia das regras do Atendimento do Zaturno CRM, sem figurinha): foto JPG/PNG até 5 MB,
   vídeo MP4/3GP até 16 MB, áudio (inclui o `audio/webm` gravado no navegador) até 16 MB e documento (PDF, Office, TXT,
   CSV) até 100 MB, até 10 por envio, com as mensagens de recusa em pt-BR.
