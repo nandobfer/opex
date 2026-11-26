@@ -81,6 +81,18 @@ describe("patches", () => {
         expect(removeSubject(renamed, "Futebol")).toBeNull()
     })
 
+    it("o mesmo nome não fica bloqueado e liberado; remover sem lista um nome nas duas pede a lista", () => {
+        const allowed = upsertSubject(ready, "allowed", { name: "Orçamento" }).settings
+        expect(() => upsertSubject(allowed, "blocked", { name: "orcamento" })).toThrow('O assunto "Orçamento" já está nos assuntos liberados')
+        const both = upsertSubject(allowed, "blocked", { name: "Política" }).settings
+        expect(() => upsertSubject(both, "blocked", { name: "Política", newName: "Orçamento" })).toThrow("já está nos assuntos liberados")
+        const twins = upsertSubject(both, "blocked", { name: "Futebol" }).settings
+        expect(() => upsertSubject(twins, "blocked", { name: "Futebol", newName: "política" })).toThrow('Já existe o assunto "Política" nos assuntos bloqueados')
+        const legacy = { ...ready, criteria: { ...ready.criteria, subjects: { ...ready.criteria.subjects, blocked: [{ id: "x", name: "Saúde", description: "", examples: [] }], allowed: [{ id: "y", name: "saude", description: "", examples: [] }] } } }
+        expect(() => removeSubject(legacy, "Saúde")).toThrow("informe a lista")
+        expect(removeSubject(legacy, "Saúde", "allowed")?.settings.criteria.subjects).toMatchObject({ blocked: [{ name: "Saúde" }], allowed: [] })
+    })
+
     it("id do assunto é único na lista e o teto de 20 assuntos é do schema", () => {
         expect(subjectIdOf("Orçamento", ["orcamento"])).toBe("orcamento-2")
         let next = ready

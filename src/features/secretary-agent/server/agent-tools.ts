@@ -289,6 +289,7 @@ export async function upsertSecretaryVariant(input: { conversation: string; titl
             blocks.push({ key: baseBlock?.key ?? blockKeyOf(change.title, [...base.blocks, ...blocks].map((block) => block.key)), title: baseBlock?.title ?? change.title.trim(), content: change.content })
         }
     }
+    if (!blocks.length) throw new DomainError(400, `A variante de ${target.name} ficaria sem nenhum bloco. Para a conversa voltar a usar só a base, use remove_secretary_variant.`, "SECRETARY_VARIANT_EMPTY")
     const parsed = variantSchema.parse({ jid: target.jid, title: input.title?.trim() || current?.title || target.name, blocks })
     const next = { ...snapshot, variants: [...snapshot.variants.filter((variant) => variant.jid !== target.jid), { ...parsed, origin: "owner" as const }] }
     await writeVersion(next, "edit", actorId, versionId)

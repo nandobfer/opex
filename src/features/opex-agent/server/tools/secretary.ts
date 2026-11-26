@@ -28,8 +28,9 @@ import { defineTool } from "./define"
  * Agente Secretário pelo chat (OPE-200): consultar e alterar a configuração (Geral, Critérios, Personalidade) e as
  * perguntas pendentes da aba Avisos, com a MESMA validação da tela. As mudanças sensíveis (ligar/desligar, modo,
  * instância, modelo do agente, quem pode ser respondido, remoções e responder/descartar perguntas) são ferramentas
- * próprias com `confirmByDefault`: a confirmação do runtime é por ferramenta, não pela entrada. Nenhuma é
- * `destructive` (tudo é reversível). Fora dos agentes rotineiros (`ROUTINE_FORBIDDEN_TOOL_GROUPS`); no Maddox e no MCP
+ * próprias com `confirmByDefault`: a confirmação do runtime é por ferramenta, não pela entrada. Só
+ * `answer_secretary_question` é `destructive`: ela pode enviar mensagem a um contato (irreversível), então a tela avisa
+ * se o dono desligar a confirmação dela; as demais são reversíveis. Os resumos de confirmação dizem o efeito. Fora dos agentes rotineiros (`ROUTINE_FORBIDDEN_TOOL_GROUPS`); no Maddox e no MCP
  * por token valem, e as que confirmam exigem `mcp:owner:destructive`.
  */
 
@@ -107,7 +108,10 @@ export const secretaryTools = [
         confirmByDefault: true,
         description: "Liga ou desliga o Agente Secretário. Para ligar é preciso provedor, modelo e instância (e o preço dos modelos que não informam custo): antes, consulte get_secretary_settings (readiness) e, se faltar algo, diga ao dono o que falta em vez de chamar esta ferramenta. Recusa sem gravar nada, com o que falta.",
         input: z.object({ enabled: z.boolean() }),
-        summarize: (input) => (input.enabled ? "Ligar o Agente Secretário" : "Desligar o Agente Secretário"),
+        summarize: (input) =>
+            input.enabled
+                ? "Ligar o Agente Secretário: no modo Responder ele passa a responder pelo WhatsApp do dono a partir de agora (no modo Só observar, só registra as decisões)"
+                : "Desligar o Agente Secretário: ele para de responder pelo WhatsApp do dono",
         execute: async (input, context) => changeSecretarySettings((settings) => ({ ...settings, enabled: input.enabled }), context.actorId),
     }),
     defineTool({
@@ -118,7 +122,8 @@ export const secretaryTools = [
         confirmByDefault: true,
         description: "Modo do Secretário: reply = Responder; observe = Só observar (registra as decisões, mas não envia mensagens).",
         input: z.object({ mode: z.enum(SECRETARY_MODES) }),
-        summarize: (input) => `Trocar o modo do Agente Secretário para ${SECRETARY_MODE_LABELS[input.mode]}`,
+        summarize: (input) =>
+            `Trocar o modo do Agente Secretário para ${SECRETARY_MODE_LABELS[input.mode]}: ${input.mode === "reply" ? "ligado, ele passa a enviar mensagens pelo WhatsApp do dono" : "ele deixa de enviar mensagens e só registra as decisões"}`,
         execute: async (input, context) => changeSecretarySettings((settings) => ({ ...settings, mode: input.mode }), context.actorId),
     }),
     defineTool({
@@ -129,7 +134,7 @@ export const secretaryTools = [
         confirmByDefault: true,
         description: "Troca a instância do WhatsApp (Evolution API) usada pelo Secretário, pelo nome; a instância precisa existir na Evolution.",
         input: z.object({ instance: z.string().trim().min(1).max(120).describe("Nome da instância") }),
-        summarize: (input) => `Trocar a instância do WhatsApp do Agente Secretário para ${input.instance}`,
+        summarize: (input) => `Trocar a instância do WhatsApp do Agente Secretário para ${input.instance}: ele passa a ler e responder as conversas desse número`,
         execute: async (input, context) => {
             const instance = await resolveSecretaryInstance(input.instance)
             return changeSecretarySettings((settings) => ({ ...settings, instance: instance.name }), context.actorId)
@@ -287,7 +292,8 @@ export const secretaryTools = [
         confirmByDefault: true,
         description: 'Remove um assunto bloqueado ou liberado pelo nome. Remover o último liberado com "Só os assuntos liberados" é recusado (troque antes para qualquer assunto).',
         input: z.object({ name: z.string().trim().min(1).max(60), list: subjectList.optional() }),
-        summarize: (input) => `Remover o assunto "${input.name}" ${input.list ? `dos ${SUBJECT_LIST_LABELS[input.list]}` : "dos critérios"} do Agente Secretário`,
+        summarize: (input) =>
+            `Remover o assunto "${input.name}" ${input.list ? `dos ${SUBJECT_LIST_LABELS[input.list]}` : "dos critérios"} do Agente Secretário${input.list === "blocked" ? ": ele volta a poder responder sobre esse assunto" : input.list === "allowed" ? ": o assunto deixa de ser liberado" : ""}`,
         execute: async (input, context) =>
             changeSecretarySettings((settings) => {
                 const result = removeSubject(settings, input.name, input.list)
@@ -348,11 +354,12 @@ export const secretaryTools = [
         name: "answer_secretary_question",
         group: "secretary",
         label: "Responder pergunta do Secretário",
-        risk: "write",
-        confirmByDefault: true,
+        // Pode enviar mensagem a um contato (irreversível): destrutiva, para a tela avisar se a confirmação for desligada.
+        risk: "destructive",
         description: "Responde uma pergunta pendente do Secretário ao dono (a mesma resposta da aba Avisos): o Secretário aprende a resposta como memória e retoma a conversa, podendo enviar mensagem ao contato. `ref` vem de pendingQuestions em get_secretary_settings (nunca mostre a ref ao dono).",
         input: z.object({ ref: z.string().trim().min(1).max(100), answer: noticeAnswerSchema.shape.answer }),
-        summarize: (input) => `Responder a pergunta pendente do Secretário: "${input.answer.length > 120 ? `${input.answer.slice(0, 119)}…` : input.answer}"`,
+        summarize: (input) =>
+            `Responder a pergunta pendente do Secretário com "${input.answer.length > 120 ? `${input.answer.slice(0, 119)}…` : input.answer}": ele aprende a resposta e pode retomar a conversa, enviando mensagem ao contato pelo WhatsApp`,
         execute: async (input, context) => answerSecretaryQuestion(input.ref, input.answer, context.actorId),
     }),
     defineTool({
@@ -363,7 +370,7 @@ export const secretaryTools = [
         confirmByDefault: true,
         description: "Descarta uma pergunta pendente do Secretário ao dono (como na aba Avisos): a conversa não é retomada. `ref` vem de pendingQuestions em get_secretary_settings (nunca mostre a ref ao dono).",
         input: z.object({ ref: z.string().trim().min(1).max(100) }),
-        summarize: () => "Descartar uma pergunta pendente do Agente Secretário",
+        summarize: () => "Descartar uma pergunta pendente do Agente Secretário: a conversa não é retomada e nada é aprendido",
         execute: async (input, context) => discardSecretaryQuestion(input.ref, context.actorId),
     }),
 ]

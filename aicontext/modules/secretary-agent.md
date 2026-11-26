@@ -296,8 +296,11 @@ serviço `server/agent-tools.ts`, com as funções puras `settings-patch.ts` (pa
   no catálogo (identificador ou nome; grava o identificador): provedor sem chave, modelo inexistente ou variante
   inválida são recusados — regra só das ferramentas (a tela já só oferece a lista; a rota `PUT` não mudou).
   Conversas entram pelo nome ou número, resolvidas entre as conversas da instância; nome ambíguo é recusado com os
-  candidatos (nome e número). Assuntos são achados pelo nome sem caixa/acento (o id vem de `subjectIdOf`); blocos da
-  personalidade pelo título (bloco de variante usa a chave do bloco da base de mesmo título).
+  candidatos (nome e número). Assuntos são achados pelo nome sem caixa/acento (o id vem de `subjectIdOf`); um nome
+  (novo ou de renomear) que já existe na outra lista — ou em outro assunto da mesma — é recusado (o mesmo assunto não
+  fica bloqueado e liberado), e remover sem a lista um nome presente nas duas pede a lista. Blocos da personalidade
+  são achados pelo título (bloco de variante usa a chave do bloco da base de mesmo título); a variante que ficaria
+  sem nenhum bloco é recusada, orientando `remove_secretary_variant`.
 - **Confirmação** (decisão do planejamento: a confirmação do runtime é por ferramenta, então cada mudança sensível
   é uma ferramenta `write` com `confirmByDefault`): `set_secretary_enabled`, `set_secretary_mode` (o modo pede
   confirmação pelo critério de aceite), `set_secretary_instance`, `set_secretary_agent_model`,
@@ -306,7 +309,13 @@ serviço `server/agent-tools.ts`, com as funções puras `settings-patch.ts` (pa
   `answer_secretary_question` (mesmo `answerNotice` da aba Avisos: aprende e retoma a conversa, podendo enviar
   mensagem) e `discard_secretary_question`. Sem confirmação: `update_secretary_settings` (temperatura, mídia, modelos
   da análise e da decisão, comportamento humano, pausa, limites, preços), `update_secretary_subjects` (modo e
-  criar/editar assuntos), `update_secretary_personality_block` e `set_secretary_variant`. Nenhuma é `destructive`.
+  criar/editar assuntos), `update_secretary_personality_block` e `set_secretary_variant`.
+- **Risco** (decisão da revisão adversarial, rodada 1): só `answer_secretary_question` é `destructive`, porque
+  pode enviar mensagem a um contato (irreversível) — se o dono desligar a confirmação dela, a tela avisa como em
+  toda destrutiva. As demais são reversíveis (ligar/desligar, modo, instância, critérios, personalidade com
+  histórico) e ficam `write` com `confirmByDefault`; desligar a confirmação delas é escolha do dono na configuração
+  do Agente Opex, como nas demais ferramentas. O resumo do card diz o efeito concreto (ex.: ligar "no modo Responder
+  ele passa a responder pelo WhatsApp"; responder "pode retomar a conversa, enviando mensagem ao contato").
 - Personalidade: `writeVersion` com a versão lida (409 se mudou no meio), origem "edit", restaurável na tela.
 - Alcance (decisão do dono no planejamento): liberadas no Agente Maddox e no MCP do dono por token (as que confirmam
   exigem `mcp:owner:destructive`); **fora dos agentes rotineiros** (`ROUTINE_FORBIDDEN_TOOL_GROUPS`). A Simulação pelo

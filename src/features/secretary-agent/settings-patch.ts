@@ -110,10 +110,29 @@ export interface SubjectInput {
     examples?: string[]
 }
 
-/** Cria (nome novo) ou edita (mesmo nome, sem diferença de caixa ou acento) um assunto da lista. */
+/** Assunto recusado com o motivo (nome repetido entre as listas, assunto ambíguo): a mensagem vai ao dono. */
+export class SubjectRuleError extends Error {
+    constructor(message: string) {
+        super(message)
+        this.name = "SubjectRuleError"
+    }
+}
+
+const OTHER_LIST: Record<SubjectList, SubjectList> = { blocked: "allowed", allowed: "blocked" }
+
+/**
+ * Cria (nome novo) ou edita (mesmo nome, sem diferença de caixa ou acento) um assunto da lista. Um nome — o novo ou o
+ * do renomear — que já existe na outra lista (ou em outro assunto da mesma) é recusado: o mesmo assunto não pode ser
+ * bloqueado e liberado ao mesmo tempo.
+ */
 export function upsertSubject(settings: SecretarySettings, list: SubjectList, input: SubjectInput): { settings: SecretarySettings; created: boolean } {
     const rules = settings.criteria.subjects[list]
     const index = rules.findIndex((rule) => normalizeName(rule.name) === normalizeName(input.name))
+    const finalName = input.newName?.trim() || (index >= 0 ? rules[index].name : input.name.trim())
+    const other = settings.criteria.subjects[OTHER_LIST[list]].find((rule) => normalizeName(rule.name) === normalizeName(finalName))
+    if (other) throw new SubjectRuleError(`O assunto "${other.name}" já está nos ${SUBJECT_LIST_LABELS[OTHER_LIST[list]]}: remova-o de lá antes (remove_secretary_subject) ou use outro nome.`)
+    const twin = rules.find((rule, at) => at !== index && normalizeName(rule.name) === normalizeName(finalName))
+    if (twin) throw new SubjectRuleError(`Já existe o assunto "${twin.name}" nos ${SUBJECT_LIST_LABELS[list]}: escolha outro nome.`)
     let next: SubjectRule[]
     if (index >= 0) {
         const current = rules[index]
@@ -125,8 +144,13 @@ export function upsertSubject(settings: SecretarySettings, list: SubjectList, in
     return { settings: { ...settings, criteria: { ...settings.criteria, subjects: { ...settings.criteria.subjects, [list]: next } } }, created: index < 0 }
 }
 
-/** Remove um assunto pelo nome (na lista indicada ou nas duas); `null` quando não existe. */
+/**
+ * Remove um assunto pelo nome (na lista indicada ou nas duas); `null` quando não existe. Sem a lista, um nome presente
+ * nas duas (configuração antiga) é recusado pedindo a lista, em vez de remover o primeiro encontrado.
+ */
 export function removeSubject(settings: SecretarySettings, name: string, list?: SubjectList): { settings: SecretarySettings; list: SubjectList; removed: SubjectRule } | null {
+    const inList = (key: SubjectList) => settings.criteria.subjects[key].some((rule) => normalizeName(rule.name) === normalizeName(name))
+    if (!list && inList("blocked") && inList("allowed")) throw new SubjectRuleError(`O assunto "${name}" está nos assuntos bloqueados e nos liberados: informe a lista (blocked ou allowed).`)
     for (const key of list ? [list] : (["blocked", "allowed"] as const)) {
         const rules = settings.criteria.subjects[key]
         const removed = rules.find((rule) => normalizeName(rule.name) === normalizeName(name))
