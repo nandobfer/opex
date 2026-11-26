@@ -45,6 +45,7 @@ export const OPEX_TOOL_GROUPS = [
     "host",
     "environments",
     "appearance",
+    "secretary",
     "engramind",
     "opencode-service",
     "opencode-resources",
@@ -89,6 +90,10 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     host: { label: "Terminal do host", description: "Executar comandos na máquina do OpenCode (fora do container do app)" },
     environments: { label: "Ambientes", description: "Listar, implantar, levantar/derrubar, mover, logs e histórico dos ambientes Docker Compose (/ambientes)" },
     appearance: { label: "Aparência", description: "Cores favoritas do seletor de cores (Configurações › Aparência): listar, adicionar, editar e remover" },
+    secretary: {
+        label: "Agente Secretário",
+        description: "Consultar e alterar a configuração do Agente Secretário (ligar/desligar, modo, instância, modelos, mídia, limites, critérios e personalidade) e responder ou descartar as perguntas pendentes dele ao dono",
+    },
     engramind: { label: "Engramind", description: "Administrar o Engramind (rede de memórias): configurações, segredos, provedores, apps, agentes, tokens, canais, assinaturas, memórias, importação, operação e variáveis de ambiente" },
     "opencode-service": { label: "Serviço do OpenCode", description: "Status, logs, iniciar, parar, reiniciar e atualizar o OpenCode; backups da configuração" },
     "opencode-resources": { label: "Recursos do OpenCode", description: "Skills, agentes, comandos, plugins e MCPs do OpenCode: listar, criar, editar, ligar/desligar, instalar, atualizar, excluir e testar MCPs" },

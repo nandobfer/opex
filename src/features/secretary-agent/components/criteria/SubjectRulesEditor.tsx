@@ -7,16 +7,9 @@ import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import type { SubjectRule } from "../../schemas"
+import { subjectIdOf } from "../../settings-patch"
 
 const item = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
-
-/** Identificador estável do assunto a partir do nome (único na lista). */
-export function subjectIdOf(name: string, existing: readonly string[]): string {
-    const base = name.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30) || "assunto"
-    let id = base
-    for (let n = 2; existing.includes(id); n++) id = `${base}-${n}`
-    return id
-}
 
 /** Lista de assuntos (bloqueados ou liberados): nome, descrição e exemplos (um por linha). */
 export function SubjectRulesEditor({ label, rules, onChange, addLabel, idPrefix, error }: { label: string; rules: SubjectRule[]; onChange: (rules: SubjectRule[]) => void; addLabel: string; idPrefix: string; error?: string }) {

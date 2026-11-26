@@ -67,9 +67,10 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
     (`opencode.fallbacks`, OPE-181; `fallbacksName`): até 5 modelo + variante, mesma validação das mesas;
     agentes gravados antes carregam sem fallback (`withRoutineEngineDefaults`). O motor Opex não tem corrente.
   - **Ferramentas**: Opex = a mesma árvore do Agente Opex (`ClienteOpexToolsCard` com a árvore do
-    dono, **sem os grupos Agentes rotineiros e Observação de eventos** — `ROUTINE_FORBIDDEN_TOOL_GROUPS`: um rotineiro não
-    confirma ações de outras execuções nem afrouxa a própria política, e a observação (OPE-194) acorda uma conversa do
-    Agente Opex, que o rotineiro não tem — ele hiberna por tempo). O fim de uma execução (ou a parada aguardando confirmação)
+    dono, **sem os grupos Agentes rotineiros, Observação de eventos e Agente Secretário** — `ROUTINE_FORBIDDEN_TOOL_GROUPS`: um rotineiro não
+    confirma ações de outras execuções nem afrouxa a própria política, a observação (OPE-194) acorda uma conversa do
+    Agente Opex, que o rotineiro não tem — ele hiberna por tempo —, e a configuração do Agente Secretário (OPE-200)
+    ficou fora por decisão do dono: liberá-la com escopo restrito é tarefa futura). O fim de uma execução (ou a parada aguardando confirmação)
     acorda as observações do Agente Opex sobre ela (`afterSettle` → `watchRoutineRunSettled`, ver `modules/opex-agent.md`,
     "Observação de eventos") + os MCPs cadastrados no Opex
     (`ClienteOpexMcpCard`); OpenCode = os MCPs do
