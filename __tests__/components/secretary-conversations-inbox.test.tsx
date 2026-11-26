@@ -1,0 +1,107 @@
+// @vitest-environment happy-dom
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { framerMotionMock } from "../helpers/framer-motion"
+import type { ChatMessageDto } from "@/features/evolution-api/chat-message"
+import type { ChatTimelinePageDto, SecretaryConversationDto } from "@/features/secretary-agent/types"
+
+const mocks = vi.hoisted(() => ({
+    rows: [] as unknown[],
+    page: null as unknown,
+    action: vi.fn(),
+    post: vi.fn(),
+    toastError: vi.fn(),
+}))
+vi.mock("framer-motion", () => framerMotionMock())
+vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn(), info: vi.fn() } }))
+vi.mock("@/lib/api", () => ({ api: { post: mocks.post }, apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
+vi.mock("@/features/evolution-api/components/EvolutionSyncAction", () => ({ EvolutionSyncAction: () => null }))
+vi.mock("@/features/secretary-agent/hooks/useSecretaryChat", () => ({
+    useSecretaryConversations: () => ({ data: mocks.rows, isPending: false, isError: false, refetch: vi.fn() }),
+    useChatTimeline: () => ({ data: mocks.page ? { pages: [mocks.page] } : undefined, isLoading: false, isError: false, refetch: vi.fn(), hasNextPage: false, isFetchingNextPage: false, fetchNextPage: vi.fn() }),
+    useSecretaryChatRealtime: vi.fn(),
+    useConversationAction: () => ({ mutate: mocks.action, isPending: false }),
+    timelineKey: (chatId: string) => ["k", chatId],
+    timelinePath: (chatId: string) => `/secretary/conversations/${chatId}/messages`,
+}))
+
+import { ConversationsInbox } from "@/features/secretary-agent/components/conversations/ConversationsInbox"
+import { chatOutbox } from "@/features/secretary-agent/hooks/chat-outbox"
+
+const row = (patch: Partial<SecretaryConversationDto>): SecretaryConversationDto => ({ jid: "5531999999999@s.whatsapp.net", chatId: "5531999999999", name: "Ana", number: "5531999999999", pictureUrl: null, isGroup: false, lastMessageAt: new Date().toISOString(), lastMessage: { text: "oi", kind: "text", fromMe: false }, unreadCount: 2, state: "active", pausedUntil: null, ...patch })
+const message = (id: string, patch: Partial<ChatMessageDto> = {}): ChatMessageDto => ({ id, chatJid: "5531999999999@s.whatsapp.net", fromMe: false, author: null, authorName: null, timestamp: "2026-11-26T10:00:00.000Z", kind: "text", text: id, media: null, quoted: null, location: null, contacts: [], reactions: [], edited: false, status: null, ...patch })
+
+function renderInbox() {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    return render(
+        <QueryClientProvider client={client}>
+            <form onSubmit={submitSpy}>
+                <ConversationsInbox minutes={30} contacts={[]} />
+            </form>
+        </QueryClientProvider>,
+    )
+}
+const submitSpy = vi.fn((event: { preventDefault: () => void }) => event.preventDefault())
+
+beforeEach(() => {
+    chatOutbox.reset()
+    mocks.rows = [row({}), row({ chatId: "5521988887777", jid: "5521988887777@s.whatsapp.net", name: "Bruno", unreadCount: 0, state: "paused", pausedUntil: "2026-11-26T12:00:00.000Z" })]
+    mocks.page = { page: 1, hasOlder: false, items: [message("Oi Ana"), message("Já vou", { fromMe: true, timestamp: "2026-11-26T10:02:00.000Z" })], decisions: [{ id: "d1", decision: "replied", reason: "Passou nos critérios", at: "2026-11-26T10:01:00.000Z" }], agentMessageIds: ["Já vou"] } satisfies ChatTimelinePageDto
+    window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas")
+})
+afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+})
+
+describe("aba Conversas como conversa (OPE-197)", () => {
+    it("lista com não lidas do WhatsApp e o chip Não lidas", () => {
+        renderInbox()
+        const list = screen.getByRole("list", { name: "Conversas" })
+        expect(within(list).getByLabelText("2 não lidas")).toBeTruthy()
+        expect(within(list).getByText("Bruno")).toBeTruthy()
+        fireEvent.click(screen.getByRole("button", { name: "Não lidas" }))
+        expect(within(list).queryByText("Bruno")).toBeNull()
+        expect(window.location.search).toContain("filtro=nao_lidas")
+    })
+
+    it("abre pela URL; D3: pílula da decisão e selo Secretário; D6: nada de marcar como lida", () => {
+        window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas&conversa=5531999999999")
+        renderInbox()
+        const chat = screen.getByRole("region", { name: "Conversa aberta" })
+        expect(within(chat).getByText("Secretário · Respondeu: Passou nos critérios")).toBeTruthy()
+        expect(chat.querySelector("[data-from-agent]")?.closest("[data-message-id]")?.getAttribute("data-message-id")).toBe("Já vou")
+        expect(mocks.post).not.toHaveBeenCalled()
+    })
+
+    it("D4: ações no cabeçalho e no menu do item, com confirmação em Nunca responder", async () => {
+        window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas&conversa=5531999999999")
+        renderInbox()
+        expect(screen.getByRole("button", { name: "Ações da conversa com Bruno" })).toBeTruthy()
+        expect(screen.getByRole("button", { name: "Mais ações da conversa" })).toBeTruthy()
+        fireEvent.click(screen.getByRole("button", { name: "Pausar" }))
+        expect(mocks.action).toHaveBeenCalledWith({ action: "pause", minutes: 30 })
+        fireEvent.click(screen.getByRole("button", { name: "Nunca responder" }))
+        expect(mocks.action).toHaveBeenCalledTimes(1)
+        expect(await screen.findByText("Nunca responder a esta conversa?")).toBeTruthy()
+    })
+
+    it("envio otimista: o balão entra na hora e, em falha, mostra Reenviar e o toast; nenhum <form> aninhado", async () => {
+        window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas&conversa=5531999999999")
+        let reject: (error: unknown) => void = () => undefined
+        mocks.post.mockImplementation(() => new Promise((_resolve, fail) => (reject = fail)))
+        const { container } = renderInbox()
+        expect(container.querySelectorAll("form form").length).toBe(0)
+        const input = screen.getByRole("textbox", { name: "Mensagem" })
+        fireEvent.change(input, { target: { value: "chego às 8" } })
+        await waitFor(() => expect(screen.getByRole("button", { name: "Enviar mensagem" })).toBeTruthy())
+        fireEvent.keyDown(input, { key: "Enter" })
+        expect(await screen.findByText("chego às 8")).toBeTruthy()
+        expect(mocks.post).toHaveBeenCalledWith("/secretary/conversations/5531999999999/messages", { type: "text", text: "chego às 8", quotedId: undefined })
+        await act(async () => reject(new Error("fora")))
+        expect(await screen.findByRole("button", { name: "Reenviar" })).toBeTruthy()
+        expect(mocks.toastError).toHaveBeenCalledWith("Não foi possível enviar a mensagem")
+        expect(submitSpy).not.toHaveBeenCalled()
+    })
+})

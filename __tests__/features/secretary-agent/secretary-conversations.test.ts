@@ -50,6 +50,15 @@ describe("conversas do Secretário", () => {
         expect(mocks.save).toHaveBeenNthCalledWith(2, settings, "local")
     })
 
+    it("OPE-197: a lista leva a prévia e as não lidas do WhatsApp na ordem do cache (última mensagem primeiro)", async () => {
+        const lastMessage = { text: "oi", kind: "text", fromMe: false }
+        mocks.contacts.mockResolvedValueOnce([{ jid: "5521999999999@s.whatsapp.net", lastMessageAt: "2026-11-26T10:00:00.000Z", lastMessage, unreadCount: 3 }, { jid, lastMessageAt: "2026-11-25T10:00:00.000Z", lastMessage: null, unreadCount: 0 }])
+        mocks.states.mockResolvedValueOnce([])
+        mocks.notices.mockResolvedValueOnce([])
+        const rows = await listSecretaryConversations()
+        expect(rows.map((row) => [row.chatId, row.unreadCount, row.lastMessage])).toEqual([["5521999999999", 3, lastMessage], [chatId, 0, null]])
+    })
+
     it("lista estados de exclusão, pausa, pergunta ao dono e conversa ativa", async () => {
         const other = ["5511999999999", "5521999999999", "5541999999999"]
         const jids = [jid, ...other.map((id) => `${id}@s.whatsapp.net`)]

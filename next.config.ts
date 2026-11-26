@@ -22,6 +22,11 @@ const nextConfig: NextConfig = {
     // Plugins (OPE-172): o kernel Cordis, o Rolldown (binário nativo) e o compilador do Tailwind rodam
     // no servidor fora do bundle do Next.
     serverExternalPackages: ["ssh2", "cordis", "rolldown", "tailwindcss"],
+    experimental: {
+        // O middleware (`src/middleware.ts`) bufferiza o corpo; o padrão de 10 MB cortaria os anexos da aba Conversas do
+        // Secretário (OPE-197: documento até 100 MB, como o WhatsApp). Margem para o multipart.
+        proxyClientMaxBodySize: "101mb",
+    },
     env: {
         APP_VERSION: pkg.version,
         APP_BUILD_ID: BUILD_ID,

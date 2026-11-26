@@ -2,8 +2,8 @@
 import { createHash, timingSafeEqual } from "node:crypto"
 import { evolutionWebhookBodySchema, type EvolutionMessage, type EvolutionWebhookBody } from "../evolution-dto"
 import { isGroupJid, LID_JID_SUFFIX, normalizeJid } from "../constants"
-import { parseEvolutionMessage, type ParsedMessage } from "../message"
-import { connectionOf, contactsOf, filledProfileFields, messagesOf, normalizeEventName, qrOf, type ContactUpdate } from "../webhook-parse"
+import { messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "../message"
+import { chatJidsOfUpdate, connectionOf, contactsOf, filledProfileFields, messagesOf, normalizeEventName, qrOf, type ContactUpdate } from "../webhook-parse"
 import { evolutionConfig, patchState } from "./instances"
 import { contactKey, EvolutionContact, EvolutionInstanceState, EvolutionSeenEvent, evolutionDb } from "./models"
 import { evolutionLog, publishEvolution } from "./shared"
@@ -67,6 +67,7 @@ export async function upsertContacts(instance: string, contacts: ContactUpdate[]
             if (contact.pictureUrl) $set.pictureUrl = contact.pictureUrl
             if (options.hasChat) $set.hasChat = true
             if (options.lastMessageAt) $set.lastMessageAt = options.lastMessageAt
+            if (typeof contact.unreadCount === "number") $set.unreadCount = contact.unreadCount
             return {
                 updateOne: {
                     filter: { _id: contactKey(instance, contact.jid) },
@@ -77,6 +78,28 @@ export async function upsertContacts(instance: string, contacts: ContactUpdate[]
         }),
         { ordered: false },
     )
+}
+
+/** Prévia da lista (até 200 caracteres). */
+export const LAST_MESSAGE_PREVIEW_MAX = 200
+
+/**
+ * Prévia e não lidas da conversa (aba Conversas do Secretário, OPE-197): recebida soma 1 (fora da conversa consigo
+ * mesmo); `fromMe` zera, como o WhatsApp faz ao responder. Reação e protocolo não mexem na prévia.
+ */
+export async function recordChatActivity(instance: string, message: ParsedMessage, ownerJid: string | null): Promise<void> {
+    if (message.ignorable) return
+    const lastMessage = { text: messageDisplayText(message).slice(0, LAST_MESSAGE_PREVIEW_MAX), kind: message.media?.kind ?? "text", fromMe: message.fromMe }
+    const self = ownerJid !== null && normalizeJid(ownerJid) === message.chatJid
+    const update = message.fromMe ? { $set: { lastMessage, unreadCount: 0 } } : self ? { $set: { lastMessage } } : { $set: { lastMessage }, $inc: { unreadCount: 1 } }
+    await EvolutionContact.updateOne({ _id: contactKey(instance, message.chatJid) }, update)
+}
+
+/** Avisa a aba Conversas do Secretário (import sob demanda, como o turno). */
+async function notifySecretaryChats(instance: string, jids: string[]): Promise<void> {
+    if (jids.length === 0) return
+    const { publishSecretaryChatUpdated } = await import("@/features/secretary-agent/server/chat-events")
+    await publishSecretaryChatUpdated(instance, jids)
 }
 
 let lastContactsPublish = 0
@@ -157,9 +180,15 @@ export async function processEvolutionEvent(body: EvolutionWebhookBody): Promise
             await upsertContacts(instance, chats, { hasChat: true })
             message = `${chats.length} conversa(s)`
             await publishContactsThrottled(instance)
+            await notifySecretaryChats(instance, chats.filter((chat) => typeof chat.unreadCount === "number").map((chat) => chat.jid))
+        } else if (event === "MESSAGES_UPDATE") {
+            const jids = chatJidsOfUpdate(body.data)
+            message = `${jids.length} conversa(s) com mensagens atualizadas`
+            await notifySecretaryChats(instance, jids)
         } else if (event === "MESSAGES_UPSERT") {
             const messages = messagesOf(body.data)
             let forwarded = 0
+            let ownerJid: string | null | undefined
             await Promise.all(messages.map(async (raw) => {
                 if (raw.key.remoteJid === "status@broadcast") return
                 if (!(await markSeen(`${instance}:${raw.key.id}`))) return
@@ -171,6 +200,10 @@ export async function processEvolutionEvent(body: EvolutionWebhookBody): Promise
                     [{ jid: parsed.chatJid, name: null, pushName: parsed.fromMe || parsed.isGroup ? null : parsed.pushName, pictureUrl: null, isGroup: parsed.isGroup }],
                     { hasChat: true, lastMessageAt: parsed.timestamp },
                 )
+                ownerJid ??= (await EvolutionInstanceState.findById(instance).select("ownerJid").lean())?.ownerJid ?? null
+                await recordChatActivity(instance, parsed, ownerJid)
+                // Antes do turno (que espera o agrupamento): a conversa aberta mostra a mensagem na hora.
+                await notifySecretaryChats(instance, [parsed.chatJid])
                 await forwardToSecretary(instance, parsed)
                 forwarded += 1
             }))

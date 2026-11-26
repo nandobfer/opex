@@ -72,6 +72,15 @@ Código: `src/features/evolution-api/` (puros: `constants.ts`, `evolution-dto.ts
   instância desconhecida é ignorada e logada. O `apikey` que a Evolution manda no corpo nunca é logado nem
   gravado.
 - Mensagens novas vão para o Agente Secretário (`handleIncomingMessage`, importado sob demanda).
+- **Prévia e não lidas** (OPE-197, aba Conversas do Secretário): cada `MESSAGES_UPSERT` grava em `evolution_contacts`
+  a prévia da última mensagem (`lastMessage`: texto com o marcador da mídia, até 200 caracteres, o tipo e se é do
+  dono) e as não lidas (`unreadCount`): recebida soma 1 (fora da conversa consigo mesmo), `fromMe` zera (como o
+  WhatsApp ao responder) e `CHATS_UPSERT`/`CHATS_UPDATE` e o `findChats` da sincronização gravam o
+  `unreadMessages`/`unreadCount` que a Evolution mandar. Reação e protocolo não mexem na prévia. A prévia nunca vai
+  para log, auditoria nem evento. O Opex nunca marca como lida por causa da tela (decisão do dono D6, 26/11/2026).
+- Depois de gravar o cache (e antes do turno do Secretário, que espera o agrupamento), `MESSAGES_UPSERT`,
+  `MESSAGES_UPDATE` (status de entrega/leitura, edição) e o `CHATS_UPDATE` com não lidas publicam
+  `secretary-chat-updated` (`{ chatId }`) quando a instância é a do Secretário (`publishSecretaryChatUpdated`).
 - Mensagem do próprio dono (`fromMe`) num grupo com endereçamento por LID ensina o `ownerLid` da instância
   (`ownerLidOf`): menções e citações por `<lid>@lid` passam a contar como menção ao dono.
 
@@ -84,9 +93,28 @@ Código: `src/features/evolution-api/` (puros: `constants.ts`, `evolution-dto.ts
   vazia do Secretário e ao lado dos seletores de conversa vazios (`ConversationPickerField`); sem instância
   escolhida, mostra um link para a aba Instância. Serve aos seletores com foto (`ConversationPicker`, sobre o
   `AvatarLabel` compartilhado com o GitHub), à aba Conversas do Secretário e aos rótulos dos canais de memória.
-- Enviar mensagem de teste (número + texto; o texto não vai para a auditoria; o id fica em `secretary_sent` para que
-  a volta como `fromMe` não pause a conversa no Agente Secretário), listar conversas, contatos e
+- Enviar mensagem de teste (número + texto; o texto não vai para a auditoria; o id fica em `secretary_sent`, com
+  `origin: "test"`, para que a volta como `fromMe` não pause a conversa no Agente Secretário e a aba Conversas não
+  ponha nela o selo "Secretário"), listar conversas, contatos e
   grupos com foto, e consultar se um número tem WhatsApp (`chat/whatsappNumbers`).
+
+## Conversa (aba Conversas do Secretário, OPE-197)
+
+Parte genérica de WhatsApp da conversa do Secretário (ver `secretary-agent.md`, "Conversas"):
+
+- `chat-message.ts` (puro): mensagens da Evolution no formato da conversa (`ChatMessageDto`): texto, mídia (tipo,
+  mimetype, nome, duração, voz), citação (id, trecho e autor), localização, contatos (número do vCard), reações
+  agregadas na mensagem alvo (a última de cada autor vale; vazia remove), edição aplicada, revogada vira "Mensagem
+  apagada", status (`SERVER_ACK` enviada, `DELIVERY_ACK` entregue, `READ`/`PLAYED` lida, `ERROR` falha) e registros
+  técnicos fora. Campo ausente vira neutro. O `parseEvolutionMessage` do turno continua separado.
+- `chat-media-rules.ts` (puro, cópia das regras do Atendimento do Zaturno CRM, sem figurinha): foto JPG/PNG até 5 MB,
+  vídeo MP4/3GP até 16 MB, áudio (inclui o `audio/webm` gravado no navegador) até 16 MB e documento (PDF, Office, TXT,
+  CSV) até 100 MB, até 10 por envio, com as mensagens de recusa em pt-BR.
+- `server/chat.ts`: página da linha do tempo pelo `findMessages` (50 por página, sem cópia das mensagens no Opex),
+  envios (`sendText` com citação, `sendReaction`, `sendLocation`, `sendContact`, `sendMedia` em base64 e
+  `sendWhatsAppAudio`, que converte para voz) e o binário da mídia (`getBase64FromMediaMessage`).
+- O corpo dos anexos passa pelo middleware: `experimental.proxyClientMaxBodySize` vale `101mb` no `next.config.ts`
+  (o padrão de 10 MB cortaria os documentos).
 
 ## Debug, auditoria e tempo real
 
