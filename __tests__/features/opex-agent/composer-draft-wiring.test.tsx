@@ -1,7 +1,9 @@
 /** @vitest-environment happy-dom */
 
+import type { ReactNode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
@@ -39,6 +41,8 @@ import { OPEX_TABS_STORAGE_KEY } from '@/features/opex-agent/constants'
 
 const draftsKey = composerDraftsKey(OPEX_TABS_STORAGE_KEY)
 const field = () => screen.getByLabelText('Mensagem para o Agente Opex') as HTMLTextAreaElement
+// O chat real monta também a faixa "Observando…" (OPE-194), que consulta o TanStack Query.
+const withClient = (children: ReactNode) => <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>{children}</QueryClientProvider>
 
 beforeEach(() => {
   window.localStorage.clear()
@@ -48,11 +52,11 @@ afterEach(cleanup)
 
 describe('ligação do rascunho no chat real', () => {
   it('OpexChat: o texto digitado na sessão volta depois de desmontar e montar', () => {
-    const first = render(<OpexChat sessionId="s1" />)
+    const first = render(withClient(<OpexChat sessionId="s1" />))
     fireEvent.change(field(), { target: { value: 'continua depois' } })
     expect(JSON.parse(window.localStorage.getItem(draftsKey) ?? '{}')).toEqual({ s1: 'continua depois' })
     first.unmount()
-    render(<OpexChat sessionId="s1" />)
+    render(withClient(<OpexChat sessionId="s1" />))
     expect(field().value).toBe('continua depois')
   })
 
