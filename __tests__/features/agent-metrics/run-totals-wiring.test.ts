@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   find: vi.fn(),
   rows: [] as Record<string, unknown>[],
+  consumptionFind: vi.fn(),
+  consumption: [] as Record<string, unknown>[],
   part: vi.fn(async () => ({ kpis: [{ id: 'duration', label: 'Duração média', hint: '', value: 3, format: 'duration', since: null }], baseCount: 1 })),
 }))
 
@@ -16,6 +18,9 @@ vi.mock('@/lib/db/models/AgentMetrics', () => {
     AgentMetricTracking: { find: () => ({ select: () => ({ lean: async () => [] }) }) },
   }
 })
+vi.mock('@/lib/db/models/AiConsumption', () => ({
+  AiConsumption: { find: (filter: unknown) => (mocks.consumptionFind(filter), { select: () => ({ lean: async () => mocks.consumption }) }) },
+}))
 vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: { find: () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) }) } }))
 vi.mock('@/lib/db/models/Project', () => ({ Project: { find: () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) }) } }))
 vi.mock('@/features/agent-metrics/server/usage-daily', () => ({ ensureFreshRuns: vi.fn(async () => {}) }))
@@ -59,6 +64,8 @@ describe('totais das execuções (OPE-141)', () => {
 describe('getAgentMetrics liga os KPIs das execuções (OPE-141)', () => {
   beforeEach(() => {
     mocks.find.mockClear()
+    mocks.consumptionFind.mockClear()
+    mocks.consumption = []
     mocks.rows = [
       { ok: true, costUsd: 0.25, inputTokens: 1000, outputTokens: 500, durationMs: 120_000 },
       { ok: false, costUsd: null, inputTokens: null, outputTokens: null, durationMs: null },
@@ -69,17 +76,33 @@ describe('getAgentMetrics liga os KPIs das execuções (OPE-141)', () => {
     const result = await getAgentMetrics('desenvolvedor', agentMetricsQuerySchema.parse({}), NOW)
     const filter = mocks.find.mock.calls.map(([value]) => value as Record<string, unknown>).find((value) => value.agent === 'desenvolvedor' && 'excluded' in value)
     expect(filter).toMatchObject({ agent: 'desenvolvedor', excluded: { $ne: true }, finishedAt: { $gte: expect.any(Date), $lte: expect.any(Date) } })
-    expect(result.runKpis.map((item) => item.id)).toEqual(['runs', 'run-failures', 'run-cost', 'run-tokens', 'run-duration'])
+    expect(result.runKpis.map((item) => item.id)).toEqual(['runs', 'run-failures', 'run-cost', 'run-tokens', 'run-cache-rate', 'run-duration'])
     expect(kpiValue(result.runKpis, 'runs')).toBe(2)
     expect(kpiValue(result.runKpis, 'run-failures')).toBe(50)
     expect(kpiValue(result.runKpis, 'run-cost')).toBe(0.25)
     expect(kpiValue(result.runKpis, 'run-tokens')).toBe(1500)
     expect(kpiValue(result.runKpis, 'run-duration')).toBe(2)
+    // Sem consumo com o cache informado: "—", nunca 0%.
+    expect(kpiValue(result.runKpis, 'run-cache-rate')).toBeNull()
+  })
+
+  it('Taxa de cache (OPE-205): consulta as origens do agente no período, sem os filtros de cliente e repositório', async () => {
+    mocks.consumption = [
+      // OpenCode de sessão: entrada pelas partes (inputTokens é só a entrada sem cache).
+      { inputTokens: 100, tokenDetails: { noCache: 100, cacheRead: 300, cacheWrite: 0, output: 10, reasoning: 0 } },
+      // SDK sem o cache escrito informado: entrada pelo inputTokens (total).
+      { inputTokens: 600, tokenDetails: { noCache: null, cacheRead: 0, cacheWrite: null, output: 10, reasoning: null } },
+    ]
+    const result = await getAgentMetrics('maddox', agentMetricsQuerySchema.parse({ clientes: 'c1' }), NOW)
+    const filter = mocks.consumptionFind.mock.calls[0]?.[0] as Record<string, unknown>
+    expect(filter).toMatchObject({ origin: { $in: ['maddox-agent', 'maddox-title', 'maddox-client-agent', 'maddox-client-title'] }, createdAt: { $gte: expect.any(Date), $lte: expect.any(Date) } })
+    expect(filter).not.toHaveProperty('clientId')
+    expect(kpiValue(result.runKpis, 'run-cache-rate')).toBe(30)
   })
 
   it('aplica RUN_KPIS_COVERED: o Revisor não repete Duração média nem % de falhas', async () => {
     const result = await getAgentMetrics('revisor', agentMetricsQuerySchema.parse({}), NOW)
-    expect(result.runKpis.map((item) => item.id)).toEqual(['runs', 'run-cost', 'run-tokens'])
+    expect(result.runKpis.map((item) => item.id)).toEqual(['runs', 'run-cost', 'run-tokens', 'run-cache-rate'])
     expect(result.kpis.map((item) => item.id)).toEqual(['duration'])
   })
 })

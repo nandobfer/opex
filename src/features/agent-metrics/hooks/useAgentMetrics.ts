@@ -83,7 +83,8 @@ export function useAgentMetricsRealtime(agent: AgentId): void {
                 void queryClient.invalidateQueries({ queryKey: [AGENT_METRICS_QUERY_KEY, agent] })
             }, DEBOUNCE_MS)
         }
-        const events = [...AGENT_REALTIME_EVENTS[agent], AGENT_METRICS_UPDATED_EVENT]
+        // `ai-consumption-updated`: a Taxa de cache (OPE-205) reflete o consumo de qualquer origem do agente.
+        const events = [...new Set([...AGENT_REALTIME_EVENTS[agent], AGENT_METRICS_UPDATED_EVENT, AI_CONSUMPTION_UPDATED_EVENT])]
         for (const event of events) channel.bind(event, handler)
         return () => {
             if (timer) clearTimeout(timer)

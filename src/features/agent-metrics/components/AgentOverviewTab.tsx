@@ -11,8 +11,8 @@ import type { AgentMetricsDto } from "../types"
 import { OverviewCharts } from "./OverviewCharts"
 import { OverviewKpis } from "./OverviewKpis"
 
-/** Último uso + os KPIs típicos de um agente + os 5 KPIs das execuções (OPE-141). */
-export const OVERVIEW_SKELETON_KPIS = 10
+/** Último uso + os KPIs típicos de um agente + os 5 KPIs das execuções (OPE-141) + a Taxa de cache (OPE-205). */
+export const OVERVIEW_SKELETON_KPIS = 11
 
 interface AgentOverviewTabProps {
     agent: AgentId

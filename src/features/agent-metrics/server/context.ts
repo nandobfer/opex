@@ -1,5 +1,6 @@
 import { dbConnect } from "@/lib/db"
 import { AgentMetricTracking, AgentRun, AgentUsageDay } from "@/lib/db/models/AgentMetrics"
+import { AiConsumption } from "@/lib/db/models/AiConsumption"
 import { COUNTED_RUN } from "./exclusions"
 import { AuditLog } from "@/lib/db/models/AuditLog"
 import { DevTask } from "@/lib/db/models/DevTask"
@@ -9,7 +10,8 @@ import { TaskBoardColumn } from "@/lib/db/models/TaskBoard"
 import { dayKey, type BucketMode } from "@/lib/time/buckets"
 import { agentDef, type AgentId } from "../catalog"
 import { METRICS_TIME_ZONE, type TrackingKey } from "../constants"
-import { runTotals, usageSeries, type BucketContext, type RunTotals } from "../logic/common"
+import { cacheRateTotals, runTotals, usageSeries, type BucketContext, type CacheTotals, type RunTotals } from "../logic/common"
+import { AGENT_CONSUMPTION_ORIGINS } from "../consumption-origins"
 import { metricsBucketMode, parseMargin, resolveMetricsRange, type AgentMetricsQuery, type MetricsRange } from "../period"
 import type { MetricKpiDto, MetricFormat, UsagePointDto } from "../types"
 
@@ -94,6 +96,19 @@ export async function runTotalsOf(ctx: MetricsContext): Promise<RunTotals> {
         .select({ ok: 1, costUsd: 1, inputTokens: 1, outputTokens: 1, durationMs: 1 })
         .lean()
     return runTotals(rows)
+}
+
+/**
+ * Totais do cache do período nas origens de consumo do agente (Taxa de cache, OPE-205). O consumo não guarda cliente
+ * nem repositório: ignora esses filtros (decisão do dono).
+ */
+export async function cacheTotalsOf(ctx: Pick<MetricsContext, "agent" | "range">): Promise<CacheTotals> {
+    const origins = AGENT_CONSUMPTION_ORIGINS[ctx.agent]
+    if (!origins.length) return cacheRateTotals([])
+    const rows = await AiConsumption.find({ origin: { $in: [...origins] }, createdAt: { $gte: ctx.range.from, $lte: ctx.range.to }, "tokenDetails.cacheRead": { $ne: null } })
+        .select({ inputTokens: 1, tokenDetails: 1 })
+        .lean()
+    return cacheRateTotals(rows)
 }
 
 /** Opções dos filtros (clientes e repositórios). */
