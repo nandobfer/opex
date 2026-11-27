@@ -3,8 +3,8 @@
 import { useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { ModelVariantFields, type ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
-import type { AiModelDto } from "@/lib/ai/providers"
+import { ModelVariantFields, type ModelVariantValue } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelVariantFields"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { ModelChoiceDto } from "../../types"
 import { MODEL_SOURCE_LABELS, describeChoice } from "./model-settings"
 

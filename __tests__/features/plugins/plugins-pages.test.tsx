@@ -35,7 +35,7 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/lib/api', () => ({ api: { get: vi.fn(async () => ({ data: { data: [] } })) }, apiErrorMessage: (_e: unknown, fallback: string) => fallback, apiErrorCode: () => null, unwrapApi: (v: unknown) => v }))
 vi.mock('@/features/plugins/client/PluginSourceContext', () => ({ usePluginSource: () => holder.source }))
-vi.mock('@/features/integrations/components/IntegrationConsole', () => ({
+vi.mock('@nandobfer/integracoes/react', () => ({
   SEARCH_HIGHLIGHT_LIMIT: 1000,
   IntegrationConsole: React.forwardRef(function Console() {
     return <div data-testid="console" />

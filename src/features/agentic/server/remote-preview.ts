@@ -1,4 +1,4 @@
-import { runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { runOpencodeShell, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { AgenticWorkbench, type IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { randomId } from "@/lib/random-id"
 import { dirname } from "node:path"

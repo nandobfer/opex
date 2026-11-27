@@ -32,7 +32,7 @@ export async function decideSubject(settings: SecretarySettingsShape, input: { t
     if (!provider || !model) throw new Error("Configure quem decide o assunto (aba Critérios).")
     const criteria = settings.criteria
     if (provider === "jev") {
-        const { askJevSystemOne } = await import("@/lib/ai/jev")
+        const { askJevSystemOne } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/jev")
         const response = await askJevSystemOne({
             model,
             state: { mensagem: input.text, anteriores: input.context.slice(-5) },

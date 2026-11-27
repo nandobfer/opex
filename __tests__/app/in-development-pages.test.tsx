@@ -21,7 +21,7 @@ vi.mock("@/features/tasks/components/detail/TaskDetailPage", () => ({
     TaskDetailPage: ({ id }: { id: string }) => <div data-testid="task">{id}</div>,
 }))
 vi.mock("@/features/tasks/server/resolve-route", () => ({ resolveTaskRoute: mocks.resolveTaskRoute }))
-vi.mock("@/features/integrations/components/IntegrationDetailPage", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationDetailPage: ({ id }: { id: string }) => <div data-testid="detail">{id}</div>,
 }))
 

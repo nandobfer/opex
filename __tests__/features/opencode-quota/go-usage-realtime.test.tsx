@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), release: vi.fn(), acquire: vi.fn(), handlers: new Map<string, Set<(payload: unknown) => void>>() }))
 
-vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: vi.fn() } }))
-vi.mock('@/lib/pusher/client', () => ({
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api: { get: mocks.get, post: vi.fn() } }))
+vi.mock("@/lib/pusher/client", () => ({
   isPusherClientAvailable: () => true,
   acquireChannel: (name: string) => {
     mocks.acquire(name)
@@ -23,7 +23,7 @@ vi.mock('@/lib/pusher/client', () => ({
   releaseChannel: mocks.release,
 }))
 
-import { useOpencodeGoUsage, useOpencodeGoUsageRealtime } from '@/features/opencode-quota/hooks/useOpencodeGoUsage'
+import { useOpencodeGoUsage, useOpencodeGoUsageRealtime } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/hooks/useOpencodeGoUsage"
 
 const query = { from: '2026-11-06T03:00:00.000Z', to: '2026-11-17T02:59:59.999Z' }
 

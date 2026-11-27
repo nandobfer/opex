@@ -8,7 +8,7 @@ import { describe, expect, it, vi } from 'vitest'
 
 /** Seletor de provedor compartilhado pelas telas de IA, agentes e Engramind (regra: extrair, nunca copiar). */
 
-import { AiProviderTabs } from '@/features/ai/components/AiProviderTabs'
+import { AiProviderTabs } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProviderTabs"
 
 const providers = [
   { id: 'gemini', integrationId: 'ai_gemini', name: 'Gemini', configured: true, connected: true },
@@ -56,7 +56,7 @@ describe('AiProviderTabs', () => {
 
 describe('TemperatureInput', () => {
   it('vazio vira null (padrão do modelo) e número vira número; 0 a 2 com passo 0,1', async () => {
-    const { TemperatureInput, temperatureFromText } = await import('@/features/ai/components/TemperatureInput')
+    const { TemperatureInput, temperatureFromText } = await import('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/TemperatureInput')
     expect(temperatureFromText('')).toBeNull()
     expect(temperatureFromText('  ')).toBeNull()
     expect(temperatureFromText('0.7')).toBe(0.7)

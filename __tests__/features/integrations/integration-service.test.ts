@@ -13,19 +13,19 @@ const mocks = vi.hoisted(() => ({
   engramindSync: vi.fn(async (...args: unknown[]) => void args),
 }))
 
-vi.mock('@/lib/integrations/store', () => ({
+vi.mock("@/lib/integrations/server", () => ({
   loadStoredIntegration: mocks.loadStoredIntegration,
   loadStoredIntegrations: vi.fn(),
   invalidateStoredIntegrations: mocks.invalidateStoredIntegrations,
   INTEGRATION_CACHE_TTL_MS: 30_000,
 }))
-vi.mock('@/lib/db', () => ({
+vi.mock("@/lib/db", () => ({
   dbConnect: vi.fn(),
   recordAudit: mocks.recordAudit,
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR' },
   createAuditContext: (userId: string) => ({ userId }),
 }))
-vi.mock('@/lib/db/models/Integration', () => {
+vi.mock('@nandobfer/integracoes/mongoose', () => {
   function Integration(this: Record<string, unknown>, data: Record<string, unknown>) {
     Object.assign(this, data)
     this.set = vi.fn()
@@ -34,25 +34,25 @@ vi.mock('@/lib/db/models/Integration', () => {
   ;(Integration as unknown as { updateOne: typeof mocks.updateOne }).updateOne = mocks.updateOne
   return { Integration }
 })
-vi.mock('@/lib/db/models/IntegrationStatus', () => ({
+vi.mock('@nandobfer/integracoes/mongoose', () => ({
   IntegrationStatus: { findOne: () => ({ lean: mocks.statusFindOne }), find: () => ({ lean: async () => [] }) },
 }))
-vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
-vi.mock('@/lib/db/models/IntegrationLog', () => ({ IntegrationLog: {} }))
-vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({ rescheduleJobs: mocks.rescheduleJobs }))
-vi.mock('@/features/local-docker/server/cleanup', () => ({ onBuilderMachineEnabled: mocks.enableHook }))
-vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.engramindSync }))
-vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationLog: {} }))
+vi.mock("@/lib/integrations/scheduler", () => ({ rescheduleJobs: mocks.rescheduleJobs }))
+vi.mock("@/features/local-docker/server/cleanup", () => ({ onBuilderMachineEnabled: mocks.enableHook }))
+vi.mock("@/features/engramind/server/ai-source", () => ({ syncEngramindProviderKey: mocks.engramindSync }))
+vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
 
-import { encryptSecret, isEncryptedSecret } from '@/lib/crypto/secretBox'
-import type { CronJobConfig } from '@/lib/integrations/catalog'
+import { encryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
+import type { CronJobConfig } from "@nandobfer/integracoes"
 import {
   getIntegrationDetail,
   IntegrationUpdateError,
   jobsToReschedule,
   listIntegrations,
   updateIntegration,
-} from '@/features/integrations/services/integration-service'
+} from "@/lib/integrations/server"
 
 const saved = { ...process.env }
 const actor = 'local'

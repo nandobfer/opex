@@ -45,10 +45,10 @@ vi.mock("@/lib/pusher/client", () => ({
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
 vi.mock("@/features/opex-agent/components/agents/AgentChatNavItem", () => ({ AgentChatNavItem: () => <li data-testid="agent-nav-item-mock" /> }))
 vi.mock("@/features/host-metrics/components/ServerQuotaSidebarItem", () => ({ ServerQuotaSidebarItem: () => <li data-testid="server-quota-item-mock" /> }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn(), isRefetching: false }) }))
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
-vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({ IntegrationTestDialog: () => null }))
-vi.mock("@/features/integrations/components/IntegrationDebugDialog", () => ({ IntegrationDebugDialog: () => null }))
+vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrations: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn(), isRefetching: false }) }))
+vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrationStatusLive: vi.fn() }))
+vi.mock("@nandobfer/integracoes/react", () => ({ IntegrationTestDialog: () => null }))
+vi.mock("@nandobfer/integracoes/react", () => ({ IntegrationDebugDialog: () => null }))
 
 import { AppLayoutShell } from "@/features/layout/components/AppLayoutShell"
 import { routineAgentHref } from "@/features/routine-agents/constants"

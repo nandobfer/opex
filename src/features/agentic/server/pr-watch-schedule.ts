@@ -1,7 +1,7 @@
 import { dbConnect } from "@/lib/db"
-import { CronJobState } from "@/lib/db/models/CronJobState"
-import { AGENTIC_PR_WATCH_JOB_ID } from "@/lib/integrations/catalog"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { CronJobState } from "@nandobfer/integracoes/mongoose"
+import { AGENTIC_PR_WATCH_JOB_ID } from "@/features/integrations/registry/jobs"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import type { PrWatchScheduleDto } from "../types"
 
 /**

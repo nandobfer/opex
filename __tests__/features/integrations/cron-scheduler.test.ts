@@ -10,21 +10,21 @@ const mocks = vi.hoisted(() => ({
   agentCleanup: vi.fn(async () => ({ archived: 1, deleted: 0, failed: 0 })),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@/lib/integrations/runtime", () => ({
   getIntegrationConfig: mocks.getIntegrationConfig,
   getInternalBaseUrl: async () => 'http://127.0.0.1:3868',
   getIntegration: async () => ({ debugMode: false, values: {} }),
 }))
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/features/plugins/server/service', () => ({ reconcilePluginServers: async () => [] }))
-vi.mock('@/lib/db/models/CronJobState', () => ({
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
+vi.mock("@/features/plugins/server/service", () => ({ reconcilePluginServers: async () => [] }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({
   CronJobState: { updateOne: mocks.updateOne, findOneAndUpdate: mocks.findOneAndUpdate },
 }))
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@/features/ai/server/task-tags', () => ({ runTaskTagsConcludedBackfill: mocks.concludedTags }))
-vi.mock('@/features/opex-agent/server/jobs', () => ({ runDueOpexJobs: mocks.runDueOpexJobs }))
-vi.mock('@/features/opencode-service/server/session-retention', () => ({ cleanupIdleOpencodeSessions: mocks.opencodeCleanup, describeOpencodeSessionCleanup: () => 'OC ok' }))
-vi.mock('@/features/opex-agent/server/session-retention', () => ({ cleanupIdleAgentSessions: mocks.agentCleanup, describeAgentSessionCleanup: () => 'agente ok' }))
+vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@/features/ai/server/task-tags", () => ({ runTaskTagsConcludedBackfill: mocks.concludedTags }))
+vi.mock("@/features/opex-agent/server/jobs", () => ({ runDueOpexJobs: mocks.runDueOpexJobs }))
+vi.mock("@/features/opencode-service/server/session-retention", () => ({ cleanupIdleOpencodeSessions: mocks.opencodeCleanup, describeOpencodeSessionCleanup: () => 'OC ok' }))
+vi.mock("@/features/opex-agent/server/session-retention", () => ({ cleanupIdleAgentSessions: mocks.agentCleanup, describeAgentSessionCleanup: () => 'agente ok' }))
 
 import {
   CronJobRunError,
@@ -35,8 +35,9 @@ import {
   runJobNow,
   runSchedulerTick,
   tickReference,
-} from '@/features/integrations/scheduler/cron-scheduler'
-import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
+} from "@/lib/integrations/scheduler"
+import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { type CronJobConfig } from "@nandobfer/integracoes"
 
 const httpJob: CronJobConfig = {
   id: 'cancel',

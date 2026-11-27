@@ -2,7 +2,7 @@
 
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { IntegrationLogLine } from '@/lib/integrations/log-format'
+import type { IntegrationLogLine } from "@nandobfer/integracoes"
 
 /**
  * Logs de debug compartilhados por integrações e plugins (`useDebugLogStream`): carga inicial, linha
@@ -17,7 +17,7 @@ const pusher = vi.hoisted(() => ({
   unbind: vi.fn(),
 }))
 
-vi.mock('@/lib/pusher/client', () => ({
+vi.mock("@/lib/pusher/client", () => ({
   acquireChannel: (channel: string) => {
     pusher.acquire(channel)
     return {
@@ -31,7 +31,7 @@ vi.mock('@/lib/pusher/client', () => ({
   releaseChannel: pusher.release,
 }))
 
-import { useDebugLogStream, type DebugLogStreamSource } from '@/features/integrations/hooks/useDebugLogStream'
+import { useDebugLogStream, type DebugLogStreamSource } from "@nandobfer/integracoes/react"
 
 const line = (ts: string, message: string, level = 'info'): IntegrationLogLine => ({ ts, level, message }) as IntegrationLogLine
 

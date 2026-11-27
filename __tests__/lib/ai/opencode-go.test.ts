@@ -10,8 +10,8 @@ const mocks = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
-vi.mock('@/lib/ai/api-keys', async (importOriginal) => {
-  const { AiProviderError } = await import('@/lib/ai/errors')
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/api-keys', async (importOriginal) => {
+  const { AiProviderError } = await import('@nandobfer/integracoes/modules/integrations/ia/ai/errors')
   const original = (await importOriginal()) as { createKeyFailoverFetch: unknown }
   const requireOrder = mocks.requireKey.mockImplementation(async (integrationId: string, name: string) => {
     if (integrationId !== 'ai_opencode_go' || !mocks.key) throw new AiProviderError(`${name} sem chave de API ativa: cadastre e ative uma chave em Integrações › Inteligência Artificial › ${name}`)
@@ -23,15 +23,15 @@ vi.mock('@/lib/ai/api-keys', async (importOriginal) => {
   }
   return { createKeyFailoverFetch: original.createKeyFailoverFetch, requireAiProviderKeyOrder: requireOrder, fetchWithKeyFailover }
 })
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
+vi.mock("@/lib/integrations/server", () => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
 }))
 
 import { streamText } from 'ai'
-import { clearOpencodeGoCatalogCache, createOpencodeGoModel, listOpencodeGoModels, opencodeGoAllowances, verifyOpencodeGoKey } from '@/lib/ai/opencode-go'
-import { OPENCODE_GO_USER_AGENT } from '@/lib/ai/endpoints'
+import { clearOpencodeGoCatalogCache, createOpencodeGoModel, listOpencodeGoModels, opencodeGoAllowances, verifyOpencodeGoKey } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go"
+import { OPENCODE_GO_USER_AGENT } from "@nandobfer/integracoes/modules/integrations/ia/ai/endpoints"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 const sse = (events: unknown[]) =>

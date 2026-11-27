@@ -1,4 +1,4 @@
-import type { JevAnswer, JevQuestion } from "@/lib/ai/jev"
+import type { JevAnswer, JevQuestion } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
 import type { SubjectDecision } from "./criteria"
 import type { SecretaryCriteria, SubjectRule } from "./schemas"
 

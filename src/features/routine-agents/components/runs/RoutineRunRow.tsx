@@ -4,7 +4,7 @@ import { ChevronRight } from "lucide-react"
 import { ROUTINE_TRIGGER_ORIGIN_LABELS } from "../../status"
 import type { RoutineRunDto } from "../../types"
 import { formatCostPair, formatDateTime, formatDuration, formatTime, formatTokens } from "../../format"
-import { formatUsd } from "@/features/ai-billing/money"
+import { formatUsd } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import { RoutineRunStatusBadge } from "../RoutineBadges"
 
 export const ROUTINE_RUN_ROW_HEIGHT = 64

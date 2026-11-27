@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildIntegrationUpdateSchema } from '@/features/integrations/schemas/integration.schema'
-import { DEFAULT_CRON_JOBS, OPENCODE_SESSIONS_CLEANUP_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, getIntegrationDef } from '@/lib/integrations/catalog'
+import { buildIntegrationUpdateSchema } from "@nandobfer/integracoes"
+import { DEFAULT_CRON_JOBS, OPENCODE_SESSIONS_CLEANUP_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
 
 describe('buildIntegrationUpdateSchema', () => {
   it('aceita somente os campos da própria integração', () => {

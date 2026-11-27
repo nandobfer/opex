@@ -9,7 +9,7 @@ vi.mock("@/lib/api", () => ({ api: { get: mocks.get }, unwrapApi: (response: { d
 vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: mocks.available, acquireChannel: mocks.acquire, releaseChannel: mocks.release }))
 vi.mock("@/features/ai/hooks/useAi", () => ({ AI_QUERY_KEY: "ai" }))
 
-import { useJevUsage } from "@/features/ai/hooks/useJevUsage"
+import { useJevUsage } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useJevUsage"
 
 beforeEach(() => {
     vi.clearAllMocks()

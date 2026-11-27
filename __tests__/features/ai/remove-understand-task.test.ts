@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db/models/Ai', () => ({ AiFeatureSetting: { deleteOne: mocks.settings }, AiUsageLog: { deleteMany: mocks.usage } }))
-vi.mock('@/lib/db/models/AiConsumption', () => ({ AiConsumption: { deleteMany: mocks.consumption } }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption', () => ({ AiConsumption: { deleteMany: mocks.consumption } }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn() } }))
 
 import { removeUnderstandTaskFeature } from '@/lib/db/migrations/remove-understand-task-feature'

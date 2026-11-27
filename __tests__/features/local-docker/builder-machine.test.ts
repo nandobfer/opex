@@ -27,10 +27,10 @@ vi.mock('@/lib/db/models/Agentic', () => {
 })
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: vi.fn() }))
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: mocks.active, assertBuilderMachineActive: vi.fn() }))
-vi.mock('@/features/integrations/services/integration-service', () => ({ updateIntegration: mocks.updateIntegration }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.integrationConfig }))
+vi.mock('@/lib/integrations/server', () => ({ updateIntegration: mocks.updateIntegration }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: mocks.integrationConfig }))
 vi.mock('@/features/agentic/server/centrals', () => ({ loadCentral: async (id: string) => ({ config: { environment: { previewHost: id === 'c1' ? '192.168.0.64' : 'localhost' } } }) }))
 vi.mock('@/features/agentic/server/ports', () => ({ isPortInUse: vi.fn(async () => false) }))
 

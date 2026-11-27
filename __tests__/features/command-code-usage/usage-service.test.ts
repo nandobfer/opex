@@ -4,16 +4,16 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ primary: vi.fn(), byId: vi.fn(), pool: vi.fn(), publish: vi.fn(), fetch: vi.fn(), warn: vi.fn() }))
 
-vi.mock('@/lib/ai/api-keys', () => ({ getPrimaryAiProviderKey: mocks.primary, getAiProviderKeyById: mocks.byId, getAiProviderKeyPool: mocks.pool }))
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/api-keys', () => ({ getPrimaryAiProviderKey: mocks.primary, getAiProviderKeyById: mocks.byId, getAiProviderKeyPool: mocks.pool }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
+vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
+vi.mock("@/lib/integrations/server", () => ({
   integrationDebug: () => ({}),
   debugFetch: (_debug: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
 }))
 
-import { getCommandCodeUsage, refreshCommandCodeUsage, resetCcUsageCacheForTests, runCommandCodeUsageRefresh } from '@/features/command-code-usage/server/usage'
-import { resetCcSeriesCacheForTests } from '@/features/command-code-usage/server/series'
+import { getCommandCodeUsage, refreshCommandCodeUsage, resetCcUsageCacheForTests, runCommandCodeUsageRefresh } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/server/usage"
+import { resetCcSeriesCacheForTests } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/server/series"
 
 const NOW = Date.parse('2026-11-07T12:00:00.000Z')
 const START = '2026-11-05T12:00:00.000Z'

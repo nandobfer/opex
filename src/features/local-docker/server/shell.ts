@@ -1,6 +1,6 @@
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import { AiProviderError } from "@/lib/ai/errors"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { integrationDebug } from "@/lib/integrations/server"
 import { LOCAL_DOCKER_INTEGRATION_ID } from "../constants"
 import { runDetached } from "./detached"
 

@@ -3,6 +3,7 @@ import { Inter } from "next/font/google"
 import "./globals.css"
 import { cn } from "@/lib/utils"
 import { QueryProvider } from "@/lib/react-query/QueryProvider"
+import { OpexIntegrationsProvider } from "@/features/integrations/registry/client"
 import { Toaster } from "@/components/ui/toast"
 import { MotionProvider } from "@/components/motion/MotionProvider"
 import { CtrlEnterSubmit } from "@/components/ctrl-enter-submit"
@@ -51,10 +52,12 @@ export default async function RootLayout({ children }: Readonly<{ children: Reac
                 <CtrlEnterSubmit />
                 <EditorModeShortcut />
                 <QueryProvider>
-                    <MotionProvider>
-                        {children}
-                        <Toaster richColors theme="dark" position="top-right" />
-                    </MotionProvider>
+                    <OpexIntegrationsProvider>
+                        <MotionProvider>
+                            {children}
+                            <Toaster richColors theme="dark" position="top-right" />
+                        </MotionProvider>
+                    </OpexIntegrationsProvider>
                 </QueryProvider>
             </body>
         </html>

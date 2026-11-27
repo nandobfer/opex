@@ -1,7 +1,7 @@
 "use client"
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { useAiAgents, useAiModels } from "@/features/ai/hooks/useAi"
+import { useAiAgents, useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { AGENT_ROLES, type AgentRole } from "../../constants"
 import type { AgentConfig } from "../../schemas"
 import { AgentConfigFields } from "./AgentConfigFields"

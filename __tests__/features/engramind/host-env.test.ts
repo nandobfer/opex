@@ -17,8 +17,8 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(async () => undefined) as (...args: unknown[]) => Promise<unknown>,
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({}) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => mocks.config }))
+vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({}) }))
 vi.mock('@/features/local-docker/server/shell', () => ({ createHostRunner: () => vi.fn() }))
 vi.mock('@/features/environments/server/service', () => ({
   resolveEnvironmentRef: async () => ({ _id: 'env1', name: 'Engramind', slug: 'engramind', source: { kind: 'adopted', machine: 'server', workingDir: '/home/engramind', configFiles: ['/home/engramind/docker-compose.yml', '/home/engramind/docker-compose.deploy.yml'], projectName: 'engramind-8000', git: false, pullOnRedeploy: false } }),

@@ -16,13 +16,13 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(async () => undefined),
 }))
 
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => ({ shell: { create: mocks.create, get: mocks.get, output: mocks.output, remove: mocks.remove } }),
 }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@/lib/integrations/server', () => ({
   integrationDebug: () => ({ request: vi.fn(), response: vi.fn(), warn: vi.fn(), error: vi.fn(), success: vi.fn() }),
 }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async () => ({})) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: vi.fn(async () => ({})) }))
 
 import { DIGEST_MARKER } from '@/features/engramind/channel-migration/plan'
 import { EXPORT_OUTPUT_MAX, runHostExport } from '@/features/engramind/server/channel-migration/host-export'

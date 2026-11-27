@@ -16,7 +16,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 vi.mock('@/lib/audit/record', () => ({ recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: 'CRIAR', EXECUTAR: 'EXECUTAR', ATUALIZAR: 'ATUALIZAR' } }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.gotenberg }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => mocks.gotenberg }))
 vi.mock('@/lib/storage/s3', async (original) => ({
   ...(await original<object>()),
   uploadFile: mocks.upload,

@@ -1,6 +1,6 @@
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { GITHUB_DEFAULT_API_URL } from "@/lib/integrations/catalog"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
+import { GITHUB_DEFAULT_API_URL } from "@nandobfer/integracoes/github"
 
 /**
  * Cliente da API REST do GitHub — SOMENTE servidor. Usa a URL e o token (PAT) salvos em

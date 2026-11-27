@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { formatLogLine, formatLogTimestamp, MASK, maskSensitive } from '@/lib/integrations/log-format'
-import { chunkForPusher } from '@/lib/integrations/debug'
+import { formatLogLine, formatLogTimestamp, MASK, maskSensitive } from "@nandobfer/integracoes"
+import { chunkForPusher } from "@/lib/integrations/server"
 
 describe('maskSensitive (issue #604)', () => {
   it('mascara chaves sensíveis em qualquer profundidade', () => {

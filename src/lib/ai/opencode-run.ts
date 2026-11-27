@@ -1,6 +1,6 @@
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
-import { recordAiConsumption } from "@/lib/ai/consumption"
-import { tokenDetailsOf, tokensFromOpencode } from "@/lib/ai/pricing/usage"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { recordAiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption"
+import { tokenDetailsOf, tokensFromOpencode } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
 import { appendTextDelta, joinTextBlocks } from "@/lib/ai/opencode-text"
 import {
     describeToolInput,
@@ -18,7 +18,7 @@ import {
     type OpencodeTokenUsage,
     type ProviderLimitPolicy,
 } from "@/lib/ai/opencode-events"
-import { SCHEDULE_TIMEZONE } from "@/lib/integrations/schedule"
+import { SCHEDULE_TIMEZONE } from "@nandobfer/integracoes"
 
 /**
  * Um turno de agente numa sessão longa do OpenCode (`@opencode/client`): troca agente/modelo, envia

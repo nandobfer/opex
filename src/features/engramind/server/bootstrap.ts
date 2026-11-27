@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 import { DomainError } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import { BOOTSTRAP_APP_SLUG, ENGRAMIND_INTEGRATION_ID, OPEX_APP_NAME, OPEX_APP_SLUG, OPEX_TOKEN_LABEL } from "../constants"
 import { connectionInputSchema, type ConnectionInput } from "../schemas/connection"
 import type { BootstrapStepDto, ConnectionSaveResultDto, EngramindApp, IssuedToken, WhoAmI } from "../types"
@@ -19,7 +19,7 @@ import { AcaoAuditoria, auditEngramind, engramindLog } from "./shared"
  */
 
 async function integrationService() {
-    return import("@/features/integrations/services/integration-service")
+    return import("@/lib/integrations/server")
 }
 
 /** Grava campos da integração pelo serviço central (cifra os segredos e audita a integração). */

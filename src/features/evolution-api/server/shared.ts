@@ -3,7 +3,7 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import type { IntegrationUpdateInput } from "@/features/integrations/schemas/integration.schema"
+import type { IntegrationUpdateInput } from "@nandobfer/integracoes"
 import { EVOLUTION_INTEGRATION_ID, EVOLUTION_UPDATED_EVENT, type EvolutionUpdateType } from "../constants"
 
 export const evolutionLog = loggerFor({ feature: "evolution-api" })
@@ -13,7 +13,7 @@ export async function saveEvolutionFields(
     input: IntegrationUpdateInput,
     actorId: string,
 ) {
-    const { updateIntegration, IntegrationUpdateError } = await import("@/features/integrations/services/integration-service")
+    const { updateIntegration, IntegrationUpdateError } = await import("@/lib/integrations/server")
     try {
         return await updateIntegration(EVOLUTION_INTEGRATION_ID, input, actorId)
     } catch (error) {

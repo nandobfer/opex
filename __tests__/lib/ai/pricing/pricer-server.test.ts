@@ -13,16 +13,16 @@ const mocks = vi.hoisted(() => ({
   ccCatalog: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async (id: string) => (id === 'models_dev' ? { apiUrl: 'https://models.dev/api.json' } : { offPeakHolidays: '' })) }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({}), debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init) }))
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => undefined) }))
-vi.mock('@/lib/db/models/AiPriceCatalog', () => ({
+vi.mock("@/lib/integrations/runtime", () => ({ getIntegrationConfig: vi.fn(async (id: string) => (id === 'models_dev' ? { apiUrl: 'https://models.dev/api.json' } : { offPeakHolidays: '' })) }))
+vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => ({}), debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init) }))
+vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiPriceCatalog', () => ({
   AiPriceCatalog: { findOne: () => ({ lean: async () => mocks.stored }), updateOne: vi.fn(async () => ({})) },
 }))
-vi.mock('@/lib/ai/command-code', () => ({ commandCodePricingCatalog: mocks.ccCatalog }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/command-code', () => ({ commandCodePricingCatalog: mocks.ccCatalog }))
 
-import { createStepPricer, loadModelsDevCatalog, resetPricingCacheForTests } from '@/lib/ai/pricing/server'
+import { createStepPricer, loadModelsDevCatalog, resetPricingCacheForTests } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server"
 
 const tokens = { input: 1_000_000, noCache: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 0, reasoning: null }
 const body = { anthropic: { models: { 'claude-sonnet-4-6': { cost: { input: 3, output: 15 } } } } }

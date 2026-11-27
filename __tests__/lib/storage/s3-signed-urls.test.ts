@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ values: {} as Record<string, unknown>, version: 'v1' }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))
+vi.mock('@/lib/integrations/server', () => ({
   integrationDebug: () => ({ step: vi.fn(), error: vi.fn(), request: vi.fn(), success: vi.fn(), response: vi.fn() }),
 }))
 

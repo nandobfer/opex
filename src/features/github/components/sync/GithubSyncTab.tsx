@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { integrationPath } from "@/lib/integrations/catalog"
+import { integrationPath } from "@/features/integrations/registry/definitions"
 import { cn } from "@/lib/utils"
 import { useGithubSyncStatus, useRunGithubSync } from "../../hooks/useGithub"
 import { NotConfiguredHint } from "../shared"

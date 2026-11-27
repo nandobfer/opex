@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
+import { integrationDebug } from "@/lib/integrations/server"
+import { streamAi, type AiStreamEvent } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { Project } from "@/lib/db/models/Project"
 import { availabilityOfBudgetPreview, loadBudgetPreviewSettings } from "@/features/ai/server/settings"
 import type { BudgetPreviewSettings } from "@/features/ai/schemas"

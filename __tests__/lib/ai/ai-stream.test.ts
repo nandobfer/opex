@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   goCosts: [] as unknown[],
   anthropicKey: 'key_anthropic',
 }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.record }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: mocks.record }))
 
 vi.mock('ai', () => ({
   streamText: (options: unknown) => {
@@ -30,21 +30,21 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@/lib/ai/opencode', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode', () => ({
   createOpencodeProvider: async () => ({ provider: Object.assign(mocks.opencodeModel, { dispose: mocks.dispose }), directory: '/home/eu/ia' }),
 }))
-vi.mock('@/lib/ai/gemini', () => ({ createGeminiProvider: async () => ({ provider: mocks.google, currentKeyId: () => 'key_google' }) }))
-vi.mock('@/lib/ai/anthropic', () => ({ createAnthropicProvider: async () => ({ provider: mocks.anthropic, currentKeyId: () => mocks.anthropicKey }) }))
-vi.mock('@/lib/ai/openai', () => ({ createOpenaiProvider: async () => ({ provider: mocks.openai, currentKeyId: () => 'key_openai' }) }))
-vi.mock('@/lib/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ provider: mocks.deepseek, currentKeyId: () => 'key_deepseek' }) }))
-vi.mock('@/lib/ai/opencode-go', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/gemini', () => ({ createGeminiProvider: async () => ({ provider: mocks.google, currentKeyId: () => 'key_google' }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/anthropic', () => ({ createAnthropicProvider: async () => ({ provider: mocks.anthropic, currentKeyId: () => mocks.anthropicKey }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/openai', () => ({ createOpenaiProvider: async () => ({ provider: mocks.openai, currentKeyId: () => 'key_openai' }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/deepseek', () => ({ createDeepseekProvider: async () => ({ provider: mocks.deepseek, currentKeyId: () => 'key_deepseek' }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({
   createOpencodeGoModel: async (id: string, options: unknown) => {
     mocks.goModel(id, options)
     return { model: { kind: 'opencode-go', id }, meter: { take: () => mocks.goCosts.shift() ?? null }, currentKeyId: () => 'key_go' }
   },
 }))
 
-import { streamAi, type AiStreamEvent } from '@/lib/ai/stream'
+import { streamAi, type AiStreamEvent } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 
 const usage = { inputTokens: 100, outputTokens: 20, totalTokens: 120 }
 

@@ -6,7 +6,7 @@ import { AgenticWorkbench, type IAgenticWorkbench, type IPendingTurn, type IWork
 import { TaskRefinement } from "@/lib/db/models/Refinement"
 import { REFINEMENT_IN_PROGRESS_REASON, refinementFilesOwner } from "@/features/refinement/constants"
 import { refinementConcluded } from "@/features/refinement/logic"
-import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
 import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
 import { getTask, moveTask } from "@/features/tasks/server/service"

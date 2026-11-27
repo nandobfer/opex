@@ -3,7 +3,7 @@ import { NextRequest } from "next/server"
 
 const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
 
 import { GET } from "@/app/api/ai/providers/opencode/usage/route"
 

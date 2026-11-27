@@ -32,14 +32,14 @@ vi.mock('@/lib/db/models/Opex', () => {
   return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: memoryModel(), OpexJob: memoryModel(), OpexFile: memoryModel(), OpexWatch: memoryModel() }
 })
 vi.mock('@/features/auth/server/context', () => ({ clientActorFor: vi.fn(async (userId: string, clientId: string) => ({ userId, client: { _id: clientId } })) }))
-vi.mock('@/lib/ai/catalog', () => ({ listAiModels: async () => {
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ listAiModels: async () => {
   if (!mocks.catalog) throw new Error('OpenCode fora do ar')
   return mocks.catalog
 } }))
 vi.mock('@/features/maddox-agent/server/runner', () => ({ sendMaddoxMessage: mocks.send }))
 vi.mock('@/features/maddox-agent/server/opencode-session', () => ({ interruptOpencodeSession: mocks.interrupt, removeOpencodeSession: mocks.remove }))
 vi.mock('@/features/maddox-agent/server/client-config', () => ({ assertClientMaddoxEnabled: mocks.assertClientEnabled }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { form: { reply: mocks.formReply, cancel: mocks.formCancel } } }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { form: { reply: mocks.formReply, cancel: mocks.formCancel } } }) }))
 vi.mock('@/features/opex-agent/server/files', () => ({ deleteSessionFiles: vi.fn(async () => {}) }))
 
 import { createMaddoxSession, updateMaddoxSession, MADDOX_OWNER_SCOPE, clientMaddoxScope } from '@/features/maddox-agent/server/sessions'

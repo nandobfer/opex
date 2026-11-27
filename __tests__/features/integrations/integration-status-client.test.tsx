@@ -4,7 +4,7 @@ import React from "react"
 import { act, renderHook } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationListItemDto } from "@/features/integrations/types"
+import type { IntegrationListItemDto } from "@nandobfer/integracoes"
 
 const mocks = vi.hoisted(() => ({
     available: true,
@@ -31,9 +31,9 @@ import {
     statusPollInterval,
     STATUS_POLL_FALLBACK_MS,
     STATUS_POLL_REALTIME_MS,
-} from "@/features/integrations/hooks/useIntegrations"
-import { useIntegrationStatusLive } from "@/features/integrations/hooks/useIntegrationStatusLive"
-import { useIntegrationTestStream } from "@/features/integrations/hooks/useIntegrationTestStream"
+} from "@nandobfer/integracoes/react"
+import { useIntegrationStatusLive } from "@nandobfer/integracoes/react"
+import { useIntegrationTestStream } from "@nandobfer/integracoes/react"
 
 const item = (id: IntegrationListItemDto["id"], health: IntegrationListItemDto["health"]): IntegrationListItemDto => ({
     id,

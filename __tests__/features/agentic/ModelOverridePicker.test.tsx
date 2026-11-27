@@ -9,9 +9,9 @@ const MODELS = [
   { id: 'openai/gpt-5', name: 'GPT-5', group: 'OpenAI', variants: [] },
 ]
 
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
+vi.mock("@/features/ai/hooks/useAi", () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
 /** Busca simplificada: o gatilho, um botão por modelo e o rodapé (o popover real não roda no DOM de teste). */
-vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models, onPick, footer }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void; footer?: React.ReactNode }) => (
     <div>
       {trigger}
@@ -25,7 +25,7 @@ vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ),
 }))
 /** Menu simplificado: o gatilho e os itens sempre visíveis (o portal do Radix não abre no DOM de teste). */
-vi.mock('@/components/ui/dropdown-menu', async () => {
+vi.mock("@/components/ui/dropdown-menu", async () => {
   const React = await import('react')
   const Ctx = React.createContext<{ value: string; onValueChange: (value: string) => void } | null>(null)
   return {
@@ -45,7 +45,7 @@ vi.mock('@/components/ui/dropdown-menu', async () => {
   }
 })
 
-import { ModelOverridePicker } from '@/features/ai/components/model-picker/ModelOverridePicker'
+import { ModelOverridePicker } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelOverridePicker"
 
 const onChange = vi.fn()
 

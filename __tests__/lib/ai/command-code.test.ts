@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
-vi.mock('@/lib/ai/api-keys', async (importOriginal) => {
-  const { AiProviderError } = await import('@/lib/ai/errors')
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/api-keys', async (importOriginal) => {
+  const { AiProviderError } = await import('@nandobfer/integracoes/modules/integrations/ia/ai/errors')
   const original = (await importOriginal()) as { createKeyFailoverFetch: unknown }
   const requireOrder = vi.fn(async (integrationId: string, name: string) => {
     if (integrationId !== 'ai_command_code' || !mocks.keys.length) throw new AiProviderError(`${name} sem chave de API ativa: cadastre e ative uma chave em Integrações › Inteligência Artificial › ${name}`)
@@ -21,16 +21,16 @@ vi.mock('@/lib/ai/api-keys', async (importOriginal) => {
   }
   return { createKeyFailoverFetch: original.createKeyFailoverFetch, requireAiProviderKeyOrder: requireOrder, fetchWithKeyFailover }
 })
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: mocks.warn, info: vi.fn(), error: vi.fn() }) }))
+vi.mock("@/lib/integrations/server", () => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
 }))
 
 import { streamText } from 'ai'
-import { clearCommandCodeCatalogCache, commandCodeModelInputs, createCommandCodeModel, listCommandCodeModels, verifyCommandCodeKey } from '@/lib/ai/command-code'
-import { COMMAND_CODE_USER_AGENT } from '@/lib/ai/endpoints'
-import { describeAiError, prepareModel } from '@/lib/ai/stream'
+import { clearCommandCodeCatalogCache, commandCodeModelInputs, createCommandCodeModel, listCommandCodeModels, verifyCommandCodeKey } from "@nandobfer/integracoes/modules/integrations/ia/ai/command-code"
+import { COMMAND_CODE_USER_AGENT } from "@nandobfer/integracoes/modules/integrations/ia/ai/endpoints"
+import { describeAiError, prepareModel } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } })
 

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isKeyFailureStatus, keyFailuresMessage, rotateFrom } from '@/lib/ai/key-rotation'
+import { isKeyFailureStatus, keyFailuresMessage, rotateFrom } from "@nandobfer/integracoes/modules/integrations/ia/ai/key-rotation"
 
 /** Rodízio das chaves em uso (OPE-179): ordem circular, falhas da chave e mensagem quando todas falham. */
 

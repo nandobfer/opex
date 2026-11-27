@@ -10,14 +10,14 @@ const mocks = vi.hoisted(() => ({
   runTest: vi.fn(async () => ({ ok: true, latencyMs: 1, message: 'ok' })),
 }))
 
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/ai/catalog', () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models }))
-vi.mock('@/lib/ai/opencode', () => ({ getOpencodeInfo: mocks.info }))
-vi.mock('@/lib/ai/opencode-go', () => ({ verifyOpencodeGoKey: mocks.verifyGo }))
-vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.runTest }))
+vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode', () => ({ getOpencodeInfo: mocks.info }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ verifyOpencodeGoKey: mocks.verifyGo }))
+vi.mock("@/lib/integrations/server", () => ({ runIntegrationTest: mocks.runTest }))
 
-import { AiProviderError } from '@/lib/ai/errors'
-import { confirmAiProviderConnection, resetAiConnectionProbes } from '@/lib/ai/connection'
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { confirmAiProviderConnection, resetAiConnectionProbes } from "@nandobfer/integracoes/modules/integrations/ia/ai/connection"
 
 const statuses = (opencode: { configured?: boolean; connected?: boolean }, gemini: { configured?: boolean; connected?: boolean } = {}) => [
   { id: 'opencode', integrationId: 'ai_opencode', name: 'OpenCode', configured: true, connected: true, ...opencode },

@@ -56,7 +56,7 @@ vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit,
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: async () => false }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   runOpencodeShell: mocks.shell,
   getOpencodeClient: vi.fn(async () => ({
     session: {

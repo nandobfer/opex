@@ -1,4 +1,4 @@
-import { integrationDebug } from "@/lib/integrations/debug"
+import { integrationDebug } from "@/lib/integrations/server"
 import { loggerFor } from "@/lib/logger"
 import { centralLogScope } from "../constants"
 

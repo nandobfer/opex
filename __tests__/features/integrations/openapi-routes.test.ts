@@ -6,9 +6,9 @@ const mocks = vi.hoisted(() => ({
   executeExplorerOperation: vi.fn(),
 }))
 
-vi.mock('@/features/integrations/openapi/explorer-service', async () => {
-  const actual = await vi.importActual<typeof import('@/features/integrations/openapi/explorer-service')>(
-    '@/features/integrations/openapi/explorer-service',
+vi.mock("@/lib/integrations/server", async () => {
+  const actual = await vi.importActual<typeof import("@/features/integrations/openapi/explorer-service")>(
+    '@/lib/integrations/server',
   )
   return {
     ExplorerError: actual.ExplorerError,
@@ -16,12 +16,12 @@ vi.mock('@/features/integrations/openapi/explorer-service', async () => {
     executeExplorerOperation: mocks.executeExplorerOperation,
   }
 })
-vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@/lib/logger", () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { GET as openapiGET } from '@/app/api/integrations/[id]/openapi/route'
-import { POST as explorePOST } from '@/app/api/integrations/[id]/explore/route'
-import { ExplorerError } from '@/features/integrations/openapi/explorer-service'
-import { OpenApiSpecError } from '@/features/integrations/openapi/parser'
+import { GET as openapiGET } from "@/app/api/integrations/[id]/openapi/route"
+import { POST as explorePOST } from "@/app/api/integrations/[id]/explore/route"
+import { ExplorerError } from "@/lib/integrations/server"
+import { OpenApiSpecError } from "@/lib/integrations/server"
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const post = (body: unknown) => new NextRequest('http://x', { method: 'POST', body: JSON.stringify(body) })

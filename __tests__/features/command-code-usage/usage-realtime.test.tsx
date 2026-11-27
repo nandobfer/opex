@@ -7,8 +7,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), release: vi.fn(), acquire: vi.fn(), handlers: new Map<string, Set<(payload: unknown) => void>>() }))
 
-vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: vi.fn() } }))
-vi.mock('@/lib/pusher/client', () => ({
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api: { get: mocks.get, post: vi.fn() } }))
+vi.mock("@/lib/pusher/client", () => ({
   isPusherClientAvailable: () => true,
   acquireChannel: (name: string) => {
     mocks.acquire(name)
@@ -23,7 +23,7 @@ vi.mock('@/lib/pusher/client', () => ({
   releaseChannel: mocks.release,
 }))
 
-import { useCommandCodeUsage, useCommandCodeUsageRealtime } from '@/features/command-code-usage/hooks/useCommandCodeUsage'
+import { useCommandCodeUsage, useCommandCodeUsageRealtime } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/hooks/useCommandCodeUsage"
 
 const query = { from: '2026-10-08T03:00:00.000Z', to: '2026-11-08T02:59:59.999Z' }
 

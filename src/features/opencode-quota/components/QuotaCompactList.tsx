@@ -1,8 +1,8 @@
 "use client"
 
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { hasMultipleAccounts, summaryLabel, summaryWindows } from "../logic"
-import type { QuotaProviderDto } from "../types"
+import { hasMultipleAccounts, summaryLabel, summaryWindows } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/logic"
+import type { QuotaProviderDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 import { QuotaWindowBar } from "./QuotaWindowBar"
 
 interface QuotaCompactListProps {

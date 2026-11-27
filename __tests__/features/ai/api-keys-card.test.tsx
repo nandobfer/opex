@@ -2,8 +2,8 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from '../../helpers/framer-motion'
-import { apiKeyDto } from '../../helpers/ai-api-keys'
+import { framerMotionMock } from "../../helpers/framer-motion"
+import { apiKeyDto } from "../../helpers/ai-api-keys"
 
 const mocks = vi.hoisted(() => ({
   keys: [] as unknown[],
@@ -17,7 +17,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
-vi.mock('@/features/ai/hooks/useAiApiKeys', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys', () => ({
   useAiApiKeys: () => ({ data: mocks.keys, isLoading: false, isError: false, refetch: vi.fn() }),
   useAiApiKeysRealtime: () => undefined,
   useToggleAiApiKey: () => ({ mutate: mocks.toggle, isPending: false }),
@@ -28,8 +28,8 @@ vi.mock('@/features/ai/hooks/useAiApiKeys', () => ({
   useUpdateAiKeyBilling: () => ({ mutateAsync: mocks.billing, isPending: false }),
 }))
 
-import { ApiKeysCard } from '@/features/ai/components/api-keys/ApiKeysCard'
-import { removeApiKeyMessage } from '@/features/ai/components/api-keys/RemoveApiKeyDialog'
+import { ApiKeysCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/api-keys/ApiKeysCard"
+import { removeApiKeyMessage } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/api-keys/RemoveApiKeyDialog"
 
 const submit = vi.fn((event: React.FormEvent) => event.preventDefault())
 const renderCard = (provider: 'gemini' | 'jev' = 'gemini', name = 'Gemini') => render(<form onSubmit={submit}><ApiKeysCard provider={provider} providerName={name} /></form>)

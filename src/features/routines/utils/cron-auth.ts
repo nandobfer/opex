@@ -13,7 +13,7 @@
 
 import { timingSafeEqual } from 'crypto'
 import type { NextRequest } from 'next/server'
-import { getIntegrationConfig } from '@/lib/integrations/config'
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 
 /** Comparação em tempo constante do Bearer contra o segredo. Segredo vazio rejeita. */
 export function matchesBearer(authorization: string | null, secret: string | undefined): boolean {

@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { DECISION_PROVIDER_IDS } from "../../schemas"
 import type { SecretaryForm } from "../SecretaryAgentTab"
 import { SecretaryModelCard } from "../SecretaryModelCard"

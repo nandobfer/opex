@@ -7,12 +7,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
-vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
+vi.mock("@/features/agentic/server/hub", () => ({ publishWorkbenchEvent: mocks.publish }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
 
-import { runAgentTurn as runOpencodeTurn, type TurnEvent } from '@/lib/ai/opencode-run'
-import { runAgentTurn as runWorkbenchTurn } from '@/features/agentic/server/runner'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { runAgentTurn as runOpencodeTurn, type TurnEvent } from "@/lib/ai/opencode-run"
+import { runAgentTurn as runWorkbenchTurn } from "@/features/agentic/server/runner"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 const SECRET = 'export GH_TOKEN=ghp_SEGREDO_COMPLETO'
 const ev = (type: string, data: Record<string, unknown> = {}) => ({ type, data: { sessionID: 's1', ...data } })

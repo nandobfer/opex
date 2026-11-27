@@ -3,7 +3,7 @@
 import React from "react"
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
 
 const mocks = vi.hoisted(() => ({
     useIntegration: vi.fn(),
@@ -14,21 +14,21 @@ const mocks = vi.hoisted(() => ({
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
-vi.mock("@/features/integrations/hooks/useIntegrationTestStream", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     useIntegrationTestStream: () => ({ state: "idle", start: vi.fn(async () => {}), cancel: vi.fn() }),
 }))
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
+vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrationStatusLive: vi.fn() }))
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
 vi.mock("sonner", () => ({ toast: mocks.toast }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     useIntegration: mocks.useIntegration,
     useUpdateIntegration: () => ({ mutateAsync: mocks.mutateAsync, isPending: false }),
     integrationErrorMessage: (_e: unknown, fallback: string) => fallback,
 }))
-vi.mock("@/features/integrations/hooks/useIntegrationDebugLogs", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     useIntegrationDebugLogs: () => ({ mode: mocks.debugMode, loading: false, error: null, refresh: mocks.refresh }),
 }))
-vi.mock("@/features/integrations/components/explorer/IntegrationExplorer", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationExplorer: ({ swaggerUrl, onBack }: { swaggerUrl: string; onBack: () => void }) => (
         <div data-testid="explorer">
             {swaggerUrl}
@@ -38,7 +38,7 @@ vi.mock("@/features/integrations/components/explorer/IntegrationExplorer", () =>
         </div>
     ),
 }))
-vi.mock("@/features/integrations/components/IntegrationConsole", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     SEARCH_HIGHLIGHT_LIMIT: 1000,
     IntegrationConsole: React.forwardRef(function Console() {
         return <div data-testid="console" />
@@ -62,9 +62,9 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { IntegrationDetailPage } from "@/features/integrations/components/IntegrationDetailPage"
-import { generateApiToken } from "@/features/integrations/components/TokenField"
-import { DEBUG_DIALOG_MEDIA_QUERY } from "@/features/integrations/components/detail/debug-toggle-context"
+import { IntegrationDetailPage } from "@nandobfer/integracoes/react"
+import { generateApiToken } from "@nandobfer/integracoes/react"
+import { DEBUG_DIALOG_MEDIA_QUERY } from "@nandobfer/integracoes/react"
 
 const detail = (overrides: Partial<IntegrationDetailDto> = {}): IntegrationDetailDto => ({
     id: "pusher",

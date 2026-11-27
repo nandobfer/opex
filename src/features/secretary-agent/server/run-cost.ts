@@ -1,5 +1,5 @@
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
-import { AiUsageLog } from "@/lib/db/models/Ai"
+import { AiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
 
 /** Custo (US$) gravado com um assunto: chamadas de texto (`ai_consumption_logs`) mais o JEV (`AiUsageLog`). */
 export async function costBySubject(subject: string): Promise<number> {

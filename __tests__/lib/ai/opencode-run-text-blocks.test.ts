@@ -6,10 +6,10 @@ import { describe, expect, it, vi } from 'vitest'
  * segue com os deltas originais (a tela não muda).
  */
 
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
 
-import { runAgentTurn, type TurnEvent } from '@/lib/ai/opencode-run'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { runAgentTurn, type TurnEvent } from "@/lib/ai/opencode-run"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 const ev = (type: string, data: Record<string, unknown> = {}) => ({ type, data: { sessionID: 's1', ...data } })
 

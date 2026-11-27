@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { describeSchedule, nextRunAt, scheduleSignature, validateSchedule } from '@/lib/integrations/schedule'
+import { describeSchedule, nextRunAt, scheduleSignature, validateSchedule } from "@nandobfer/integracoes"
 
 /** Brasília = UTC-3 (sem horário de verão). */
 const brt = (iso: string) => new Date(`${iso}-03:00`)

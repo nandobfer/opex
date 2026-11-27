@@ -1,4 +1,4 @@
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
 import { runAgentTurn as runTurn, type TurnResult } from "@/lib/ai/opencode-run"
 import { AGENTIC_CONSUMPTION_ORIGIN, type WorkbenchStage } from "../constants"

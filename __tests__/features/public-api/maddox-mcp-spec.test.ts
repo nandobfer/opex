@@ -23,20 +23,20 @@ const portalAdminTool = { name: 'list_client_users', group: 'users', label: 'Usu
 const portalContext = { name: 'get_portal_overview', group: 'context', label: 'Visão', description: 'Visão do portal', risk: 'read', input: z.object({}), execute: async () => null }
 const portalJob = { name: 'schedule_job', group: 'jobs', label: 'Agendar', description: 'Agenda', risk: 'write', input: z.object({ title: z.string() }), execute: async () => null }
 
-vi.mock('@/features/opex-agent/server/tools/registry', () => ({ OPEX_TOOLS: [listTool, secretTool, jobTool] }))
-vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ OPEX_CLIENT_SERVER_TOOLS: [portalContext, portalAdminTool, portalJob] }))
-vi.mock('@/features/maddox-agent/catalog', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/features/maddox-agent/catalog')>()
+vi.mock("@/features/opex-agent/server/tools/registry", () => ({ OPEX_TOOLS: [listTool, secretTool, jobTool] }))
+vi.mock("@/features/opex-agent/server/client-tools/registry", () => ({ OPEX_CLIENT_SERVER_TOOLS: [portalContext, portalAdminTool, portalJob] }))
+vi.mock("@/features/maddox-agent/catalog", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/features/maddox-agent/catalog")>()
   return { ...actual, MADDOX_CLIENT_TOOL_NAMES: ['get_portal_overview', 'list_client_users'] }
 })
 
-import { maddoxMcpCatalog, maddoxMcpDocsCatalog, toolDescriptor } from '@/features/maddox-agent/server/mcp-catalog'
-import type { OpexTool } from '@/features/opex-agent/server/tools/define'
-import { buildPublicApiSpec } from '@/features/public-api/openapi/spec'
-import { MADDOX_MCP_SECURITY_SCHEME, MADDOX_MCP_TAGS, maddoxToolSchemaName } from '@/features/public-api/openapi/maddox-mcp'
-import { exampleFromJsonSchema } from '@/features/public-api/openapi/json-schema-example'
-import { parseOpenApiSpec } from '@/features/integrations/openapi/parser'
-import { MADDOX_MCP_REFUSALS } from '@/features/maddox-agent/mcp-protocol'
+import { maddoxMcpCatalog, maddoxMcpDocsCatalog, toolDescriptor } from "@/features/maddox-agent/server/mcp-catalog"
+import type { OpexTool } from "@/features/opex-agent/server/tools/define"
+import { buildPublicApiSpec } from "@/features/public-api/openapi/spec"
+import { MADDOX_MCP_SECURITY_SCHEME, MADDOX_MCP_TAGS, maddoxToolSchemaName } from "@/features/public-api/openapi/maddox-mcp"
+import { exampleFromJsonSchema } from "@/features/public-api/openapi/json-schema-example"
+import { parseOpenApiSpec } from "@/lib/integrations/server"
+import { MADDOX_MCP_REFUSALS } from "@/features/maddox-agent/mcp-protocol"
 
 type Op = { tags: string[]; security: unknown; description: string; requestBody: { content: Record<string, { schema: unknown; examples: Record<string, { value: { method: string; params?: { name: string; arguments: unknown } } }> }> }; responses: Record<string, { content?: Record<string, { examples: Record<string, { value: unknown }> }> }> }
 type Raw = { paths: Record<string, Record<string, Op>>; components: { schemas: Record<string, Record<string, unknown>>; securitySchemes: Record<string, unknown> }; tags: { name: string }[] }
@@ -137,15 +137,15 @@ describe('seção MCP da especificação', () => {
 
 describe('GET /api/openapi.json', () => {
   it('inclui o MCP do Agente Maddox', async () => {
-    const { GET } = await import('@/app/api/openapi.json/route')
+    const { GET } = await import("@/app/api/openapi.json/route")
     const body = (await (await GET()).json()) as Raw
     expect(Object.keys(body.paths)).toEqual(['/api/v1/whoami', '/api/v1/routine-agents/{id}/runs', '/api/maddox/mcp/owner', '/api/maddox/mcp/portal'])
   })
 
   it('catálogo indisponível: responde a especificação sem o MCP', async () => {
     vi.resetModules()
-    vi.doMock('@/features/maddox-agent/server/mcp-catalog', () => ({ maddoxMcpDocsCatalog: async () => { throw new Error('registro quebrado') } }))
-    const { GET } = await import('@/app/api/openapi.json/route')
+    vi.doMock("@/features/maddox-agent/server/mcp-catalog", () => ({ maddoxMcpDocsCatalog: async () => { throw new Error('registro quebrado') } }))
+    const { GET } = await import("@/app/api/openapi.json/route")
     const res = await GET()
     expect(res.status).toBe(200)
     expect(Object.keys(((await res.json()) as Raw).paths)).toEqual(['/api/v1/whoami', '/api/v1/routine-agents/{id}/runs'])

@@ -45,12 +45,12 @@ vi.mock("@xterm/addon-search", () => ({
     },
 }))
 
-import { DebugSearchBar, formatSearchCounter } from "@/features/integrations/components/DebugSearchBar"
+import { DebugSearchBar, formatSearchCounter } from "@nandobfer/integracoes/react"
 import {
     IntegrationConsole,
     SEARCH_OPTIONS,
     type IntegrationConsoleHandle,
-} from "@/features/integrations/components/IntegrationConsole"
+} from "@nandobfer/integracoes/react"
 
 beforeEach(() => {
     vi.clearAllMocks()

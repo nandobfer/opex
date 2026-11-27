@@ -44,7 +44,7 @@ vi.mock('@/lib/db/models/RoutineAgent', () => ({
     updateOne: vi.fn(async (filter: { _id: string }) => holder.writes.push(`routine:${filter._id}`)),
   },
 }))
-vi.mock('@/features/integrations/services/integration-service', () => ({ updateIntegration: vi.fn(async (...args: unknown[]) => holder.integration.push(args)) }))
+vi.mock('@/lib/integrations/server', () => ({ updateIntegration: vi.fn(async (...args: unknown[]) => holder.integration.push(args)) }))
 vi.mock('@/features/engramind/server/shared', () => ({ AcaoAuditoria: { EXECUTAR: 'EXECUTAR' }, auditEngramind: vi.fn(async () => undefined), engramindLog: { info: vi.fn(), warn: vi.fn() } }))
 vi.mock('@/features/routine-agents/server/provisioning', () => ({ startProvisioning: vi.fn(async () => undefined) }))
 

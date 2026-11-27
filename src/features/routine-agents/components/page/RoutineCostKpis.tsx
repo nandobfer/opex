@@ -2,7 +2,7 @@
 
 import { KpiCard } from "@/components/metrics/KpiCard"
 import { formatMetricValue } from "@/components/metrics/format"
-import { formatBrl, formatUsd } from "@/features/ai-billing/money"
+import { formatBrl, formatUsd } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import type { RoutineCostKpisDto, RoutineMoneyPair } from "../../types"
 
 const usd = (value: number) => formatMetricValue(value, "usd")

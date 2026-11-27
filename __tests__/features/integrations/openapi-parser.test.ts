@@ -1,13 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { OpenApiSpecError, parseOpenApiSpec } from '@/features/integrations/openapi/parser'
+import { OpenApiSpecError, parseOpenApiSpec } from "@/lib/integrations/server"
 import {
   buildExample,
   initialBodyText,
   jsonError,
   splitParameterValues,
   validateParameters,
-} from '@/features/integrations/openapi/examples'
-import { UNTAGGED } from '@/features/integrations/openapi/types'
+} from "@/lib/integrations/server"
+import { UNTAGGED } from "@/lib/integrations/server"
 
 /** Especificação no formato do FastAPI (Pydantic v2): anyOf com null, allOf, $ref e tags. */
 const spec = {

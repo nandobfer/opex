@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { allocateJevHistoricalUsage, normalizeJevUsage } from "@/lib/ai/jev-usage"
+import { allocateJevHistoricalUsage, normalizeJevUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev-usage"
 
 describe("usage e custo JEV", () => {
     it("soma entrada e saída, mas cobra somente entrada sem arredondar por chamada", () => {

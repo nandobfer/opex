@@ -26,8 +26,8 @@ vi.mock('@/features/ai/server/settings', async (original) => ({
   persistFeature: mocks.persist,
   availability: mocks.testConnection,
 }))
-vi.mock('@/lib/ai/catalog', async (original) => ({ ...(await original<object>()), getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models }))
-vi.mock('@/lib/integrations/config', async (original) => ({ ...(await original<object>()), getIntegration: async () => ({ version: 1 }), isIntegrationConfigured: () => true }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', async (original) => ({ ...(await original<object>()), getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models }))
+vi.mock('@/lib/integrations/runtime', async (original) => ({ ...(await original<object>()), getIntegration: async () => ({ version: 1 }), isIntegrationConfigured: () => true }))
 vi.mock('@/features/evolution-api/server/instances', async (original) => ({ ...(await original<object>()), listInstances: mocks.instances }))
 vi.mock('@/features/evolution-api/server/contacts', async (original) => ({ ...(await original<object>()), contactsByJid: mocks.contactsByJid, listContacts: mocks.listContacts }))
 vi.mock('@/features/evolution-api/server/client', async (original) => ({ ...(await original<object>()), evolution: { sendText: mocks.sendText } }))

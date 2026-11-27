@@ -58,7 +58,7 @@ vi.mock('@/features/ai/server/memory-settings', () => ({
   memorySettings: async () => ({ textMin: 3, textMax: 4000, maxBatch: 100, budgetTokens: 4000, categories: [{ key: 'PROJECT_RULES', label: 'Regras' }] }),
   memoryLimitsFor: async () => ({ textMin: 3, textMax: 4000 }),
 }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: (input: { signal?: AbortSignal; prompt?: string }) => holder.stream!(input) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: (input: { signal?: AbortSignal; prompt?: string }) => holder.stream!(input) }))
 
 import { compactCombination, downloadBackup, generateBackup, getMigration, resetMigrationRuntimeForTests, runCurator, setCuratorTimeoutForTests } from '@/features/engramind/server/migration'
 

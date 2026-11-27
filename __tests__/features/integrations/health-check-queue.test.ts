@@ -7,17 +7,17 @@ const mocks = vi.hoisted(() => ({
   tested: [] as string[],
 }))
 
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/db/models/IntegrationStatus', () => ({ IntegrationStatus: { updateOne: vi.fn(async () => undefined) } }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.config }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), success: vi.fn() }) }))
-vi.mock('@/lib/pusher/server', () => ({ isPusherServerConfigured: async () => false, getRawPusherServer: vi.fn() }))
-vi.mock('@/features/integrations/testers/testers', () => ({
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
+vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationStatus: { updateOne: vi.fn(async () => undefined) } }))
+vi.mock("@/lib/integrations/runtime", () => ({ getIntegrationConfig: mocks.config }))
+vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), success: vi.fn() }) }))
+vi.mock("@/lib/pusher/server", () => ({ isPusherServerConfigured: async () => false, getRawPusherServer: vi.fn() }))
+vi.mock("@/lib/integrations/server", () => ({
   INTEGRATION_TESTERS: new Proxy({}, { get: (_target, id: string) => async () => { mocks.tested.push(id); return 'ok' } }),
 }))
 
-import { runAllIntegrationHealthChecks } from '@/features/integrations/services/integration-test-runner'
+import { runAllIntegrationHealthChecks } from "@/lib/integrations/server"
 
 beforeEach(() => {
   mocks.tested.length = 0

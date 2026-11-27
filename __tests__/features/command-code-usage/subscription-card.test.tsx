@@ -4,17 +4,17 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { CommandCodeUsageDto } from '@/features/command-code-usage/types'
+import type { CommandCodeUsageDto } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/types"
 
 /** OPE-190: card da assinatura Command Code na aba Consumo (mesmo desenho do OpenCode Go). */
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 
-vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+vi.mock('framer-motion', async () => (await import("../../helpers/framer-motion")).framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
-vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: mocks.post } }))
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api: { get: mocks.get, post: mocks.post } }))
 
-import { CommandCodeSubscriptionCard } from '@/features/command-code-usage/components/CommandCodeSubscriptionCard'
+import { CommandCodeSubscriptionCard } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/components/CommandCodeSubscriptionCard"
 
 const ok = (data: unknown) => ({ data: { success: true, data } })
 const query = { from: '2026-10-08T03:00:00.000Z', to: '2026-11-08T02:59:59.999Z' }

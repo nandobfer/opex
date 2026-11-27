@@ -12,8 +12,8 @@ const host = vi.hoisted(() => ({
   },
 }))
 
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ shell: host.shell }) }))
-vi.mock('@/lib/ai/opencode', async (original) => ({ ...(await original<object>()), getOpencodeConnection: async () => ({ baseUrl: 'http://oc', headers: {}, directory: host.directory }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ shell: host.shell }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode', async (original) => ({ ...(await original<object>()), getOpencodeConnection: async () => ({ baseUrl: 'http://oc', headers: {}, directory: host.directory }) }))
 vi.mock('@/lib/db', async (original) => ({ ...(await original<object>()), recordAudit: host.recordAudit }))
 vi.mock('@/features/opex-agent/server/settings', async (original) => ({
   ...(await original<object>()),

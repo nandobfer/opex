@@ -17,8 +17,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 vi.mock('@/lib/db/models/Ai', () => ({ AiUsageLog: { create: vi.fn() } }))
 vi.mock('@/lib/db/models/DevTask', () => ({ DevTask: { find: mocks.find, findById: mocks.findById, updateOne: mocks.updateOne } }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.stream }))
+vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: mocks.stream }))
 vi.mock('@/features/ai/server/settings', () => ({ loadTaskSummarySettings: mocks.loadSettings, availabilityOfTaskSummary: mocks.availability }))
 vi.mock('@/features/tasks/server/service', () => ({ concludedColumnKeys: mocks.concluded, getTask: mocks.getTask, publishTasksUpdated: mocks.publish }))
 

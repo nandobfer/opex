@@ -7,8 +7,8 @@ import { aiApiKeysMock, apiKeyDto } from "../../helpers/ai-api-keys"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn(), refetch: vi.fn() }))
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("@/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Pessoal", true), apiKeyDto("key_bbbbbbbbbbbbbbbbbb", "Empresa")]))
-vi.mock("@/features/ai/hooks/useJevUsage", () => ({ useJevUsage: mocks.usage }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Pessoal", true), apiKeyDto("key_bbbbbbbbbbbbbbbbbb", "Empresa")]))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useJevUsage", () => ({ useJevUsage: mocks.usage }))
 vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
     // Período fixo que NUNCA coincide com o padrão "Último mês" (hoje−1 mês … hoje): se coincidisse,
@@ -16,9 +16,9 @@ vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     PresetDateRangeFilter: ({ onChange }: { onChange: (range: { startDate: string; endDate: string }) => void }) => <button type="button" onClick={() => onChange({ startDate: "2026-10-05", endDate: "2026-10-06" })}>Selecionar período personalizado</button>,
 }))
 
-import { JevUsageCard } from "@/features/ai/components/JevUsageCard"
+import { JevUsageCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/JevUsageCard"
 import { DATE_PRESET } from "@/components/ui/preset-date-range-filter"
-import { jevUsageRangeQuery } from "@/features/ai/jev-usage"
+import { jevUsageRangeQuery } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/jev-usage"
 
 const summary = {
     requests: 149, failedRequests: 0, totalTokens: 235088, inputTokens: null, outputTokens: null, costUsd: 0.0067, reconstructedRequests: 149, missingTokenRequests: 0, missingCostRequests: 0,

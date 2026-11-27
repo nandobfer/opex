@@ -24,8 +24,8 @@ import {
   subUtcMonths,
   sumGoMeters,
   type GoDayValue,
-} from '@/features/opencode-quota/go-logic'
-import type { GoStatus } from '@/features/opencode-quota/go-schemas'
+} from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/go-logic"
+import type { GoStatus } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/go-schemas"
 
 const goStatus = (overrides: { used?: number; limit?: number; startsAt?: string; endsAt?: string; fiveHourReset?: string | null } = {}): GoStatus => ({
   product: 'go',

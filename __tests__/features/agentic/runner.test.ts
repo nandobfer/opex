@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
-vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish }))
+vi.mock("@/features/agentic/server/hub", () => ({ publishWorkbenchEvent: mocks.publish }))
 
-import { runAgentTurn } from '@/features/agentic/server/runner'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { runAgentTurn } from "@/features/agentic/server/runner"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 type Raw = { type: string; data: Record<string, unknown> }
 

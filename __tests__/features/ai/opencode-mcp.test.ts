@@ -6,10 +6,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * divergente deixam o servidor `failed` e o registro falha (o turno manda os dados da mesa no prompt).
  */
 
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { ensureRemoteMcp, REMOTE_MCP_STATUS_POLLS } from '@/features/ai/server/opencode-mcp'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { ensureRemoteMcp, REMOTE_MCP_STATUS_POLLS } from "@/features/ai/server/opencode-mcp"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 type Status = { status: string; error?: string }
 

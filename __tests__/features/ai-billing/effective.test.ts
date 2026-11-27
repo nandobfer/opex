@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { autoExhaustionAt } from '@/features/ai-billing/credits'
-import { cycleFor, dailyQuota } from '@/features/ai-billing/cycle'
-import { stepEffectiveCost, sumStepCosts, type BillingLookup, type CostStepInput, type KeyBillingInfo, type SubscriptionDayTotal } from '@/features/ai-billing/effective'
-import type { StoredAiKeyBilling } from '@/features/ai-billing/schemas'
+import { autoExhaustionAt } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/credits"
+import { cycleFor, dailyQuota } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/cycle"
+import { stepEffectiveCost, sumStepCosts, type BillingLookup, type CostStepInput, type KeyBillingInfo, type SubscriptionDayTotal } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/effective"
+import type { StoredAiKeyBilling } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/schemas"
 
 /**
  * OPE-203: custo efetivo pela modalidade da chave que respondeu (pago por uso, créditos, assinatura com rateio

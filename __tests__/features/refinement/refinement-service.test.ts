@@ -77,7 +77,7 @@ vi.mock('@/lib/db/models/Refinement', () => ({
     },
 }))
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { findOne: vi.fn(() => ({ lean: async () => mocks.central })) } }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => mocks.fakeClient) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => mocks.fakeClient) }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.run }))
 vi.mock('@/features/agentic/server/hub', () => ({
     prepareHub: vi.fn(),
@@ -100,8 +100,8 @@ vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
 vi.mock('@/features/agentic/server/live-chat', () => ({ liveChatEnabled: vi.fn(async () => mocks.liveChat), deliverLiveMessage: mocks.deliverLive }))
 // A espera entre leituras da lista de skills (diretório frio, OPE-158) não usa timer real nos testes.
-vi.mock('@/lib/ai/opencode-skill-list', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('@/lib/ai/opencode-skill-list')>()
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list')>()
     return { ...actual, listOpencodeSkillsAt: (client: Parameters<typeof actual.listOpencodeSkillsAt>[0], directory: string, options: Parameters<typeof actual.listOpencodeSkillsAt>[2] = {}) => actual.listOpencodeSkillsAt(client, directory, { ...options, wait: async () => undefined }) }
 })
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))

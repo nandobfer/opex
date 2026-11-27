@@ -3,22 +3,22 @@ import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
-import { draftFrom } from "@/features/integrations/components/detail/draft"
-import { getIntegrationDef } from "@/lib/integrations/catalog"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
+import { draftFrom } from "@nandobfer/integracoes/react"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
 
 vi.mock('@/hooks/useInstanceInfo', () => ({ useInstanceInfo: () => ({ data: undefined }) }))
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
-vi.mock("@/features/integrations/components/detail/CronJobsCard", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     CronJobsCard: ({ hiddenJobIds }: { hiddenJobIds?: ReadonlySet<string> }) => <div data-testid="cron-jobs" data-hidden={[...(hiddenJobIds ?? [])].join(",")} />,
 }))
 const builderMachine = vi.hoisted(() => ({ active: false }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegration: () => ({ data: { publicValues: { active: builderMachine.active } } }) }))
-vi.mock("@/features/integrations/components/detail/ApiDocsCard", () => ({ ApiDocsCard: () => <div data-testid="api-docs" /> }))
+vi.mock("@nandobfer/integracoes/react", () => ({ useIntegration: () => ({ data: { publicValues: { active: builderMachine.active } } }) }))
+vi.mock("@nandobfer/integracoes/react", () => ({ ApiDocsCard: () => <div data-testid="api-docs" /> }))
 vi.mock("@/features/opex-agent/components/jobs/OpexJobsTab", () => ({ OpexJobsTab: () => <div data-testid="opex-jobs" /> }))
 
-import { CronsEditorForm } from "@/features/integrations/components/detail/CronsEditorForm"
+import { CronsEditorForm } from "@nandobfer/integracoes/react"
 
 const def = getIntegrationDef("crons")!
 const data: IntegrationDetailDto = {

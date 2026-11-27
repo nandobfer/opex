@@ -10,10 +10,10 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('nodemailer', () => ({ default: { createTransport: mocks.createTransport } }))
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({
   getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })),
 }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@/lib/integrations/server', () => ({
   integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 vi.mock('@/lib/logger', () => ({ logger: { info: mocks.loggerInfo, warn: vi.fn(), error: vi.fn() } }))

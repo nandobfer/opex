@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import * as go from '@/features/opencode-quota/go-logic'
-import { buildCycleChart, cycleAxisTicks, cycleForecast, cycleYMax, cycleYTicks, formatUsageDate, usageStatusLine } from '@/features/subscription-usage/cycle-logic'
+import * as go from "@/features/opencode-quota/go-logic"
+import { buildCycleChart, cycleAxisTicks, cycleForecast, cycleYMax, cycleYTicks, formatUsageDate, usageStatusLine } from "@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/cycle-logic"
 
 /**
  * OPE-190: regras do gráfico de ciclo extraídas do OpenCode Go para o módulo compartilhado (usado também pelo

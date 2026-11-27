@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { describeSchedule, intervalMs, isSecondsSchedule, nextRunAt, scheduleSignature, validateSchedule } from '@/lib/integrations/schedule'
-import { scheduleSchema } from '@/features/integrations/schemas/integration.schema'
+import { describeSchedule, intervalMs, isSecondsSchedule, nextRunAt, scheduleSignature, validateSchedule } from "@nandobfer/integracoes"
+import { scheduleSchema } from "@nandobfer/integracoes"
 
 describe('agendamento em segundos (OPE-145)', () => {
   it('intervalo em segundos: grade de 10 s, descrição e assinatura próprias', () => {

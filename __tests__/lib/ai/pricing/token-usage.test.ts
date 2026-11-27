@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { tokenDetailsOf, tokensFromOpencode, tokensFromUsage } from '@/lib/ai/pricing/usage'
+import { tokenDetailsOf, tokensFromOpencode, tokensFromUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
 
 /** OPE-205: extração dos tokens separados (cache e raciocínio) — fonte única de todo o consumo de IA. */
 

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { ccAccountKey, ccReferenceIndex, ccDailyCredits, ccKeyLabel, ccMonthPool, ccSeriesBoundaries, combineCcDays, groupCcAccounts, hasCcWindows, sumCcMeters } from '@/features/command-code-usage/logic'
-import { ccCreditsSchema, ccSubscriptionSchema, ccWhoamiSchema, toIsoInstant } from '@/features/command-code-usage/schemas'
-import { joinCommandCodeCatalog, commandCodeRoute, toCommandCodeModels } from '@/lib/ai/command-code-models'
+import { ccAccountKey, ccReferenceIndex, ccDailyCredits, ccKeyLabel, ccMonthPool, ccSeriesBoundaries, combineCcDays, groupCcAccounts, hasCcWindows, sumCcMeters } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/logic"
+import { ccCreditsSchema, ccSubscriptionSchema, ccWhoamiSchema, toIsoInstant } from "@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/schemas"
+import { joinCommandCodeCatalog, commandCodeRoute, toCommandCodeModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/command-code-models"
 
 /** OPE-190: regras puras da assinatura Command Code (API da CLI) e do catálogo do provedor. */
 

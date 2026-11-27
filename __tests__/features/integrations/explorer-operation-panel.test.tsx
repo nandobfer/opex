@@ -20,9 +20,9 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { OperationPanel, prettyBody } from "@/features/integrations/components/explorer/OperationPanel"
-import { filterOperations } from "@/features/integrations/components/explorer/IntegrationExplorer"
-import { parseOpenApiSpec } from "@/features/integrations/openapi/parser"
+import { OperationPanel, prettyBody } from "@nandobfer/integracoes/react"
+import { filterOperations } from "@nandobfer/integracoes/react"
+import { parseOpenApiSpec } from "@/lib/integrations/server"
 
 const spec = parseOpenApiSpec({
     openapi: "3.0.3",

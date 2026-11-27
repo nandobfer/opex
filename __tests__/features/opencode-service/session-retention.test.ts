@@ -51,7 +51,7 @@ vi.mock('@/features/adversarial-agent/server/models', async () => {
   return { AdversarialReview: store.models.adversarial, adversarialDb: async () => {} }
 })
 vi.mock('@opencode/client', () => ({ isSessionNotFoundError: (error: unknown) => (error as { notFound?: boolean })?.notFound === true }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => {
     if (oc.unavailable) throw new Error('sem conexão')
     return {

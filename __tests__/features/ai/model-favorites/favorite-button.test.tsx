@@ -3,11 +3,11 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from '../../../helpers/framer-motion'
+import { framerMotionMock } from "../../../helpers/framer-motion"
 
 vi.mock('framer-motion', () => framerMotionMock())
 
-import { ModelFavoriteButton } from '@/features/ai/components/model-picker/ModelFavoriteButton'
+import { ModelFavoriteButton } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelFavoriteButton"
 
 afterEach(() => cleanup())
 

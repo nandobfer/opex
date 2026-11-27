@@ -13,7 +13,7 @@
  * - `private-plugin-{pluginId}`: logs de debug de um plugin (OPE-172), só o **dono**.
  */
 
-import { isIntegrationId } from "@/lib/integrations/catalog"
+import { isIntegrationId } from "@/features/integrations/registry/definitions"
 import { LOCAL_USER_ID } from "@/lib/local-user"
 import type { SessionPayload } from "@/features/auth/session"
 import { appChannel, CLIENT_CHANNEL_PREFIX, OPEX_CHANNEL_PREFIX, PLUGIN_DEBUG_CHANNEL_PREFIX, REPO_RECENTS_CHANNEL_PREFIX } from "./channel-names"

@@ -1,26 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  ATTACHMENT_CLEANUP_JOB_ID,
-  BUILDER_MACHINE_CLEANUP_JOB_ID,
-  OPEX_FILES_CLEANUP_JOB_ID,
-  OPENCODE_QUOTA_JOB_ID,
-  HOST_METRICS_JOB_ID,
-  DEFAULT_CRON_JOBS,
-  HEALTH_CHECK_JOB_ID,
-  IN_DEVELOPMENT_INTEGRATIONS,
-  INTEGRATIONS,
-  INTEGRATIONS_BASE_PATH,
-  INTEGRATION_IDS,
-  TASK_TAGS_CONCLUDED_JOB_ID,
-  cronJobIntegration,
-  defaultSwaggerUrl,
-  getInDevelopmentIntegration,
-  getIntegrationDef,
-  hasCustomIntegrationPath,
-  integrationPath,
-  isCardManagedField,
-  isIntegrationId,
-} from '@/lib/integrations/catalog'
+import { ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, HOST_METRICS_JOB_ID, DEFAULT_CRON_JOBS, TASK_TAGS_CONCLUDED_JOB_ID, cronJobIntegration } from "@/features/integrations/registry/jobs"
+import { HEALTH_CHECK_JOB_ID, defaultSwaggerUrl, getInDevelopmentIntegration, isCardManagedField } from "@nandobfer/integracoes"
+import { IN_DEVELOPMENT_INTEGRATIONS, INTEGRATIONS, INTEGRATIONS_BASE_PATH, INTEGRATION_IDS, getIntegrationDef, hasCustomIntegrationPath, integrationPath, isIntegrationId } from "@/features/integrations/registry/definitions"
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {

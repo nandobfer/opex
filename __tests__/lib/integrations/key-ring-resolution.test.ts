@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { randomBytes } from 'crypto'
-import { encryptSecret } from '@/lib/crypto/secretBox'
-import { getIntegrationDef } from '@/lib/integrations/catalog'
-import { activeApiKeyOf, buildResolvedIntegration, isIntegrationConfigured, selectedApiKeysOf } from '@/lib/integrations/config'
-import { KEY_RING_INTEGRATION_IDS } from '@/lib/integrations/key-ring'
-import type { StoredIntegration } from '@/lib/integrations/store'
+import { encryptSecret } from "@/lib/crypto/secretBox"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
+import { activeApiKeyOf, buildResolvedIntegration, isIntegrationConfigured, selectedApiKeysOf } from "@/lib/integrations/server"
+import { KEY_RING_INTEGRATION_IDS } from "@nandobfer/integracoes/modules/server/key-ring"
+import type { StoredIntegration } from "@/lib/integrations/server"
 
 /** Chaveiro dos provedores de IA (OPE-155): a API key efetiva é a da chave ATIVA. */
 

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 import { withBasePath } from "@/lib/base-path"
-import { parseNdjsonChunk } from "@/features/integrations/hooks/useIntegrationTestStream"
+import { parseNdjsonChunk } from "@nandobfer/integracoes/react"
 import type { TaskSummaryEvent } from "../types"
 import { applyAiStreamEvent, finishAiStream, INITIAL_AI_STREAM_STATE, type AiStreamState } from "../ai-stream-state"
 

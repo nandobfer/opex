@@ -12,12 +12,12 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: vi.fn() }))
-vi.mock("@/features/integrations/components/IntegrationDetailPage", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationDetailPage: ({ id }: { id: string }) => <div data-testid="detail">{id}</div>,
 }))
 
 import ProvedorIaPage from "@/app/(app)/integracoes/ia/[provider]/page"
-import { hasCustomIntegrationPath, INTEGRATION_IDS, integrationPath } from "@/lib/integrations/catalog"
+import { hasCustomIntegrationPath, INTEGRATION_IDS, integrationPath } from "@/features/integrations/registry/definitions"
 
 const APP_DIR = path.resolve(__dirname, "../../src/app/(app)")
 

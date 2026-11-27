@@ -6,13 +6,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
-vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish }))
+vi.mock("@/features/agentic/server/hub", () => ({ publishWorkbenchEvent: mocks.publish }))
 
-import { isAgentTurnLive, steerAgentTurn } from '@/lib/ai/opencode-run'
-import { runAgentTurn } from '@/features/agentic/server/runner'
-import { parseCentralConfig, resolveLiveChat } from '@/features/agentic/logic'
-import { agenticSettingsSchema, centralConfigSchema, defaultCentralConfig, DEFAULT_AGENTIC_SETTINGS, withDefaultAgents } from '@/features/agentic/schemas'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { isAgentTurnLive, steerAgentTurn } from "@/lib/ai/opencode-run"
+import { runAgentTurn } from "@/features/agentic/server/runner"
+import { parseCentralConfig, resolveLiveChat } from "@/features/agentic/logic"
+import { agenticSettingsSchema, centralConfigSchema, defaultCentralConfig, DEFAULT_AGENTIC_SETTINGS, withDefaultAgents } from "@/features/agentic/schemas"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 beforeEach(() => vi.clearAllMocks())
 

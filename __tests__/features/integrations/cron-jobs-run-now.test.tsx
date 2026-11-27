@@ -19,15 +19,16 @@ vi.mock("framer-motion", () => {
     }
 })
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     useRunCronJob: () => ({ mutateAsync: mocks.mutateAsync }),
     integrationErrorMessage: (_e: unknown, fallback: string) => fallback,
 }))
 
-import { CronJobsEditor, runNowBlockReason } from "@/features/integrations/components/CronJobsEditor"
-import { CONTROL, ScheduleEditor } from "@/features/integrations/components/ScheduleEditor"
-import { FIELD_GRID } from "@/features/integrations/components/IntegrationDetailPage"
-import { TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { CronJobsEditor, runNowBlockReason } from "@nandobfer/integracoes/react"
+import { CONTROL, ScheduleEditor } from "@nandobfer/integracoes/react"
+import { FIELD_GRID } from "@nandobfer/integracoes/react"
+import { TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { type CronJobConfig } from "@nandobfer/integracoes"
 
 const job: CronJobConfig = {
     id: "cancel",

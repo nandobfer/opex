@@ -6,22 +6,22 @@ const mocks = vi.hoisted(() => ({
   debug: { info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@/lib/integrations/runtime", () => ({
   getIntegration: mocks.getIntegration,
   getInternalBaseUrl: async () => 'http://127.0.0.1:3868',
   getIntegrationConfig: async () => ({}),
 }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => mocks.debug }))
-vi.mock('@/lib/db', () => ({ recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR' } }))
-vi.mock('@/features/integrations/services/integration-service', () => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))
+vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => mocks.debug }))
+vi.mock("@/lib/db", () => ({ recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR' } }))
+vi.mock("@/lib/integrations/server", () => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))
 
-import { clearSpecCache, findSpecUrlCandidates, loadOpenApiSpec } from '@/features/integrations/openapi/spec-source'
+import { clearSpecCache, findSpecUrlCandidates, loadOpenApiSpec } from "@/lib/integrations/server"
 import {
   ExplorerError,
   executeExplorerOperation,
   getExplorerSpec,
-} from '@/features/integrations/openapi/explorer-service'
-import { EXPLORER_ADAPTER_IDS } from '@/features/integrations/openapi/adapters'
+} from "@/lib/integrations/server"
+import { EXPLORER_ADAPTER_IDS } from "@/lib/integrations/server"
 
 const actor = 'local'
 const INTERNAL = 'http://127.0.0.1:3868'

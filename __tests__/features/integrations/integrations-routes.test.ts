@@ -15,9 +15,9 @@ const mocks = vi.hoisted(() => ({
   apiTokenScopeCatalog: vi.fn(),
 }))
 
-vi.mock('@/features/integrations/services/integration-service', async () => {
-  const actual = await vi.importActual<typeof import('@/features/integrations/services/integration-service')>(
-    '@/features/integrations/services/integration-service',
+vi.mock("@/lib/integrations/server", async () => {
+  const actual = await vi.importActual<typeof import("@/features/integrations/services/integration-service")>(
+    '@/lib/integrations/server',
   )
   return {
     IntegrationUpdateError: actual.IntegrationUpdateError,
@@ -27,27 +27,27 @@ vi.mock('@/features/integrations/services/integration-service', async () => {
     listIntegrationLogs: mocks.listIntegrationLogs,
   }
 })
-vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.runIntegrationTest }))
-vi.mock('@/features/integrations/api-tokens/service', () => ({
+vi.mock("@/lib/integrations/server", () => ({ runIntegrationTest: mocks.runIntegrationTest }))
+vi.mock("@/features/integrations/api-tokens/service", () => ({
   listApiTokens: mocks.listApiTokens,
   createApiToken: mocks.createApiToken,
   revokeApiToken: mocks.revokeApiToken,
   updateApiTokenScopes: mocks.updateApiTokenScopes,
   requireApiToken: mocks.requireApiToken,
 }))
-vi.mock('@/features/integrations/api-tokens/scope-catalog', () => ({ apiTokenScopeCatalog: mocks.apiTokenScopeCatalog }))
-vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@/features/integrations/api-tokens/scope-catalog", () => ({ apiTokenScopeCatalog: mocks.apiTokenScopeCatalog }))
+vi.mock("@/lib/logger", () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { GET as listGET } from '@/app/api/integrations/route'
-import { GET as detailGET, PATCH } from '@/app/api/integrations/[id]/route'
-import { POST as testPOST } from '@/app/api/integrations/[id]/test/route'
-import { GET as logsGET } from '@/app/api/integrations/[id]/logs/route'
-import { GET as tokensGET, POST as tokensPOST } from '@/app/api/integrations/internal_api/tokens/route'
-import { DELETE as tokenDELETE, PATCH as tokenPATCH } from '@/app/api/integrations/internal_api/tokens/[tokenId]/route'
-import { GET as scopesGET } from '@/app/api/integrations/internal_api/scopes/route'
-import { GET as whoamiGET } from '@/app/api/v1/whoami/route'
-import { IntegrationUpdateError } from '@/features/integrations/services/integration-service'
-import { DomainError } from '@/lib/api/route'
+import { GET as listGET } from "@/app/api/integrations/route"
+import { GET as detailGET, PATCH } from "@/app/api/integrations/[id]/route"
+import { POST as testPOST } from "@/app/api/integrations/[id]/test/route"
+import { GET as logsGET } from "@/app/api/integrations/[id]/logs/route"
+import { GET as tokensGET, POST as tokensPOST } from "@/app/api/integrations/internal_api/tokens/route"
+import { DELETE as tokenDELETE, PATCH as tokenPATCH } from "@/app/api/integrations/internal_api/tokens/[tokenId]/route"
+import { GET as scopesGET } from "@/app/api/integrations/internal_api/scopes/route"
+import { GET as whoamiGET } from "@/app/api/v1/whoami/route"
+import { IntegrationUpdateError } from "@/lib/integrations/server"
+import { DomainError } from "@/lib/api/route"
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 

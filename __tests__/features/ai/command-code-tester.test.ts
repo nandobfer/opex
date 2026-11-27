@@ -9,23 +9,23 @@ const mocks = vi.hoisted(() => ({
   pool: [] as { id: string; name: string; apiKey: string }[],
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@/lib/integrations/runtime", () => ({
   getIntegration: vi.fn(async () => ({ values: mocks.values })),
   isIntegrationConfigured: vi.fn(() => true),
 }))
-vi.mock('@/lib/ai/catalog', () => ({ clearAiCatalogCache: vi.fn(), listAiAgents: vi.fn(), listAiModels: mocks.models }))
-vi.mock('@/lib/ai/opencode', () => ({ getOpencodeInfo: vi.fn() }))
-vi.mock('@/lib/ai/opencode-go', () => ({ verifyOpencodeGoKey: vi.fn() }))
-vi.mock('@/lib/ai/command-code', () => ({ verifyCommandCodeKey: mocks.verify }))
-vi.mock('@/lib/ai/api-keys', () => ({ getAiProviderKeyPool: async () => mocks.pool }))
-vi.mock('@/lib/ai/gemini', () => ({ listGeminiModels: vi.fn() }))
-vi.mock('@/lib/ai/anthropic', () => ({ listAnthropicModels: vi.fn() }))
-vi.mock('@/lib/ai/openai', () => ({ listOpenaiModels: vi.fn() }))
-vi.mock('@/lib/ai/deepseek', () => ({ listDeepseekModels: vi.fn() }))
-vi.mock('@/lib/ai/jev', () => ({ listJevModels: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ clearAiCatalogCache: vi.fn(), listAiAgents: vi.fn(), listAiModels: mocks.models }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode', () => ({ getOpencodeInfo: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ verifyOpencodeGoKey: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/command-code', () => ({ verifyCommandCodeKey: mocks.verify }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/api-keys', () => ({ getAiProviderKeyPool: async () => mocks.pool }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/gemini', () => ({ listGeminiModels: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/anthropic', () => ({ listAnthropicModels: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/openai', () => ({ listOpenaiModels: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/deepseek', () => ({ listDeepseekModels: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/jev', () => ({ listJevModels: vi.fn() }))
 
-import { AiProviderError } from '@/lib/ai/errors'
-import { testCommandCode } from '@/features/ai/server/testers'
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { testCommandCode } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/server/testers"
 
 const run = () => testCommandCode({ emit: vi.fn(), signal: new AbortController().signal })
 

@@ -1,7 +1,7 @@
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { HOST_METRICS_JOB_ID } from "@/lib/integrations/catalog"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { intervalMs } from "@/lib/integrations/schedule"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { HOST_METRICS_JOB_ID } from "@/features/integrations/registry/jobs"
+import { integrationDebug } from "@/lib/integrations/server"
+import { intervalMs } from "@nandobfer/integracoes"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import {

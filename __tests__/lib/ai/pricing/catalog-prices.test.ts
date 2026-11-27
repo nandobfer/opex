@@ -1,8 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { commandCodePrice } from '@/lib/ai/pricing/command-code'
-import { listCostOf, reportedListCost } from '@/lib/ai/pricing/compute'
-import { modelsDevPrice, parseModelsDevCatalog } from '@/lib/ai/pricing/models-dev'
-import { tokensFromUsage } from '@/lib/ai/pricing/usage'
+import { commandCodePrice } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/command-code"
+import { listCostOf, reportedListCost } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/compute"
+import { modelsDevPrice, parseModelsDevCatalog } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/models-dev"
+import { tokensFromUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
 
 /** OPE-203: preço por catálogo (models.dev, Command Code), cálculo do custo de tabela e os tokens da SDK `ai` v7. */
 

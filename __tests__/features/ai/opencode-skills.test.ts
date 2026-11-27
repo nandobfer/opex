@@ -3,11 +3,11 @@ import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn() }))
 
-vi.mock('@/lib/ai/catalog', () => ({ listAiSkills: mocks.list }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ listAiSkills: mocks.list }))
 
-import { AiProviderError } from '@/lib/ai/errors'
-import { toOpencodeSkill } from '@/lib/ai/opencode-skills'
-import { GET } from '@/app/api/ai/skills/route'
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { toOpencodeSkill } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills"
+import { GET } from "@/app/api/ai/skills/route"
 
 const call = (query = '') => GET(new NextRequest(`http://localhost/api/ai/skills${query}`), { params: Promise.resolve({}) })
 

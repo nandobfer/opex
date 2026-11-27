@@ -39,7 +39,7 @@ vi.mock('@/features/routine-agents/components/chat/RoutineChatColumn', () => ({
   RoutineChatColumn: () => <aside data-testid="routine-chat" />,
 }))
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(), usePathname: () => '/' }))
 vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
   useRoutineAgent: () => ({ data: mocks.loaded, isLoading: false }),

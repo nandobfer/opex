@@ -26,7 +26,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock([], mocks.setFavorite))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock([], mocks.setFavorite))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
 vi.mock('@/features/ai/hooks/useAi', () => ({
   useAiProviderStatuses: () => ({ providers: mocks.providers, isLoading: false }),

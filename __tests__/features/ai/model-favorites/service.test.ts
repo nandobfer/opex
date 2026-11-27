@@ -1,17 +1,17 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { memoryModel } from '../../../helpers/memory-model'
+import type { memoryModel } from "../../../helpers/memory-model"
 
 const store = vi.hoisted(() => ({ model: null as unknown, publish: vi.fn(), audit: vi.fn() }))
 
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: store.audit, AcaoAuditoria: { CRIAR: 'CRIAR', EXCLUIR: 'EXCLUIR' } }))
-vi.mock('@/lib/db/models/AiModelFavorite', async () => {
-  const { memoryModel: make } = await import('../../../helpers/memory-model')
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(), recordAudit: store.audit, AcaoAuditoria: { CRIAR: 'CRIAR', EXCLUIR: 'EXCLUIR' } }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiModelFavorite', async () => {
+  const { memoryModel: make } = await import("../../../helpers/memory-model")
   store.model = make()
   return { AiModelFavorite: store.model }
 })
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: store.publish }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: store.publish }))
 
-import { addModelFavorite, listModelFavorites, removeModelFavorite } from '@/features/ai/model-favorites/server/service'
+import { addModelFavorite, listModelFavorites, removeModelFavorite } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-favorites/server/service"
 
 const model = () => store.model as ReturnType<typeof memoryModel>
 

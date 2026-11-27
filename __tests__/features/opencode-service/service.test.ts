@@ -23,8 +23,8 @@ vi.mock("@/features/opencode-service/server/ssh", async (importActual) => ({
     runSsh: mocks.runSsh,
     probeHostFingerprint: mocks.probe,
 }))
-vi.mock("@/lib/ai/opencode", () => ({ getOpencodeConnection: vi.fn(async () => ({ baseUrl: "http://h:5050", headers: {} })) }))
-vi.mock("@/lib/ai/opencode-client", () => ({ getOpencodeClient: vi.fn(async () => ({ server: { info: mocks.serverInfo } })) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode", () => ({ getOpencodeConnection: vi.fn(async () => ({ baseUrl: "http://h:5050", headers: {} })) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client", () => ({ getOpencodeClient: vi.fn(async () => ({ server: { info: mocks.serverInfo } })) }))
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: "ATUALIZAR", EXECUTAR: "EXECUTAR" } }))
 vi.mock("@/lib/db/models/OpencodeServiceOperation", () => ({
     OpencodeServiceOperation: {
@@ -39,7 +39,7 @@ vi.mock("@/lib/db/models/OpencodeServiceOperation", () => ({
 vi.mock("@/lib/db/models/Agentic", () => ({ AgenticWorkbench: { countDocuments: vi.fn(async () => 2) } }))
 vi.mock("@/lib/db/models/Refinement", () => ({ TaskRefinement: { countDocuments: vi.fn(async () => 1) } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
-vi.mock("@/features/integrations/services/integration-service", () => ({ updateIntegration: mocks.updateIntegration }))
+vi.mock("@/lib/integrations/server", () => ({ updateIntegration: mocks.updateIntegration }))
 vi.mock("@/features/opencode-resources/server/versions", () => ({ fetchNpmPackage: mocks.fetchNpm }))
 vi.mock("@/features/local-docker/server/shell", () => ({ createHostRunner: () => mocks.hostRun }))
 vi.mock("@/features/opencode-resources/server/host", () => ({ opencodeDebug: {} }))

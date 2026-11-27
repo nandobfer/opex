@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), connect: vi.fn(), stored: vi.fn() }))
-vi.mock("@/lib/integrations/store", () => ({ loadStoredIntegration: mocks.stored, invalidateStoredIntegrations: vi.fn() }))
+vi.mock("@/lib/integrations/server", () => ({ loadStoredIntegration: mocks.stored, invalidateStoredIntegrations: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: mocks.aggregate } }))
 
-import { formatJevCost, jevUsageQuerySchema, jevUsageRangeQuery } from "@/features/ai/jev-usage"
-import { getJevUsage } from "@/features/ai/server/jev-usage"
+import { formatJevCost, jevUsageQuerySchema, jevUsageRangeQuery } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/jev-usage"
+import { getJevUsage } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/server/jev-usage"
 
 const feature = (overrides: Record<string, unknown>) => ({
     requests: 0,

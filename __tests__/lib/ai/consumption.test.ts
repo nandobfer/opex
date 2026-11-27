@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ updateOne: vi.fn(), connect: vi.fn(), publish: vi.fn(), warn: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { updateOne: mocks.updateOne } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { updateOne: mocks.updateOne } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: mocks.warn }) }))
 
-import { AI_CONSUMPTION_UPDATED_EVENT, recordAiConsumption } from "@/lib/ai/consumption"
+import { AI_CONSUMPTION_UPDATED_EVENT, recordAiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption"
 
 const input = {
     dedupKey: "session:agentic:w1:m1",

@@ -14,7 +14,7 @@ import { modelFavoritesMock } from '../../helpers/model-favorites'
 const mocks = vi.hoisted(() => ({ save: vi.fn(async (values: unknown) => ({ settings: values })), settings: null as unknown, data: null as unknown }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
 vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   // Dados estáveis entre renders, como o TanStack Query (o efeito do formulário reinicia ao mudar).
   useArchitectSettings: () => {

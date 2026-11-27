@@ -1,8 +1,8 @@
 "use client"
 
 import type { Dispatch, SetStateAction } from "react"
-import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
-import type { Draft } from "@/features/integrations/components/detail/draft"
+import { GeneralCard } from "@nandobfer/integracoes/react"
+import type { Draft } from "@nandobfer/integracoes/react"
 import { ActivationCard } from "../ActivationCard"
 
 /**

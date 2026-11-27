@@ -1,8 +1,8 @@
 import { z } from "zod"
+import { aiProviderIdIn, aiTextProviderIdSchema } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
 import { MIN_MASKABLE_SECRET_LENGTH } from "@/features/http-request/secrets"
-import { OPEX_PROVIDER_IDS } from "@/features/opex-agent/constants"
-import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
-import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
+import { OPEX_PROVIDER_IDS, isOpexProviderId } from "@/features/opex-agent/constants"
+import { addFallbackIssues, fallbackListSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 import { MAX_RUN_REQUEST_CHARS } from "./constants"
 import { CHANNEL_SLUG } from "./provision-plan"
 
@@ -49,16 +49,16 @@ export const EMPTY_ROUTINE_LIMITS: RoutineLimits = { concurrency: null, maxActiv
 /**
  * Decisão D9 do plano aprovado (OPE-130): o motor Opex usa só os provedores do Agente Opex (Gemini,
  * Anthropic, OpenAI, DeepSeek e, desde a OPE-154, OpenCode Go por API e, desde a OPE-190, Command Code) — o OpenCode de sessão não aceita as ferramentas do app e é o próprio motor
- * "OpenCode no host".
+ * "OpenCode no host". Os provedores customizados OpenAI compatible (`custom-<slug>`) também valem.
  */
 export const ROUTINE_OPEX_PROVIDER_IDS = OPEX_PROVIDER_IDS
 export const ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE = "O motor Opex não usa o OpenCode: em Configurar, escolha Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go ou Command Code, ou troque o motor para OpenCode no host."
 /** Provedor gravado que o motor Opex não aceita (agentes salvos antes de D9 com `opencode`). */
 export const isInvalidRoutineOpexProvider = (engine: string, provider: string | null | undefined): boolean =>
-    engine === "opex" && provider !== null && provider !== undefined && !(ROUTINE_OPEX_PROVIDER_IDS as readonly string[]).includes(provider)
+    engine === "opex" && provider !== null && provider !== undefined && !isOpexProviderId(provider)
 
 export const routineOpexEngineSchema = z.object({
-    provider: z.enum(ROUTINE_OPEX_PROVIDER_IDS, { error: "Escolha o provedor" }).nullable(),
+    provider: aiProviderIdIn(ROUTINE_OPEX_PROVIDER_IDS).nullable(),
     model: z.string().trim().max(200),
     variant: z.string().trim().max(80).nullable(),
     enabledTools: z.array(z.string().trim().min(1).max(120)).max(500),
@@ -178,7 +178,7 @@ export const routineActionResolutionSchema = z.object({ note: z.string().trim().
 /** Modelo do subagente de provisionamento (decisão D2 da OPE-130). */
 /** Forma gravada (leitura): aceita o que já estiver salvo, inclusive provedor sem modelo. */
 export const routineAgentSettingsShape = z.object({
-    provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+    provider: aiTextProviderIdSchema.nullable(),
     model: z.string().trim().max(200),
     variant: z.string().trim().max(80).nullable(),
     agent: z.string().trim().max(120).nullable(),

@@ -2,13 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ health: vi.fn(), failure: null as Error | null }))
 // Falha de rede por um lançamento comum: o Vitest 5 registra o erro lançado por um `vi.fn` como falha do teste.
-vi.mock('@/lib/pdf/gotenberg', () => ({ gotenbergHealth: async () => {
+vi.mock("@/lib/pdf/gotenberg", () => ({ gotenbergHealth: async () => {
   if (mocks.failure) throw mocks.failure
   return mocks.health()
 } }))
 
-import { INTEGRATION_TESTERS } from '@/features/integrations/testers/testers'
-import { getIntegrationDef } from '@/lib/integrations/catalog'
+import { INTEGRATION_TESTERS } from "@/lib/integrations/server"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
 
 const context = () => ({ emit: vi.fn(), signal: new AbortController().signal })
 

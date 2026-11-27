@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   clients: [] as Array<Record<string, unknown>>,
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))
+vi.mock('@/lib/integrations/server', () => ({
   integrationDebug: () => ({ step: vi.fn(), error: vi.fn(), request: vi.fn(), success: vi.fn(), response: vi.fn() }),
 }))
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: vi.fn(async () => 'https://assinada') }))

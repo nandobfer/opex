@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import { listOpencodeSkillsAt, SKILL_LIST_MAX_ATTEMPTS, SKILL_LIST_STABLE_READS } from '@/lib/ai/opencode-skill-list'
-import type { OpencodeSkillRaw } from '@/lib/ai/opencode-skills'
+import { listOpencodeSkillsAt, SKILL_LIST_MAX_ATTEMPTS, SKILL_LIST_STABLE_READS } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list"
+import type { OpencodeSkillRaw } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills"
 
 /**
  * Listagem das skills de um diretório do OpenCode (OPE-158): diretório recém-aberto responde primeiro

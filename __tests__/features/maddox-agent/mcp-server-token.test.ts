@@ -30,7 +30,7 @@ const TOOLS = [
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {} }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: mocks.info, warn: mocks.warn }) }))
 vi.mock('@/lib/db/models/Opex', () => ({ OpexSession: { findOne: () => ({ lean: async () => null }) } }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { get: async () => null } }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { get: async () => null } }) }))
 vi.mock('@/features/auth/server/context', () => ({ clientActorFor: vi.fn() }))
 vi.mock('@/features/maddox-agent/server/client-config', () => ({ assertClientMaddoxToolAllowed: vi.fn() }))
 vi.mock('@/features/integrations/api-tokens/service', () => ({

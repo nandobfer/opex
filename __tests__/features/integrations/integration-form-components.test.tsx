@@ -17,18 +17,19 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { SecretField } from "@/features/integrations/components/SecretField"
-import { IntegrationStatusDot } from "@/features/integrations/components/IntegrationBadges"
-import { buildInterval, intervalUnitOf, switchScheduleType } from "@/features/integrations/components/ScheduleEditor"
-import { buildIntegrationPatch } from "@/features/integrations/components/IntegrationDetailPage"
-import { MANAGED_SWAGGER_DESCRIPTION, SwaggerDocsField } from "@/features/integrations/components/SwaggerDocsField"
-import { formatTestEvent } from "@/features/integrations/components/IntegrationTestDialog"
-import { parseNdjsonChunk } from "@/features/integrations/hooks/useIntegrationTestStream"
-import { getIntegrationDef, type PublicFieldDef, type PublicFieldValue } from "@/lib/integrations/catalog"
-import { PublicFieldsCard } from "@/features/integrations/components/detail/PublicFieldsCard"
-import type { PublicDraft } from "@/features/integrations/components/detail/draft"
-import { buildIntegrationUpdateSchema, type SecretAction } from "@/features/integrations/schemas/integration.schema"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
+import { SecretField } from "@nandobfer/integracoes/react"
+import { IntegrationStatusDot } from "@nandobfer/integracoes/react"
+import { buildInterval, intervalUnitOf, switchScheduleType } from "@nandobfer/integracoes/react"
+import { buildIntegrationPatch } from "@nandobfer/integracoes/react"
+import { MANAGED_SWAGGER_DESCRIPTION, SwaggerDocsField } from "@nandobfer/integracoes/react"
+import { formatTestEvent } from "@nandobfer/integracoes/react"
+import { parseNdjsonChunk } from "@nandobfer/integracoes/react"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
+import { type PublicFieldDef, type PublicFieldValue } from "@nandobfer/integracoes"
+import { PublicFieldsCard } from "@nandobfer/integracoes/react"
+import type { PublicDraft } from "@nandobfer/integracoes/react"
+import { buildIntegrationUpdateSchema, type SecretAction } from "@nandobfer/integracoes"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
 
 function SecretHarness({ configured, onAction, multiline }: { configured: boolean; onAction: (a: SecretAction | undefined) => void; multiline?: boolean }) {
     const [action, setAction] = useState<SecretAction | undefined>()

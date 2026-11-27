@@ -20,7 +20,7 @@ const MODELS = [
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
 /** Busca simplificada: o gatilho e um botão por modelo (o popover da busca não interessa aqui). */
-vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models, onPick }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void }) => (
     <div>
       {trigger}

@@ -3,7 +3,7 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { Brain, Cpu } from "lucide-react"
 import { cn } from "@/lib/utils"
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { modelName } from "./model-settings"
 
 interface ModelInUseProps {

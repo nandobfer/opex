@@ -26,7 +26,7 @@ vi.mock('@/features/agentic/hooks/useBuilds', () => ({
     return mocks.stream
   },
 }))
-vi.mock('@/features/integrations/components/IntegrationConsole', () => ({
+vi.mock('@nandobfer/integracoes/react', () => ({
   IntegrationConsole: React.forwardRef(function Console(props: { ariaLabel?: string }, ref: React.Ref<unknown>) {
     React.useImperativeHandle(ref, () => ({ clear: () => mocks.written.splice(0), write: (text: string) => mocks.written.push(text), search: vi.fn(), clearSearch: vi.fn() }))
     return <div role="log" aria-label={props.ariaLabel} />

@@ -2,9 +2,9 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), publish: vi.fn(), detect: vi.fn(), rpc: vi.fn(), shell: vi.fn(), now: vi.fn() }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.config }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: mocks.config }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
+vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/features/host-metrics/server/rpc', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/host-metrics/server/rpc')>()), detectHtopPlugin: vi.fn(), callHtopRpc: vi.fn() }))
 vi.mock('@/features/host-metrics/server/shell', () => ({ readHostMetricsShell: vi.fn() }))

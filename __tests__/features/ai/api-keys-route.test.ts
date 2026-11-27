@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), select: vi.fn(), primary: vi.fn() }))
-vi.mock('@/features/ai/server/api-keys', async (importOriginal) => ({
-  keyRingProvider: (await importOriginal<typeof import('@/features/ai/server/api-keys')>()).keyRingProvider,
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys', async (importOriginal) => ({
+  keyRingProvider: (await importOriginal<typeof import('@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys')>()).keyRingProvider,
   listAiApiKeys: mocks.list,
   createAiApiKey: mocks.create,
   updateAiApiKey: mocks.update,

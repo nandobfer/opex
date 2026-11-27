@@ -4,17 +4,9 @@ import React from "react"
 import { readFileSync } from "node:fs"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { CronJobExtraFields, retentionHelp } from "@/features/integrations/components/CronJobExtraFields"
-import {
-    DEFAULT_CRON_JOBS,
-    HEALTH_CHECK_JOB_ID,
-    MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
-    OPENCODE_SESSIONS_CLEANUP_JOB_ID,
-    OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
-    SESSION_CLEANUP_JOB_IDS,
-    TASK_TAGS_CONCLUDED_JOB_ID,
-    type CronJobConfig,
-} from "@/lib/integrations/catalog"
+import { CronJobExtraFields, retentionHelp } from "@nandobfer/integracoes/react"
+import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@nandobfer/integracoes"
 
 /** Campos próprios das rotinas internas no card da aba Rotinas: "Dias sem interação" das limpezas de sessões (OPE-106). */
 

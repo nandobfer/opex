@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegration, getIntegrationConfig } from "@/lib/integrations/config"
+import { getIntegration, getIntegrationConfig } from "@/lib/integrations/runtime"
 import {
     AI_SOURCE_SECTIONS,
     OPEX_KEY_INTEGRATION,

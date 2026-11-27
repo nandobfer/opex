@@ -13,18 +13,18 @@ const mocks = vi.hoisted(() => ({
   docs: new Map<string, Record<string, unknown>>(),
 }))
 
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => undefined) }))
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: vi.fn(), info: vi.fn() }) }))
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: vi.fn(async () => undefined) }))
-vi.mock('@/lib/ai/api-keys', () => ({ getAiProviderKeyById: vi.fn() }))
-vi.mock('@/lib/integrations/store', () => ({ loadStoredIntegration: vi.fn() }))
-vi.mock('@/features/opencode-quota/server/go-api', () => ({ fetchGoStatus: async (apiKey: string) => mocks.status.get(apiKey), fetchGoCostByDay: mocks.costByDay }))
-vi.mock('@/features/command-code-usage/server/api', () => ({
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
+vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: vi.fn(), info: vi.fn() }) }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: vi.fn(async () => undefined) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/api-keys', () => ({ getAiProviderKeyById: vi.fn() }))
+vi.mock("@/lib/integrations/server", () => ({ loadStoredIntegration: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/server/go-api', () => ({ fetchGoStatus: async (apiKey: string) => mocks.status.get(apiKey), fetchGoCostByDay: mocks.costByDay }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/server/api', () => ({
   fetchCcWhoami: async (apiKey: string) => mocks.whoami.get(apiKey),
   fetchCcSubscription: async () => ({ currentPeriodStart: '2026-11-20T00:00:00.000Z' }),
 }))
-vi.mock('@/features/command-code-usage/server/series', () => ({ loadCcDays: mocks.ccDays }))
-vi.mock('@/lib/db/models/AiSubscriptionDay', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/command-code-usage/server/series', () => ({ loadCcDays: mocks.ccDays }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiSubscriptionDay', () => ({
   AiSubscriptionDay: {
     bulkWrite: async (ops: { updateOne: { filter: { provider: string; account: string; date: string }; update: { $set: Record<string, unknown> } } }[]) => {
       let upserted = 0
@@ -41,7 +41,7 @@ vi.mock('@/lib/db/models/AiSubscriptionDay', () => ({
   },
 }))
 
-import { readCommandCodeSubscriptionDays, readGoSubscriptionDays, saveSubscriptionDays } from '@/features/ai-billing/server/subscription-days'
+import { readCommandCodeSubscriptionDays, readGoSubscriptionDays, saveSubscriptionDays } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/subscription-days"
 
 const meter = (limit: number, used: number) => ({ limitMicroCents: limit, usedMicroCents: used, resetsAt: null })
 const goStatus = (used: number, startsAt = '2026-11-05T00:00:00Z') => ({ product: 'go', access: { startsAt, endsAt: '2026-12-05T00:00:00Z', meters: { fiveHour: meter(1, used), week: meter(2, used), month: meter(3, used) } } })

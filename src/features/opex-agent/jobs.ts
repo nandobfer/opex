@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { zonedWallTimeToDate } from "@/lib/integrations/schedule"
+import { zonedWallTimeToDate } from "@nandobfer/integracoes"
 import { OPEX_MESSAGE_MAX } from "./constants"
 
 /**

@@ -24,7 +24,7 @@ import {
     dashboardContentRect,
     useMaximizedFrame,
 } from "@/hooks/useMaximizedFrame"
-import { isSearchEscape } from "@/features/integrations/components/DebugSearchBar"
+import { isSearchEscape } from "@nandobfer/integracoes/react"
 
 type RectLike = { top: number; left: number; width: number; height: number }
 const rectOf = (r: RectLike) => ({ ...r, right: r.left + r.width, bottom: r.top + r.height, x: r.left, y: r.top, toJSON: () => r }) as DOMRect
@@ -179,7 +179,7 @@ describe("isSearchEscape", () => {
 
 describe("DebugSearchBar — Esc com texto não propaga", () => {
     it("limpa a busca sem deixar o Esc chegar a quem está acima", async () => {
-        const { DebugSearchBar } = await import("@/features/integrations/components/DebugSearchBar")
+        const { DebugSearchBar } = await import("@nandobfer/integracoes/react")
         const parentEsc = vi.fn()
         const onClear = vi.fn()
         render(

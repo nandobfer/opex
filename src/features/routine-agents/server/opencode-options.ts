@@ -13,8 +13,8 @@ export const isBrowserMcp = (name: string) => BROWSER.test(name)
 
 export async function routineOpencodeOptions(): Promise<RoutineOpencodeOptionsDto> {
     try {
-        const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
-        const { getOpencodeConnection } = await import("@/lib/ai/opencode")
+        const { getOpencodeClient } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client")
+        const { getOpencodeConnection } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode")
         const connection = await getOpencodeConnection()
         const client = await getOpencodeClient(connection)
         const result = await client.mcp.list(connection.directory ? { location: { directory: connection.directory } } : {})

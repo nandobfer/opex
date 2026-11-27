@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), refresh: vi.fn() }))
 
-vi.mock('@/features/opencode-quota/server/go-usage', () => ({ getOpencodeGoUsage: mocks.get, refreshOpencodeGoUsage: mocks.refresh }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/server/go-usage', () => ({ getOpencodeGoUsage: mocks.get, refreshOpencodeGoUsage: mocks.refresh }))
 
 import { GET } from '@/app/api/opencode/quota/go/route'
 import { POST } from '@/app/api/opencode/quota/go/refresh/route'

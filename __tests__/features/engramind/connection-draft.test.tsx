@@ -12,17 +12,17 @@ import { describe, expect, it, vi } from 'vitest'
  */
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/api', async (original) => ({
+vi.mock("@/lib/api", async (original) => ({
   ...(await original<object>()),
   api: { put: vi.fn(async () => ({ data: { success: true, data: { connection: {}, steps: [] } } })), post: vi.fn(async () => ({ data: { success: true, data: { connection: {}, steps: [] } } })), get: vi.fn() },
 }))
 
-import { getIntegrationDef } from '@/lib/integrations/catalog'
-import { buildIntegrationPatch, draftFrom } from '@/features/integrations/components/detail/draft'
-import { buildIntegrationUpdateSchema } from '@/features/integrations/schemas/integration.schema'
-import { integrationDetailKey, integrationsListKey } from '@/features/integrations/hooks/useIntegrations'
-import { useRunEngramindBootstrap, useSaveEngramindConnection } from '@/features/engramind/hooks/useEngramindConnection'
-import type { IntegrationDetailDto } from '@/features/integrations/types'
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
+import { buildIntegrationPatch, draftFrom } from "@nandobfer/integracoes/react"
+import { buildIntegrationUpdateSchema } from "@nandobfer/integracoes"
+import { integrationDetailKey, integrationsListKey } from "@nandobfer/integracoes/react"
+import { useRunEngramindBootstrap, useSaveEngramindConnection } from "@/features/engramind/hooks/useEngramindConnection"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
 
 const detail = (debugMode: boolean) => ({ id: 'engramind', environment: 'externo', debugMode, swaggerUrl: null, swaggerUrlManaged: false, publicValues: {}, secrets: {} }) as unknown as IntegrationDetailDto
 

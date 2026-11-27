@@ -7,8 +7,8 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { OPENCODE_QUOTA_QUERY_KEY, OPENCODE_QUOTA_UPDATED_EVENT } from "../constants"
-import type { OpencodeQuotaDto } from "../types"
+import { OPENCODE_QUOTA_QUERY_KEY, OPENCODE_QUOTA_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/constants"
+import type { OpencodeQuotaDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 
 /** Quota do OpenCode: atualizada pelo evento em tempo real da rotina, não por polling. */
 export const useOpencodeQuota = () =>

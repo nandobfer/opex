@@ -1,6 +1,6 @@
 "use client"
 
-import { formatMoneyPair } from "@/features/ai-billing/money"
+import { formatMoneyPair } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import type { RoutineRunDetailDto } from "../../types"
 
 /**

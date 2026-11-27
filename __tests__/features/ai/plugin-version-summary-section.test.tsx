@@ -15,7 +15,7 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
   useSavePluginVersionSummarySettings: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useAiProviderStatuses: () => ({ providers: [] }),
 }))
-vi.mock('@/features/ai/components/shared/ProviderModelCard', () => ({ ProviderModelCard: () => null }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard', () => ({ ProviderModelCard: () => null }))
 
 import { PluginVersionSummarySection } from '@/features/ai/components/plugin-version-summary/PluginVersionSummarySection'
 

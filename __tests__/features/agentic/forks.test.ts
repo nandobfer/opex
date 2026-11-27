@@ -51,7 +51,7 @@ vi.mock('@/lib/logger', () => {
   return { logger: log, loggerFor: () => log }
 })
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => mocks.client) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => mocks.client) }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn, steerAgentTurn: mocks.steer }))
 vi.mock('@/lib/db/models/Agentic', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')

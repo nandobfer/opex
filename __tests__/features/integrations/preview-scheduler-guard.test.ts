@@ -9,12 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const logs = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: logs }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { updateOne: vi.fn(), findOneAndUpdate: vi.fn() } }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async () => ({ schedulerEnabled: true, jobs: [] })), getInternalBaseUrl: async () => 'http://127.0.0.1:3100' }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ CronJobState: { updateOne: vi.fn(), findOneAndUpdate: vi.fn() } }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: vi.fn(async () => ({ schedulerEnabled: true, jobs: [] })), getInternalBaseUrl: async () => 'http://127.0.0.1:3100' }))
 
 async function start() {
   vi.resetModules()
-  const { startCronScheduler } = await import('@/features/integrations/scheduler/cron-scheduler')
+  const { startCronScheduler } = await import('@/lib/integrations/scheduler')
   startCronScheduler()
 }
 

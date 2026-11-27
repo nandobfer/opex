@@ -13,16 +13,16 @@ vi.mock("@/features/ai/hooks/useAi", () => ({
     useAiModels: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
     useAiAgents: () => ({ data: [], isError: false }),
 }))
-vi.mock("@/features/ai/components/ModelFields", () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields", () => ({
     ModelPickerField: ({ placeholder }: { placeholder: string }) => <p data-testid="model-picker">{placeholder}</p>,
     VariantSelectField: () => null,
 }))
-vi.mock("@/features/ai/components/model-picker/FallbackModelsField", () => ({ FallbackModelsField: () => null }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField", () => ({ FallbackModelsField: () => null }))
 
 import { SecretaryModelCard, type SecretaryModelPrefix } from "@/features/secretary-agent/components/SecretaryModelCard"
 import { DecisionModelCard } from "@/features/secretary-agent/components/criteria/DecisionModelCard"
 import { DEFAULT_SECRETARY_SETTINGS, type SecretarySettings } from "@/features/secretary-agent/schemas"
-import type { AiProviderStatusDto } from "@/lib/ai/providers"
+import type { AiProviderStatusDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 const providers: AiProviderStatusDto[] = [
     { id: "opencode-go", integrationId: "ai_opencode_go", name: "OpenCode Go", configured: true, connected: true },

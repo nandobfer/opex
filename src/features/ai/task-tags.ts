@@ -2,7 +2,7 @@ import { createHash } from "crypto"
 import { z } from "zod"
 import { TASK_TYPE_LABELS, type TaskType } from "@/features/tasks/constants"
 import { filterKnownTags, type TaskTagDef } from "@/features/tasks/tags"
-import type { JevAnswer, JevQuestion } from "@/lib/ai/jev"
+import type { JevAnswer, JevQuestion } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
 import type { TaskTagsSettings } from "./schemas"
 
 /**

@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   related: vi.fn<(event: unknown) => Promise<boolean>>(async () => true),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => mocks.config }))
 vi.mock('@/features/engramind/server/models', () => ({
   engramindDb: async () => {},
   EngramindWebhookEvent: {

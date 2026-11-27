@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegration } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getIntegration } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
 import { mmToInches, pageSizeInches, type PdfFormat, type PdfOrientation } from "./pages"
 
 /**

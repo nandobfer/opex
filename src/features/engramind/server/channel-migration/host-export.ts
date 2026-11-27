@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
 import type { HostRunner } from "@/features/local-docker/server/shell"
 import { DIGEST_MARKER, parseDigestOutput, type ExportDigest } from "../../channel-migration/plan"
 import { ENGRAMIND_INTEGRATION_ID } from "../../constants"

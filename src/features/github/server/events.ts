@@ -1,4 +1,4 @@
-import { integrationDebugChannel } from "@/lib/integrations/catalog"
+import { integrationDebugChannel } from "@nandobfer/integracoes"
 import { appChannel, publishToChannels } from "@/lib/pusher/channels"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import { GITHUB_UPDATED_EVENT, type GithubUpdateScope } from "../constants"

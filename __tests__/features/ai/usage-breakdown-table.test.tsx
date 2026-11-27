@@ -6,7 +6,7 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 
 vi.mock("framer-motion", () => framerMotionMock())
 
-import { UsageBreakdownTable } from "@/features/ai/components/UsageBreakdownTable"
+import { UsageBreakdownTable } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/UsageBreakdownTable"
 
 const rows = [
     { key: "task-tags", label: "Tags de tarefas", requests: 2, inputTokens: 1200, outputTokens: null, totalTokens: 1350, costUsd: 0.0000042 },

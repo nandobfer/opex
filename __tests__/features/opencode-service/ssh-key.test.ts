@@ -15,8 +15,8 @@ vi.mock("ssh2", async () => {
         }),
     }
 })
-vi.mock("@/lib/integrations/config", () => ({ getIntegrationConfig: vi.fn() }))
-vi.mock("@/lib/integrations/debug", () => ({ integrationDebug: () => ({ request: vi.fn(), response: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock("@/lib/integrations/runtime", () => ({ getIntegrationConfig: vi.fn() }))
+vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => ({ request: vi.fn(), response: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import { runSsh, type SshSettings } from "@/features/opencode-service/server/ssh"
 

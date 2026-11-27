@@ -19,9 +19,9 @@ vi.mock("@/lib/db/models/Ai", () => ({
         updateOne: mocks.updateOne,
     },
 }))
-vi.mock("@/lib/ai/catalog", () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models, listAiAgents: mocks.agents, listAiSkills: mocks.skills }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/catalog", () => ({ getAiProviderStatuses: mocks.statuses, listAiModels: mocks.models, listAiAgents: mocks.agents, listAiSkills: mocks.skills }))
 // A conexão é confirmada na hora (OPE-91); aqui ela segue o status gravado do mock.
-vi.mock("@/lib/ai/connection", () => ({ confirmAiProviderConnection: mocks.confirm }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/connection", () => ({ confirmAiProviderConnection: mocks.confirm }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/lib/after-response", () => ({ runAfterResponse: vi.fn() }))
 

@@ -1,13 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect: vi.fn(), stored: vi.fn() }))
-vi.mock("@/lib/integrations/store", () => ({ loadStoredIntegration: mocks.stored, invalidateStoredIntegrations: vi.fn() }))
+vi.mock("@/lib/integrations/server", () => ({ loadStoredIntegration: mocks.stored, invalidateStoredIntegrations: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
 
-import { formatTokensCompact, isUsageProviderId, usageProviderReportsCost, usageQuerySchema, usageRangeQuery, withUsageKey } from "@/features/ai/provider-usage"
-import { resolveUsageKey, usageKeyMatch, usageKeyOptions } from "@/features/ai/usage-key-filter"
-import { getProviderUsage } from "@/features/ai/server/provider-usage"
+import { formatTokensCompact, isUsageProviderId, usageProviderReportsCost, usageQuerySchema, usageRangeQuery, withUsageKey } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/provider-usage"
+import { resolveUsageKey, usageKeyMatch, usageKeyOptions } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/usage-key-filter"
+import { getProviderUsage } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/server/provider-usage"
 
 const chain = (doc: { createdAt: Date } | null) => ({
     sort: () => ({ select: () => ({ lean: async () => doc }) }),

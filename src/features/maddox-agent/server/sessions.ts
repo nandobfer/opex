@@ -2,7 +2,7 @@ import { clientOpexScope, OWNER_SCOPE, withAgent, type OpexServerScope } from "@
 import { createSession, loadSession, publishSessionUpdated, toSessionDto, updateSession } from "@/features/opex-agent/server/sessions"
 import type { OpexMessageDto, OpexSessionDto } from "@/features/opex-agent/types"
 import type { ClientActor } from "@/features/auth/server/context"
-import { listAiModels } from "@/lib/ai/catalog"
+import { listAiModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/catalog"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { OpexSession, type IOpexSession } from "@/lib/db/models/Opex"

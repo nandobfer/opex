@@ -7,13 +7,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * interrompe a execução e termina como falha do modelo (`limited`) — elegível ao fallback.
  */
 
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
-vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
+vi.mock("@/features/agentic/server/hub", () => ({ publishWorkbenchEvent: vi.fn() }))
 
-import { runAgentTurn, type TurnEvent } from '@/lib/ai/opencode-run'
-import { DEFAULT_PROVIDER_LIMIT_POLICY } from '@/lib/ai/opencode-events'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
-import { runAgentTurn as runWorkbenchTurn } from '@/features/agentic/server/runner'
+import { runAgentTurn, type TurnEvent } from "@/lib/ai/opencode-run"
+import { DEFAULT_PROVIDER_LIMIT_POLICY } from "@/lib/ai/opencode-events"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { runAgentTurn as runWorkbenchTurn } from "@/features/agentic/server/runner"
 
 const ev = (type: string, data: Record<string, unknown> = {}) => ({ type, data: { sessionID: 's1', ...data } })
 const HOURS = 60 * 60_000

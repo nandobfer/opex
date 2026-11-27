@@ -7,10 +7,10 @@ import { FORM_GRID } from "@/components/ui/form-grid"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { apiErrorMessage } from "@/lib/api"
-import type { AiAgentDto, AiModelDto } from "@/lib/ai/providers"
+import type { AiAgentDto, AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { AgentConfig } from "../../schemas"
-import { FallbackModelsField, describeFallbacks } from "@/features/ai/components/model-picker/FallbackModelsField"
-import { ModelVariantFields } from "@/features/ai/components/model-picker/ModelVariantFields"
+import { FallbackModelsField, describeFallbacks } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField"
+import { ModelVariantFields } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelVariantFields"
 
 const DEFAULT_OPTION = "__default__"
 const EMPTY: AgentConfig = { agent: null, model: null, variant: null }

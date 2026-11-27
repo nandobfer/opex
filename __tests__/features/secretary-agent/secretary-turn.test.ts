@@ -34,7 +34,7 @@ vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mock
 
 vi.mock("node:timers/promises", () => ({ setTimeout: vi.fn(async () => undefined) }))
 vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ total: mocks.spent }] } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ total: mocks.spent }] } }))
 vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: async () => ({ block: "" }) }))
 vi.mock("@/features/ai/server/self-memory/settings", () => ({ selfMemoryEnabled: async () => true }))
 vi.mock("@/features/ai/server/self-memory/tools", () => ({ selfMemoryTools: () => mocks.memoryTools }))

@@ -2,16 +2,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ active: vi.fn(), byId: vi.fn(), pool: vi.fn(), allowances: vi.fn(), publish: vi.fn(), fetch: vi.fn() }))
 
-vi.mock('@/lib/ai/api-keys', () => ({ getPrimaryAiProviderKey: mocks.active, getAiProviderKeyById: mocks.byId, getAiProviderKeyPool: mocks.pool }))
-vi.mock('@/lib/ai/opencode-go', () => ({ opencodeGoAllowances: mocks.allowances }))
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/api-keys', () => ({ getPrimaryAiProviderKey: mocks.active, getAiProviderKeyById: mocks.byId, getAiProviderKeyPool: mocks.pool }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ opencodeGoAllowances: mocks.allowances }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
+vi.mock("@/lib/integrations/server", () => ({
   integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn(), response: vi.fn() }),
   debugFetch: (_debug: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
 }))
 
-import { getOpencodeGoUsage, refreshOpencodeGoUsage, resetGoUsageCacheForTests, runOpencodeGoUsageRefresh } from '@/features/opencode-quota/server/go-usage'
-import { resetGoSeriesCacheForTests } from '@/features/opencode-quota/server/go-series'
+import { getOpencodeGoUsage, refreshOpencodeGoUsage, resetGoUsageCacheForTests, runOpencodeGoUsageRefresh } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/server/go-usage"
+import { resetGoSeriesCacheForTests } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/server/go-series"
 
 const NOW = Date.parse('2026-11-16T19:57:00.000Z')
 const KEY = { id: 'key_aaaaaaaaaaaaaaaaaa', name: 'Chave principal', apiKey: 'oc_sk_secret' }

@@ -7,7 +7,7 @@ const holder = vi.hoisted(() => ({ jobs: null as unknown as FakeCollection }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
 vi.mock('@/lib/instance', () => ({ INSTANCE_ID: 'inst-1' }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
-vi.mock('@/lib/db/models/CronJobState', () => ({
+vi.mock('@nandobfer/integracoes/mongoose', () => ({
   get CronJobState() {
     return {
       ...holder.jobs,

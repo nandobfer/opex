@@ -3,20 +3,20 @@
 import React from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationListItemDto } from "@/features/integrations/types"
+import type { IntegrationListItemDto } from "@nandobfer/integracoes"
 
 const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn(), testDialog: vi.fn(), debugDialog: vi.fn() }))
 
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
+vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrationStatusLive: vi.fn() }))
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
-vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrations: mocks.useIntegrations }))
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationTestDialog: (props: { integrationId: string | null }) => {
         mocks.testDialog(props.integrationId)
         return null
     },
 }))
-vi.mock("@/features/integrations/components/IntegrationDebugDialog", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationDebugDialog: (props: { integrationId: string | null }) => {
         mocks.debugDialog(props.integrationId)
         return null
@@ -35,7 +35,7 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { IntegrationList } from "@/features/integrations/components/IntegrationList"
+import { IntegrationList } from "@nandobfer/integracoes/react"
 
 const item = (overrides: Partial<IntegrationListItemDto>): IntegrationListItemDto => ({
     id: "pusher",

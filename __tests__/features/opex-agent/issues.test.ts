@@ -19,7 +19,7 @@ vi.mock('@/features/github/client', async (original) => ({
   githubPaginate: mocks.githubPaginate,
   githubBaseUrl: async () => 'https://api.github.com',
 }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ token: 'tok', apiUrl: 'https://api.github.com' }) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ token: 'tok', apiUrl: 'https://api.github.com' }) }))
 vi.mock('@/features/agentic/server/centrals', () => ({ listCentrals: async () => [{ projectName: 'CRM', repo: 'Sipal/CRM', config: { git: { baseBranch: 'dev', prTargetBranch: 'main' } } }] }))
 vi.mock('@/features/tasks/server/service', async (original) => ({ ...(await original<object>()), listTasks: mocks.listTasks, getTask: mocks.getTask }))
 vi.mock('@/features/tasks/server/columns', () => ({ getBoard: async () => ({ columns: [], layout: [] }) }))

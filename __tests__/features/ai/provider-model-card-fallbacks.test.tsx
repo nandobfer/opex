@@ -4,7 +4,7 @@ import React from 'react'
 import { useForm } from 'react-hook-form'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from '../../helpers/framer-motion'
+import { framerMotionMock } from "../../helpers/framer-motion"
 
 /**
  * Card "Provedor e modelo" com os modelos de fallback (OPE-181): com `fallbacksName` e o OpenCode, a
@@ -14,10 +14,10 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const models = { data: [{ id: 'anthropic/claude', name: 'Claude', variants: [], group: 'Anthropic' }, { id: 'deepseek/flash', name: 'Flash', variants: [], group: 'DeepSeek' }], isLoading: false, isError: false, error: null }
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => models, useAiAgents: () => ({ data: [], isError: false, error: null }) }))
-vi.mock('@/features/ai/components/ModelFields', () => ({ ModelPickerField: () => <div>modelo principal</div>, VariantSelectField: () => null }))
+vi.mock("@/features/ai/hooks/useAi", () => ({ useAiModels: () => models, useAiAgents: () => ({ data: [], isError: false, error: null }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields', () => ({ ModelPickerField: () => <div>modelo principal</div>, VariantSelectField: () => null }))
 // Busca de modelos simplificada: o gatilho + um botão por modelo.
-vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models: list, onPick }: { trigger: React.ReactElement; models: { data?: { id: string; name: string }[] }; onPick: (model: { id: string }) => void }) => (
     <div>
       {trigger}
@@ -30,7 +30,7 @@ vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ),
 }))
 
-import { ProviderModelCard } from '@/features/ai/components/shared/ProviderModelCard'
+import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
 
 type Values = { provider: 'opencode' | 'gemini' | null; model: string | null; agent: string | null; variant: string | null; fallbacks: { model: string; variant: string | null }[] }
 

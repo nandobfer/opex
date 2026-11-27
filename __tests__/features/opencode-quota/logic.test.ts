@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { formatResetIn, hasMultipleAccounts, keepLastGoodWindows, isQuotaStale, normalizeQuotaSnapshot, quotaErrorMessage, quotaHash, quotaLevel, rowValueText, snapshotCheckedAt, summaryLabel, summaryWindows, usedPercent, visibleQuotaLevel, visibleQuotaWindows } from '@/features/opencode-quota/logic'
-import type { OpencodeQuotaDto, QuotaProviderDto, QuotaWindowDto } from '@/features/opencode-quota/types'
-import { quotaSnapshotSchema } from '@/features/opencode-quota/schemas'
+import { formatResetIn, hasMultipleAccounts, keepLastGoodWindows, isQuotaStale, normalizeQuotaSnapshot, quotaErrorMessage, quotaHash, quotaLevel, rowValueText, snapshotCheckedAt, summaryLabel, summaryWindows, usedPercent, visibleQuotaLevel, visibleQuotaWindows } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/logic"
+import type { OpencodeQuotaDto, QuotaProviderDto, QuotaWindowDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
+import { quotaSnapshotSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/schemas"
 
 const CHECKED = new Date('2026-10-28T12:00:00Z')
 const OK_AT = Date.parse('2026-10-28T11:58:00Z')

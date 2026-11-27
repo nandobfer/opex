@@ -1,17 +1,17 @@
 /** @vitest-environment happy-dom */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from '../../helpers/framer-motion'
-import { apiKeyDto } from '../../helpers/ai-api-keys'
+import { framerMotionMock } from "../../helpers/framer-motion"
+import { apiKeyDto } from "../../helpers/ai-api-keys"
 
 /** OPE-203: diálogo do plano de cobrança da chave — modalidades, validação pelo schema da API e envio. */
 
 const mocks = vi.hoisted(() => ({ save: vi.fn(async (...args: unknown[]) => args) }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiApiKeys', () => ({ useUpdateAiKeyBilling: () => ({ mutateAsync: mocks.save, isPending: false }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys', () => ({ useUpdateAiKeyBilling: () => ({ mutateAsync: mocks.save, isPending: false }) }))
 
-import { ApiKeyBillingDialog, billingDefaults } from '@/features/ai/components/api-keys/ApiKeyBillingDialog'
+import { ApiKeyBillingDialog, billingDefaults } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/api-keys/ApiKeyBillingDialog"
 
 beforeEach(() => mocks.save.mockClear())
 afterEach(cleanup)

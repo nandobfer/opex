@@ -6,21 +6,21 @@ const mocks = vi.hoisted(() => ({
   checkBucket: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@/lib/integrations/runtime", () => ({
   getIntegrationConfig: mocks.getIntegrationConfig,
   getInternalBaseUrl: vi.fn(async () => 'http://127.0.0.1:3100'),
 }))
-vi.mock('@/lib/email/mailer', () => ({ verifyConnection: mocks.verifyConnection }))
-vi.mock('@/lib/storage/s3', () => ({ checkBucket: mocks.checkBucket }))
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
-vi.mock('@/lib/db/models/ApiToken', () => ({ ApiToken: { countDocuments: vi.fn() } }))
-vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: { countDocuments: vi.fn() } }))
-vi.mock('@/lib/pusher/server', () => ({ getRawPusherServer: vi.fn() }))
-vi.mock('@/features/ai/server/testers', () => ({ testAiHub: vi.fn(), testAnthropic: vi.fn(), testDeepseek: vi.fn(), testGemini: vi.fn(), testJev: vi.fn(), testOpenai: vi.fn(), testOpencode: vi.fn(), testOpencodeGo: vi.fn(), testCommandCode: vi.fn() }))
+vi.mock("@/lib/email/mailer", () => ({ verifyConnection: mocks.verifyConnection }))
+vi.mock("@/lib/storage/s3", () => ({ checkBucket: mocks.checkBucket }))
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ ApiToken: { countDocuments: vi.fn() } }))
+vi.mock("@/lib/db/models/Orcamento", () => ({ OrcamentoClient: { countDocuments: vi.fn() } }))
+vi.mock("@/lib/pusher/server", () => ({ getRawPusherServer: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/server/testers', () => ({ testAiHub: vi.fn(), testAnthropic: vi.fn(), testDeepseek: vi.fn(), testGemini: vi.fn(), testJev: vi.fn(), testOpenai: vi.fn(), testOpencode: vi.fn(), testOpencodeGo: vi.fn(), testCommandCode: vi.fn() }))
 
-import type { IntegrationId } from '@/lib/integrations/catalog'
-import { INTEGRATION_TESTERS } from '@/features/integrations/testers/testers'
+import type { IntegrationId } from "@/features/integrations/registry/definitions"
+import { INTEGRATION_TESTERS } from "@/lib/integrations/server"
 
 function run(id: IntegrationId, config: Record<string, unknown>) {
   mocks.getIntegrationConfig.mockResolvedValue(config)

@@ -21,7 +21,7 @@ const lean = (value: unknown) => ({ select: () => ({ lean: async () => value }),
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
 vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-derivado-de-teste') }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Dono' }) }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100/' }) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100/' }) }))
 vi.mock('@/lib/db/models/Agentic', () => ({
   AgenticWorkbench: { findOne: (query: { sessionId: string }) => lean(mocks.workbench && mocks.workbench.sessionId === query.sessionId ? mocks.workbench : null) },
   AgenticFork: { findOne: () => lean(null) },
@@ -29,7 +29,7 @@ vi.mock('@/lib/db/models/Agentic', () => ({
 vi.mock('@/features/adversarial-agent/server/models', () => ({ AdversarialReview: { findOne: (query: { sessionId: string }) => lean(mocks.review && mocks.review.sessionId === query.sessionId ? mocks.review : null) } }))
 vi.mock('@/features/architect-agent/server/models', () => ({ ArchitectDiagram: { findOne: (query: { sessionId: string }) => lean(mocks.diagram && mocks.diagram.sessionId === query.sessionId ? mocks.diagram : null) } }))
 vi.mock('@/lib/db/models/Opex', () => ({ OpexSession: { findOne: () => lean(null) } }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { get: async ({ sessionID }: { sessionID: string }) => ({ parentID: mocks.parents[sessionID] ?? null }) } }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { get: async ({ sessionID }: { sessionID: string }) => ({ parentID: mocks.parents[sessionID] ?? null }) } }) }))
 vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled: async () => mocks.enabled }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ createAgentMemory: mocks.create, updateAgentMemory: vi.fn(), deleteAgentMemory: mocks.remove, listAgentMemories: vi.fn(async () => []) }))
 vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: { confirmationOverrides: mocks.overrides, disabledTools: mocks.disabled } }) }))

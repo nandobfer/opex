@@ -3,16 +3,16 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from '../../helpers/framer-motion'
+import { framerMotionMock } from "../../helpers/framer-motion"
 
 const fav = vi.hoisted(() => ({ favorites: [] as { provider: string; model: string }[], setFavorite: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => ({
   useAiModelFavorites: () => ({ favorites: fav.favorites, setFavorite: fav.setFavorite, isFavorite: () => false }),
 }))
 
-import { ModelOption, ModelPickerField, VariantSelectField } from '@/features/ai/components/ModelFields'
+import { ModelOption, ModelPickerField, VariantSelectField } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields"
 
 /** Campos compartilhados de modelo/variante (abas de IA, Agente Opex e Agente Mentor). */
 

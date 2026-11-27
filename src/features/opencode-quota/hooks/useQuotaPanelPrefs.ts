@@ -1,8 +1,8 @@
 "use client"
 
 import { usePersistentState } from "@/hooks/usePersistentState"
-import { OPENCODE_QUOTA_PANEL_KEY } from "../constants"
-import { quotaPanelPrefsSchema, type QuotaPanelPrefs } from "../schemas"
+import { OPENCODE_QUOTA_PANEL_KEY } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/constants"
+import { quotaPanelPrefsSchema, type QuotaPanelPrefs } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/schemas"
 
 export const DEFAULT_QUOTA_PANEL_PREFS: QuotaPanelPrefs = { collapsed: false, collapsedProviders: [] }
 

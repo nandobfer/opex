@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { aiProviderIdIn } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
 import { OPEX_PROVIDER_IDS } from "@/features/opex-agent/constants"
 import { csvList, isoDate, pageQuery } from "@/lib/list/query"
 import { SECRETARY_DECISIONS, SECRETARY_DEFAULTS, SECRETARY_MODES } from "./constants"
@@ -9,7 +10,7 @@ import { needsPrice, priceKey } from "./cost"
  * de inferência por API que aceitam ferramentas (`OPEX_PROVIDER_IDS`), nunca o OpenCode de sessão.
  */
 
-const providerSchema = z.enum(OPEX_PROVIDER_IDS).nullable()
+const providerSchema = aiProviderIdIn(OPEX_PROVIDER_IDS).nullable()
 const nullableText = z.string().trim().nullable()
 
 export const mainModelSchema = z.object({

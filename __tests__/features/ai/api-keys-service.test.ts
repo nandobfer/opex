@@ -52,13 +52,13 @@ function matches(doc: Doc | undefined, filter: Record<string, unknown>): boolean
   return true
 }
 
-vi.mock('@/lib/db', () => ({
+vi.mock("@/lib/db", () => ({
   dbConnect: vi.fn(),
   recordAudit: mocks.audit,
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' },
   createAuditContext: (userId: string) => ({ userId }),
 }))
-vi.mock('@/lib/db/models/Integration', () => {
+vi.mock('@nandobfer/integracoes/mongoose', () => {
   function Integration(this: Record<string, unknown>, data: Doc) {
     Object.assign(this, data)
     this.set = vi.fn()
@@ -78,20 +78,20 @@ vi.mock('@/lib/db/models/Integration', () => {
   })
   return { Integration }
 })
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
-vi.mock('@/lib/integrations/store', () => ({ invalidateStoredIntegrations: mocks.invalidate, loadStoredIntegration: vi.fn() }))
-vi.mock('@/lib/ai/catalog', () => ({ clearAiCatalogCache: mocks.clearCatalog }))
-vi.mock('@/lib/ai/connection', () => ({ resetAiConnectionProbes: mocks.resetProbes }))
-vi.mock('@/lib/ai/opencode-go', () => ({ clearOpencodeGoCatalogCache: mocks.clearGoCatalog }))
-vi.mock('@/lib/ai/command-code', () => ({ clearCommandCodeCatalogCache: mocks.clearCcCatalog }))
-vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.test }))
-vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.sync }))
-vi.mock('@/features/ai-billing/server/key-notices', () => ({ keyBillingNotices: async (_provider: string, items: { id: string }[]) => new Map(items.map((item) => [item.id, ['aviso do plano']])) }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
+vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
+vi.mock("@/lib/integrations/server", () => ({ invalidateStoredIntegrations: mocks.invalidate, loadStoredIntegration: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ clearAiCatalogCache: mocks.clearCatalog }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/connection', () => ({ resetAiConnectionProbes: mocks.resetProbes }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ clearOpencodeGoCatalogCache: mocks.clearGoCatalog }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/command-code', () => ({ clearCommandCodeCatalogCache: mocks.clearCcCatalog }))
+vi.mock("@/lib/integrations/server", () => ({ runIntegrationTest: mocks.test }))
+vi.mock("@/features/engramind/server/ai-source", () => ({ syncEngramindProviderKey: mocks.sync }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/key-notices', () => ({ keyBillingNotices: async (_provider: string, items: { id: string }[]) => new Map(items.map((item) => [item.id, ['aviso do plano']])) }))
 
-import { DomainError } from '@/lib/api/route'
-import { decryptSecret, type EncryptedSecret } from '@/lib/crypto/secretBox'
-import { createAiApiKey, keyRingProvider, listAiApiKeys, makePrimaryAiApiKey, removeAiApiKey, setAiApiKeySelected, updateAiApiKey, updateAiKeyBilling } from '@/features/ai/server/api-keys'
+import { DomainError } from "@/lib/api/route"
+import { decryptSecret, type EncryptedSecret } from "@/lib/crypto/secretBox"
+import { createAiApiKey, keyRingProvider, listAiApiKeys, makePrimaryAiApiKey, removeAiApiKey, setAiApiKeySelected, updateAiApiKey, updateAiKeyBilling } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys"
 
 const saved = process.env.INTEGRATIONS_ENCRYPTION_KEY
 const actor = 'local'

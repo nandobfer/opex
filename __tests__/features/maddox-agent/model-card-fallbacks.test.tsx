@@ -16,7 +16,7 @@ const models = { data: [{ id: 'anthropic/claude', name: 'Claude', variants: [], 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => models }))
 // Seletor do modelo principal simplificado: um botão por modelo.
-vi.mock('@/features/ai/components/ModelFields', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields', () => ({
   ModelPickerField: ({ id, onPick }: { id: string; onPick: (model: { id: string }) => void }) => (
     <div>
       {models.data.map((model) => (
@@ -28,7 +28,7 @@ vi.mock('@/features/ai/components/ModelFields', () => ({
   ),
   VariantSelectField: () => null,
 }))
-vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger }: { trigger: React.ReactElement }) => <div>{trigger}</div>,
 }))
 

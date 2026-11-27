@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn() }))
-vi.mock("@/features/ai/server/jev-usage", () => ({ getJevUsage: mocks.usage }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/server/jev-usage", () => ({ getJevUsage: mocks.usage }))
 
 import { GET } from "@/app/api/ai/providers/jev/usage/route"
 const call = (query = "") => GET(new NextRequest(`http://localhost/api/ai/providers/jev/usage${query}`), { params: Promise.resolve({}) })

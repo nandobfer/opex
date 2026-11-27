@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), add: vi.fn(), remove: vi.fn() }))
 
-vi.mock('@/features/ai/model-favorites/server/service', () => ({ listModelFavorites: mocks.list, addModelFavorite: mocks.add, removeModelFavorite: mocks.remove }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/model-favorites/server/service', () => ({ listModelFavorites: mocks.list, addModelFavorite: mocks.add, removeModelFavorite: mocks.remove }))
 
 import { DELETE, GET, POST } from '@/app/api/ai/model-favorites/route'
 

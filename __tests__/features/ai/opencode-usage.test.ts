@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
 
-import { aiConsumptionOriginLabel, formatUsd, opencodeUsageQuerySchema, opencodeUsageRangeQuery } from "@/features/ai/opencode-usage"
-import { getOpencodeUsage } from "@/features/ai/server/opencode-usage"
+import { aiConsumptionOriginLabel, formatUsd, opencodeUsageQuerySchema, opencodeUsageRangeQuery } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/opencode-usage"
+import { getOpencodeUsage } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/server/opencode-usage"
 
 const chain = (doc: { createdAt: Date } | null) => ({
     sort: () => ({ select: () => ({ lean: async () => doc }) }),

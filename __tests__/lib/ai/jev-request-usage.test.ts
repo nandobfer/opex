@@ -2,8 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), fetch: vi.fn(), create: vi.fn(), connect: vi.fn(), audit: vi.fn(), publish: vi.fn(), warn: vi.fn() }))
 // A chave vem do chaveiro (OPE-155): `null` = sem chave ativa. O rodízio (OPE-179) é coberto em key-failover.test.
-vi.mock("@/lib/ai/api-keys", async () => {
-    const { AiProviderError } = await import("@/lib/ai/errors")
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/api-keys", async () => {
+    const { AiProviderError } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/errors")
     class AiKeysExhaustedError extends AiProviderError {
         constructor(message: string, readonly lastKeyId: string) {
             super(message)
@@ -23,14 +23,14 @@ vi.mock("@/lib/ai/api-keys", async () => {
         },
     }
 })
-vi.mock("@/lib/integrations/debug", () => ({ integrationDebug: () => ({}), debugFetch: mocks.fetch }))
+vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => ({}), debugFetch: mocks.fetch }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
 vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { create: mocks.create } }))
 vi.mock("@/lib/audit/record", () => ({ recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: "CRIAR" } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: mocks.warn }) }))
 
-import { askJevSystemOne, listJevModels } from "@/lib/ai/jev"
+import { askJevSystemOne, listJevModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
 
 const input = { model: "jev-latest", tracking: { feature: "task-tags", subject: "task-1" }, state: "conteúdo privado", questions: { tag: { type: "noul" as const, instructions: "É uma tag?" } } }
 const response = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status })

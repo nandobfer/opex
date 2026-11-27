@@ -1,6 +1,6 @@
 import { dbConnect } from "@/lib/db"
 import { AgentMetricTracking, AgentRun, AgentUsageDay } from "@/lib/db/models/AgentMetrics"
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
+import { AiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption"
 import { COUNTED_RUN } from "./exclusions"
 import { AuditLog } from "@/lib/db/models/AuditLog"
 import { DevTask } from "@/lib/db/models/DevTask"

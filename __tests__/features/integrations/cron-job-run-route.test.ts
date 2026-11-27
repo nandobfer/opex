@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/db', () => ({ recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR' } }))
-vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({
+vi.mock('@/lib/integrations/scheduler', () => ({
   runJobNow: mocks.runJobNow,
   CronJobRunError: mocks.CronJobRunError,
 }))
-vi.mock('@/features/integrations/services/integration-service', () => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))
+vi.mock('@/lib/integrations/server', () => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))
 vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { POST } from '@/app/api/integrations/[id]/jobs/[jobId]/run/route'

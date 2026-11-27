@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { addStepCost, createOpencodeGoCostScanner, findOpencodeGoCost, opencodeSessionStepCost, type AiStepCost } from '@/lib/ai/provider-cost'
+import { addStepCost, createOpencodeGoCostScanner, findOpencodeGoCost, opencodeSessionStepCost, type AiStepCost } from "@nandobfer/integracoes/modules/integrations/ia/ai/provider-cost"
 
 /** OPE-154: custo efetivo do OpenCode Go = `cost` (Extra Usage, em dinheiro) + `opencode.allowance` (cota). */
 

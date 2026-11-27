@@ -10,7 +10,8 @@
 export async function register() {
     if (process.env.NEXT_RUNTIME !== "nodejs") return
 
-    const { startCronScheduler } = await import("@/features/integrations/scheduler/cron-scheduler")
+    // Central de integrações (`@nandobfer/integracoes`): o runtime do Opex é configurado no import.
+    const { startCronScheduler } = await import("@/lib/integrations/scheduler")
     startCronScheduler()
 
     // Kernel de plugins (OPE-172): sobe sem bloquear o boot. Ver aicontext/modules/plugins.md.

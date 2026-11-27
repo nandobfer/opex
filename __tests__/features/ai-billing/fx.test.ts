@@ -11,12 +11,12 @@ const mocks = vi.hoisted(() => ({
   publish: vi.fn(async () => undefined),
 }))
 
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => undefined) }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async () => ({ baseUrl: 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata' })) }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({}), debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init) }))
-vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ warn: vi.fn(), info: vi.fn() }) }))
-vi.mock('@/lib/db/models/FxRateDaily', () => {
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
+vi.mock("@/lib/integrations/runtime", () => ({ getIntegrationConfig: vi.fn(async () => ({ baseUrl: 'https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata' })) }))
+vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => ({}), debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init) }))
+vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
+vi.mock("@/lib/logger", () => ({ loggerFor: () => ({ warn: vi.fn(), info: vi.fn() }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/FxRateDaily', () => {
   const query = (filter: { date: { $gte: string; $lte: string } }) => {
     const docs = [...mocks.rows.values()].filter((row) => row.date >= filter.date.$gte && row.date <= filter.date.$lte).sort((a, b) => a.date.localeCompare(b.date))
     const chain = { sort: () => chain, select: () => chain, lean: async () => docs }
@@ -34,8 +34,8 @@ vi.mock('@/lib/db/models/FxRateDaily', () => {
   }
 })
 
-import { fillCalendarRates, parsePtaxPeriod, ptaxPeriodUrl } from '@/lib/fx/ptax-parse'
-import { fillFxRates, loadFxRates, runFxPtaxRoutine } from '@/features/ai-billing/server/fx'
+import { fillCalendarRates, parsePtaxPeriod, ptaxPeriodUrl } from "@nandobfer/integracoes/modules/integrations/ia/ai/ptax-parse"
+import { fillFxRates, loadFxRates, runFxPtaxRoutine } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/fx"
 
 // Resposta real da API Olinda (23 a 26/11/2026; 21 e 22/11 são sábado e domingo).
 const OLINDA = {

@@ -1,8 +1,8 @@
 import type { Types } from "mongoose"
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
-import type { ListCost } from "@/lib/ai/pricing/types"
-import type { AiBilling } from "@/lib/ai/provider-cost"
-import { stepEffectiveCost, sumStepCosts, type CostStepInput, type CostTotals, type StepCost } from "@/features/ai-billing/effective"
+import { AiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption"
+import type { ListCost } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/types"
+import type { AiBilling } from "@nandobfer/integracoes/modules/integrations/ia/ai/provider-cost"
+import { stepEffectiveCost, sumStepCosts, type CostStepInput, type CostTotals, type StepCost } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/effective"
 import { ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
 import type { RoutineCostBreakdownRow, RoutineCostDto } from "../types"
 import { routineLog } from "./shared"
@@ -49,7 +49,7 @@ const needsEstimate = (row: ConsumptionRow) => !row.listCost || (row.listCost.us
 async function estimateMissing(rows: ConsumptionRow[]): Promise<void> {
     const pending = rows.filter(needsEstimate)
     if (!pending.length) return
-    const { createStepPricer } = await import("@/lib/ai/pricing/server")
+    const { createStepPricer } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server")
     const groups = new Map<string, ConsumptionRow[]>()
     for (const row of pending) groups.set(`${row.provider}\u0000${row.model}`, [...(groups.get(`${row.provider}\u0000${row.model}`) ?? []), row])
     for (const group of groups.values()) {
@@ -98,7 +98,7 @@ export async function computeRunCosts(runIds: readonly string[]): Promise<RunCos
     if (!inScope.length) return empty
     await estimateMissing(inScope)
     const inputs = inScope.map(toStepInput)
-    const { buildBillingLookup } = await import("@/features/ai-billing/server/billing-context")
+    const { buildBillingLookup } = await import("@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/billing-context")
     const lookup = await buildBillingLookup(inputs)
     const steps: RunStepCost[] = inScope.map((row, index) => ({ runId: row.subject!, provider: row.provider, model: row.model, cost: stepEffectiveCost(inputs[index]!, lookup) }))
     const grouped = new Map<string, StepCost[]>()

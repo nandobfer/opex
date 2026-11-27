@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({
   loggerError: vi.fn(),
 }))
 
-vi.mock('@/lib/db/models/CronJobState', () => ({
+vi.mock('@nandobfer/integracoes/mongoose', () => ({
   CronJobState: {
     aggregate: mocks.jobAggregate,
     deleteMany: mocks.jobDeleteMany,
@@ -22,15 +22,15 @@ vi.mock('@/lib/db/models/CronJobState', () => ({
     createIndexes: mocks.jobCreateIndexes,
   },
 }))
-vi.mock('@/lib/db/models/IntegrationStatus', () => ({
+vi.mock('@nandobfer/integracoes/mongoose', () => ({
   IntegrationStatus: {
     aggregate: mocks.statusAggregate,
     deleteMany: mocks.statusDeleteMany,
     createIndexes: mocks.statusCreateIndexes,
   },
 }))
-vi.mock('@/lib/db/models/IntegrationLog', () => ({ IntegrationLog: { createIndexes: mocks.logCreateIndexes } }))
-vi.mock('@/lib/db/models/Integration', () => ({
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationLog: { createIndexes: mocks.logCreateIndexes } }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({
   Integration: { findOne: () => ({ lean: mocks.configFindOne }), createIndexes: mocks.configCreateIndexes },
 }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: mocks.loggerError, info: vi.fn() } }))

@@ -6,20 +6,20 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ refresh: vi.fn(), startTest: vi.fn(), testState: "idle" as string }))
 
-vi.mock("@/features/integrations/hooks/useIntegrationDebugLogs", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     useIntegrationDebugLogs: () => ({ mode: "realtime", loading: false, error: null, refresh: mocks.refresh }),
 }))
-vi.mock("@/features/integrations/hooks/useIntegrationTestStream", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     useIntegrationTestStream: () => ({ state: mocks.testState, start: mocks.startTest, cancel: vi.fn() }),
 }))
-vi.mock("@/features/integrations/components/IntegrationConsole", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     SEARCH_HIGHLIGHT_LIMIT: 1000,
     IntegrationConsole: React.forwardRef(function Console() {
         return <div data-testid="console" />
     }),
 }))
 
-import { IntegrationDebugDialog } from "@/features/integrations/components/IntegrationDebugDialog"
+import { IntegrationDebugDialog } from "@nandobfer/integracoes/react"
 
 beforeEach(() => {
     vi.clearAllMocks()

@@ -6,20 +6,20 @@ const mocks = vi.hoisted(() => ({
   configured: vi.fn(async () => true),
 }))
 
-vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => undefined) }))
-vi.mock('@/lib/db/models/IntegrationStatus', () => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))
+vi.mock("@/lib/integrations/server", () => ({
   integrationDebug: () => new Proxy({}, { get: () => vi.fn() }),
 }))
-vi.mock('@/lib/pusher/server', () => ({
+vi.mock("@/lib/pusher/server", () => ({
   isPusherServerConfigured: mocks.configured,
   getRawPusherServer: vi.fn(async () => ({ trigger: mocks.trigger })),
 }))
-vi.mock('@/features/integrations/testers/testers', () => ({ INTEGRATION_TESTERS: {} }))
-vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@/lib/integrations/server", () => ({ INTEGRATION_TESTERS: {} }))
+vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { runIntegrationTest } from '@/features/integrations/services/integration-test-runner'
-import { RUNNING_STALE_MS, toHealth } from '@/features/integrations/services/integration-service'
+import { runIntegrationTest } from "@/lib/integrations/server"
+import { RUNNING_STALE_MS, toHealth } from "@/lib/integrations/server"
 
 beforeEach(() => {
   vi.clearAllMocks()

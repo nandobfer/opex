@@ -4,15 +4,15 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OpencodeGoUsageDto } from '@/features/opencode-quota/go-types'
+import type { OpencodeGoUsageDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/go-types"
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 
-vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+vi.mock('framer-motion', async () => (await import("../../helpers/framer-motion")).framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
-vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: mocks.post } }))
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api: { get: mocks.get, post: mocks.post } }))
 
-import { OpencodeGoSubscriptionCard } from '@/features/opencode-quota/components/go/OpencodeGoSubscriptionCard'
+import { OpencodeGoSubscriptionCard } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/components/go/OpencodeGoSubscriptionCard"
 
 const ok = (data: unknown) => ({ data: { success: true, data } })
 const query = { from: '2026-11-06T03:00:00.000Z', to: '2026-11-17T02:59:59.999Z' }

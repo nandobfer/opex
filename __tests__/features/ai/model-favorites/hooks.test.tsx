@@ -15,15 +15,15 @@ const mocks = vi.hoisted(() => ({
   unbind: vi.fn(),
   toastError: vi.fn(),
 }))
-vi.mock('@/lib/api', () => ({
+vi.mock("@/lib/api", () => ({
   api: { get: mocks.get, post: mocks.post, delete: mocks.del },
   unwrapApi: (response: { data: unknown }) => response.data,
   apiErrorMessage: (_error: unknown, fallback: string) => fallback,
 }))
-vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: mocks.available, acquireChannel: mocks.acquire, releaseChannel: mocks.release }))
+vi.mock("@/lib/pusher/client", () => ({ isPusherClientAvailable: mocks.available, acquireChannel: mocks.acquire, releaseChannel: mocks.release }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
 
-import { useAiModelFavorites } from '@/features/ai/hooks/useAiModelFavorites'
+import { useAiModelFavorites } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites"
 
 const LIST = { favorites: [{ provider: 'gemini', model: 'flash' }] }
 
