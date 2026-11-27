@@ -48,6 +48,37 @@ describe('routineInstructions — estáveis entre execuções (OPE-204)', () => 
   })
 })
 
+describe('consulta às memórias por índice (OPE-209)', () => {
+  it('motor Opex: índice primeiro, consulta por chave, listagem como exceção, índice atualizado e leituras juntas', () => {
+    const text = routineInstructions(instructionInput)
+    expect(text).toContain('leia primeiro a memória de chave `indice` (list_my_memories com `chave: "indice"`')
+    expect(text).toContain('busque cada item por `chave`')
+    expect(text).toContain('Listar os títulos do canal inteiro (formato "titulos", seguindo o cursor) é exceção')
+    expect(text).toContain('Acrescente ao `indice` o que encontrar assim')
+    expect(text).toContain('crie-o uma única vez com as chaves que já existem')
+    expect(text).toContain('Se não couber numa memória (até 20 mil caracteres), mantenha o `indice` como mapa curto e divida em índices por tema (`indice-<tema>`), citados nele.')
+    expect(text).toContain('acrescente-a ao `indice` do mesmo canal nesta execução, editando com update_memory')
+    expect(text).toContain('saem juntas, no mesmo passo')
+    expect(text).toContain('Se as instruções do dono acima definirem outro jeito de consultar as memórias, elas valem.')
+  })
+
+  it('a orientação antiga (listar o canal inteiro antes de trabalhar) não aparece', () => {
+    for (const engine of ['opex', 'opencode'] as const) {
+      const text = routineInstructions({ ...instructionInput, engine, toolPrefix: engine === 'opencode' ? 'rotina_ab12_' : '' })
+      expect(text).not.toContain('ANTES de trabalhar')
+      expect(text).not.toContain('para consultar tudo de um canal')
+    }
+  })
+
+  it('motor OpenCode: as ferramentas de memória saem com o prefixo, sem nome cru', () => {
+    const text = routineInstructions({ ...instructionInput, engine: 'opencode', toolPrefix: 'rotina_ab12_', http: null })
+    expect(text).toContain('rotina_ab12_list_my_memories com `chave: "indice"`')
+    expect(text).toContain('com rotina_ab12_remember e `chave: "indice"`')
+    expect(text).toContain('editando com rotina_ab12_update_memory')
+    for (const name of ['list_my_memories', 'remember', 'update_memory']) expect(text).not.toMatch(new RegExp(`(?<!rotina_ab12_)\\b${name}\\b`))
+  })
+})
+
 describe('activationMessage — data e hora da ativação (OPE-204)', () => {
   it('disparo: a data e a hora (horário de Brasília) vêm logo depois do cabeçalho', () => {
     const now = new Date('2026-11-05T12:00:00Z')

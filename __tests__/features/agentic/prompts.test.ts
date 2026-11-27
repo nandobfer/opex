@@ -141,6 +141,13 @@ describe('mensagens das etapas', () => {
     expect(text).not.toContain('Commit para a prévia')
   })
 
+  it('backup não proíbe o banco do Opex quando ele é o banco do projeto', () => {
+    const text = previewPreparePrompt(config, ctx, { method: 'github', backup })
+    expect(text).not.toContain('não o do Opex')
+    expect(text).toContain('Se esse banco for o mesmo do Opex')
+    expect(text).toContain('faça o dump dele normalmente')
+  })
+
   it('preparo no GitHub Action sem backup (OPE-72): só o commit, sem dump nem push', () => {
     const text = previewPreparePrompt(config, ctx, { method: 'github', backup: null })
     expect(text).not.toContain('mongodump')

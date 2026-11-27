@@ -298,7 +298,8 @@ export function remotePreviewCommands(ctx: WorkbenchContext, remote: { attempt: 
 function backupSteps(backup: PreviewBackupPaths): string[] {
     return [
         "## Backup do MongoDB",
-        "- Faça um dump do banco MongoDB do PRÓPRIO PROJETO (não o do Opex). Descubra o banco pela configuração do projeto (compose/.env do repositório); NUNCA imprima nem registre a URI ou credenciais.",
+        "- Faça um dump do banco MongoDB que o projeto usa, indicado pela configuração do repositório (compose/.env). NUNCA imprima nem registre a URI ou credenciais.",
+        "- Se esse banco for o mesmo do Opex (por exemplo, quando o projeto é o próprio Opex), faça o dump dele normalmente: é o banco que a prévia usa. Não peça confirmação por isso.",
         `- Se o arquivo ${shellQuote(backup.path)} já existir e não estiver vazio, REUTILIZE-O — é o backup da primeira publicação desta mesa; NÃO sobrescreva.`,
         `- Senão, crie a pasta e gere o dump SÓ desse banco, como arquivo único:
 \`\`\`sh
