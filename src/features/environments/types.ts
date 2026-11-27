@@ -1,5 +1,5 @@
 import type { ResourceLimits } from "./resource-limits"
-import type { BuilderAction, EnvironmentLimits, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
+import type { BuilderAction, ComposeOverrides, EnvironmentLimits, ServiceValues, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 export type DeployStatus = "running" | "success" | "failed"
 export type DeployKind = "deploy" | "move" | "delete"
@@ -85,6 +85,10 @@ export interface EnvironmentDto {
     limitsConfigured: boolean
     /** Limites do último deploy com sucesso (`null` = nenhum deploy desde a OPE-193). */
     deployedLimits: EnvironmentLimits | null
+    /** Ajustes dos serviços do compose salvos (OPE-211; valem no próximo deploy; `null` = nunca configurado). */
+    composeOverrides: ComposeOverrides | null
+    /** Ajustes do último deploy com sucesso (`null` = nenhum deploy desde a OPE-211 ou sem ajustes). */
+    deployedComposeOverrides: ComposeOverrides | null
     /** Onde está no ar (último deploy com sucesso); `null` = nunca implantado. */
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     /** Versão do código do último deploy com sucesso. */
@@ -121,7 +125,7 @@ export interface EnvironmentsListDto {
 
 /** "Ler compose" do formulário: os serviços e os limites declarados no compose (sem o override do app). */
 export interface ComposeServicesDto {
-    services: { name: string; hasBuild: boolean; declared: ResourceLimitsDto }[]
+    services: { name: string; hasBuild: boolean; declared: ResourceLimitsDto; values: ServiceValues }[]
 }
 
 export interface HostCapacityDto {

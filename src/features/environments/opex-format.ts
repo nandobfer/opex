@@ -4,6 +4,7 @@ import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource
 import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
 import { composeNotDeployed } from "./managed-compose"
+import { composeOverridesPendingDeploy, composeOverridesText } from "./service-overrides"
 import { DEPLOY_KIND_LABELS, formatDuration, groupByMachine, healthOf, HEALTH_LABELS, placementLabel, versionLabel } from "./view"
 
 /** Formatação das respostas das ferramentas do Agente Opex para os ambientes (módulo puro). */
@@ -72,6 +73,8 @@ export function environmentRow(env: EnvironmentDto) {
         ...(composeNotDeployed(env) ? { composeNaoImplantado: true } : {}),
         build: placementLabel(env.deployedOn?.buildOn ?? env.buildOn, env.deployedOn?.runOn ?? env.runOn),
         limites: appliedLimitsText(env.services),
+        ...(composeOverridesText(env.deployedComposeOverrides) ? { ajustesImplantados: composeOverridesText(env.deployedComposeOverrides) } : {}),
+        ...(composeOverridesPendingDeploy(env) ? { ajustesNaoImplantados: true } : {}),
         ultimoDeploy: env.lastDeploy ? deployView(env.lastDeploy) : null,
     }
 }
@@ -100,6 +103,8 @@ export function environmentDetailView(env: EnvironmentDto) {
         variaveis: env.envKeys,
         urlSaude: env.healthUrl,
         limites: { salvos: environmentLimitsText(env.limits), configuracao: env.limits, aplicados: appliedLimitsText(env.services), diferem: limitsPendingDeploy(env) },
+        // Ajustes dos serviços do compose (OPE-211): texto simples, por decisão do dono.
+        ajustesDosServicos: { salvos: composeOverridesText(env.composeOverrides) || "sem ajustes", configuracao: env.composeOverrides, implantados: composeOverridesText(env.deployedComposeOverrides) || "sem ajustes", diferem: composeOverridesPendingDeploy(env) },
         servicos: env.services.map((service) => ({
             servico: service.service,
             container: service.container,
@@ -134,6 +139,8 @@ export interface EnvironmentPatch {
     runOn?: EnvironmentInput["runOn"]
     /** Substitui os limites salvos. */
     limits?: EnvironmentInput["limits"]
+    /** Substitui os ajustes dos serviços salvos (OPE-211). */
+    composeOverrides?: EnvironmentInput["composeOverrides"]
 }
 
 /** Valores do ambiente salvo com os campos enviados por cima (variáveis com valor vazio = mantém). */
@@ -148,6 +155,7 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
         buildOn: patch.buildOn ?? current.buildOn,
         runOn: patch.runOn ?? current.runOn,
         limits: patch.limits ?? current.limits,
+        composeOverrides: patch.composeOverrides === undefined ? current.composeOverrides : patch.composeOverrides,
     }
 }
 

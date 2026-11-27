@@ -1,5 +1,5 @@
 import { builderDeployEnsureCommand } from "./builder-commands"
-import { buildCommand, cancelPorts, cancelReverseRegistry, ensureRegistryCommand, forwardPorts, healthCommand, pullCommand, pushCommand, reverseRegistry, upCommand, type ComposePlan, type DockerTarget } from "./commands"
+import { buildCommand, cancelPorts, cancelReverseRegistry, ensureRegistryCommand, forwardPorts, healthCommand, pullCommand, pullServicesCommand, pushCommand, reverseRegistry, upCommand, type ComposePlan, type DockerTarget } from "./commands"
 import { HEALTH_TIMEOUT_MS } from "./constants"
 import type { EnvironmentsSettings, Machine } from "./schemas"
 
@@ -28,6 +28,8 @@ export interface DeployPlanInput {
     healthUrl: string | null
     /** Imagens do commit já prontas na máquina do build (build reaproveitado). */
     skipBuild?: boolean
+    /** Serviços com imagem própria (OPE-211): na mesma máquina, `pull` antes de subir (busca a tag nova). */
+    pullServices?: string[]
 }
 
 const BUILD_TIMEOUT = 45 * 60_000
@@ -61,6 +63,7 @@ export function deploySteps(input: DeployPlanInput): DeployStep[] {
     }
     if (buildOn !== runOn) steps.push({ label: `Pull no ${runOn === "pc" ? "PC" : "servidor"}`, command: pullCommand(plan, run), timeoutMs: STEP_TIMEOUT })
     if (cross && buildOn === "server") steps.push({ label: "Fecha o repasse do registry", command: cancelReverseRegistry(settings), timeoutMs: 30_000, always: true })
+    if (buildOn === runOn && input.pullServices?.length) steps.push({ label: "Pull das imagens prontas", command: pullServicesCommand(plan, run, input.pullServices), timeoutMs: STEP_TIMEOUT })
     steps.push({ label: `Sobe no ${runOn === "pc" ? "PC" : "servidor"}`, command: upCommand(plan, run, false), timeoutMs: STEP_TIMEOUT })
     if (runOn === "pc" && input.ports.length) steps.push({ label: "Repasse das portas para o servidor", command: forwardPorts(input.ports), timeoutMs: 30_000 })
     if (input.healthUrl) steps.push({ label: "Saúde", command: healthCommand(input.healthUrl, HEALTH_TIMEOUT_MS), timeoutMs: HEALTH_TIMEOUT_MS + 30_000 })

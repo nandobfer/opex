@@ -66,10 +66,11 @@ describe('compose', () => {
 
   it('lê o config, bloqueia bind mount e develop.watch para executar no PC', () => {
     const services = parseComposeConfig(`aviso\n${config}`)!
-    expect(services).toEqual([
+    expect(services).toMatchObject([
       { name: 'app', hasBuild: true, bindMounts: ['/srv/app:/app'], hasWatch: true, declared: NO_LIMITS, limitStyle: { memory: 'deploy', cpus: 'deploy' } },
       { name: 'db', hasBuild: false, bindMounts: [], hasWatch: false, declared: NO_LIMITS, limitStyle: { memory: 'deploy', cpus: 'deploy' } },
     ])
+    expect(services[1]!.values.volumes).toEqual([{ type: 'volume', source: 'data', target: '/data/db', readOnly: false }])
     expect(runOnPcProblem(services)).toContain('bind mount em app (/srv/app:/app) e develop.watch em app')
     expect(runOnPcProblem(selectServices(services, ['db']))).toBeNull()
   })
@@ -195,7 +196,7 @@ describe('regras', () => {
   })
 
   it('schema: slug, portas e variáveis repetidas, ref e caminho do compose', () => {
-    const input = { name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, env: [], ports: [4100], healthUrl: '', buildOn: 'server', runOn: 'server', limits: DEFAULT_ENVIRONMENT_LIMITS }
+    const input = { name: 'Loja', slug: 'loja', source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' }, env: [], ports: [4100], healthUrl: '', buildOn: 'server', runOn: 'server', limits: DEFAULT_ENVIRONMENT_LIMITS, composeOverrides: null }
     expect(environmentInputSchema.safeParse(input).success).toBe(true)
     expect(environmentInputSchema.safeParse({ ...input, slug: 'Loja!' }).success).toBe(false)
     expect(environmentInputSchema.safeParse({ ...input, ports: [4100, 4100] }).success).toBe(false)

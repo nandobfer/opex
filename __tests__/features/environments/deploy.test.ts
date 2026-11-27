@@ -91,6 +91,7 @@ const input = (overrides: Partial<EnvironmentInput> = {}): EnvironmentInput => (
   buildOn: 'server',
   runOn: 'server',
   limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  composeOverrides: null,
   ...overrides,
 })
 
@@ -248,7 +249,9 @@ describe('"Ler compose" do formulário (OPE-193)', () => {
   it('central: compose da ref numa pasta temporária, os serviços escolhidos e os limites declarados (saída fora do log)', async () => {
     const run = vi.fn(async (): Promise<HostResult> => ({ exitCode: 0, output: `aviso\n${LIMITED}` }))
     const result = await readComposeServices({ kind: 'central', centralId: 'c1', ref: 'dev', composeFile: 'docker-compose.yml', services: ['app', 'db'], projectName: 'loja' }, {}, run)
-    expect(result).toEqual({ services: [{ name: 'app', hasBuild: true, declared: { memoryGb: 1, swapGb: null, cpus: 2 } }, { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null } }] })
+    expect(result.services.map(({ name, hasBuild, declared }) => ({ name, hasBuild, declared }))).toEqual([{ name: 'app', hasBuild: true, declared: { memoryGb: 1, swapGb: null, cpus: 2 } }, { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null } }])
+    // OPE-211: os dados de cada serviço vêm junto (o que o compose não declara fica null).
+    expect(result.services[1]!.values).toMatchObject({ image: 'mongo:7', command: null, ports: null })
     const [command, , options] = run.mock.calls[0] as unknown as [string, number, { redactedAs?: string }]
     expect(command).toContain("git -C '/home/u/loja' archive \"$sha\" -- 'docker-compose.yml'")
     expect(command).toContain("'dev^{commit}'")

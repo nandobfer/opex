@@ -62,6 +62,10 @@ export const buildCommand = (plan: ComposePlan, target: DockerTarget) => compose
 export const upCommand = (plan: ComposePlan, target: DockerTarget, build: boolean) => composeCommand(plan, target, `up -d ${build ? "--build" : "--no-build"} --remove-orphans ${servicesArg(plan)}`.trim(), { build })
 export const pushCommand = (plan: ComposePlan, target: DockerTarget, services: string[]) => composeCommand(plan, target, `push ${services.map(quote).join(" ")}`.trim())
 export const pullCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, `pull ${servicesArg(plan)}`.trim())
+/** `pull` só dos serviços com imagem própria (OPE-211; build e execução na mesma máquina). */
+export const pullServicesCommand = (plan: ComposePlan, target: DockerTarget, services: string[]) => composeCommand(plan, target, `pull ${services.map(quote).join(" ")}`.trim())
+/** Confere o compose com o override do app (OPE-211), sem imprimir nada (a saída traria as variáveis). */
+export const overrideCheckCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, "config --quiet")
 export const startCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, `up -d --no-build ${servicesArg(plan)}`.trim())
 export const downCommand = (plan: ComposePlan, target: DockerTarget, volumes = false) => composeCommand(plan, target, `down --remove-orphans${volumes ? " -v" : ""}`)
 export const restartCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, `restart ${servicesArg(plan)}`.trim())

@@ -1,6 +1,6 @@
 import type { OptionTabsOption } from "@/components/ui/option-tabs"
 import { initialLimits } from "./limits-form"
-import { MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
+import { EMPTY_COMPOSE_OVERRIDES, MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
 import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto } from "./types"
 
 /** Regras de tela (puras) do módulo Ambientes. */
@@ -55,6 +55,7 @@ export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: 
             buildOn: "server",
             runOn: "server",
             limits: initialLimits(null),
+            composeOverrides: EMPTY_COMPOSE_OVERRIDES,
         }
     return {
         name: env.name,
@@ -66,6 +67,7 @@ export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: 
         buildOn: env.buildOn,
         runOn: env.runOn,
         limits: initialLimits(env),
+        composeOverrides: env.composeOverrides ?? EMPTY_COMPOSE_OVERRIDES,
     }
 }
 

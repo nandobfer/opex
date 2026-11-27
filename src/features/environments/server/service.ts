@@ -10,6 +10,7 @@ import { ENVIRONMENTS_AUDIT_ENTITY, MANAGED_COMPOSE_FILE, REGISTRY_CONTAINER } f
 import { composeBytes, composeContentProblem } from "../managed-compose"
 import { type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
 import { environmentLimitsOf, environmentLimitsText } from "../resource-limits"
+import { composeOverridesText } from "../service-overrides"
 import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, HostCapacityDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
 import { Environment, EnvironmentComposeVersion, EnvironmentDeploy, environmentsDb, type IEnvironment, type IEnvironmentDeploy } from "./models"
@@ -58,6 +59,8 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
         limits: environmentLimitsOf(env.limits),
         limitsConfigured: Boolean(env.limits),
         deployedLimits: env.deployedLimits ?? null,
+        composeOverrides: env.composeOverrides ?? null,
+        deployedComposeOverrides: env.deployedComposeOverrides ?? null,
         deployedOn: env.deployedOn,
         deployedVersion: env.deployedVersion ?? null,
         deployedComposeVersion: env.deployedComposeVersion ?? null,
@@ -243,7 +246,7 @@ async function assertUnique(input: Pick<EnvironmentInput, "slug" | "source">, ig
     if (others.some((env) => env.source.projectName === input.source.projectName)) throw new DomainError(409, `Já existe um ambiente com o projeto do compose "${input.source.projectName}"`, "ENVIRONMENT_PROJECT_TAKEN")
 }
 
-const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" | "healthUrl" | "buildOn" | "runOn" | "limits"> & { env: { key: string }[] }) => ({
+const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" | "healthUrl" | "buildOn" | "runOn" | "limits" | "composeOverrides"> & { env: { key: string }[] }) => ({
     nome: env.name,
     slug: env.slug,
     origem: env.source.kind,
@@ -255,6 +258,8 @@ const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" 
     buildEm: env.buildOn,
     executarEm: env.runOn,
     limites: environmentLimitsText(environmentLimitsOf(env.limits)),
+    // Do `environment` dos serviços, só as chaves (OPE-211).
+    servicos: composeOverridesText(env.composeOverrides) || "sem ajustes",
 })
 
 /** Compose gerenciado válido (vazio, acima do limite ou YAML inválido: 422 com a linha). */
@@ -317,7 +322,7 @@ export async function adoptProject(input: AdoptInput, actorId: string, run: Host
     if (!project) throw new DomainError(404, "Projeto não encontrado entre os não gerenciados (ele ainda está em execução?)", "ENVIRONMENT_PROJECT_NOT_FOUND")
     if (!project.workingDir || !project.configFiles.length) throw new DomainError(422, "O projeto não informa a pasta nem os arquivos do compose (labels do Docker Compose ausentes)", "ENVIRONMENT_PROJECT_INCOMPLETE")
     const source = { kind: "adopted" as const, machine: project.machine, workingDir: project.workingDir, configFiles: project.configFiles, projectName: project.projectName, git: project.git, pullOnRedeploy: false }
-    const env = await createEnvironment({ name: input.name, slug: input.slug, source, env: [], ports: [], healthUrl: "", buildOn: project.machine, runOn: project.machine, limits: null }, actorId)
+    const env = await createEnvironment({ name: input.name, slug: input.slug, source, env: [], ports: [], healthUrl: "", buildOn: project.machine, runOn: project.machine, limits: null, composeOverrides: null }, actorId)
     await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: { buildOn: project.machine, runOn: project.machine } } })
     return { ...env, deployedOn: { buildOn: project.machine, runOn: project.machine } }
 }

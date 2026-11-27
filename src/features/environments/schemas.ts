@@ -1,6 +1,7 @@
 import { z } from "zod"
 import { PORTAL_ENVIRONMENT_ACTIONS } from "./constants"
 import { composeContentProblem } from "./managed-compose"
+import { overrideYamlKeys, overrideYamlProblem } from "./override-yaml"
 import { resourceLimitsShape, swapNeedsMemory } from "./resource-limits"
 
 /** Caminho relativo seguro (sem `..`, sem começar por `/` ou `-`). */
@@ -95,6 +96,128 @@ export const LIMIT_MODES = ["shared", "service"] as const
 export type LimitMode = (typeof LIMIT_MODES)[number]
 export const DEFAULT_ENVIRONMENT_LIMITS: EnvironmentLimits = { mode: "shared", memoryGb: null, cpus: null, swapGb: null }
 
+// --- Serviços do compose (OPE-211) -----------------------------------------------------------------
+
+/** Referência de imagem (sem espaços nem aspas; `${VAR}` é interpolado pelo compose). */
+export const imageSchema = z.string().trim().min(1, "Informe a imagem").max(255).regex(/^[^\s"'`]+$/, "Imagem inválida (sem espaços nem aspas)")
+/** `command`/`entrypoint` na forma exec: um argumento por item. */
+const argsSchema = z.array(z.string().max(4000)).max(100)
+export const composeKeyValueSchema = z.object({ key: z.string().trim().min(1, "Informe o nome").max(200).regex(/^[^\s=]+$/, "Nome sem espaços nem ="), value: z.string().max(10_000) })
+export type ComposeKeyValue = z.infer<typeof composeKeyValueSchema>
+export const PORT_PROTOCOLS = ["tcp", "udp"] as const
+export const portOverrideSchema = z.object({
+    target: z.number().int().min(1, "Porta de 1 a 65535").max(65535, "Porta de 1 a 65535"),
+    /** Porta (ou intervalo `8000-8010`) publicada no host; vazio = sem publicar (só na rede do compose). */
+    published: z.string().trim().regex(/^(\d{1,5}(-\d{1,5})?)?$/, "Porta publicada: número ou intervalo (8000-8010)"),
+    protocol: z.enum(PORT_PROTOCOLS),
+    /** IP do host (vazio = todos). */
+    hostIp: z.string().trim().max(64).regex(/^[0-9a-fA-F.:[\]]*$/, "IP inválido"),
+})
+export type PortOverride = z.infer<typeof portOverrideSchema>
+export const VOLUME_TYPES = ["bind", "volume", "tmpfs"] as const
+export type VolumeType = (typeof VOLUME_TYPES)[number]
+export const volumeOverrideSchema = z
+    .object({
+        type: z.enum(VOLUME_TYPES),
+        /** Caminho (bind, relativo à pasta do compose) ou nome do volume; vazio = volume anônimo/tmpfs. */
+        source: z.string().trim().max(400).regex(/^[^\n\r]*$/),
+        target: z.string().trim().min(1, "Informe o destino").max(400).regex(/^\//, "O destino é um caminho absoluto no container"),
+        readOnly: z.boolean(),
+    })
+    .superRefine((value, ctx) => {
+        if (value.type === "bind" && !value.source) ctx.addIssue({ code: "custom", path: ["source"], message: "Informe o caminho da máquina" })
+        if (value.type === "volume" && value.source && !/^[a-zA-Z0-9][a-zA-Z0-9_.-]*$/.test(value.source)) ctx.addIssue({ code: "custom", path: ["source"], message: "Nome de volume inválido" })
+    })
+export type VolumeOverride = z.infer<typeof volumeOverrideSchema>
+export const RESTART_POLICIES = ["no", "always", "on-failure", "unless-stopped"] as const
+export type RestartPolicy = (typeof RESTART_POLICIES)[number]
+/** Duração do compose (`30s`, `1m30s`, `500ms`); vazio = padrão. */
+const durationSchema = z.string().trim().regex(/^((\d+(\.\d+)?)(us|ms|s|m|h))*$/, "Duração como 30s, 1m30s ou 500ms")
+export const HEALTHCHECK_MODES = ["disable", "shell", "exec"] as const
+export type HealthcheckMode = (typeof HEALTHCHECK_MODES)[number]
+export const healthcheckOverrideSchema = z.discriminatedUnion("mode", [
+    z.object({ mode: z.literal("disable") }),
+    z.object({
+        mode: z.enum(["shell", "exec"]),
+        /** Shell: um item (o comando); exec: um argumento por item. */
+        test: z.array(z.string().max(4000)).min(1, "Informe o comando").max(50),
+        interval: durationSchema,
+        timeout: durationSchema,
+        startPeriod: durationSchema,
+        retries: z.number().int().min(0).max(1000).nullable(),
+    }),
+])
+export type HealthcheckOverride = z.infer<typeof healthcheckOverrideSchema>
+export const DEPENDS_CONDITIONS = ["service_started", "service_healthy", "service_completed_successfully"] as const
+export type DependsCondition = (typeof DEPENDS_CONDITIONS)[number]
+export const dependsOnSchema = z.object({ service: serviceSchema, condition: z.enum(DEPENDS_CONDITIONS), restart: z.boolean() })
+export type DependsOn = z.infer<typeof dependsOnSchema>
+
+/** Dados de um serviço do compose; `null` em cada campo = o do compose (Personalizar desligado). */
+export const serviceValuesShape = {
+    image: imageSchema.nullable(),
+    command: argsSchema.nullable(),
+    entrypoint: argsSchema.nullable(),
+    environment: z.array(composeKeyValueSchema).max(200).nullable(),
+    labels: z.array(composeKeyValueSchema).max(100).nullable(),
+    ports: z.array(portOverrideSchema).max(50).nullable(),
+    volumes: z.array(volumeOverrideSchema).max(50).nullable(),
+    restart: z.enum(RESTART_POLICIES).nullable(),
+    healthcheck: healthcheckOverrideSchema.nullable(),
+    dependsOn: z.array(dependsOnSchema).max(30).nullable(),
+}
+export type ServiceValues = { [K in keyof typeof serviceValuesShape]: z.infer<(typeof serviceValuesShape)[K]> }
+export type ServiceField = keyof ServiceValues
+
+const repeated = (values: string[]) => values.find((value, index) => values.indexOf(value) !== index)
+
+export const serviceOverrideSchema = z.object({ service: serviceSchema, ...serviceValuesShape }).superRefine((value, ctx) => {
+    const env = repeated((value.environment ?? []).map((item) => item.key))
+    if (env) ctx.addIssue({ code: "custom", path: ["environment"], message: `Variável repetida: ${env}` })
+    const labels = (value.labels ?? []).map((item) => item.key)
+    const label = repeated(labels)
+    if (label) ctx.addIssue({ code: "custom", path: ["labels"], message: `Label repetido: ${label}` })
+    const reserved = labels.find((key) => key.startsWith("com.docker.compose."))
+    if (reserved) ctx.addIssue({ code: "custom", path: ["labels"], message: `Labels com.docker.compose.* são do compose (o Opex usa para achar os projetos): ${reserved}` })
+    const target = repeated((value.volumes ?? []).map((item) => item.target))
+    if (target) ctx.addIssue({ code: "custom", path: ["volumes"], message: `Destino repetido: ${target}` })
+    const port = repeated((value.ports ?? []).filter((item) => item.published).map((item) => `${item.hostIp}:${item.published}/${item.protocol}`))
+    if (port) ctx.addIssue({ code: "custom", path: ["ports"], message: `Porta publicada repetida: ${port}` })
+    const deps = (value.dependsOn ?? []).map((item) => item.service)
+    const dep = repeated(deps)
+    if (dep) ctx.addIssue({ code: "custom", path: ["dependsOn"], message: `Dependência repetida: ${dep}` })
+    if (deps.includes(value.service)) ctx.addIssue({ code: "custom", path: ["dependsOn"], message: "O serviço não pode depender dele mesmo" })
+})
+export type ServiceOverride = z.infer<typeof serviceOverrideSchema>
+
+/** Campo do formulário → chave do compose. */
+export const SERVICE_FIELD_KEYS: Record<ServiceField, string> = { image: "image", command: "command", entrypoint: "entrypoint", environment: "environment", labels: "labels", ports: "ports", volumes: "volumes", restart: "restart", healthcheck: "healthcheck", dependsOn: "depends_on" }
+export const SERVICE_FIELDS = Object.keys(SERVICE_FIELD_KEYS) as ServiceField[]
+
+/**
+ * Ajustes dos serviços do compose (OPE-211), aplicados no deploy pelo override: o bloco guiado por
+ * serviço e o YAML avançado (o conteúdo do bloco `services:`).
+ */
+export const composeOverridesSchema = z
+    .object({ services: z.array(serviceOverrideSchema).max(30), yaml: z.string().max(70_000, "O YAML avançado passa de 64 KB") })
+    .superRefine((value, ctx) => {
+        const service = repeated(value.services.map((item) => item.service))
+        if (service) ctx.addIssue({ code: "custom", path: ["services"], message: `Serviço repetido: ${service}` })
+        const problem = overrideYamlProblem(value.yaml)
+        if (problem) {
+            ctx.addIssue({ code: "custom", path: ["yaml"], message: problem.message })
+            return
+        }
+        const yamlKeys = overrideYamlKeys(value.yaml)
+        for (const item of value.services) {
+            const keys = yamlKeys[item.service] ?? []
+            const clash = SERVICE_FIELDS.find((field) => item[field] !== null && keys.includes(SERVICE_FIELD_KEYS[field]))
+            if (clash) ctx.addIssue({ code: "custom", path: ["yaml"], message: `${item.service}.${SERVICE_FIELD_KEYS[clash]} está no bloco guiado e no YAML avançado: deixe em um só` })
+        }
+    })
+export type ComposeOverrides = z.infer<typeof composeOverridesSchema>
+export const EMPTY_COMPOSE_OVERRIDES: ComposeOverrides = { services: [], yaml: "" }
+
 export const environmentInputSchema = z
     .object({
         name: z.string().trim().min(2, "Informe o nome").max(80),
@@ -109,6 +232,8 @@ export const environmentInputSchema = z
         compose: z.string().max(COMPOSE_INPUT_MAX_CHARS).optional(),
         /** `null` = nunca configurado (o Editar mostra os aplicados no host); objeto vazio = configurado sem limite. */
         limits: environmentLimitsSchema.nullable(),
+        /** Ajustes dos serviços do compose (OPE-211); `null` = nunca configurado. */
+        composeOverrides: composeOverridesSchema.nullable(),
     })
     .superRefine((value, ctx) => {
         const keys = value.env.map((item) => item.key)

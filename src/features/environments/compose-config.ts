@@ -1,6 +1,9 @@
 import { parse } from "yaml"
 import { ENV_FILE } from "./constants"
+import { overrideYamlServices } from "./override-yaml"
 import { round2, type ResourceLimits } from "./resource-limits"
+import type { ComposeOverrides, ServiceValues } from "./schemas"
+import { composeOverridesOf, namedVolumes, overrideBindMounts, normalizeServiceValues, ownImageServices, serviceOverrideLines } from "./service-overrides"
 
 /** Onde o compose declara o limite: no serviço (`mem_limit`/`cpus`) ou em `deploy.resources.limits`. */
 export type LimitStyle = "service" | "deploy"
@@ -16,6 +19,8 @@ export interface ComposeService {
     declared: ResourceLimits
     /** Forma usada pelo compose (o override segue a mesma, para não declarar as duas com valores diferentes). */
     limitStyle: { memory: LimitStyle; cpus: LimitStyle }
+    /** Dados do serviço declarados no compose (OPE-211; `null` = não declarado). */
+    values: ServiceValues
 }
 
 interface RawService {
@@ -78,6 +83,7 @@ export function parseComposeConfig(output: string): ComposeService[] | null {
         bindMounts: (service.volumes ?? []).filter((volume) => volume.type === "bind").map((volume) => `${volume.source ?? "?"}:${volume.target ?? "?"}`),
         hasWatch: Array.isArray(service.develop?.watch) && service.develop.watch.length > 0,
         ...declaredLimits(service),
+        values: normalizeServiceValues(service),
     }))
 }
 
@@ -113,7 +119,7 @@ export function parseComposeYaml(content: string): ComposeService[] | null {
     if (!parsed.services || typeof parsed.services !== "object") return null
     return Object.entries(parsed.services).map(([name, service]) => {
         const watch = service.develop?.watch
-        return { name, hasBuild: Boolean(service.build), bindMounts: yamlBindMounts(service.volumes), hasWatch: Array.isArray(watch) && watch.length > 0, ...declaredLimits(service) }
+        return { name, hasBuild: Boolean(service.build), bindMounts: yamlBindMounts(service.volumes), hasWatch: Array.isArray(watch) && watch.length > 0, ...declaredLimits(service), values: normalizeServiceValues(service) }
     })
 }
 
@@ -130,6 +136,19 @@ export function runOnPcProblem(services: ComposeService[]): string | null {
     if (binds.length) parts.push(`bind mount em ${binds.join("; ")}`)
     if (watch.length) parts.push(`develop.watch em ${watch.join(", ")}`)
     return parts.length ? `Não dá para executar no PC: ${parts.join(" e ")}. Esses recursos montam arquivos da máquina do build; tire-os do compose (ou use um override só para desenvolvimento) ou execute no servidor.` : null
+}
+
+/**
+ * Bind mounts depois dos ajustes (OPE-211): volumes personalizados no bloco guiado substituem os do compose;
+ * os do YAML avançado se somam. Usado no bloqueio de executar no PC.
+ */
+export function withOverrideMounts(services: ComposeService[], overrides: ComposeOverrides | null | undefined): ComposeService[] {
+    const value = composeOverridesOf(overrides)
+    return services.map((service) => {
+        const guided = value.services.find((item) => item.service === service.name)?.volumes
+        const extra = overrideBindMounts(value, service.name)
+        return { ...service, bindMounts: guided ? extra : [...service.bindMounts, ...extra] }
+    })
 }
 
 const mib = (gb: number) => `${Math.round(gb * 1024)}m`
@@ -159,18 +178,31 @@ export function limitLines(limits: ResourceLimits, service: Pick<ComposeService,
     return lines
 }
 
-/** `docker-compose.opex.yml`: imagem do registry (build e execução em máquinas diferentes), as variáveis extras e os limites. */
-export function overrideYaml(input: { services: ComposeService[]; images: Record<string, string>; withEnvFile: boolean; envFilePath?: string; limits?: Record<string, ResourceLimits | null> }): string {
+const OVERRIDE_HEADER = "# Gerado pelo opex (Ambientes). Não edite: é regravado a cada deploy."
+
+/**
+ * `docker-compose.opex.yml`: imagem do registry (build e execução em máquinas diferentes), as variáveis
+ * extras, os limites e os ajustes dos serviços (OPE-211: bloco guiado e YAML avançado). Serviço com
+ * imagem própria não recebe a imagem do registry e ganha `build: !reset null`.
+ */
+export function overrideYaml(input: { services: ComposeService[]; images: Record<string, string>; withEnvFile: boolean; envFilePath?: string; limits?: Record<string, ResourceLimits | null>; overrides?: ComposeOverrides | null }): string {
+    const overrides = composeOverridesOf(input.overrides)
+    const ownImages = ownImageServices(overrides)
+    const yamlServices = overrideYamlServices(overrides.yaml)
     const blocks = input.services
         .map((service) => {
             const lines: string[] = []
-            const image = input.images[service.name]
+            const ownImage = ownImages.includes(service.name)
+            const image = ownImage ? undefined : input.images[service.name]
             if (image) lines.push(`    image: ${JSON.stringify(image)}`)
             if (input.withEnvFile) lines.push("    env_file:", `      - ${JSON.stringify(input.envFilePath ?? ENV_FILE)}`)
             const limits = input.limits?.[service.name]
             if (limits) lines.push(...limitLines(limits, service))
+            lines.push(...serviceOverrideLines(overrides.services.find((item) => item.service === service.name), yamlServices.get(service.name), { ownImage }))
             return lines.length ? [`  ${JSON.stringify(service.name)}:`, ...lines].join("\n") : null
         })
         .filter((block): block is string => block !== null)
-    return blocks.length ? `# Gerado pelo opex (Ambientes). Não edite: é regravado a cada deploy.\nservices:\n${blocks.join("\n")}\n` : "# Gerado pelo opex (Ambientes). Não edite: é regravado a cada deploy.\nservices: {}\n"
+    const volumes = namedVolumes(overrides, input.services.map((service) => service.name))
+    const volumesBlock = volumes.length ? `volumes:\n${volumes.map((name) => `  ${JSON.stringify(name)}: {}`).join("\n")}\n` : ""
+    return blocks.length ? `${OVERRIDE_HEADER}\nservices:\n${blocks.join("\n")}\n${volumesBlock}` : `${OVERRIDE_HEADER}\nservices: {}\n`
 }
