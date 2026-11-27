@@ -19,7 +19,6 @@ vi.mock("@nandobfer/integracoes/modules/integrations/pusher/connection", async (
   isPusherServerConfigured: mocks.configured,
   getRawPusherServer: vi.fn(async () => ({ trigger: mocks.trigger })),
 }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
-vi.mock('@/features/integrations/testers/testers', () => ({ INTEGRATION_TESTERS: {} }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { runIntegrationTest } from "@nandobfer/integracoes/modules/server/test-runner"

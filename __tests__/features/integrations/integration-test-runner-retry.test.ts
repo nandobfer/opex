@@ -10,7 +10,6 @@ vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOrig
 vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegrationConfig: vi.fn(async () => ({})) }))()) as Record<string, unknown>) }))
 vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), success: vi.fn(), step: vi.fn() }) }))()) as Record<string, unknown>) }))
 vi.mock('@/lib/pusher/server', () => ({ isPusherServerConfigured: async () => false, getRawPusherServer: vi.fn() }))
-vi.mock('@/features/integrations/testers/testers', () => ({ INTEGRATION_TESTERS: {} }))
 
 import { runIntegrationTest } from "@nandobfer/integracoes/modules/server/test-runner"
 

@@ -4,6 +4,49 @@ Chamadas a IA do app passam por uma camada única sobre a **Vercel AI SDK** (`ai
 são integrações configuradas na tela (sem `.env`) e cada feature que usa IA escolhe provedor, modelo
 e opções na própria aba da página "Inteligência Artificial".
 
+**O que é biblioteca e o que é do Opex (OPE-212).** A camada de provedores inteira vem do subpath `/ia` de
+`@nandobfer/integracoes`: o hub `ai`, os 8 provedores, os provedores customizados, o chaveiro com rodízio
+e plano de cobrança, as abas Configuração, Modelos e Consumo, os favoritos, os testadores, `prepareModel`
+e `streamAi`, os preços (DeepSeek, models.dev, Command Code, custo do Go), o billing, PTAX e models.dev e
+as rotinas `fx-ptax-daily`, `ai-subscription-days`, `opencode-go-usage-refresh` e `command-code-usage-refresh`.
+O código mora em `@nandobfer/integracoes/modules/integrations/ia/...` (os caminhos citados neste
+documento). Ficam no Opex, como **extensões** registradas em `src/features/integrations/registry/client.tsx`:
+as abas de agentes do hub (Opex, Maddox, Secretário, Orçamentista, Catalogador, Refinador, Desenvolvedor,
+Arquiteto, Adversário, Revisor, Mentor e Rotineiros, com os aliases de URL), a página `ia/centrais/:id`, as
+abas extras do OpenCode de sessão (Controles, Contas, Skills, Agentes, Comandos, Plugins e MCPs) e as rotas
+delas; o registro de features (`loadFeature`/`availability`, `src/features/ai/`), o runtime de agentes do
+OpenCode (`opencode-run`, `opencode-sessions`, `opencode-events`), o plugin opencode-quota, as memórias do
+Engramind e a memória própria. A biblioteca recebe do Opex os rótulos das origens de consumo
+(`configureIa`) e o gancho `onPrimaryKeyChanged` (a chave principal de Gemini, Anthropic, OpenAI e DeepSeek
+vai para o Engramind; `src/lib/integrations/runtime.ts`).
+
+## Provedor customizado (OpenAI compatible, OPE-212)
+
+- **Criar**: botão **Adicionar provedor customizado** na aba Provedores do hub. O diálogo pede o nome e a
+  URL base (`https://.../v1`) e, opcionalmente, modelos cadastrados à mão (id, rótulo e preço por milhão
+  de tokens de entrada e saída, em USD). O `slug` é gerado do nome e é único; podem existir vários.
+- **Dados**: o cadastro fica na coleção nova `ai_custom_providers` (`{ slug, name, baseUrl, manualModels }`);
+  a configuração e o chaveiro, como os dos outros provedores, em `integration_configs` com o id
+  `ai_custom_<slug>`. Excluir apaga o cadastro, a configuração e o chaveiro e **mantém o histórico de
+  consumo** (rotulado com o nome gravado).
+- **Página** `/integracoes/ia/custom-<slug>` (filho dinâmico do hub): Configuração (URL, Chaves de API com
+  rodízio e principal), Modelos (os de `GET {baseUrl}/models` mais os manuais; manual com o mesmo id
+  sobrepõe rótulo e preço), Consumo (custo pelo preço do modelo manual; sem preço, só os tokens), teste,
+  debug e auditoria (entidade `ProvedorIACustomizado`). Editar e excluir pedem confirmação.
+- **Teste**: `GET {baseUrl}/models` com cada chave em uso. 404 avisa (amarelo) e segue com a lista manual.
+- **Geração**: `@ai-sdk/openai-compatible`, pelo `prepareModel` (o provedor `custom-<slug>`), com failover
+  entre as chaves em uso como os demais.
+- **Seletores**: o `AiProviderId` é a união dos fixos com `` `custom-${string}` `` (`aiProviderIdSchema`,
+  `aiTextProviderIdSchema`, `aiProviderIdIn(lista)`, enum + padrão, que vira `pattern` no JSON Schema das
+  ferramentas). Os customizados aparecem em todos os seletores de provedor de texto, inclusive no Agente
+  Opex (`OPEX_PROVIDER_IDS` + customizados), no motor Opex dos rotineiros, no Secretário e no Arquiteto.
+- **API**: `GET/POST /api/ai/custom-providers`, `PATCH/DELETE /api/ai/custom-providers/[slug]` (catch-all
+  `src/app/api/ai/[...path]`); o resto (`keys`, `models`, `consumption`, teste) pelas rotas de sempre do
+  provedor e da integração `ai_custom_<slug>`.
+- **Tempo real**: `ai-custom-providers-updated` (`{ slug, action: "created" | "updated" | "deleted" }`) em
+  `private-app`; o canal `private-integration-ai_custom_<slug>` é aceito pelo `channel-auth` quando o id
+  existe no registro.
+
 ## Provedores
 
 | Provedor | Integração | Pacote | Configuração |
