@@ -3,23 +3,12 @@
 import { useEffect, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { CheckCircle2, Loader2, XCircle } from "lucide-react"
-import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { readNdjson } from "@/lib/ndjson-client"
+import { cn } from "@/lib/utils"
 import { IntegrationConsole, type IntegrationConsoleHandle } from "@nandobfer/integracoes/react"
 import { clockSkewMs } from "../deploy-progress"
 import type { DeployStatus, DeployStreamEvent } from "../types"
 import { DeployProgress, type DeployProgressMeta } from "./DeployProgress"
-
-/** Log do deploy ao vivo (NDJSON) num drawer com o terminal. */
-export function DeployDrawer({ deployId, title, onClose }: { deployId: string | null; title: string; onClose: () => void }) {
-    return (
-        <Sheet open={deployId !== null} onOpenChange={(open) => !open && onClose()}>
-            <SheetContent side="right" className="flex w-full flex-col gap-4 sm:max-w-3xl">
-                {deployId && <DeployLog key={deployId} deployId={deployId} title={title} />}
-            </SheetContent>
-        </Sheet>
-    )
-}
 
 /** Espera entre as tentativas de reconectar e o tempo máximo sem conseguir (o app pode estar reiniciando). */
 export const RECONNECT_DELAY_MS = 3_000
@@ -27,7 +16,12 @@ export const RECONNECT_MAX_MS = 180_000
 
 type LogState = { value: DeployStatus; error: string | null; reconnecting: boolean }
 
-function DeployLog({ deployId, title }: { deployId: string; title: string }) {
+/**
+ * Log do deploy ao vivo (NDJSON) com o status, a barra de progresso e o terminal (OPE-208: saiu da gaveta para a
+ * página `/ambientes/deploys/[id]`). O stream manda o log inteiro a cada conexão: reabrir a página, voltar a ela
+ * ou reconectar redesenha o terminal do zero, sem perder nada.
+ */
+export function DeployLog({ deployId, className }: { deployId: string; className?: string }) {
     const consoleRef = useRef<IntegrationConsoleHandle>(null)
     const [status, setStatus] = useState<LogState>({ value: "running", error: null, reconnecting: false })
     // Início e estimativa do deploy em andamento (o `meta` chega de novo a cada conexão; o relógio segue o `startedAt`,
@@ -82,7 +76,7 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
             // Conexão caiu (ou fechou sem o fim) antes do status final: o servidor pode estar reiniciando.
             failingSince ??= Date.now()
             if (Date.now() - failingSince > RECONNECT_MAX_MS) {
-                setStatus({ value: "failed", error: `Sem conexão com o servidor para acompanhar o deploy${failure ? ` (${failure})` : ""}. Feche e abra o log de novo.`, reconnecting: false })
+                setStatus({ value: "failed", error: `Sem conexão com o servidor para acompanhar o deploy${failure ? ` (${failure})` : ""}. Recarregue a página para tentar de novo.`, reconnecting: false })
                 return
             }
             setStatus((current) => ({ ...current, reconnecting: true }))
@@ -95,21 +89,21 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
         }
     }, [deployId])
 
-    const Icon = status.value === "success" ? CheckCircle2 : status.value === "failed" ? XCircle : Loader2
+    const Icon = status.reconnecting ? Loader2 : status.value === "success" ? CheckCircle2 : status.value === "failed" ? XCircle : Loader2
+    const spinning = status.reconnecting || status.value === "running"
     const key = status.reconnecting ? "reconnecting" : status.value
     return (
-        <>
-            <SheetHeader>
-                <SheetTitle>Deploy de {title}</SheetTitle>
-                <SheetDescription asChild>
-                    <AnimatePresence mode="wait" initial={false}>
-                        <motion.span key={key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="flex items-center gap-1.5">
-                            <Icon className={status.value === "running" ? "h-4 w-4 animate-spin" : status.value === "success" ? "h-4 w-4 text-success" : "h-4 w-4 text-destructive"} aria-hidden />
+        <div className={cn("flex min-h-0 flex-col gap-3", className)} data-testid="deploy-log">
+            <p role="status" aria-live="polite" className="min-h-5 shrink-0 text-sm">
+                <AnimatePresence mode="wait" initial={false}>
+                    <motion.span key={key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }} className="flex items-center gap-1.5">
+                        <Icon className={cn("h-4 w-4 shrink-0", spinning ? "animate-spin text-muted-foreground" : status.value === "success" ? "text-success" : "text-destructive")} aria-hidden />
+                        <span className={cn(status.value === "failed" && !status.reconnecting && "text-destructive")}>
                             {status.reconnecting ? "Reconectando ao servidor…" : status.value === "running" ? "Em andamento…" : status.value === "success" ? "Concluído" : `Falhou${status.error ? `: ${status.error}` : ""}`}
-                        </motion.span>
-                    </AnimatePresence>
-                </SheetDescription>
-            </SheetHeader>
+                        </span>
+                    </motion.span>
+                </AnimatePresence>
+            </p>
             <AnimatePresence initial={false}>
                 {meta && status.value === "running" && (
                     <motion.div key="deploy-progress" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="shrink-0 overflow-hidden">
@@ -118,6 +112,6 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
                 )}
             </AnimatePresence>
             <IntegrationConsole ref={consoleRef} className="min-h-0 flex-1" placeholder="Aguardando o log…" />
-        </>
+        </div>
     )
 }

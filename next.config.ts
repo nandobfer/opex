@@ -18,6 +18,13 @@ const nextConfig: NextConfig = {
         ],
     },
     output: "standalone",
+    // Build da imagem (Dockerfile): o type check do `next build` roda em processo próprio, logo
+    // depois do build. Dentro do `next build` ele soma a memória ainda ocupada pelo compilador e
+    // estoura a RAM do runner ("cannot allocate memory"). O `tsc --noEmit` seguinte cobre o mesmo
+    // escopo, inclusive os tipos de rota que o build gera em `.next/types`.
+    typescript: {
+        ignoreBuildErrors: process.env.OPEX_SEPARATE_TYPE_CHECK === "1",
+    },
     // `ssh2` (aba Controles do OpenCode) carrega binários opcionais em try/catch: fica fora do bundle.
     // Plugins (OPE-172): o kernel Cordis, o Rolldown (binário nativo) e o compilador do Tailwind rodam
     // no servidor fora do bundle do Next.

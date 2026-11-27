@@ -6,7 +6,7 @@ import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { ROUTINE_AGENT_UPDATED_EVENT, ROUTINE_RUN_ATTENTION_EVENT, ROUTINE_RUN_UPDATED_EVENT, routineAgentHref } from "../constants"
+import { ROUTINE_AGENT_UPDATED_EVENT, ROUTINE_RUN_ATTENTION_EVENT, ROUTINE_RUN_UPDATED_EVENT, routineRunPath } from "../constants"
 import { ROUTINE_RUN_STATUS_LABELS } from "../status"
 import type { RoutineAgentUpdatedPayload, RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
 import { routineChatQueryPrefix } from "../chat"
@@ -103,7 +103,7 @@ export function useRoutineAttentionToasts(enabled = true): void {
         const handler = (payload: RoutineRunAttentionPayload) => {
             if (!payload?.id || !payload.agentId) return
             const { kind, message } = attentionToast(payload)
-            const action = { label: "Abrir execução", onClick: () => router.push(routineAgentHref(payload.agentId, payload.id)) }
+            const action = { label: "Abrir execução", onClick: () => router.push(routineRunPath(payload.agentId, payload.id)) }
             toast[kind](message, { action, id: `routine-run-${payload.id}-${payload.kind}` })
         }
         channel.bind(ROUTINE_RUN_ATTENTION_EVENT, handler)

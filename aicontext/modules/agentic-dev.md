@@ -368,7 +368,8 @@ Opex) e a mesa só conclui depois de removê-lo. Pipeline: `preview-backup.ts` (
 - **Caminho reservado antes do build**: ao iniciar o turno de build (`startBuildTurn`), a mesa
   reserva uma pasta exclusiva do ciclo em `<pasta dos worktrees>/.opex-backups/<código>/<ciclo>/`
   (`previewBackup` na mesa: `dir`, `path`, `createdAt`) e o turno de preparo do build manda criar o dump ali
-  como arquivo único (`mongodump --archive ... --gzip`), limitado ao banco do projeto e **sem
+  como arquivo único (`mongodump --archive ... --gzip`), limitado ao banco do projeto (o da configuração do repositório; quando é o
+  mesmo banco do Opex, como na central do próprio Opex, o dump é desse banco, sem pedir confirmação) e **sem
   imprimir credenciais**. A pasta fica **fora do worktree**, então nunca entra em commit nem é
   derrubada pelo `git worktree remove`. Com o backup desligado no modo **local** a reserva é
   dispensada (a mesa fica sem `previewBackup` e conclui sem etapa de limpeza).

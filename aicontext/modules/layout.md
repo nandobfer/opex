@@ -22,8 +22,8 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
   fora da casca.
 - **Safe areas** (`src/components/ui/safe-area.ts`): com `viewport-fit=cover`, o app instalado vai até
   as bordas do aparelho. A raiz da casca (`AppShell`, `SAFE_AREA_PADDING`), a gaveta do celular e a
-  tela cheia do chat (`SAFE_AREA_Y`), as folhas (`Sheet`, `SAFE_AREA_SHEET`, aplicada depois do
-  `className` do chamador para um padding dele não descartá-la), a barra de lote das Tarefas
+  tela cheia do chat (`SAFE_AREA_Y`), a folha de baixo (`Sheet`, `SAFE_AREA_SHEET` só com o inset inferior, aplicada
+  depois do `className` do chamador para um padding dele não descartá-la), a barra de lote das Tarefas
   (`SAFE_AREA_FLOATING_BOTTOM`), os logs maximizados da central (`SAFE_AREA_INSET_4`), a imagem ampliada do
   chat (`SAFE_AREA_INSET_6`) e os toasts no celular (`SAFE_AREA_TOAST_MOBILE_OFFSET`) reservam os insets.
   Testes em `__tests__/components/safe-area.test.tsx`. No desktop e no navegador comum os insets valem 0. Elemento novo fixo numa borda usa
@@ -51,6 +51,13 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 ## Componentes (`src/features/layout/`)
 
 - `AppLayoutShell`: marca "Opex", `APP_NAV`, "Menu principal".
+- **Gavetas (OPE-208)**: a gaveta do menu no celular é mantida por decisão do dono: é navegação (a sidebar do
+  computador recolhida), só existe enquanto está aberta e não toma espaço do conteúdo. O componente `Sheet`
+  (`src/components/ui/sheet.tsx`) só tem o lado de baixo (borda arredondada, até 85% da altura visível, rola por
+  dentro): serve às folhas de ações e filtros do celular. O log do deploy e a execução do rotineiro viraram página
+  própria. **Pendência:** o painel do canal do Engramind (`ChannelPanel`, componente da lib `@engramind/client`) ainda
+  abre como gaveta lateral direita até a lib 0.15.0 ser publicada e a dependência subir (ver `modules/engramind.md`).
+  A regra está em `use-para-atualizar-tema-e-componentes-ui.md`, "Qual padrão usar para cada tipo de conteúdo".
 - `AppShell`: sidebar (desktop) ou gaveta (< 1024px; fecha por Esc, fundo, link do menu e também a
   cada troca de rota, para links que não são itens do menu, como o atalho "Configurar OpenCode no
   host" do painel "Servidor e quota"), `RealtimeStatusBanner` e

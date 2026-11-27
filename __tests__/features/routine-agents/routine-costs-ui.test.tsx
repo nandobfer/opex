@@ -92,7 +92,7 @@ describe('linha da execução (OPE-203)', () => {
   })
 
   it('mostra o custo de tabela e o efetivo, com o R$ na dica', () => {
-    const { container } = render(<RoutineRunRow run={run()} onOpen={vi.fn()} />)
+    const { container } = render(<RoutineRunRow run={run()} />)
     const list = container.querySelector('[data-cost="list"]')!
     const effective = container.querySelector('[data-cost="effective"]')!
     expect(list.textContent).toContain('4,00')
@@ -100,11 +100,17 @@ describe('linha da execução (OPE-203)', () => {
     expect(list.getAttribute('title')).toMatch(/R\$\s20,00/)
   })
 
+  it('OPE-208: a linha inteira é o link para a página da execução (a gaveta saiu)', () => {
+    render(<RoutineRunRow run={run()} />)
+    const link = screen.getByRole('link', { name: 'Abrir a execução #3' })
+    expect(link.getAttribute('href')).toBe('/agentes-rotineiros/a1/execucoes/r1')
+  })
+
   it('motor OpenCode: "—" com a dica de fora do escopo; parcial marcado', () => {
-    const { container, unmount } = render(<RoutineRunRow run={run({ engine: 'opencode', cost: null })} onOpen={vi.fn()} />)
+    const { container, unmount } = render(<RoutineRunRow run={run({ engine: 'opencode', cost: null })} />)
     expect(container.querySelector('[data-cost="list"]')!.getAttribute('title')).toContain('fora desta versão')
     unmount()
-    const partial = render(<RoutineRunRow run={run({ cost: totals({ partial: true, effectiveUsd: null, effectiveBrl: null }) })} onOpen={vi.fn()} />)
+    const partial = render(<RoutineRunRow run={run({ cost: totals({ partial: true, effectiveUsd: null, effectiveBrl: null }) })} />)
     expect(partial.container.querySelector('[data-cost="effective"]')!.textContent).toBe('—*')
   })
 })
