@@ -56,6 +56,7 @@ describe('consulta às memórias por índice (OPE-209)', () => {
     expect(text).toContain('Listar os títulos do canal inteiro (formato "titulos", seguindo o cursor) é exceção')
     expect(text).toContain('Acrescente ao `indice` o que encontrar assim')
     expect(text).toContain('crie-o uma única vez com as chaves que já existem')
+    expect(text).toContain('Se não couber numa memória (até 20 mil caracteres), mantenha o `indice` como mapa curto e divida em índices por tema (`indice-<tema>`), citados nele.')
     expect(text).toContain('acrescente-a ao `indice` do mesmo canal nesta execução, editando com update_memory')
     expect(text).toContain('saem juntas, no mesmo passo')
     expect(text).toContain('Se as instruções do dono acima definirem outro jeito de consultar as memórias, elas valem.')

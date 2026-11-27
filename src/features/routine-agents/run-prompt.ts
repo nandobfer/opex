@@ -1,6 +1,6 @@
 import type { RoutineRunStatus, RoutineTriggerOrigin } from "./status"
 import { ROUTINE_TRIGGER_ORIGIN_LABELS } from "./status"
-import { DEFAULT_LIVE_WAIT_MINUTES, MAX_WEBHOOK_PAYLOAD_BYTES, ROUTINE_MEMORY_INDEX_KEY } from "./constants"
+import { DEFAULT_LIVE_WAIT_MINUTES, MAX_WEBHOOK_PAYLOAD_BYTES, ROUTINE_MEMORY_INDEX_KEY, ROUTINE_MEMORY_TEXT_MAX } from "./constants"
 
 /**
  * Textos da execução (OPE-130, módulo PURO): instruções do sistema (obrigam a confirmação antes de
@@ -63,7 +63,7 @@ export function routineInstructions(input: RoutineInstructionInput): string {
         "- Antes de agir, consulte as memórias abaixo: não repita o que já foi feito e siga as correções do dono.",
         `- Grave com ${t("remember")} o que precisa lembrar nas próximas execuções (o que já fez, o que aprendeu)${input.memoryChannels?.length ? `, num destes canais: ${input.memoryChannels.join(", ")} (sem \`canal\`, o primeiro)` : ""}.`,
         `- O bloco "Memórias" abaixo é só um recorte. Para consultar um canal, leia primeiro a memória de chave \`${index}\` (${t("list_my_memories")} com \`chave: "${index}"\`, o mapa das chaves do canal) e depois busque cada item por \`chave\`.`,
-        `- Listar os títulos do canal inteiro (formato "titulos", seguindo o cursor) é exceção: só quando o canal não tem \`${index}\` ou o item procurado não está nele. Acrescente ao \`${index}\` o que encontrar assim. Canal sem \`${index}\`: crie-o uma única vez com as chaves que já existem (uma por linha, \`chave\` — o que guarda), com ${t("remember")} e \`chave: "${index}"\`.`,
+        `- Listar os títulos do canal inteiro (formato "titulos", seguindo o cursor) é exceção: só quando o canal não tem \`${index}\` ou o item procurado não está nele. Acrescente ao \`${index}\` o que encontrar assim. Canal sem \`${index}\`: crie-o uma única vez com as chaves que já existem (uma por linha, \`chave\` — o que guarda), com ${t("remember")} e \`chave: "${index}"\`. Se não couber numa memória (até ${ROUTINE_MEMORY_TEXT_MAX / 1000} mil caracteres), mantenha o \`${index}\` como mapa curto e divida em índices por tema (\`${index}-<tema>\`), citados nele.`,
         `- Ao criar uma chave nova, acrescente-a ao \`${index}\` do mesmo canal nesta execução, editando com ${t("update_memory")} (id e \`versao\` da leitura, para não sobrescrever uma gravação feita no meio do caminho).`,
         "- Leituras e consultas independentes (várias chaves, canais diferentes) saem juntas, no mesmo passo.",
         "- Se as instruções do dono acima definirem outro jeito de consultar as memórias, elas valem.",

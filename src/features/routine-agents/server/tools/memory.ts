@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
-import { ROUTINE_MEMORY_INDEX_KEY, routineChannelOf, routineGlobalChannel } from "../../constants"
+import { ROUTINE_MEMORY_INDEX_KEY, ROUTINE_MEMORY_TEXT_MAX, routineChannelOf, routineGlobalChannel } from "../../constants"
 import { listInChannel, memoryKeySchema, memoryTagsSchema, memoryTitleSchema, rememberInChannel, updateInChannel, type RoutineMemoryEnv } from "../memory-channels"
 
 /**
@@ -25,7 +25,7 @@ export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
             description:
                 "Grava uma memória permanente (fato durável e autossuficiente) para as próximas execuções. Para manter UMA entrada por item (ex.: um repositório, uma vaga), informe `chave` fixa: com a mesma chave a entrada existente é atualizada (criada: false), nunca duplicada. `titulo` fixa o título. Sem `canal`, grava no canal do próprio agente.",
             input: z.object({
-                texto: z.string().trim().min(3).max(20_000),
+                texto: z.string().trim().min(3).max(ROUTINE_MEMORY_TEXT_MAX),
                 canal,
                 chave: memoryKeySchema.optional().describe("Chave fixa do item no canal (ex.: catalogo-dono-repo)"),
                 titulo: memoryTitleSchema.optional(),
@@ -48,7 +48,7 @@ export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
             description: "Edita uma memória por id (texto, título, categoria ou tags) num canal assinado. `versao` (da listagem) evita sobrescrever uma mudança feita no meio do caminho.",
             input: z.object({
                 id: z.string().trim().min(1),
-                texto: z.string().trim().min(3).max(20_000).optional(),
+                texto: z.string().trim().min(3).max(ROUTINE_MEMORY_TEXT_MAX).optional(),
                 titulo: memoryTitleSchema.optional(),
                 categoria: z.string().trim().max(60).optional(),
                 tags: memoryTagsSchema.optional(),

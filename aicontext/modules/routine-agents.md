@@ -239,7 +239,10 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
       `indice` ou o item não está nele, acrescentando ao índice o que encontrar;
     - canal sem `indice`: o agente cria o índice uma única vez, com as chaves que já existem, por `remember`
       com `chave: "indice"`. Não há verificação no servidor: conferir a cada execução custaria uma chamada ao
-      Engramind e mudaria as instruções (quebra o cache); depois de criado, a regra de leitura passa a valer;
+      Engramind e mudaria as instruções (quebra o cache); depois de criado, a regra de leitura passa a valer.
+      Se o índice não couber numa memória (`ROUTINE_MEMORY_TEXT_MAX`, 20 mil caracteres, o teto do `texto` de
+      `remember`/`update_memory`), o `indice` fica como mapa curto e o resto vai para índices por tema
+      (`indice-<tema>`), citados nele — como o `indice-receitas` do Candidatador;
     - chave nova criada na execução entra no `indice` do mesmo canal na mesma execução, editado com
       `update_memory` com o id e a `versao` lidos: duas gravações simultâneas no índice de um canal
       compartilhado dão o 409 "releia e tente de novo", em vez de uma apagar a outra (`remember` com a mesma

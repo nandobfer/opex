@@ -57,6 +57,9 @@ export const routineAgentHref = (agentId: string, runId?: string) => `/agentes-r
  */
 export const ROUTINE_MEMORY_INDEX_KEY = "indice"
 
+/** Teto do texto de uma memória gravada pelo agente rotineiro (`remember`/`update_memory`). */
+export const ROUTINE_MEMORY_TEXT_MAX = 20_000
+
 /** Ferramentas internas da execução (sempre liberadas, nos dois motores). */
 export const ROUTINE_INTERNAL_TOOLS = ["remember", "list_my_memories", "wait", "hibernate", "request_confirmation", "finish"] as const
 export type RoutineInternalTool = (typeof ROUTINE_INTERNAL_TOOLS)[number]
