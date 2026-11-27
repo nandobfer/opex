@@ -729,10 +729,11 @@ ainda destaca as 3 memórias mais próximas pelo sentido. No modo `text` ("Busca
 **Busca e filtros destacam sem remover** (`matchesFilters`): nos universos as que casam ficam em
 destaque e as demais apagadas, sem recalcular a escala; na visão inicial os canais mostram "N na
 busca" e os sem resultado ficam apagados. **Nova memória** (`create_memory`) no universo de canal
-ativo. `ChannelPanel` (Sheet): Editar (slug imutável), Arquivar / Restaurar / Excluir de vez (só
-arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard`
-(sobreposições com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar
-leva ao universo do canal).
+ativo. `ChannelPanel` (diálogo centralizado desde a lib 0.15.0, OPE-208; antes era uma gaveta lateral): a rede
+fica atrás, com o zoom e o universo intactos; cabeçalho com o nome, Editar (slug imutável), Arquivar / Restaurar /
+Excluir de vez (só arquivado, com confirmação) e "Abrir detalhe" fixos e, rolando por dentro (`max-h-[90dvh]`),
+`SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard` (sobreposições com "Remover sobreposição");
+fecha com Esc e clique fora. A página `/engramind/canais/<slug>` continua (o voltar leva ao universo do canal).
 
 **Novo canal** (OPE-129): depois de criar, a tela abre o universo do canal novo (`ChannelDialog.onCreated`),
 onde fica **Nova memória**; como nasce vazio, ele só entra nas redes quando ganhar a primeira memória. O aviso
@@ -752,8 +753,8 @@ As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela 
   por app fica dentro do card aberto.
 - **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha e roda sozinha ao digitar (o × dentro
   do campo limpa); embaixo, **Filtros** (com quantos estão ativos, sem contar a busca) abre os mesmos
-  campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa gaveta
-  de baixo para cima (`NetworkFiltersSheet`, com Limpar e Ver rede). Importar/Novo canal ficam na
+  campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa folha
+  de baixo (`NetworkFiltersSheet`, com Limpar e Ver rede; mantida na OPE-208: folha de filtros só no celular). Importar/Novo canal ficam na
   linha do Voltar, só com ícone e dica.
 - **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a rede
   não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
