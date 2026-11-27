@@ -139,7 +139,7 @@ export async function prepareRoutineChatTurn(input: PrepareTurnInput): Promise<P
             lookup: new Map(tools.map((tool) => [tool.name, tool])),
             instructions: routineChatInstructions({ memoryBlock: memory.block, skillsBlock: skillsCatalogBlock(skills.catalog), secrets: http ? secrets.list() : null }),
             history,
-            toolContext: { sessionId: input.sessionId, actorId: input.actorId, signal: input.signal, scope: input.scope, secrets },
+            toolContext: { sessionId: input.sessionId, actorId: input.actorId, signal: input.signal, scope: input.scope, secrets, routine: { agentId: String(agent._id), runId: null } },
             notices,
             hooks: {
                 // Internas (memória, skills) nunca pedem confirmação; as demais seguem o switch do agente (D4).

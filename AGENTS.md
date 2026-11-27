@@ -396,6 +396,8 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   encapsulado em `src/features/plugins/server/kernel/cordis.ts`), compilação das versões com `rolldown` (1.3.3,
   fixado) e CSS das classes do plugin com o `compile` do `tailwindcss` (dependência de produção); diff entre
   versões com `diff`
+- PDF/PNG dos documentos dos agentes: Gotenberg (serviço compartilhado no host, integração `gotenberg`, chamado com
+  `fetch` nativo; `aicontext/modules/agent-documents.md`)
 - Integrações: terminal de logs com `@xterm/xterm` (+ `@xterm/addon-fit`, `@xterm/addon-search`),
   Swagger UI via `swagger-ui-dist` (CDN)
 

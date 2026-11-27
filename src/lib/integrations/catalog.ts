@@ -19,7 +19,7 @@ import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
 import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT } from "@/lib/ai/pricing/deepseek"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind", "evolution-api", "fx_ptax", "models_dev"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind", "evolution-api", "fx_ptax", "models_dev", "gotenberg"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -912,6 +912,40 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,
         publicFields: [{ key: "apiUrl", label: "URL do catálogo", description: "JSON com os modelos e os preços por 1M de tokens", kind: "url", defaultValue: MODELS_DEV_DEFAULT_CATALOG_URL, placeholder: MODELS_DEV_DEFAULT_CATALOG_URL, required: true }],
+        secretFields: [],
+    },
+    {
+        // OPE-210: HTML → PDF/PNG dos documentos dos agentes (ver aicontext/modules/agent-documents.md). Serviço
+        // compartilhado no host (projeto Compose próprio, rede gotenberg-network); sem `env`.
+        id: "gotenberg",
+        name: "Gotenberg (PDF)",
+        description: "Conversão de HTML em PDF e PNG dos documentos dos agentes e validade das URLs desses documentos",
+        defaultEnvironment: "interno",
+        streamsDebugOverPusher: true,
+        publicFields: [
+            { key: "url", label: "URL interna", description: "Endereço que o servidor do Opex alcança (rede gotenberg-network)", kind: "url", placeholder: "http://gotenberg:3000", required: true },
+            { key: "timeoutSeconds", label: "Tempo limite da conversão", kind: "number", unit: "s", defaultValue: 30, min: 5, max: 120 },
+            {
+                key: "urlTtlMinutes",
+                label: "Validade padrão das URLs dos documentos",
+                description: "Validade das URLs de download e de envio devolvidas pelas ferramentas de documentos dos agentes",
+                kind: "number",
+                unit: "min",
+                defaultValue: 15,
+                min: 1,
+                max: 1440,
+            },
+            {
+                key: "urlTtlMaxMinutes",
+                label: "Validade máxima das URLs dos documentos",
+                description: "Teto da validade que o agente pode pedir (se ficar abaixo da padrão, vale a menor das duas)",
+                kind: "number",
+                unit: "min",
+                defaultValue: 60,
+                min: 1,
+                max: 10_080,
+            },
+        ],
         secretFields: [],
     },
 ]

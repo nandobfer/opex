@@ -1,0 +1,71 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+@page{size:A4;margin:13mm 14mm}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:"Helvetica Neue",Helvetica,Arial,sans-serif;font-size:9.3pt;line-height:1.36;color:#15181c}
+h1{font-size:17pt;font-weight:700;letter-spacing:.2px;line-height:1.1}
+.sub{font-size:9.5pt;color:#33505f;margin-top:3px;font-weight:600}
+.contact{font-size:8.3pt;color:#4a5560;margin-top:4px}
+h2{font-size:8.5pt;letter-spacing:1.1px;text-transform:uppercase;color:#0b5cad;border-bottom:1px solid #cfd8e0;padding-bottom:2px;margin:10px 0 4px}
+p{text-align:justify}
+ul{list-style:none}
+li{margin-bottom:2px;padding-left:9px;position:relative}
+li:before{content:"\2013";position:absolute;left:0;color:#0b5cad}
+.role{display:flex;justify-content:space-between;margin-top:6px}
+.role b{font-size:9.5pt}
+.role span{font-size:8.5pt;color:#54606c;white-space:nowrap}
+.co{font-size:9pt;color:#1d4a63;font-weight:600;margin-bottom:2px}
+.sk{font-size:8.9pt;margin-bottom:2px;padding-left:0}
+.sk:before{content:none}
+.sk b{color:#0b2a45}
+.earlier{font-size:8.9pt;margin-top:6px;color:#2a3a47}
+</style></head><body>
+<h1>Fernando Burgos Fernandes</h1>
+<div class="sub">Senior Software Engineer &middot; Full-Stack &amp; AI Systems &middot; TypeScript, Node.js, Rust</div>
+<div class="contact">Curitiba, Brazil (remote) &middot; fernando@example.com &middot; +55 00 00000-0000 &middot; linkedin.com/in/fernando-burgos-fernandes &middot; github.com/nandobfer</div>
+<h2>Profile</h2>
+<p>Software engineer with 7 years of professional experience, programming since 2012 &mdash; senior in backend and in AI automation. I build the layer that makes AI and ERP work inside a real business product: data model, API, interface and production operation. Most AI projects stall between the demo and production &mdash; a legacy system that does not expose the data, memory that does not survive between runs, token cost out of control. That is the part I build.</p>
+<h2>Core skills</h2>
+<ul>
+<li class="sk"><b>Languages:</b> TypeScript, JavaScript, Python, Rust, SQL</li>
+<li class="sk"><b>Backend:</b> Node.js, Next.js (API routes), Prisma, REST, OpenAPI, SSE, webhooks, Socket.IO, authentication and permissions</li>
+<li class="sk"><b>Data:</b> PostgreSQL, MongoDB, MySQL, SQLite (WAL, sqlite-vec, FTS5), hybrid search fused by RRF</li>
+<li class="sk"><b>AI:</b> LLM APIs (Anthropic, OpenAI, Google, DeepSeek), tool calling, structured output, MCP, durable agent memory, RAG, LLM-as-judge evals, embedding and LLM workers</li>
+<li class="sk"><b>Frontend &amp; mobile:</b> React, React Native, Next.js</li>
+<li class="sk"><b>ERP &amp; integrations:</b> SAP (Business Partner, trade slip, purchasing, transport and freight; CDS Views, OData), WhatsApp/Meta, PagSeguro</li>
+<li class="sk"><b>Delivery:</b> Docker, GitHub Actions, CI/CD, Vitest, Prometheus, Vercel</li>
+</ul>
+<h2>Experience</h2>
+<div class="role"><b>Senior Software Engineer</b><span>Feb 2026 &ndash; Present</span></div>
+<div class="co">Sipal</div>
+<ul>
+<li>Grain trading platform: pricing per crop, CIF/FOB, CBOT, FX and premiums; audited approval and the contract generated in SAP in the same flow.</li>
+<li>Rust middleware that centralizes application access to SAP (Business Partner, trade slip, purchasing, transport and freight), with per-application token, idempotent ledger audited in PostgreSQL, OpenAPI/Swagger, Prometheus metrics and S/4HANA CDS Views over OData.</li>
+<li>AI infrastructure: durable memory for agents with hierarchical channels, context versioned by ETag to preserve prompt caching and hybrid search (vector with sqlite-vec plus full-text with FTS5, fused by RRF); exposed over REST, MCP Streamable HTTP and CLI, with LLM and embedding workers.</li>
+<li>Multi-tenant SaaS: each company gets its own CRM, branding, rules and permissions by role and branch in the same application and database, selected by slug, with automated container provisioning per tenant.</li>
+<li>Published npm package with entry points for server, AI (Vercel AI SDK and MCP) and React, with SSE, HMAC-SHA256 webhook and graph memory visualization; authorization library with tree catalog, roles, scopes and guards.</li>
+</ul>
+<div class="role"><b>Full-Stack Engineer</b><span>Apr 2022 &ndash; Feb 2026</span></div>
+<div class="co">Ag&ecirc;ncia BOZ</div>
+<ul>
+<li>LLM products: sales and prospecting agents, AI-assisted code review and image generation with Anthropic, OpenAI, Google and DeepSeek.</li>
+<li>Customer service over WhatsApp run by agents through MCP, and web and mobile projects for the agency clients.</li>
+<li>Apps published on the App Store and on Google Play.</li>
+</ul>
+<div class="role"><b>Software Developer</b><span>Apr 2022 &ndash; Jun 2023</span></div>
+<div class="co">Quaestum</div>
+<div class="earlier"><b>Earlier:</b> about 2 years as software development intern and trainee, before 2022 &mdash; the foundation in process, data modelling and production support that still shapes how I design systems.</div>
+<h2>Selected AI work</h2>
+<ul>
+<li><b>Agent harness:</b> plugin architecture for tools, draft &rarr; preview &rarr; stable cycle and tool exposure to both the agent and MCP clients.</li>
+<li><b>Agent memory:</b> durable hierarchical channels with retrieval over hybrid search, served through REST, MCP and CLI.</li>
+<li><b>AI gateway:</b> cost per consumer and per plan, key rotation per provider and fallback between models on quota.</li>
+<li><b>Agentic customer service:</b> two-stage criteria, simulation and escalation to the owner over WhatsApp.</li>
+<li><b>Evals:</b> rubric-based evaluation with LLM-as-judge over structured output.</li>
+</ul>
+<h2>Education &amp; languages</h2>
+<ul>
+<li class="sk"><b>Mechatronics Engineering</b> &mdash; UTFPR, Curitiba, Brazil</li>
+<li class="sk"><b>SAP ACM</b> certification</li>
+<li class="sk"><b>Languages:</b> Portuguese (native); English (advanced, working proficiency)</li>
+</ul>
+</body></html>

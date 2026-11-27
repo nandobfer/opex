@@ -556,6 +556,13 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `opencode.enabledSkills`, OPE-153) também só pelo dono. O que o dono já liberou continua como está.
   As duas ferramentas aceitam a seleção de skills dos dois motores (`enabledSkills` em `opex`/`opencode`).
 
+- **Documentos (OPE-210)**: o grupo `documents` (`gerar_pdf`, `obter_pdf`, `upload_s3`, `get_s3`,
+  `preparar_curriculo`, `obter_curriculo`) aparece na árvore do motor Opex e é liberado por agente. O contexto das
+  ferramentas leva `routine: { agentId, runId }` (motor Opex, MCP da execução e ação confirmada; na conversa,
+  `runId: null`) e o catálogo grava a origem (agente, execução e ferramenta). O Candidatador recebeu as
+  ferramentas de currículo, o bloco de instruções e as memórias novas pela migração
+  `candidatador-curriculo-tools` (ver `modules/agent-documents.md`, "Candidatador").
+
 Grupo `routine-agents` (`server/tools/routine-agents.ts`, só no dono): `list_routine_agents`,
 `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`,
 `archive_routine_agent` (destrutiva), `reprovision_routine_agent`, `run_routine_agent`,
