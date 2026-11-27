@@ -39,7 +39,8 @@ import {
 const log = loggerFor({ module: "ai", feature: "api-keys" })
 
 function stripSetAt(billing: StoredAiKeyBilling): AiKeyBilling {
-    const { setAt: _setAt, ...plan } = billing
+    const plan: Partial<StoredAiKeyBilling> = { ...billing }
+    delete plan.setAt
     return plan as AiKeyBilling
 }
 export const AI_API_KEY_AUDIT_ENTITY = "ChaveApiIA"
