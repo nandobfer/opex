@@ -612,3 +612,101 @@ describe('compose gerenciado (OPE-191)', () => {
     expect(envs.docs).toHaveLength(0)
   })
 })
+
+describe('serviços do compose no deploy (OPE-211)', () => {
+  const service = (name: string, values: Partial<NonNullable<EnvironmentInput['composeOverrides']>['services'][number]> = {}) => ({
+    service: name,
+    image: null,
+    command: null,
+    entrypoint: null,
+    environment: null,
+    labels: null,
+    ports: null,
+    volumes: null,
+    restart: null,
+    healthcheck: null,
+    dependsOn: null,
+    ...values,
+  })
+
+  it('PC → Servidor com imagem própria no serviço com build: sem build, sem registry; o override fixa a imagem e tira o build', async () => {
+    const env = await createEnvironment(input({ buildOn: 'pc', ports: [], composeOverrides: { services: [service('app', { image: 'ghcr.io/loja/app:2' })], yaml: '' } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const deploy = deploys.docs[0]!
+    expect(deploy.status).toBe('success')
+    const log = String(deploy.log)
+    expect(log).not.toContain('▸ Build')
+    expect(log).not.toContain('Push das imagens')
+    expect(log).not.toContain('Registry no servidor')
+    expect(log).toContain('▸ Pull no servidor')
+    expect(log).toContain('Serviços: app imagem ghcr.io/loja/app:2')
+    expect(deploy.repositories).toBeUndefined()
+    const yaml = lastOverride(calls)
+    expect(yaml).toContain('    image: ghcr.io/loja/app:2\n    build: !reset null')
+    expect(yaml).not.toContain('opex-env/loja-app')
+    // O override é conferido (sem saída) antes de subir.
+    const check = run.mock.calls.find(([command]) => String(command).includes('config --quiet'))!
+    expect(String(check[0])).toContain('-f docker-compose.opex.yml')
+    expect(calls.indexOf(String(check[0]))).toBeLessThan(calls.findIndex((command) => command.includes('up -d')))
+    expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { image: 'ghcr.io/loja/app:2' })], yaml: '' })
+  })
+
+  it('mesma máquina: as imagens prontas são buscadas (pull) antes de subir; o build segue para os outros serviços', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { image: 'mongo:8' })], yaml: '' } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const pull = calls.findIndex((command) => command.includes(" pull 'db'"))
+    expect(pull).toBeGreaterThanOrEqual(0)
+    expect(pull).toBeLessThan(calls.findIndex((command) => command.includes('up -d')))
+    expect(String(deploys.docs[0]!.log)).toContain('▸ Pull das imagens prontas')
+    expect(String(deploys.docs[0]!.log)).toContain('▸ Build no servidor')
+  })
+
+  it('falha na conferência do override para antes de qualquer build; os ajustes não viram implantados', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { restart: 'always' })], yaml: '' } }), 'local')
+    const { run, calls } = host({ fail: 'config --quiet' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('failed')
+    expect(deploys.docs[0]!.error).toContain('Conferindo o override falhou')
+    expect(calls.some((command) => / build( |$)/.test(command) || command.includes('up -d'))).toBe(false)
+    expect(envs.docs[0]!.deployedComposeOverrides ?? null).toBeNull()
+  })
+
+  it('log sem os valores do environment; serviço fora do compose avisa e não bloqueia; o override não aparece no debug', async () => {
+    const env = await createEnvironment(
+      input({ composeOverrides: { services: [service('app', { environment: [{ key: 'API_KEY', value: 'valor-secreto' }] }), service('antigo', { restart: 'always' })], yaml: 'worker:\n  restart: always\n' } }),
+      'local',
+    )
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const log = String(deploys.docs[0]!.log)
+    expect(deploys.docs[0]!.status).toBe('success')
+    expect(log).toContain('Serviços: app environment (1: API_KEY)')
+    expect(log).not.toContain('valor-secreto')
+    expect(log).toContain('Ajustes do serviço antigo ignorados: o serviço não está no compose.')
+    expect(log).toContain('Ajustes do serviço worker ignorados: o serviço não está no compose.')
+    expect(lastOverride(calls)).toContain('API_KEY: valor-secreto')
+    expect(run.mock.calls.filter(([command]) => String(command).includes('docker-compose.opex.yml') && String(command).includes('base64 -d')).at(-1)![2]).toMatchObject({ redactedAs: 'gravar docker-compose.opex.yml (conteúdo omitido)' })
+  })
+
+  it('compose gerenciado com build: o serviço com imagem própria implanta', async () => {
+    const env = await createEnvironment(
+      input({ slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: 'services:\n  app:\n    build: .\n', ports: [], composeOverrides: { services: [service('app', { image: 'ghcr.io/x/app:1' })], yaml: '' } }),
+      'local',
+    )
+    const { run } = host({ config: JSON.stringify({ services: { app: { build: { context: '.' } } } }) })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+  })
+
+  it('salvar audita o resumo dos ajustes (do environment, só as chaves)', async () => {
+    const env = await createEnvironment(input(), 'local')
+    await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { image: 'nginx:1.27', environment: [{ key: 'A', value: 'segredo-a' }] })], yaml: '' } }), 'local')
+    const audit = mocks.audit.mock.calls.at(-1)![0]
+    expect(audit.antes!.servicos).toBe('sem ajustes')
+    expect(audit.depois!.servicos).toBe('app imagem nginx:1.27, environment (1: A)')
+    expect(JSON.stringify(audit)).not.toContain('segredo-a')
+  })
+})

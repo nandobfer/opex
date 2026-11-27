@@ -133,6 +133,19 @@ describe('retomada do deploy depois de o app reiniciar', () => {
     expect(revisions.docs.find((item) => item.version === 4)!.deployedAt).toBeNull()
   })
 
+  it('OPE-211: a retomada refaz o pull das imagens prontas do ponto de retomada e grava os ajustes daquele deploy', async () => {
+    const envId = await adopted()
+    const applied = { services: [{ service: 'app', image: 'nginx:1.27', command: null, entrypoint: null, environment: null, labels: null, ports: null, volumes: null, restart: null, healthcheck: null, dependsOn: null }], yaml: '' }
+    envs.docs[0]!.composeOverrides = { services: [], yaml: 'app:\n  restart: always\n' }
+    orphan(envId, { checkpoint: { step: 0, failure: null, ref: null, commit: 'abc123def456', tag: 'abc123def456', version: null, buildServices: [], skipBuild: false, from: null, overrides: applied, pullServices: ['app'] } })
+    const calls = host()
+    await resumeInterruptedDeploys()
+    await settleResumes()
+    expect(deploys.docs[0]).toMatchObject({ status: 'success', resumed: true })
+    expect(calls.some((call) => call.command.includes(" pull 'app'"))).toBe(true)
+    expect(envs.docs[0]!.deployedComposeOverrides).toEqual(applied)
+  })
+
   it('regressão: redeploy do próprio app termina como sucesso (não fica em Implantando)', async () => {
     const envId = await adopted()
     const id = orphan(envId)

@@ -108,6 +108,20 @@ describe('linha do ambiente', () => {
     expect(screen.queryByText(/faça Deploy/)).toBeNull()
   })
 
+  it('serviços do compose (OPE-211): resumo dos ajustes implantados e o selo quando os salvos diferem', () => {
+    const app = { service: 'app', image: 'nginx:1.27', command: null, entrypoint: null, environment: null, labels: null, ports: null, volumes: null, restart: 'always' as const, healthcheck: null, dependsOn: null }
+    const deployed = { services: [app], yaml: '' }
+    render(<EnvironmentRow env={env({ composeOverrides: deployed, deployedComposeOverrides: deployed })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    expect(screen.getByText(/serviços: app imagem nginx:1\.27 · 2 ajustes/)).toBeTruthy()
+    expect(screen.queryByText(/Ajustes dos serviços salvos diferem/)).toBeNull()
+    cleanup()
+    render(<EnvironmentRow env={env({ composeOverrides: { services: [{ ...app, restart: null }], yaml: '' }, deployedComposeOverrides: deployed })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    expect(screen.getByText('Ajustes dos serviços salvos diferem dos implantados: faça Deploy')).toBeTruthy()
+    cleanup()
+    render(<EnvironmentRow env={env({ deployedOn: null, composeOverrides: deployed })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    expect(screen.queryByText(/Ajustes dos serviços salvos diferem/)).toBeNull()
+  })
+
   it('ambiente no PC com o túnel fechado: ações bloqueadas', () => {
     render(<EnvironmentRow env={env({ runOn: 'pc', deployedOn: { buildOn: 'pc', runOn: 'pc' } })} pcAvailable={false} onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Levantar' }).hasAttribute('disabled')).toBe(true)

@@ -103,6 +103,13 @@ describe('ambientes no portal do cliente', () => {
     expect(toPortalEnvironment(env).deploying).toBe(true)
   })
 
+  it('OPE-211: os ajustes dos serviços do compose nunca vão ao portal', () => {
+    const overrides = { services: [{ service: 'app', image: 'nginx:1.27', command: null, entrypoint: null, environment: [{ key: 'API_KEY', value: 'segredo-env' }], labels: null, ports: null, volumes: null, restart: null, healthcheck: null, dependsOn: null }], yaml: '' }
+    const portal = toPortalEnvironment(dto(loja, { composeOverrides: overrides, deployedComposeOverrides: overrides }))
+    expect(portal).not.toHaveProperty('composeOverrides')
+    expect(JSON.stringify(portal)).not.toMatch(/API_KEY|segredo-env|nginx/)
+  })
+
   it('o admin implanta (ref salva), levanta e reinicia pelos serviços do dono, com a auditoria do usuário', async () => {
     expect(await runPortalEnvironmentAction(actor(true), String(loja._id), 'deploy', 'host' as never)).toEqual({ started: true })
     expect(mocks.runAction).toHaveBeenCalledWith(String(loja._id), { action: 'deploy' }, 'u1', 'host')

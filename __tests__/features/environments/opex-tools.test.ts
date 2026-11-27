@@ -172,6 +172,35 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ limits: null }), 'local')
   })
 
+  it('serviços do compose (OPE-211): detalhe com salvos, implantados e divergência; criar e editar aceitam `composeOverrides` (substitui; ausente mantém)', async () => {
+    const app = { service: 'app', image: 'nginx:1.27', command: null, entrypoint: null, environment: [{ key: 'A', value: 'texto' }], labels: null, ports: null, volumes: null, restart: null, healthcheck: null, dependsOn: null }
+    const saved = { services: [app], yaml: '' }
+    Object.assign(LIST_ITEM, { composeOverrides: saved, deployedComposeOverrides: null })
+    try {
+      const detail = (await run('get_environment', { environment: 'loja' })) as { ajustesDosServicos: Record<string, unknown> }
+      expect(detail.ajustesDosServicos).toMatchObject({ salvos: 'app imagem nginx:1.27, environment (1: A)', implantados: 'sem ajustes', diferem: true, configuracao: saved })
+      const list = (await run('list_environments', {})) as { pc: Record<string, unknown>[] }
+      expect(list.pc[0]).toMatchObject({ ajustesNaoImplantados: true })
+    } finally {
+      Object.assign(LIST_ITEM, { composeOverrides: undefined, deployedComposeOverrides: undefined })
+    }
+
+    await run('update_environment', { environment: 'loja', composeOverrides: saved })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ composeOverrides: saved }), 'local')
+    mocks.envs = [{ ...mocks.envs[0]!, composeOverrides: saved }]
+    await run('update_environment', { environment: 'loja', ports: [9090] })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ composeOverrides: saved }), 'local')
+    await run('update_environment', { environment: 'loja', composeOverrides: null })
+    expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ composeOverrides: null }), 'local')
+    // A mesma validação da tela: chave no guiado e no YAML avançado é recusada.
+    expect(() => find('update_environment').input.parse({ environment: 'loja', composeOverrides: { services: [app], yaml: 'app:\n  image: outra\n' } })).toThrow(/bloco guiado e no YAML avançado/)
+
+    await run('create_environment', { name: 'Nova', centralId: 'c1', composeOverrides: saved })
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ composeOverrides: saved }), 'local')
+    await run('create_environment', { name: 'Outra', centralId: 'c1' })
+    expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ composeOverrides: null }), 'local')
+  })
+
   it('deploy volta na hora com o id e pede o aviso na sessão; adotado não aceita outra ref', async () => {
     const out = await run('deploy_environment', { environment: 'loja' })
     expect(out).toMatchObject({ deployId: 'd1', status: 'running', ref: 'main' })
