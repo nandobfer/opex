@@ -12,6 +12,10 @@ interface Props {
     readOnly?: boolean
     /** Erro do YAML (com a linha), do formulário ou do servidor. */
     error?: string | null
+    /** Outro uso do editor (ex.: YAML avançado dos serviços, OPE-211): limite, exemplo e ajuda próprios. */
+    maxBytes?: number
+    placeholder?: string
+    hint?: string
 }
 
 const PLACEHOLDER = `services:
@@ -27,11 +31,13 @@ const PLACEHOLDER = `services:
 volumes:
   data:`
 
+const MANAGED_HINT = "Use `image:` nos serviços (sem `build`). A revisão vale a partir do próximo deploy; as Variáveis extras entram pelo `.env.opex`."
+
 /**
  * Editor do compose gerenciado (OPE-191): campo grande e monoespaçado. É o mesmo na criação do ambiente
  * e no diálogo Compose (inclusive para ver uma revisão antiga, só leitura).
  */
-export function ComposeEditorField({ id, label, value, onChange, readOnly, error }: Props) {
+export function ComposeEditorField({ id, label, value, onChange, readOnly, error, maxBytes = MANAGED_COMPOSE_MAX_BYTES, placeholder = PLACEHOLDER, hint = MANAGED_HINT }: Props) {
     const bytes = composeBytes(value)
     return (
         <div className="space-y-1.5">
@@ -39,8 +45,8 @@ export function ComposeEditorField({ id, label, value, onChange, readOnly, error
                 <label htmlFor={id} className="text-xs font-semibold">
                     {label}
                 </label>
-                <span className={bytes > MANAGED_COMPOSE_MAX_BYTES ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
-                    {formatComposeSize(bytes)} de {formatComposeSize(MANAGED_COMPOSE_MAX_BYTES)}
+                <span className={bytes > maxBytes ? "text-xs text-destructive" : "text-xs text-muted-foreground"}>
+                    {formatComposeSize(bytes)} de {formatComposeSize(maxBytes)}
                 </span>
             </div>
             <Textarea
@@ -50,7 +56,7 @@ export function ComposeEditorField({ id, label, value, onChange, readOnly, error
                 spellCheck={false}
                 aria-invalid={error ? true : undefined}
                 onChange={(event) => onChange?.(event.target.value)}
-                placeholder={readOnly ? undefined : PLACEHOLDER}
+                placeholder={readOnly ? undefined : placeholder}
                 className="min-h-80 w-full resize-y whitespace-pre font-mono text-xs"
             />
             {error ? (
@@ -58,7 +64,7 @@ export function ComposeEditorField({ id, label, value, onChange, readOnly, error
                     {error}
                 </p>
             ) : (
-                !readOnly && <p className="text-xs text-muted-foreground">Use `image:` nos serviços (sem `build`). A revisão vale a partir do próximo deploy; as Variáveis extras entram pelo `.env.opex`.</p>
+                !readOnly && <p className="text-xs text-muted-foreground">{hint}</p>
             )}
         </div>
     )

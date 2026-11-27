@@ -10,6 +10,7 @@ import { composeNotDeployed } from "../managed-compose"
 import type { EnvironmentDto } from "../types"
 import { limitsPendingDeploy } from "../limits-form"
 import { appliedLimitsText, environmentLimitsText } from "../resource-limits"
+import { composeOverridesPendingDeploy, composeOverridesShortText, composeOverridesText } from "../service-overrides"
 import { healthOf, placementLabel, versionLabel } from "../view"
 import { DeployMenu } from "./DeployMenu"
 import { EnvironmentActionButton as RowButton, EnvironmentStatusBadges } from "./EnvironmentStatus"
@@ -38,6 +39,8 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
     const memory = env.services.map((service) => service.memory?.split("/")[0]?.trim()).filter(Boolean).join(" · ")
     const limits = appliedLimitsText(env.services)
     const pendingLimits = limitsPendingDeploy(env)
+    const pendingOverrides = composeOverridesPendingDeploy(env)
+    const overrides = composeOverridesShortText(env.deployedComposeOverrides)
 
     return (
         <div className="flex flex-col gap-2 py-3 md:flex-row md:items-center">
@@ -53,6 +56,11 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
                             Limites salvos diferem dos aplicados: faça Deploy
                         </Badge>
                     )}
+                    {pendingOverrides && (
+                        <Badge variant="outline" className="border-warning/50 text-warning" title={`Salvos: ${composeOverridesText(env.composeOverrides) || "sem ajustes"}`}>
+                            Ajustes dos serviços salvos diferem dos implantados: faça Deploy
+                        </Badge>
+                    )}
                 </div>
                 {composeNotDeployed(env) && (
                     <p className="text-xs text-warning">
@@ -66,6 +74,7 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
                     {cpu ? ` · CPU ${cpu}` : ""}
                     {memory ? ` · RAM ${memory}` : ""}
                     {limits ? ` · limites: ${limits}` : ""}
+                    {overrides ? ` · serviços: ${overrides}` : ""}
                 </p>
                 {env.lastDeploy && (
                     <button type="button" className="text-left text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => onOpenDeploy(env.lastDeploy!.id)}>

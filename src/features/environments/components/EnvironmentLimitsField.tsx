@@ -1,20 +1,18 @@
 "use client"
 
-import { useState } from "react"
 import { useWatch, type UseFormReturn } from "react-hook-form"
 import { AnimatePresence, motion } from "framer-motion"
 import { AlertCircle, FileSearch, RotateCw, Trash2 } from "lucide-react"
-import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { FORM_GRID_3 } from "@/components/ui/form-grid"
 import { Label } from "@/components/ui/label"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useReadComposeServices } from "../hooks/useEnvironments"
-import { mergeComposeServices, orphanServices, runningServiceNames, switchLimitMode } from "../limits-form"
+import { useComposeRead } from "../hooks/useFormComposeRead"
+import { orphanServices, runningServiceNames, switchLimitMode } from "../limits-form"
 import { appliedLimitsText } from "../resource-limits"
-import { composeServicesInputSchema, DEFAULT_ENVIRONMENT_LIMITS, type EnvironmentInput, type EnvironmentLimits, type LimitMode } from "../schemas"
+import { DEFAULT_ENVIRONMENT_LIMITS, type EnvironmentInput, type EnvironmentLimits, type LimitMode } from "../schemas"
 import type { EnvironmentDto, HostCapacityDto } from "../types"
 import { ResourceLimitsFields } from "./ResourceLimitsFields"
 
@@ -50,33 +48,17 @@ function LimitRowsSkeleton() {
  */
 export function EnvironmentLimitsField({ form, env, host, machine }: { form: UseFormReturn<EnvironmentInput>; env: EnvironmentDto | null; host: HostCapacityDto | null; machine: string }) {
     const limits = (useWatch({ control: form.control, name: "limits" }) ?? DEFAULT_ENVIRONMENT_LIMITS) as EnvironmentLimits
-    const source = useWatch({ control: form.control, name: "source" })
-    // Origem incompleta (ex.: Novo sem a central) não dá para ler: nada de pedido que só voltaria erro. No
-    // compose gerenciado a revisão só existe depois de salvar o ambiente (o YAML está no editor do Novo).
-    const canRead = composeServicesInputSchema.safeParse({ source, environmentId: env?.id }).success && (source?.kind !== "managed" || Boolean(env))
-    const read = useReadComposeServices()
-    const [composeNames, setComposeNames] = useState<string[] | null>(null)
+    // A leitura do compose é a do formulário (compartilhada com os serviços do compose, OPE-211).
+    const read = useComposeRead()
+    const canRead = read.canRead
+    const composeNames = read.names
     const known = composeNames ?? (env ? runningServiceNames(env) : null)
     const errors = form.formState.errors.limits as LimitErrors | undefined
     const applied = env ? appliedLimitsText(env.services) : null
     const setLimits = (next: EnvironmentLimits) => form.setValue("limits", next, { shouldValidate: true, shouldDirty: true })
 
     const current = () => form.getValues("limits") ?? DEFAULT_ENVIRONMENT_LIMITS
-    const readCompose = () => {
-        if (!canRead) return
-        read.mutate(
-            { source: form.getValues("source"), ...(env && form.getValues("source")?.kind === "managed" ? { environmentId: env.id } : {}) },
-            {
-                onSuccess: (result) => {
-                    setComposeNames(result.services.map((service) => service.name))
-                    const merged = mergeComposeServices(current(), result)
-                    setLimits(merged.limits)
-                    if (merged.differs) toast.info("O compose declara limites diferentes por serviço: use \"Por serviço\" para vê-los.")
-                    else toast.success(`Compose lido: ${result.services.length} serviço(s)${merged.filled ? "; limites declarados preenchidos" : ""}`)
-                },
-            },
-        )
-    }
+    const readCompose = () => read.read({ explicit: true })
 
     const changeMode = (mode: LimitMode) => {
         const next = switchLimitMode(current(), mode, known ?? [])

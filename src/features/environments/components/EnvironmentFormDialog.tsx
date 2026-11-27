@@ -13,7 +13,9 @@ import { useEnvironmentEnvValues, useSaveEnvironment } from "../hooks/useEnviron
 import { environmentCreateSchema, environmentInputSchema, type EnvironmentInput, type Machine } from "../schemas"
 import type { EnvironmentDto, HostCapacityDto } from "../types"
 import { formValuesOf, machineOptions, slugify } from "../view"
+import { ComposeReadProvider } from "../hooks/useFormComposeRead"
 import { EnvironmentLimitsField } from "./EnvironmentLimitsField"
+import { EnvironmentServicesField } from "./EnvironmentServicesField"
 import { EnvVarsField, type EnvValuesStatus } from "./EnvVarsField"
 import { listToText, SourceFields, textToList } from "./SourceFields"
 
@@ -85,7 +87,10 @@ export function EnvironmentFormDialog({ open, env, pcAvailable, pcReason, hosts,
                     </div>
                     <SourceFields form={form} editing={Boolean(env)} />
                     <EnvVarsField form={form} status={envStatus} onRetry={() => void envValues.refetch()} />
-                    <EnvironmentLimitsField form={form} env={env} host={hosts[runOn]} machine={MACHINE_SUBJECT[runOn]} />
+                    <ComposeReadProvider form={form} env={env}>
+                        <EnvironmentLimitsField form={form} env={env} host={hosts[runOn]} machine={MACHINE_SUBJECT[runOn]} />
+                        <EnvironmentServicesField form={form} env={env} />
+                    </ComposeReadProvider>
                     <div className={FORM_GRID}>
                         <Field id="environment-ports" label="Portas (separadas por vírgula)" error={errors.ports?.message ?? errors.ports?.find?.((item) => item?.message)?.message}>
                             <Controller control={form.control} name="ports" render={({ field }) => <Input id="environment-ports" className="font-mono" value={listToText(field.value.map(String))} onChange={(event) => field.onChange(textToList(event.target.value).map(Number))} placeholder="4100, 4101" />} />

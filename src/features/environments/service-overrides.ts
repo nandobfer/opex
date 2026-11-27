@@ -197,6 +197,15 @@ export function composeOverridesCount(overrides: ComposeOverrides | null | undef
     return value.services.reduce((sum, item) => sum + customizedFields(item).length, 0) + Object.values(overrideYamlKeys(value.yaml)).reduce((sum, keys) => sum + keys.length, 0)
 }
 
+/** Resumo curto da linha: "app imagem nginx:1.27 · 3 ajustes" (vazio = sem ajustes). */
+export function composeOverridesShortText(overrides: ComposeOverrides | null | undefined): string {
+    const value = composeOverridesOf(overrides)
+    const count = composeOverridesCount(value)
+    if (!count) return ""
+    const images = value.services.filter((item) => item.image !== null).map((item) => `${item.service} imagem ${item.image}`)
+    return [...images, count === 1 ? "1 ajuste" : `${count} ajustes`].join(" · ")
+}
+
 /** Forma comparável: sem serviços vazios, em ordem de nome, YAML sem espaços nas pontas. */
 function canonical(overrides: ComposeOverrides | null | undefined): string {
     const value = composeOverridesOf(overrides)
