@@ -10,7 +10,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { ROUTINE_TRIGGER_ORIGIN_LABELS, canCancelRun } from "../../status"
-import { formatCost, formatDateTime, formatDuration, formatTime, formatTokens } from "../../format"
+import { formatCostPair, formatDateTime, formatDuration, formatTime, formatTokens } from "../../format"
+import { RoutineRunCostSection } from "./RoutineRunCostSection"
 import { useCancelRoutineRun, useResolveRoutineAction, useRoutineRun } from "../../hooks/useRoutineRuns"
 import { RoutineRunStatusBadge } from "../RoutineBadges"
 import { RoutinePendingAction } from "./RoutinePendingAction"
@@ -53,8 +54,11 @@ export function RoutineRunDetailSheet({ agentId, runId, onClose }: { agentId: st
                             <Info label="Duração ativa" value={formatDuration(run.activeMs)} />
                             <Info label="Esperando" value={formatDuration(run.waitingMs)} />
                             <Info label="Tokens" value={formatTokens(run.tokens)} />
-                            <Info label="Custo" value={formatCost(run.costUsd, run.costPartial)} />
+                            <Info label="Custo de tabela" value={run.cost ? formatCostPair(run.cost.listUsd, run.cost.listBrl, { partial: run.cost.partial, estimated: run.cost.estimated }) : "—"} />
+                            <Info label="Custo efetivo" value={run.cost ? formatCostPair(run.cost.effectiveUsd, run.cost.effectiveBrl, { partial: run.cost.partial }) : "—"} />
+                            <Info label="Economia" value={run.cost ? formatCostPair(run.cost.savingsUsd, run.cost.savingsBrl) : "—"} />
                         </div>
+                        <RoutineRunCostSection run={run} />
                         {run.hibernation && run.status === "hibernating" && (
                             <p className="rounded-md bg-muted p-2 text-sm">
                                 Próxima verificação às {formatTime(run.hibernation.at)}: {run.hibernation.reason}

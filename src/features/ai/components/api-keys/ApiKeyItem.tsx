@@ -2,7 +2,7 @@
 
 import { useState } from "react"
 import { motion } from "framer-motion"
-import { RefreshCcw, Star } from "lucide-react"
+import { Receipt, RefreshCcw, Star } from "lucide-react"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { toast } from "sonner"
@@ -13,6 +13,7 @@ import { Button } from "@/components/ui/button"
 import { renameAiApiKeySchema, type AiApiKeyDto, type AiApiKeyProviderId } from "../../api-keys"
 import { useMakePrimaryAiApiKey, useToggleAiApiKey, useUpdateAiApiKey } from "../../hooks/useAiApiKeys"
 import { RemoveApiKeyDialog } from "./RemoveApiKeyDialog"
+import { billingSummary } from "@/features/ai-billing/schemas"
 
 interface ApiKeyItemProps {
     provider: AiApiKeyProviderId
@@ -21,6 +22,8 @@ interface ApiKeyItemProps {
     /** Há outras chaves no provedor (a principal não pode ser removida sem eleger outra). */
     hasOthers: boolean
     onReplaceSecret: (apiKey: AiApiKeyDto) => void
+    /** Abre o plano de cobrança (OPE-203); ausente nos provedores sem plano (JEV). */
+    onEditBilling?: (apiKey: AiApiKeyDto) => void
 }
 
 export const PRIMARY_KEY_RULE_MESSAGE = "Esta é a chave principal: torne outra chave principal antes"
@@ -30,7 +33,7 @@ export const PRIMARY_KEY_RULE_MESSAGE = "Esta é a chave principal: torne outra 
  * "Principal" e não sai de uso; as demais têm "Tornar principal". Substituir o segredo, renomear (inline)
  * e remover (com confirmação) seguem como antes.
  */
-export function ApiKeyItem({ provider, providerName, apiKey, hasOthers, onReplaceSecret }: ApiKeyItemProps) {
+export function ApiKeyItem({ provider, providerName, apiKey, hasOthers, onReplaceSecret, onEditBilling }: ApiKeyItemProps) {
     const toggle = useToggleAiApiKey(provider)
     const makePrimary = useMakePrimaryAiApiKey(provider)
     const rename = useUpdateAiApiKey(provider, "Chave renomeada")
@@ -57,7 +60,23 @@ export function ApiKeyItem({ provider, providerName, apiKey, hasOthers, onReplac
     return (
         <ActiveItemRow
             label={apiKey.name}
-            sublabel={`Segredo definido · criada em ${format(new Date(apiKey.createdAt), "dd/MM/yyyy", { locale: ptBR })}`}
+            sublabel={
+                <span className="flex flex-col gap-0.5">
+                    <span>{`Segredo definido · criada em ${format(new Date(apiKey.createdAt), "dd/MM/yyyy", { locale: ptBR })}`}</span>
+                    {onEditBilling ? (
+                        <span data-slot="billing-summary" className="text-foreground/80">
+                            {billingSummary(apiKey.billing ?? { mode: "usage" })}
+                        </span>
+                    ) : null}
+                    {onEditBilling
+                        ? (apiKey.billingNotices ?? []).map((notice) => (
+                              <span key={notice} data-slot="billing-notice">
+                                  {notice}
+                              </span>
+                          ))
+                        : null}
+                </span>
+            }
             active={apiKey.active}
             activateLabel={`Usar a chave ${apiKey.name}`}
             deactivateLabel={`Tirar a chave ${apiKey.name} de uso`}
@@ -81,6 +100,11 @@ export function ApiKeyItem({ provider, providerName, apiKey, hasOthers, onReplac
                     {!apiKey.primary ? (
                         <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={`Tornar ${apiKey.name} a chave principal`} title="Tornar principal" disabled={pending} onClick={() => makePrimary.mutate(apiKey.id)}>
                             <Star className="h-4 w-4" aria-hidden />
+                        </Button>
+                    ) : null}
+                    {onEditBilling ? (
+                        <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={`Plano de cobrança de ${apiKey.name}`} title="Plano de cobrança" onClick={() => onEditBilling(apiKey)}>
+                            <Receipt className="h-4 w-4" aria-hidden />
                         </Button>
                     ) : null}
                     <Button type="button" size="icon" variant="ghost" className="h-8 w-8" aria-label={`Substituir o segredo de ${apiKey.name}`} title="Substituir segredo" onClick={() => onReplaceSecret(apiKey)}>

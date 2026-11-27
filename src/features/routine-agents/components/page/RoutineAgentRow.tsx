@@ -7,28 +7,33 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { UsageByDateChart } from "@/components/metrics/UsageByDateChart"
 import { formatMetricValue } from "@/components/metrics/format"
 import { routineAgentHref } from "../../constants"
-import { formatDateTime } from "../../format"
+import { formatCostPair, formatDateTime } from "../../format"
 import { ROUTINE_ENGINE_LABELS } from "../../schemas"
 import type { RoutineAgentDto, RoutineAgentMetricsDto } from "../../types"
 import { RoutineAgentStatusBadge, RoutineProvisioningBadge, RoutineRunStatusBadge } from "../RoutineBadges"
-import { ROUTINE_ROW_CHART_CLASS, ROUTINE_ROW_CHART_HEIGHT, ROUTINE_ROW_GRID, ROUTINE_ROW_KPI_HEIGHT, ROUTINE_ROW_KPIS } from "./routine-agents-layout"
+import { ROUTINE_ROW_CHART_CLASS, ROUTINE_ROW_CHART_HEIGHT, ROUTINE_ROW_GRID, ROUTINE_ROW_KPI_COUNT, ROUTINE_ROW_KPI_HEIGHT, ROUTINE_ROW_KPIS } from "./routine-agents-layout"
 
 type MetricsState = { status: "loading" } | { status: "error" } | { status: "ready"; metrics: RoutineAgentMetricsDto | undefined }
 
-function RowKpi({ label, value, format }: { label: string; value: number; format: "count" | "tokens" }) {
+function RowKpi({ label, value, format, title }: { label: string; value: number | null; format: "count" | "tokens" | "usd"; title?: string }) {
     return (
-        <div className={`flex flex-col justify-center rounded-lg border bg-background/40 px-3 ${ROUTINE_ROW_KPI_HEIGHT}`}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
-            <p className="font-mono text-lg font-bold text-foreground">
-                <AnimatedNumber value={value} formatter={(next) => formatMetricValue(next, format)} />
+        <div className={`flex flex-col justify-center rounded-lg border bg-background/40 px-3 ${ROUTINE_ROW_KPI_HEIGHT}`} title={title}>
+            <p className="truncate text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
+            <p className="truncate font-mono text-lg font-bold text-foreground">
+                {value === null ? <span className="text-muted-foreground">—</span> : <AnimatedNumber value={value} formatter={(next) => formatMetricValue(next, format)} />}
             </p>
         </div>
     )
 }
 
+/** Dica dos KPIs de custo: o valor em R$ e as marcações (OPE-203). */
+function costTitle(kind: string, usd: number | null, brl: number | null, cost: RoutineAgentMetricsDto["cost"]["totals"] | undefined): string {
+    return `${kind}: ${formatCostPair(usd, brl, { partial: cost?.partial, estimated: cost?.estimated })}${cost?.missingPrices.length ? ` · sem preço: ${cost.missingPrices.join(", ")}` : ""}`
+}
+
 /**
  * Linha de um agente rotineiro em `/agentes-rotineiros` (OPE-130, D18): identificação (link para a página
- * do agente), quatro KPIs e "Execuções por dia" do período escolhido nos filtros.
+ * do agente), seis KPIs (com o custo efetivo e o de tabela, OPE-203) e "Execuções por dia" do período escolhido nos filtros.
  */
 export function RoutineAgentRow({ agent, metrics }: { agent: RoutineAgentDto; metrics: MetricsState }) {
     const model = agent.engine === "opex" ? agent.opex.model : agent.opencode.model
@@ -63,7 +68,7 @@ export function RoutineAgentRow({ agent, metrics }: { agent: RoutineAgentDto; me
                 {metrics.status === "loading" ? (
                     <>
                         <div className={ROUTINE_ROW_KPIS}>
-                            {[0, 1, 2, 3].map((index) => (
+                            {Array.from({ length: ROUTINE_ROW_KPI_COUNT }, (_, index) => (
                                 <Skeleton key={index} className={`${ROUTINE_ROW_KPI_HEIGHT} w-full rounded-lg`} />
                             ))}
                         </div>
@@ -78,6 +83,8 @@ export function RoutineAgentRow({ agent, metrics }: { agent: RoutineAgentDto; me
                             <RowKpi label="Concluídas" value={metrics.metrics?.kpis.completed ?? 0} format="count" />
                             <RowKpi label="Com erro" value={metrics.metrics?.kpis.errors ?? 0} format="count" />
                             <RowKpi label="Tokens" value={metrics.metrics?.kpis.tokens ?? 0} format="tokens" />
+                            <RowKpi label="Custo efetivo" value={metrics.metrics?.cost.totals.effectiveUsd ?? null} format="usd" title={costTitle("Custo efetivo", metrics.metrics?.cost.totals.effectiveUsd ?? null, metrics.metrics?.cost.totals.effectiveBrl ?? null, metrics.metrics?.cost.totals)} />
+                            <RowKpi label="Custo de tabela" value={metrics.metrics?.cost.totals.listUsd ?? null} format="usd" title={costTitle("Custo de tabela", metrics.metrics?.cost.totals.listUsd ?? null, metrics.metrics?.cost.totals.listBrl ?? null, metrics.metrics?.cost.totals)} />
                         </div>
                         <div className="min-w-0">
                             <p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">Execuções por dia</p>

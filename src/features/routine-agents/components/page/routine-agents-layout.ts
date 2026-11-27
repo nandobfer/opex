@@ -3,7 +3,9 @@
  * carregamento ter a mesma estrutura das linhas: identificação | KPIs | gráfico.
  */
 export const ROUTINE_ROW_GRID = "grid gap-4 p-4 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,1.5fr)] lg:items-center"
-export const ROUTINE_ROW_KPIS = "grid grid-cols-2 gap-2"
+/** Seis KPIs: execuções, concluídas, com erro, tokens, custo efetivo e custo de tabela (OPE-203). */
+export const ROUTINE_ROW_KPIS = "grid grid-cols-2 gap-2 sm:grid-cols-3"
+export const ROUTINE_ROW_KPI_COUNT = 6
 export const ROUTINE_ROW_KPI_HEIGHT = "h-[68px]"
 /** Altura da área do gráfico da linha (px). */
 export const ROUTINE_ROW_CHART_HEIGHT = 150
@@ -16,6 +18,12 @@ export const ROUTINE_ROWS_GAP = "space-y-3"
  */
 export const ROUTINE_OVERVIEW_GRID = "flex flex-col gap-4 lg:flex-row lg:items-start"
 export const ROUTINE_OVERVIEW_MAIN = "min-w-0 flex-1 space-y-4"
+/**
+ * Visão geral (OPE-203): 11 KPIs (5 de execução + 6 de custo) e 4 gráficos — "Custo por dia" (linhas, largura toda),
+ * execuções, tokens e a divisão do custo. O skeleton usa as mesmas quantidades.
+ */
+export const ROUTINE_OVERVIEW_KPI_COUNT = 11
+export const ROUTINE_OVERVIEW_CHART_COUNT = 4
 /** Larguras da coluna da conversa (px) a partir de `lg`. */
 export const ROUTINE_CHAT_EXPANDED_WIDTH = 440
 export const ROUTINE_CHAT_COLLAPSED_WIDTH = 56

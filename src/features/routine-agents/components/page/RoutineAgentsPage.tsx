@@ -23,7 +23,7 @@ import { useRoutineRealtime } from "../../hooks/useRoutineRealtime"
 import type { RoutineAgentDto } from "../../types"
 import { RoutineAgentRow } from "./RoutineAgentRow"
 import { RoutineAgentsFilters } from "./RoutineAgentsFilters"
-import { ROUTINE_ROW_CHART_CLASS, ROUTINE_ROW_GRID, ROUTINE_ROW_KPI_HEIGHT, ROUTINE_ROW_KPIS, ROUTINE_ROWS_GAP } from "./routine-agents-layout"
+import { ROUTINE_ROW_CHART_CLASS, ROUTINE_ROW_GRID, ROUTINE_ROW_KPI_COUNT, ROUTINE_ROW_KPI_HEIGHT, ROUTINE_ROW_KPIS, ROUTINE_ROWS_GAP } from "./routine-agents-layout"
 
 /** Altura estimada de uma linha na lista virtualizada (mais de 50 agentes). */
 const ROUTINE_ROW_ESTIMATE = 220
@@ -43,7 +43,7 @@ export function RoutineAgentsSkeleton() {
                             <Skeleton className="h-3 w-3/4" />
                         </div>
                         <div className={ROUTINE_ROW_KPIS}>
-                            {[0, 1, 2, 3].map((kpi) => (
+                            {Array.from({ length: ROUTINE_ROW_KPI_COUNT }, (_, kpi) => (
                                 <Skeleton key={kpi} className={`${ROUTINE_ROW_KPI_HEIGHT} w-full rounded-lg`} />
                             ))}
                         </div>

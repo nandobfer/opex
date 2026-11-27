@@ -1,5 +1,6 @@
 import { format, formatDistanceToNowStrict } from "date-fns"
 import { ptBR } from "date-fns/locale"
+import { formatMoneyPair } from "@/features/ai-billing/money"
 
 /** Formatação das telas dos agentes rotineiros (OPE-130, módulo PURO). */
 
@@ -22,6 +23,13 @@ export function formatCost(costUsd: number | null, partial: boolean): string {
     if (costUsd === null) return "—"
     const value = `US$ ${costUsd.toFixed(costUsd < 1 ? 4 : 2)}`
     return partial ? `${value} (parcial)` : value
+}
+
+/** Custo de tabela ou efetivo com R$ e as marcações de parcial/estimado (OPE-203). */
+export function formatCostPair(usd: number | null, brl: number | null, flags: { partial?: boolean; estimated?: boolean } = {}): string {
+    if (usd === null) return flags.partial ? "— (parcial)" : "—"
+    const marks = [flags.partial ? "parcial" : null, flags.estimated ? "estimado" : null].filter(Boolean)
+    return `${formatMoneyPair(usd, brl)}${marks.length ? ` (${marks.join(", ")})` : ""}`
 }
 
 export function formatTokens(tokens: number): string {
