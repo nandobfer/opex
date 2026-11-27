@@ -32,6 +32,10 @@ describe('html-guard (OPE-210)', () => {
     ['<img title=">" src="http://10.0.0.5/x">', 'src'],
     ['<a href="java&#x09;script:alert(1)">x</a>', 'javascript:'],
     ['<svg><style>a{background:u&#114;l(http://x)}</style></svg>', 'url('],
+    // Rodada 3: <style> de conteúdo estrangeiro (svg/math) não é texto bruto.
+    ['<svg><style><div><svg><image href="http://10.0.0.5:8080/x"/></svg></div></style></svg>', 'dentro de <style>'],
+    ['<math><style><div><svg><image href="http://10.0.0.5:8080/x"/></svg></div></style></math>', 'dentro de <style>'],
+    ['<style>p{color:red}<div></style>', 'dentro de <style>'],
   ])('recusa %s', (html, fragment) => {
     expect(externalResourceReason(html)).toContain(fragment)
   })

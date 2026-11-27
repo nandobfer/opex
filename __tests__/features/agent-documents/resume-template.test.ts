@@ -3,6 +3,7 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { COMPACT_REPLACEMENTS, renderResumeHtml, resumeCss } from '@/features/agent-documents/server/resume/template'
 import { REFERENCE_RESUME_CONTENT } from '../../fixtures/resume/sample-content'
+import { externalResourceReason } from '@/lib/pdf/html-guard'
 
 const ENTITIES: Record<string, string> = { middot: '·', ndash: '–', mdash: '—', rarr: '→', ecirc: 'ê' }
 
@@ -19,6 +20,12 @@ const reference = readFileSync(join(__dirname, '../../fixtures/resume/curriculo-
 describe('modelo do currículo aprovado (OPE-210)', () => {
   it('reproduz literalmente o HTML de referência (curriculo-fernando-burgos-2026-11-15)', () => {
     expect(normalize(renderResumeHtml(REFERENCE_RESUME_CONTENT, 'padrao'))).toBe(normalize(reference))
+  })
+
+  it('o modelo (nas duas densidades) passa pela guarda do HTML', () => {
+    expect(externalResourceReason(renderResumeHtml(REFERENCE_RESUME_CONTENT, 'padrao'))).toBeNull()
+    expect(externalResourceReason(renderResumeHtml(REFERENCE_RESUME_CONTENT, 'compacto'))).toBeNull()
+    expect(externalResourceReason(reference)).toBeNull()
   })
 
   it('o CSS padrão é o da referência, linha a linha', () => {

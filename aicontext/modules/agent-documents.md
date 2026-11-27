@@ -73,7 +73,7 @@ em CSS ou URL (`&lpar;`). `<a href>` é aceito (o link não é buscado).
 
 Duas camadas no app: regras globais por regex sobre o documento inteiro e um tokenizador das tags que respeita aspas
 (um `>` dentro de `title=">"` não fecha a tag), lê o `<style>` até o `</style` ou até o fim do documento (sem
-fechamento), decodifica entidades numéricas antes de conferir CSS e URLs (inclusive `java&#x09;script:` e o `<style>`
+fechamento) e recusa qualquer `<` dentro dele (no `<style>` de `<svg>`/`<math>` a marcação vale como HTML), decodifica entidades numéricas antes de conferir CSS e URLs (inclusive `java&#x09;script:` e o `<style>`
 do SVG) e trata comentários `<!-- -->` como texto (recusa a mais, nunca a menos). A camada do host abaixo é a que fecha
 a rede de vez. Defesa em profundidade no host
 (Variáveis extras do ambiente `gotenberg`): `CHROMIUM_DENY_PRIVATE_IPS=true` e `CHROMIUM_DISABLE_JAVASCRIPT=true`

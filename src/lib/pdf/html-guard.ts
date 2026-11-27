@@ -156,7 +156,11 @@ function tagsReason(html: string): string | null {
             // Texto bruto até `</style` ou até o fim do documento (sem fechamento, o navegador lê tudo como CSS).
             const close = html.slice(i).search(/<\/style/i)
             const end = close === -1 ? html.length : i + close
-            const reason = cssReason(html.slice(i, end), "bloco")
+            const css = html.slice(i, end)
+            // CSS legítimo não tem marcação. Dentro de <svg>/<math> o <style> não é texto bruto: um `<div>` ali
+            // sai do conteúdo estrangeiro e as tags seguintes viram HTML de verdade.
+            if (css.includes("<")) return "marcação (<) dentro de <style> não é aceita"
+            const reason = cssReason(css, "bloco")
             if (reason) return reason
             i = end
         }
