@@ -12,6 +12,8 @@ import { ENGRAMIND_INTEGRATION_ID } from "../../constants"
  */
 
 const EXPORT_TIMEOUT_MS = 10 * 60_000
+/** Teto da leitura do resumo (~205 caracteres por memória: cobre cerca de 300 mil memórias). */
+export const EXPORT_OUTPUT_MAX = 64_000_000
 export const EXPORT_ROOT = "/tmp/opex/engramind-migracao"
 /** Caminho absoluto simples (sem aspas, espaços nem quebras): vai num comando de shell. */
 const SAFE_PATH = /^\/[A-Za-z0-9._/-]+$/
@@ -63,9 +65,11 @@ export async function exportScriptPath(): Promise<string | null> {
  */
 export async function runHostExport(dir: string, options: { scriptPath: string }): Promise<ExportDigest> {
     const runner = await hostRunner()
-    const result = await runner(exportCommand(options.scriptPath, dir), EXPORT_TIMEOUT_MS, { redactedAs: `export das memórias do Engramind em ${dir}`, quiet: true })
+    const result = await runner(exportCommand(options.scriptPath, dir), EXPORT_TIMEOUT_MS, { redactedAs: `export das memórias do Engramind em ${dir}`, quiet: true, maxOutput: EXPORT_OUTPUT_MAX })
     if (result.exitCode !== 0) throw new DomainError(502, `O export das memórias falhou no host (código ${result.exitCode ?? "?"}): ${result.output.split("\n").filter((line) => !line.startsWith(DIGEST_MARKER)).slice(-3).join(" ").slice(0, 300)}`, "ENGRAMIND_EXPORT_FAILED")
+    if (result.readError) throw new DomainError(502, `A leitura do resumo do export falhou no meio (${result.output.length} caractere(s) lidos do host): tente de novo.`, "ENGRAMIND_EXPORT_READ_FAILED")
+    if (result.truncated) throw new DomainError(502, `O resumo do export passou do limite de leitura do host (${Math.round(EXPORT_OUTPUT_MAX / 1_000_000)} MB).`, "ENGRAMIND_EXPORT_TOO_LARGE")
     const digest = parseDigestOutput(result.output)
-    if (!digest) throw new DomainError(502, "O export das memórias não devolveu o resumo esperado.", "ENGRAMIND_EXPORT_INVALID")
+    if (!digest) throw new DomainError(502, `O export das memórias não devolveu o resumo esperado (${result.output.length} caractere(s) lidos do host).`, "ENGRAMIND_EXPORT_INVALID")
     return digest
 }

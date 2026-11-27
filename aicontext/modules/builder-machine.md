@@ -124,6 +124,11 @@ não existe — ver `modules/opencode-resources.md`.
   processo) e a pasta do job é apagada no fim. `onOutput` entrega a saída aos pedaços; `retryOnLost`
   repete uma leitura sem efeito colateral; `quiet` não escreve no debug. `createHostRunner(debug)` cria
   um executor que escreve no debug de outra integração.
+- **Saída do comando** (`server/shell.ts`, `readAll`): lida do OpenCode em páginas de 64k seguindo o `cursor`
+  devolvido até o fim (`truncated`/`cursor < size`), também depois do fim com `onOutput`. Teto padrão de 2 MB
+  (`HOST_OUTPUT_MAX`, opção `maxOutput`, vale também para o que é acumulado ao vivo com `onOutput`); acima dele o
+  resultado traz o começo e `truncated: true`. Página que falha é repetida uma vez; se falhar de novo, o resultado
+  traz o que veio antes com `truncated: true` e `readError: true` (nunca como saída completa).
 - **Fila do build** continua única (um build local por vez em todo o app).
 - **Forks não usam a Builder Machine**: só o build **da mesa** passa por ela (o marcador de nova
   prévia do fork do My Tasks não foi portado); um `docker compose` rodado por um fork vai para o

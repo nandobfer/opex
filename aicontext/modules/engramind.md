@@ -908,7 +908,10 @@ inverso, `moveIdempotencyKey`), `runner.ts` (passos idempotentes e retomáveis) 
    portão da seção "Portão de manutenção", então o backup e a conferência comparam o mesmo acervo parado.
 2. **Backup**: o script do campo público "Script de export das memórias (host)" da integração roda no
    host pelo `createHostRunner` em `/tmp/opex/engramind-migracao/<id>/antes`; só um resumo por memória
-   (id, canal, status, fixação, chave, SHA-256 do texto) volta para o Opex. Sem o script, não começa; a
+   (id, canal, status, fixação, chave, SHA-256 do texto) volta para o Opex, numa linha `OPEX_DIGEST:` (~205
+   caracteres por memória: ~611 KB no acervo de 2.987 memórias). O executor do host lê essa saída em páginas de 64k
+   seguindo o `cursor` do OpenCode até o fim, com teto de 64 MB no export (`EXPORT_OUTPUT_MAX`); acima dele falha com
+   `ENGRAMIND_EXPORT_TOO_LARGE`, leitura que falha no meio com `ENGRAMIND_EXPORT_READ_FAILED` e resumo sem marcador ou JSON inválido com `ENGRAMIND_EXPORT_INVALID`. Sem o script, não começa; a
    listagem de cada origem no Engramind é conferida contra o resumo (garante que o export é o mesmo
    Engramind da integração). Se não conferir (antes de qualquer `move`), a migração para e a retomada
    **refaz o backup**. Qualquer falha antes do primeiro `move` (backup, mapa ou destinos) **desliga a
