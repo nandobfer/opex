@@ -320,6 +320,22 @@ describe('migração B: ida', () => {
     expect(h.maintenance.at(-1)).toBeNull()
   })
 
+  it('retomada depois do resumo incompleto no backup: refaz o backup do acervo grande e move cada memória uma vez', async () => {
+    for (let index = 0; index < 600; index++) h.memories.set(`g_${index}`, mem(`g_${index}`, 'agentes/adversario', `memória ${index}`))
+    h.exportFails = true
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(latest()).toMatchObject({ status: 'failed', step: 'backup', movedCount: 0 })
+    h.exportFails = false
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(h.docs.size).toBe(1)
+    expect(latest().status).toBe('done')
+    expect((latest().backup as { totals: { memories: number } }).totals.memories).toBe(605)
+    expect([...h.moves.values()].every((count) => count === 1)).toBe(true)
+    expect(h.memories.get('g_599')!.channel).toBe('opex/agentes/adversario')
+  })
+
   it('falha depois de mover mantém a manutenção ligada', async () => {
     h.failMove = (id) => id === 'm_2'
     await startChannelMigration({ direction: 'forward' }, 'local')
