@@ -16,9 +16,10 @@
  */
 
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
+import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT } from "@/lib/ai/pricing/deepseek"
 import type { Schedule } from "./schedule"
 
-export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind", "evolution-api"] as const
+export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind", "evolution-api", "fx_ptax", "models_dev"] as const
 
 export type IntegrationId = (typeof INTEGRATION_IDS)[number]
 
@@ -211,6 +212,10 @@ export const OPENCODE_QUOTA_JOB_ID = "opencode-quota-refresh"
 /** Lê o status da assinatura OpenCode Go (Console) com a chave em uso e avisa a tela quando os percentuais mudam (OPE-167). */
 export const OPENCODE_GO_USAGE_JOB_ID = "opencode-go-usage-refresh"
 export const COMMAND_CODE_USAGE_JOB_ID = "command-code-usage-refresh"
+/** OPE-203: grava a PTAX (venda) de cada dia, usada nos valores em R$ dos custos de IA. */
+export const FX_PTAX_JOB_ID = "fx-ptax-daily"
+/** OPE-203: grava o uso total diário das assinaturas de IA (OpenCode Go, Command Code), base do rateio da mensalidade. */
+export const AI_SUBSCRIPTION_DAYS_JOB_ID = "ai-subscription-days"
 /** Lê CPU, RAM, swap e disco da máquina do OpenCode (RPC do opencode-htop ou shell) e avisa a tela quando muda. */
 export const HOST_METRICS_JOB_ID = "host-metrics-refresh"
 /** Engramind (OPE-192): reprocessa as gravações de memória que ficaram na fila com o Engramind fora do ar. */
@@ -354,6 +359,20 @@ export const DEFAULT_CRON_JOBS: CronJobConfig[] = [
         enabled: true,
     },
     {
+        id: FX_PTAX_JOB_ID,
+        label: "Gravar a cotação do dólar (PTAX do Banco Central)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 180 },
+        enabled: true,
+    },
+    {
+        id: AI_SUBSCRIPTION_DAYS_JOB_ID,
+        label: "Gravar o uso diário das assinaturas de IA (rateio do custo efetivo)",
+        kind: "internal",
+        schedule: { type: "interval", minutes: 30 },
+        enabled: true,
+    },
+    {
         id: HOST_METRICS_JOB_ID,
         label: "Ler CPU, RAM, swap e disco do servidor (opencode-htop)",
         kind: "internal",
@@ -432,6 +451,13 @@ export const PUSHER_MODE_OPTIONS = [
 // ---------------------------------------------------------------------------
 
 export const OPENCODE_DEFAULT_URL = "http://127.0.0.1:4096"
+
+// ---------------------------------------------------------------------------
+// Custos de IA (OPE-203)
+// ---------------------------------------------------------------------------
+
+export const FX_PTAX_DEFAULT_URL = "https://olinda.bcb.gov.br/olinda/servico/PTAX/versao/v1/odata"
+export const MODELS_DEV_DEFAULT_CATALOG_URL = "https://models.dev/api.json"
 
 // ---------------------------------------------------------------------------
 // Campos condicionais
@@ -725,7 +751,16 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
         defaultEnvironment: "externo",
         streamsDebugOverPusher: true,
         parent: "ai",
-        publicFields: [],
+        publicFields: [
+            {
+                key: "offPeakHolidays",
+                label: "Feriados fora de pico",
+                description: "Feriados chineses em que o dia inteiro usa a tarifa fora de pico no custo de tabela: uma data AAAA-MM-DD por linha (calendário de Pequim). Já vem com os feriados oficiais de 2026 e 2027; acrescente os anos seguintes quando o Conselho de Estado publicar",
+                kind: "textarea",
+                defaultValue: DEEPSEEK_DEFAULT_HOLIDAYS_TEXT,
+                placeholder: "2027-01-01\n2027-02-05",
+            },
+        ],
         secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma DeepSeek (platform.deepseek.com/api_keys); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],
     },
     {
@@ -856,6 +891,26 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             { key: "apiKey", label: "Chave global", description: "AUTHENTICATION_API_KEY da Evolution (cifrada; nunca exibida)", required: true },
             { key: "webhookSecret", label: "Segredo do webhook", description: "Gerado pelo Opex e enviado pela Evolution no header do webhook; nunca exibido", group: "card" },
         ],
+    },
+    {
+        // OPE-203: cotação do dólar para os custos de IA em R$ (API Olinda do Banco Central, pública, sem credencial).
+        id: "fx_ptax",
+        name: "Cotação do dólar (PTAX)",
+        description: "PTAX de venda do Banco Central, gravada por dia, para os custos de IA em R$",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        publicFields: [{ key: "baseUrl", label: "URL do serviço PTAX", description: "Serviço OData do Banco Central (Olinda)", kind: "url", defaultValue: FX_PTAX_DEFAULT_URL, placeholder: FX_PTAX_DEFAULT_URL, required: true }],
+        secretFields: [],
+    },
+    {
+        // OPE-203: preços de tabela de Anthropic, OpenAI e Gemini (público, sem credencial).
+        id: "models_dev",
+        name: "Preços de modelos (models.dev)",
+        description: "Catálogo público de preços por modelo (Anthropic, OpenAI, Gemini) para o custo de tabela",
+        defaultEnvironment: "externo",
+        streamsDebugOverPusher: true,
+        publicFields: [{ key: "apiUrl", label: "URL do catálogo", description: "JSON com os modelos e os preços por 1M de tokens", kind: "url", defaultValue: MODELS_DEV_DEFAULT_CATALOG_URL, placeholder: MODELS_DEV_DEFAULT_CATALOG_URL, required: true }],
+        secretFields: [],
     },
 ]
 

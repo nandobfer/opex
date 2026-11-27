@@ -1,4 +1,5 @@
 import { Schema, model, models, type Model } from "mongoose"
+import type { ListCost, TokenDetails } from "@/lib/ai/pricing/types"
 
 /**
  * Consumo de IA dO Opex, uma linha por **etapa/geração** (prospectivo). É a fonte do painel de
@@ -27,6 +28,13 @@ export interface IAiConsumption {
     apiKeyId?: string | null
     /** Detalhe da cobrança informado pelo OpenCode Go (`costUsd` = cobrado + cota); `null` nos demais. */
     billing?: { source: string | null; allowanceUsd: number | null; listCostUsd: number | null } | null
+    /** Tokens separados do passo (OPE-203, motor Opex dos rotineiros); ausente nas demais origens. */
+    tokenDetails?: TokenDetails | null
+    /**
+     * Custo de tabela do passo com a origem e o preço congelados (OPE-203). Ausente = ainda não calculado (o
+     * histórico recebe a estimativa na primeira leitura, `estimated: true`).
+     */
+    listCost?: ListCost | null
     createdAt: Date
 }
 
@@ -46,6 +54,8 @@ const AiConsumptionSchema = new Schema<IAiConsumption>(
             type: new Schema({ source: { type: String, default: null }, allowanceUsd: { type: Number, default: null }, listCostUsd: { type: Number, default: null } }, { _id: false }),
             default: null,
         },
+        tokenDetails: { type: Schema.Types.Mixed, default: undefined },
+        listCost: { type: Schema.Types.Mixed, default: undefined },
         createdAt: { type: Date, default: () => new Date() },
     },
     { collection: "ai_consumption_logs", versionKey: false },
@@ -54,6 +64,8 @@ const AiConsumptionSchema = new Schema<IAiConsumption>(
 AiConsumptionSchema.index({ provider: 1, createdAt: -1 })
 AiConsumptionSchema.index({ provider: 1, origin: 1, createdAt: -1 })
 AiConsumptionSchema.index({ provider: 1, apiKeyId: 1, createdAt: -1 })
+AiConsumptionSchema.index({ origin: 1, subject: 1 })
+AiConsumptionSchema.index({ apiKeyId: 1, createdAt: 1 })
 
 if (process.env.NODE_ENV === "development") {
     delete models.AiConsumption

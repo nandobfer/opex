@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(async () => []),
   remove: vi.fn(),
   create: vi.fn(async () => []),
+  billing: vi.fn(async () => []),
   toastError: vi.fn(),
 }))
 vi.mock('framer-motion', () => framerMotionMock())
@@ -24,6 +25,7 @@ vi.mock('@/features/ai/hooks/useAiApiKeys', () => ({
   useUpdateAiApiKey: () => ({ mutateAsync: mocks.update, isPending: false }),
   useRemoveAiApiKey: () => ({ mutate: mocks.remove, isPending: false }),
   useCreateAiApiKey: () => ({ mutateAsync: mocks.create, isPending: false }),
+  useUpdateAiKeyBilling: () => ({ mutateAsync: mocks.billing, isPending: false }),
 }))
 
 import { ApiKeysCard } from '@/features/ai/components/api-keys/ApiKeysCard'
@@ -107,5 +109,21 @@ describe('ApiKeysCard (chaves de API nomeadas, OPE-155/OPE-179)', () => {
     renderCard()
     expect(screen.getByText('Nenhuma chave de API')).toBeTruthy()
     expect(screen.getAllByRole('button', { name: 'Adicionar chave' }).length).toBe(2)
+  })
+
+  it('OPE-203: mostra o plano de cobrança e os avisos de cada chave e abre o plano pelo botão; o JEV não tem plano', () => {
+    mocks.keys = [
+      apiKeyDto('key_aaaaaaaaaaaaaaaaaa', 'Pessoal', true, true, { billing: { mode: 'subscription', amount: 10, currency: 'USD', renewalDay: 5, iofPercent: 6.38 }, billingNotices: ['Ciclo atual (desde 05/11): 2 dia(s) sem uso'] }),
+      apiKeyDto('key_bbbbbbbbbbbbbbbbbb', 'Empresa'),
+    ]
+    renderCard()
+    const summaries = screen.getAllByText(/Assinatura de|Pago por uso/)
+    expect(summaries.map((node) => node.textContent)).toEqual([expect.stringContaining('renova dia 5'), 'Pago por uso'])
+    expect(screen.getByText(/2 dia\(s\) sem uso/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Plano de cobrança de Pessoal' }))
+    expect(screen.getByText('Plano de cobrança — Pessoal')).toBeTruthy()
+    cleanup()
+    renderCard('jev', 'JEV')
+    expect(screen.queryByRole('button', { name: /Plano de cobrança/ })).toBeNull()
   })
 })

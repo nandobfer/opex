@@ -87,10 +87,11 @@ vi.mock('@/lib/ai/opencode-go', () => ({ clearOpencodeGoCatalogCache: mocks.clea
 vi.mock('@/lib/ai/command-code', () => ({ clearCommandCodeCatalogCache: mocks.clearCcCatalog }))
 vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.test }))
 vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.sync }))
+vi.mock('@/features/ai-billing/server/key-notices', () => ({ keyBillingNotices: async (_provider: string, items: { id: string }[]) => new Map(items.map((item) => [item.id, ['aviso do plano']])) }))
 
 import { DomainError } from '@/lib/api/route'
 import { decryptSecret, type EncryptedSecret } from '@/lib/crypto/secretBox'
-import { createAiApiKey, keyRingProvider, listAiApiKeys, makePrimaryAiApiKey, removeAiApiKey, setAiApiKeySelected, updateAiApiKey } from '@/features/ai/server/api-keys'
+import { createAiApiKey, keyRingProvider, listAiApiKeys, makePrimaryAiApiKey, removeAiApiKey, setAiApiKeySelected, updateAiApiKey, updateAiKeyBilling } from '@/features/ai/server/api-keys'
 
 const saved = process.env.INTEGRATIONS_ENCRYPTION_KEY
 const actor = 'local'
@@ -404,5 +405,57 @@ describe('chaveiro dos provedores de IA', () => {
     delete process.env.INTEGRATIONS_ENCRYPTION_KEY
     await expect(createAiApiKey('gemini', { name: 'A', secret: 'a' }, actor)).rejects.toMatchObject({ status: 409 })
     expect(await listAiApiKeys('gemini')).toEqual([])
+  })
+})
+
+describe('plano de cobrança da chave (OPE-203)', () => {
+  it('sem plano vale "Pago por uso"; gravar valida pelo Zod, audita antes/depois sem segredo e publica o evento', async () => {
+    const [key] = await createAiApiKey('deepseek', { name: 'Créditos', secret: 'sk-deepseek' }, actor)
+    expect(key).toMatchObject({ billing: { mode: 'usage' }, billingNotices: [] })
+    vi.clearAllMocks()
+    const keys = await updateAiKeyBilling('deepseek', key!.id, { mode: 'credits', faceValueUsd: 100, paidAmount: 0, paidCurrency: 'USD', startsAt: null, expiresAt: '2027-01-31', exhaustedAt: null }, actor)
+    expect(keys[0]).toMatchObject({ billing: { mode: 'credits', faceValueUsd: 100, paidAmount: 0 }, billingNotices: ['aviso do plano'] })
+    expect(keys[0]!.billing).not.toHaveProperty('setAt')
+    const stored = mocks.docs.get('ai_deepseek')!.apiKeys![0]!.billing as { mode: string; setAt: string }
+    expect(stored.mode).toBe('credits')
+    expect(typeof stored.setAt).toBe('string')
+    expect(mocks.audit).toHaveBeenCalledWith(expect.objectContaining({ entidade: 'ChaveApiIA', acao: 'ATUALIZAR', antes: expect.objectContaining({ plano: { mode: 'usage' } }), depois: expect.objectContaining({ plano: expect.objectContaining({ mode: 'credits' }) }) }))
+    expect(JSON.stringify(mocks.audit.mock.calls)).not.toContain('sk-deepseek')
+    expect(mocks.publish).toHaveBeenCalledWith('ai-provider-keys-updated', { provider: 'deepseek' })
+    // O plano não muda a chave em uso: nada de reteste nem de cache limpo.
+    expect(mocks.clearCatalog).not.toHaveBeenCalled()
+  })
+
+  it('editar o plano de créditos (validade, esgotado em) mantém o início padrão; trocar de modalidade o renova', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-11-01T12:00:00Z'))
+      const [key] = await createAiApiKey('deepseek', { name: 'Créditos', secret: 'sk-1' }, actor)
+      const credits = { mode: 'credits', faceValueUsd: 100, paidAmount: 50, paidCurrency: 'USD', startsAt: null, expiresAt: '2027-01-31', exhaustedAt: null }
+      await updateAiKeyBilling('deepseek', key!.id, credits, actor)
+      const setAtOf = () => (mocks.docs.get('ai_deepseek')!.apiKeys![0]!.billing as { setAt: string }).setAt
+      expect(setAtOf()).toBe('2026-11-01T12:00:00.000Z')
+      vi.setSystemTime(new Date('2026-11-20T12:00:00Z'))
+      await updateAiKeyBilling('deepseek', key!.id, { ...credits, expiresAt: '2027-02-28' }, actor)
+      await updateAiKeyBilling('deepseek', key!.id, { ...credits, expiresAt: '2027-02-28', exhaustedAt: '2026-11-25' }, actor)
+      expect(setAtOf()).toBe('2026-11-01T12:00:00.000Z')
+      await updateAiKeyBilling('deepseek', key!.id, { mode: 'usage' }, actor)
+      await updateAiKeyBilling('deepseek', key!.id, credits, actor)
+      expect(setAtOf()).toBe('2026-11-20T12:00:00.000Z')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('valores inválidos são recusados; o mesmo plano não grava de novo; o JEV não tem plano', async () => {
+    const [key] = await createAiApiKey('opencode-go', { name: 'Go', secret: 'oc_sk_1' }, actor)
+    await expect(updateAiKeyBilling('opencode-go', key!.id, { mode: 'subscription', amount: 0, currency: 'USD', renewalDay: 40, iofPercent: null }, actor)).rejects.toThrow()
+    const plan = { mode: 'subscription', amount: 10, currency: 'USD', renewalDay: 5, iofPercent: 6.38 }
+    await updateAiKeyBilling('opencode-go', key!.id, plan, actor)
+    vi.clearAllMocks()
+    await updateAiKeyBilling('opencode-go', key!.id, plan, actor)
+    expect(mocks.audit).not.toHaveBeenCalled()
+    const [jev] = await createAiApiKey('jev', { name: 'JEV', secret: 'ts-1' }, actor)
+    await expect(updateAiKeyBilling('jev', jev!.id, { mode: 'usage' }, actor)).rejects.toBeInstanceOf(DomainError)
   })
 })

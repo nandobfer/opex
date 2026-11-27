@@ -243,9 +243,13 @@ sem pedido explícito.
   `aicontext/modules/secretary-agent.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
+- Custos de IA (OPE-203): `ai-billing-updated` (`{ kind: "fx" | "subscription-days" }`) em `private-app` quando as
+  rotinas `fx-ptax-daily` ou `ai-subscription-days` (ou o preenchimento sob demanda) gravam PTAX ou uso diário das
+  assinaturas; as telas dos rotineiros também releem os custos em `ai-provider-keys-updated` (plano da chave) e
+  `ai-consumption-updated` com `origin: routine-agent` (ver `aicontext/modules/routine-agents.md`, "Custos").
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
-  ao criar, renomear, substituir o segredo, pôr ou tirar de uso, tornar principal (OPE-179) ou remover uma chave
-  (ver `aicontext/modules/ai.md`, "Chaves de API").
+  ao criar, renomear, substituir o segredo, pôr ou tirar de uso, tornar principal (OPE-179), alterar o plano de
+  cobrança (OPE-203) ou remover uma chave (ver `aicontext/modules/ai.md`, "Chaves de API").
 - Conversa com um agente rotineiro (OPE-160): `routine-chat-session-updated` / `routine-chat-session-deleted`
   (`{ id, agentId }`) em `private-app`; a resposta ao vivo vai pelo NDJSON
   (`GET /api/routine-agents/[id]/chat/sessions/[sessionId]/stream`).

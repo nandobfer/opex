@@ -14,6 +14,8 @@ import {
     OPENCODE_QUOTA_JOB_ID,
     OPENCODE_GO_USAGE_JOB_ID,
     COMMAND_CODE_USAGE_JOB_ID,
+    FX_PTAX_JOB_ID,
+    AI_SUBSCRIPTION_DAYS_JOB_ID,
     OPENCODE_SESSIONS_CLEANUP_JOB_ID,
     OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
     OPEX_FILES_CLEANUP_JOB_ID,
@@ -466,6 +468,14 @@ export function registerBuiltInJobs(): void {
     registerInternalJob(COMMAND_CODE_USAGE_JOB_ID, async () => {
         const { runCommandCodeUsageRefresh } = await import("@/features/command-code-usage/server/usage")
         return runCommandCodeUsageRefresh()
+    })
+    registerInternalJob(FX_PTAX_JOB_ID, async () => {
+        const { runFxPtaxRoutine } = await import("@/features/ai-billing/server/fx")
+        return runFxPtaxRoutine()
+    })
+    registerInternalJob(AI_SUBSCRIPTION_DAYS_JOB_ID, async () => {
+        const { runSubscriptionDaysRoutine } = await import("@/features/ai-billing/server/subscription-days")
+        return runSubscriptionDaysRoutine()
     })
     registerInternalJob(HOST_METRICS_JOB_ID, async () => {
         const { runHostMetricsRefresh } = await import("@/features/host-metrics/server/service")

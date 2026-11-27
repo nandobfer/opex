@@ -10,8 +10,9 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { feedsEngramind, type AiApiKeyDto, type AiApiKeyProviderId } from "../../api-keys"
+import { feedsEngramind, hasKeyBilling, type AiApiKeyDto, type AiApiKeyProviderId } from "../../api-keys"
 import { useAiApiKeys, useAiApiKeysRealtime } from "../../hooks/useAiApiKeys"
+import { ApiKeyBillingDialog } from "./ApiKeyBillingDialog"
 import { ApiKeyFormDialog } from "./ApiKeyFormDialog"
 import { ApiKeyItem } from "./ApiKeyItem"
 
@@ -24,6 +25,7 @@ export function ApiKeysCard({ provider, providerName }: { provider: AiApiKeyProv
     const keys = useAiApiKeys(provider)
     useAiApiKeysRealtime(provider)
     const [dialog, setDialog] = useState<{ open: boolean; target: AiApiKeyDto | null }>({ open: false, target: null })
+    const [billing, setBilling] = useState<{ open: boolean; target: AiApiKeyDto | null }>({ open: false, target: null })
     const rows = keys.data ?? []
 
     return (
@@ -62,7 +64,7 @@ export function ApiKeysCard({ provider, providerName }: { provider: AiApiKeyProv
                     <ul className="space-y-2" aria-label={`Chaves de API do ${providerName}`}>
                         <AnimatePresence initial={false}>
                             {rows.map((apiKey) => (
-                                <ApiKeyItem key={apiKey.id} provider={provider} providerName={providerName} apiKey={apiKey} hasOthers={rows.length > 1} onReplaceSecret={(target) => setDialog({ open: true, target })} />
+                                <ApiKeyItem key={apiKey.id} provider={provider} providerName={providerName} apiKey={apiKey} hasOthers={rows.length > 1} onReplaceSecret={(target) => setDialog({ open: true, target })} onEditBilling={hasKeyBilling(provider) ? (target) => setBilling({ open: true, target }) : undefined} />
                             ))}
                         </AnimatePresence>
                     </ul>
@@ -76,6 +78,7 @@ export function ApiKeysCard({ provider, providerName }: { provider: AiApiKeyProv
                 open={dialog.open}
                 onOpenChange={(open) => setDialog((current) => ({ ...current, open }))}
             />
+            {hasKeyBilling(provider) ? <ApiKeyBillingDialog provider={provider} target={billing.target} open={billing.open} onOpenChange={(open) => setBilling((current) => ({ ...current, open }))} /> : null}
         </Card>
     )
 }

@@ -227,6 +227,63 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   aparecem como **sem chave identificada**. O filtro "Chave de API" da aba Consumo marca "(em uso)" em
   todas as chaves do rodízio.
 
+### Plano de cobrança da chave (OPE-203)
+
+Cada chave de Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e Command Code (`AI_BILLING_PROVIDER_IDS`; o JEV
+fica fora) tem uma **modalidade**, que define o **custo efetivo** das chamadas que ela atender (por enquanto, só o
+motor Opex dos agentes rotineiros — `modules/routine-agents.md`, "Custos"):
+
+- **Pago por uso** (padrão; chave sem plano salvo): efetivo = custo de tabela.
+- **Assinatura**: mensalidade, moeda (USD/BRL), dia de renovação (1–31; 31 vira o último dia nos meses curtos) e
+  IOF/spread opcional (%), somado à mensalidade. Rateio **diário sobre o uso total da assinatura**: cota do dia =
+  mensalidade com IOF ÷ dias do ciclo; cada passo recebe cota × min(1, uso do passo ÷ uso total do dia). O uso total
+  vem da API de cota gravada por dia (`ai_subscription_days`, rotina `ai-subscription-days`; Go: custo do dia no
+  Console, comparado ao `allowance` do passo; Command Code: créditos do pool do dia, comparados ao custo de tabela do
+  passo). Chaves da **mesma assinatura** são detectadas pela API de cota (Go: mesmo ciclo e limites no Console;
+  Command Code: mesma conta) e compartilham o total — a mensalidade conta uma vez. Sem API de cota (Gemini,
+  Anthropic, OpenAI, DeepSeek) cada chave é a própria assinatura e o Opex carrega a cota do dia inteira (dividida
+  entre os passos dos rotineiros do dia). Dia sem o total da API → efetivo do dia **Parcial**, com o motivo. O uso
+  extra cobrado à parte (`usage.cost` do Go) soma ao efetivo. Dias sem uso nenhum são **ociosidade**: aparecem no
+  item da chave ("Ciclo atual: N dia(s) sem uso, ociosidade de …") e não são atribuídos a nenhum agente.
+- **Créditos**: valor de face (US$), valor pago (0 = concedidos) e a moeda, início (vazio = a data em que o plano de
+  créditos foi salvo pela primeira vez; editar validade ou "esgotado em" não muda esse início, só trocar de modalidade), validade e "esgotado em" opcional. Efetivo = tabela × (pago ÷ face; pago em R$ convertido pela PTAX do
+  início). Os créditos se esgotam quando o custo de tabela somado do Opex desde o início passa do valor de face (o
+  passo que cruza ainda é coberto) ou na data manual. Fora da validade, antes do início ou esgotados → custo de
+  tabela (pago por uso), com aviso na tela e no item da chave ("Opex já usou US$ X de US$ Y").
+
+Gravação: `PATCH /api/ai/providers/[provider]/keys/[keyId]/billing` (`updateAiKeyBilling` em
+`src/features/ai/server/api-keys.ts`, o único caminho de gravação do chaveiro), schema Zod único (`aiKeyBillingSchema`,
+`src/features/ai-billing/schemas.ts`) na API e no formulário, gravado em `apiKeys[i].billing` com `setAt`, auditoria
+`ChaveApiIA` com o plano antes/depois (nunca o segredo) e o evento `ai-provider-keys-updated`. O plano não muda a
+chave em uso (nada de reteste nem cache limpo). O DTO traz `billing` (sem `setAt`) e `billingNotices`
+(`server/key-notices.ts`; falha na leitura dos avisos não derruba a lista). Tela: ação **Plano de cobrança** (ícone de
+recibo) em cada chave abre o `ApiKeyBillingDialog` (abas Pago por uso | Assinatura | Créditos com `OptionTabs`, troca
+animada, campos em `FORM_GRID`); o item mostra o resumo do plano e os avisos. Alterar o plano recalcula o efetivo; o
+custo de tabela gravado nos passos não muda.
+
+### Custo de tabela (OPE-203, `src/lib/ai/pricing/`)
+
+Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é `null` (nunca zero):
+
+- **DeepSeek** (`deepseek.ts`): tabela oficial conferida em api-docs.deepseek.com/quick_start/pricing (26/11/2026) —
+  `deepseek-flash` (V4.1 Flash; `deepseek-v4-flash` e `deepseek-v4-flash-vision-exp` são cobrados como ele) e
+  `deepseek-v4-pro`, pico/fora de pico (o fora de pico é a metade). Pico: seg–sex, 01:00–04:00 e 06:00–10:00 UTC, pelo
+  início da chamada; fins de semana e os feriados chineses do campo **"Feriados fora de pico"** da integração DeepSeek
+  (uma data `AAAA-MM-DD` por linha, calendário de Pequim) são fora de pico. O campo já vem semeado com os feriados
+  oficiais de 2026 e 2027 (`DEEPSEEK_DEFAULT_HOLIDAYS`, avisos do Conselho de Estado em gov.cn, sem os dias de trabalho
+  compensatório) e continua editável. Sem escrita de cache cobrada à parte.
+- **OpenCode Go**: o `list_cost` que a própria resposta traz (`billing.listCostUsd`).
+- **Command Code** (`command-code.ts`): `pricing` do catálogo `?view=client` (`inputCost`, `outputCost`,
+  `cacheReadCost`, `cacheWriteCost`, faixas `contextTiers`); exposto por `commandCodePricingCatalog` (mesmo prazo e
+  cópia anterior do catálogo da geração).
+- **Anthropic, OpenAI, Gemini** (`models-dev.ts`): catálogo do models.dev (`input`, `output`, `cache_read`,
+  `cache_write`, faixas `tiers`/`context_over_200k`; Gemini = provedor `google`), integração **models_dev**.
+- Cálculo (`compute.ts`): faixa pela entrada do passo; entrada sem cache, cache lido e escrito (sem preço próprio, o
+  de entrada) e a saída total (o reasoning já está nela, sem cobrança dupla). Sem tokens informados → `null` com o motivo.
+- `createStepPricer` (`server.ts`): carrega o preço uma vez por turno, com prazo próprio (8 s) e o sinal de quem pediu;
+  falhou → a última cópia boa em memória e depois a do banco (`ai_price_catalogs`), com aviso no log; sem cópia →
+  passos sem preço com o motivo; cancelamento propaga.
+
 ## Geração (`src/lib/ai/stream.ts`)
 
 - `streamAi(request)` é o **único ponto** das features: gera em streaming e nunca lança — falhas
@@ -275,7 +332,9 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   `ai-consumption-updated` em `private-app`. A medição começou com o painel: o histórico anterior não
   é somado (decisão "precisão daqui em diante"). O registro aceita `billing` (`source`, `allowanceUsd`,
   `listCostUsd`, só o OpenCode Go; `null` nos demais). O Agente Opex grava o custo do turno quando o
-  provedor informa (antes, sempre `null`).
+  provedor informa (antes, sempre `null`). Desde a OPE-203 aceita também `tokenDetails` (tokens separados) e
+  `listCost` (custo de tabela com origem e preço congelados), gravados hoje só pelo motor Opex dos rotineiros; o
+  `costUsd` não mudou de significado (os painéis de consumo dos provedores seguem iguais).
 
 ## OpenCode Go (`opencode-go`, OPE-154)
 

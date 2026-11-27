@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { MetricsOverviewSkeleton } from "@/components/metrics/MetricsOverviewSkeleton"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { ROUTINE_CHAT_PANEL, ROUTINE_CHAT_PANEL_EXPANDED, ROUTINE_OVERVIEW_GRID, ROUTINE_OVERVIEW_MAIN } from "./routine-agents-layout"
+import { ROUTINE_CHAT_PANEL, ROUTINE_CHAT_PANEL_EXPANDED, ROUTINE_OVERVIEW_CHART_COUNT, ROUTINE_OVERVIEW_GRID, ROUTINE_OVERVIEW_KPI_COUNT, ROUTINE_OVERVIEW_MAIN } from "./routine-agents-layout"
 
 /**
  * Visão geral do agente rotineiro em duas colunas (OPE-160): filtros, KPIs e gráficos à esquerda e a
@@ -38,7 +38,7 @@ export function RoutineAgentPageSkeleton() {
             <div className={ROUTINE_OVERVIEW_GRID}>
                 <div className={ROUTINE_OVERVIEW_MAIN}>
                     <Skeleton className="h-10 w-full" />
-                    <MetricsOverviewSkeleton kpis={6} charts={2} />
+                    <MetricsOverviewSkeleton kpis={ROUTINE_OVERVIEW_KPI_COUNT} charts={ROUTINE_OVERVIEW_CHART_COUNT} />
                 </div>
                 <div className={cn(ROUTINE_CHAT_PANEL, ROUTINE_CHAT_PANEL_EXPANDED, "w-full lg:w-[440px]")} data-testid="routine-chat-skeleton">
                     <Skeleton className="m-3 h-8 w-2/3" />

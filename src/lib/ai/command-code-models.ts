@@ -1,6 +1,7 @@
 import { COMMAND_CODE_API_URL } from "./endpoints"
 import type { AiModelDto } from "./providers"
 import { isAiSdkReasoningLevel } from "./reasoning-levels"
+import type { CommandCodePricing } from "./pricing/command-code"
 
 /**
  * Catálogo do Command Code (módulo PURO, OPE-190): une `GET /provider/v1/models` (rotas por modelo) e
@@ -35,7 +36,7 @@ export interface CommandCodeClientModel {
     display?: { group?: string | null; label?: string | null } | null
     inputModalities?: string[]
     reasoningEfforts?: string[]
-    pricing?: { inputCost?: number; outputCost?: number } | null
+    pricing?: CommandCodePricing | null
 }
 
 /** Modelo do catálogo já unido pelo id. */
@@ -49,6 +50,8 @@ export interface CommandCodeRawModel {
     reasoningEfforts: string[]
     inputCost: number | null
     outputCost: number | null
+    /** Preço completo do catálogo (cache e faixas de contexto), para o custo de tabela (OPE-203). */
+    pricing: CommandCodePricing | null
 }
 
 const finite = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null)
@@ -75,6 +78,7 @@ export function joinCommandCodeCatalog(routing: readonly CommandCodeRoutingModel
             reasoningEfforts: strings(info?.reasoningEfforts) ?? [],
             inputCost: finite(info?.pricing?.inputCost),
             outputCost: finite(info?.pricing?.outputCost),
+            pricing: info?.pricing && typeof info.pricing === "object" ? info.pricing : null,
         })
     }
     for (const item of routing) if (typeof item?.id === "string") push(item.id, item)

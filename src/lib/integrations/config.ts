@@ -45,7 +45,7 @@ export interface IntegrationConfigMap {
     ai_gemini: { apiKey?: string }
     ai_anthropic: { apiKey?: string }
     ai_openai: { apiKey?: string }
-    ai_deepseek: { apiKey?: string }
+    ai_deepseek: { offPeakHolidays?: string; apiKey?: string }
     ai_opencode_go: { apiKey?: string }
     ai_command_code: { apiKey?: string }
     ai_jev: { apiKey?: string }
@@ -63,6 +63,8 @@ export interface IntegrationConfigMap {
     /** Builder Machine: ativação e a chave privada colada pelo usuário (a configuração fica nas coleções `local_docker_*`). */
     builder_machine: { active: boolean; sshPrivateKey?: string }
     engramind: { baseUrl?: string; opexPublicUrl?: string; environmentId?: string; adminToken?: string; webhookSecret?: string }
+    fx_ptax: { baseUrl: string }
+    models_dev: { apiUrl: string }
     "evolution-api": { internalUrl?: string; publicUrl?: string; defaultInstance?: string; version?: string; webhookUrl?: string; apiKey?: string; webhookSecret?: string }
 }
 

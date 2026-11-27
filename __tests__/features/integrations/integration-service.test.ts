@@ -80,7 +80,7 @@ describe('listIntegrations', () => {
   it('lista todas as integrações do catálogo, sem flags de permissão', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(null)
     const items = await listIntegrations()
-    expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api'])
+    expect(items.map((item) => item.id)).toEqual(['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api', 'fx_ptax', 'models_dev'])
     // Builder Machine aparece sempre (mesmo desativada), para poder ser ativada.
     // Inteligência Artificial são filhos do hub "Inteligência Artificial" (fora da lista principal na tela).
     expect(items.filter((item) => item.parent === 'ai').map((item) => item.id)).toEqual(['ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev'])
