@@ -62,6 +62,15 @@ na `main` sem repeti-la, com dois jobs encadeados.
   MCPs do Agente Opex falhava com "Cannot find module 'undici'"; agora o build da imagem falha com
   "Dependência de execução ausente na imagem: …". `pnpm dev` e os testes não mostram o problema (usam o
   `node_modules` completo).
+- **Type check do build da imagem (OPE-207):** o `next build` roda com `OPEX_SEPARATE_TYPE_CHECK=1` e
+  `next.config.ts` desliga o type check interno; logo depois, em processo próprio, o `Dockerfile` roda
+  `pnpm exec tsc --noEmit`. Dentro do `next build`, o tsc somava a memória ainda ocupada pelo Turbopack e
+  estourava a RAM do runner (`cannot allocate memory`, exit 102) logo após "Running TypeScript" — primeiro
+  em execuções simultâneas e depois de forma determinística no `Build image` da `main` e no `Preview`,
+  bloqueando o deploy de produção desde o build de 19:04 de 27/11/2026. Em processo separado o pico é só o
+  do tsc (~3,6 GB, medido com `tsc --diagnostics`); o escopo é o mesmo, inclusive os tipos de rota que o
+  build grava em `.next/types`. Fora do build da imagem (PR, `pnpm dev`) o `next build` continua checando
+  os tipos normalmente.
 - Versões recém-publicadas do `next` entram em `minimumReleaseAgeExclude` no
   `pnpm-workspace.yaml`: a política de idade mínima de release do pnpm bloquearia a atualização.
 
