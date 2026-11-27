@@ -18,7 +18,8 @@ interface MoveDialogProps {
     pcAvailable: boolean
     pcReason: string | null
     onClose: () => void
-    onStarted: (deployId: string, title: string) => void
+    /** Mudança iniciada: quem usa abre a página do log do deploy. */
+    onStarted: (deployId: string) => void
 }
 
 export function MoveDialog(props: MoveDialogProps) {
@@ -70,7 +71,7 @@ function MoveDialogContent({ env, pcAvailable, pcReason, onClose, onStarted }: M
                                 { action: "move", buildOn, runOn },
                                 {
                                     onSuccess: (result) => {
-                                        if (result.deployId) onStarted(result.deployId, env.name)
+                                        if (result.deployId) onStarted(result.deployId)
                                         onClose()
                                     },
                                 },

@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
-import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
+import { api, apiErrorCode, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import type { RoutineEntryInput } from "../schemas"
 import type { RoutineRunStatus } from "../status"
@@ -20,6 +20,8 @@ export function useRoutineRun(runId: string | null) {
         queryKey: routineKeys.run(runId ?? ""),
         queryFn: async () => unwrapApi((await api.get<ApiResponse<RoutineRunDetailDto>>(`/routine-agents/runs/${runId}`)).data),
         enabled: Boolean(runId),
+        // Execução inexistente (link velho, retenção): a página mostra "não encontrada" na hora, sem repetir.
+        retry: (failures, error) => apiErrorCode(error) !== "ROUTINE_RUN_NOT_FOUND" && failures < 3,
     })
 }
 

@@ -455,9 +455,22 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   com erro, tempo médio, tokens e os seis de custo da OPE-203, ver "Custos") e os gráficos (`GET /api/routine-agents/[id]/metrics?periodo=`):
   "Custo por dia" (largura toda), "Execuções por dia", "Tokens por dia" e "Divisão do custo";
   à direita a conversa com o agente, recolhível (ver "Conversa com o agente"). O carregamento da página
-  (`RoutineAgentPageSkeleton`) tem o cabeçalho, as abas e as duas colunas. **Execuções** (lista ao vivo, detalhe em
-  `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas**,
-  **Memórias** e **Segredos**.
+  (`RoutineAgentPageSkeleton`) tem o cabeçalho, as abas e as duas colunas. **Execuções** (lista ao vivo; a linha
+  inteira é o link para a página da execução, ver abaixo), **Entradas**, **Memórias** e **Segredos**.
+- **Página da execução** (OPE-208, no lugar da gaveta `?execucao=`, decisão do dono):
+  `/agentes-rotineiros/[id]/execucoes/[runId]` (`routineRunPath`), `RoutineRunPage`. Cabeçalho `AgentPageHeader` com a
+  seta **Voltar para as execuções** (`routineRunsHref`: a página do agente com `?aba=execucoes`), o título "Execução #N",
+  a linha agente · origem · motor · modelo e, na linha do título, o status e **Cancelar execução** (com confirmação).
+  Corpo em duas colunas no computador (`run-page-layout.ts`; uma só no celular): à esquerda a ação pendente
+  (Confirmar/Recusar), a hibernação, a solicitação, o erro, o relato final e os passos (`RoutineRunMain`); à direita,
+  fixo ao rolar, o resumo com início, fim, duração ativa, esperando, tokens, custos de tabela/efetivo/economia, custo
+  por modelo, avisos e ferramentas usadas (`RoutineRunAside`). Tudo atualiza pelo tempo real (`useRoutineRealtime`).
+  Estados: skeleton com a mesma grade (`RoutineRunPageSkeleton`), erro com Tentar novamente e, para
+  `ROUTINE_RUN_NOT_FOUND` (sem repetir a consulta), "Execução não encontrada" com **Ver as execuções do agente**.
+  Execução de outro agente: o endereço é trocado (`router.replace`) para o do agente dela. O toast "Abrir execução"
+  (`routine-run-attention`) leva para esta página. **Link antigo** `?execucao=<id>` na página do agente (da gaveta
+  removida) é redirecionado com `router.replace` para a página da execução; `execucao` só continua no schema da URL
+  para isso. O `RoutineRunDetailSheet` foi apagado.
 - **Memórias** (`RoutineMemoriesTab`, D10/D11): um card "Rede de memórias" com o `AgentUniverse` da lib
   (`agent="opex/rotineiro-<slug>"`, `defaultCreateChannel` = canal próprio), dentro do
   `OpexEngramindProvider`: as memórias de `opex`, `agentes/rotineiros/global`, do canal próprio e dos
