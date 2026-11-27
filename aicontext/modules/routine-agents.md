@@ -307,10 +307,21 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   (espera viva cancelável; soma por ativação; estourou → hiberna em 1 min), `hibernate` (mínimo
   1 min, com o motivo), `request_confirmation` (só com o switch ligado) e `finish` (relato final). As
   três últimas encerram o turno. Turno sem `finish` conclui com o último texto e um aviso.
+- **Cache de prompt (OPE-204)**: as instruções do sistema (`routineInstructions`, `run-prompt.ts`) não
+  trazem data e hora nem nada que mude a cada execução: com a mesma configuração, as mesmas memórias e os
+  mesmos avisos, saem idênticas byte a byte, e o 1º passo de cada execução acerta o cache de prefixo do
+  provedor. A ordem das seções vai do mais estável ao mais variável e deve ser mantida: identidade →
+  objetivo → instruções do dono → como trabalhar → HTTP e segredos → skills → avisos → memórias. A data e
+  a hora (`Data e hora atual: … (horário de Brasília).`) vão na mensagem de cada ativação
+  (`activationMessage`), logo depois do cabeçalho, no disparo e na retomada (com a hora da retomada); na
+  mensagem combinada da retomada sem histórico (disparo + retomada), aparecem uma vez só, na parte da retomada.
+  Vale para os dois motores.
 - **Motor Opex** (`server/engines/opex.ts`): `prepareModel` + `streamText` (o mesmo loop do Agente
   Opex; o `streamAi` não aceita ferramentas), o registro do Agente Opex filtrado pelas liberadas, os
   MCPs liberados (`loadMcpTools(..., { serverIds })`) e o histórico do modelo em `messages` para a
-  retomada. Ficam de fora, com aviso na execução: ferramentas removidas do catálogo, desligadas pelo
+  retomada. As ferramentas chegam ao modelo em ordem fixa entre execuções (cache de prompt): as externas
+  (app e MCPs) ordenadas pelo nome (código de caractere, sem depender do locale) e as internas num bloco
+  depois, sem depender da ordem dos servidores, do `tools/list` de cada um nem da seleção. Ficam de fora, com aviso na execução: ferramentas removidas do catálogo, desligadas pelo
   dono no Agente Opex (`disabledTools`) e as do grupo proibido aos rotineiros (também recusadas ao
   executar uma ação confirmada). Consumo por passo em `recordAiConsumption` (origem `routine-agent`).
   **Uma ferramenta por vez depois de encerrar**: se uma ferramenta do passo já encerrou o turno
@@ -333,6 +344,8 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   MCPs do host não liberados, e as ferramentas internas **por rede** num MCP do Opex por execução
   (`POST /api/routine-agents/mcp/<runId>`, em `PUBLIC_PREFIXES`, autenticado por um segredo
   aleatório da execução — só o hash no banco; registrado como `rotina_<id>` e removido no fim).
+  Como o prefixo `rotina_<id>_` muda a cada execução e entra nas instruções e nas ferramentas, o cache de
+  prompt do motor OpenCode só se repete entre as ativações (retomadas) da mesma execução.
   Serviço desligado → **Erro** com o motivo. As permissões falham fechadas: sem conseguir listar os
   MCPs do host → **Erro** acionável; sessão reaproveitada cujas permissões não puderam ser atualizadas
   → sessão nova, com aviso. As chamadas ao MCP da execução (memória, Chamada HTTP) viram passos.

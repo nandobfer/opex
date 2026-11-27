@@ -23,6 +23,7 @@ const holder = vi.hoisted(() => ({
   apiKeyId: 'key_x' as string | null,
   pricerRequests: [] as unknown[],
   pricedAt: [] as Date[],
+  mcpTools: [] as OpexTool[],
 }))
 
 vi.mock('ai', () => ({
@@ -60,6 +61,12 @@ vi.mock('@/lib/ai/pricing/server', () => ({
       },
     }
   },
+}))
+vi.mock('@/features/opex-agent/server/mcp/service', () => ({
+  loadEnabledMcpServers: async (ids: readonly string[]) => ids.map((id) => ({ _id: { toString: () => id } })),
+}))
+vi.mock('@/features/opex-agent/server/mcp/tools', () => ({
+  loadMcpTools: async () => ({ tools: holder.mcpTools, overrides: {}, notices: [], close: async () => undefined }),
 }))
 vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: holder.settings }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', async () => {
@@ -118,6 +125,7 @@ beforeEach(() => {
   holder.pricerRequests = []
   holder.pricedAt = []
   holder.settings = { disabledTools: [], confirmationOverrides: {} }
+  holder.mcpTools = []
   holder.catalog = new Map(
     [tool('delete_task', 'destructive'), tool('update_task', 'write'), tool('list_tasks', 'read'), tool('confirm_routine_action', 'write', 'routine-agents'), tool('update_routine_agent', 'write', 'routine-agents')].map((item) => [item.name, item]),
   )
@@ -231,6 +239,24 @@ describe('motor Opex — ferramentas liberadas', () => {
       'A ferramenta "confirm_routine_action" não pode ser usada por agentes rotineiros: a execução segue sem ela.',
       'A ferramenta "update_routine_agent" não pode ser usada por agentes rotineiros: a execução segue sem ela.',
     ])
+  })
+})
+
+describe('motor Opex — ordem determinística das ferramentas (OPE-204)', () => {
+  it('MCPs e seleção em ordens diferentes geram o mesmo ToolSet: externas por nome, internas num bloco depois', async () => {
+    const finish = tool('finish', 'read', 'routine-control')
+    const run = async (enabledTools: string[], mcpOrder: string[]) => {
+      holder.mcpTools = mcpOrder.map((name) => tool(name, 'read', 'mcp'))
+      const { input } = engineInput(enabledTools)
+      ;(input.run.snapshot.opex as { enabledMcpServers: string[] }).enabledMcpServers = ['srv1']
+      ;(input as { internalTools: OpexTool[] }).internalTools = [finish]
+      await runOpexEngine(input)
+      return holder.toolNames
+    }
+    const first = await run(['update_task', 'list_tasks'], ['mcp_z', 'mcp_a'])
+    const second = await run(['list_tasks', 'update_task'], ['mcp_a', 'mcp_z'])
+    expect(first).toEqual(['list_tasks', 'mcp_a', 'mcp_z', 'update_task', 'finish'])
+    expect(second).toEqual(first)
   })
 })
 
