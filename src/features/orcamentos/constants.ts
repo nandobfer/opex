@@ -52,6 +52,9 @@ export const USER_TOKEN_PREFIX = "usr_"
 
 /** Nome do recurso de IA que gera a prévia/estimativa da tarefa. */
 export const BUDGET_PREVIEW_FEATURE = "budget-preview"
+/** Origens do consumo de IA do Orçamentista (`ai_consumption_logs`). */
+export const BUDGET_PREVIEW_CONSUMPTION_ORIGIN = "budget-preview"
+export const ESTIMATE_HOURS_CONSUMPTION_ORIGIN = "estimate-hours"
 
 /** Termo do valor monetário na visão do cliente (o dono usa "Faturamento"). */
 export const CLIENTE_COST_LABEL = "Custo"

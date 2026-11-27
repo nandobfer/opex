@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({
   find: vi.fn(),
   rows: [] as Record<string, unknown>[],
-  consumptionFind: vi.fn(),
+  consumptionAggregate: vi.fn(),
   consumption: [] as Record<string, unknown>[],
   part: vi.fn(async () => ({ kpis: [{ id: 'duration', label: 'Duração média', hint: '', value: 3, format: 'duration', since: null }], baseCount: 1 })),
 }))
@@ -19,7 +19,8 @@ vi.mock('@/lib/db/models/AgentMetrics', () => {
   }
 })
 vi.mock('@/lib/db/models/AiConsumption', () => ({
-  AiConsumption: { find: (filter: unknown) => (mocks.consumptionFind(filter), { select: () => ({ lean: async () => mocks.consumption }) }) },
+  // A agregação roda no banco: o mock devolve o `$group` já somado (o pipeline é conferido no caso da Taxa de cache).
+  AiConsumption: { aggregate: async (pipeline: unknown) => (mocks.consumptionAggregate(pipeline), mocks.consumption) },
 }))
 vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: { find: () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) }) } }))
 vi.mock('@/lib/db/models/Project', () => ({ Project: { find: () => ({ select: () => ({ sort: () => ({ lean: async () => [] }) }) }) } }))
@@ -64,7 +65,7 @@ describe('totais das execuções (OPE-141)', () => {
 describe('getAgentMetrics liga os KPIs das execuções (OPE-141)', () => {
   beforeEach(() => {
     mocks.find.mockClear()
-    mocks.consumptionFind.mockClear()
+    mocks.consumptionAggregate.mockClear()
     mocks.consumption = []
     mocks.rows = [
       { ok: true, costUsd: 0.25, inputTokens: 1000, outputTokens: 500, durationMs: 120_000 },
@@ -86,18 +87,22 @@ describe('getAgentMetrics liga os KPIs das execuções (OPE-141)', () => {
     expect(kpiValue(result.runKpis, 'run-cache-rate')).toBeNull()
   })
 
-  it('Taxa de cache (OPE-205): consulta as origens do agente no período, sem os filtros de cliente e repositório', async () => {
-    mocks.consumption = [
-      // OpenCode de sessão: entrada pelas partes (inputTokens é só a entrada sem cache).
-      { inputTokens: 100, tokenDetails: { noCache: 100, cacheRead: 300, cacheWrite: 0, output: 10, reasoning: 0 } },
-      // SDK sem o cache escrito informado: entrada pelo inputTokens (total).
-      { inputTokens: 600, tokenDetails: { noCache: null, cacheRead: 0, cacheWrite: null, output: 10, reasoning: null } },
-    ]
+  it('Taxa de cache (OPE-205): agrega no banco as origens do agente no período, sem os filtros de cliente e repositório', async () => {
+    mocks.consumption = [{ _id: null, cacheReadSum: 300, inputSum: 1000, count: 2 }]
     const result = await getAgentMetrics('maddox', agentMetricsQuerySchema.parse({ clientes: 'c1' }), NOW)
-    const filter = mocks.consumptionFind.mock.calls[0]?.[0] as Record<string, unknown>
-    expect(filter).toMatchObject({ origin: { $in: ['maddox-agent', 'maddox-title', 'maddox-client-agent', 'maddox-client-title'] }, createdAt: { $gte: expect.any(Date), $lte: expect.any(Date) } })
-    expect(filter).not.toHaveProperty('clientId')
+    const pipeline = mocks.consumptionAggregate.mock.calls[0]?.[0] as Record<string, Record<string, unknown>>[]
+    const match = pipeline[0]!.$match!
+    expect(match).toMatchObject({ origin: { $in: ['maddox-agent', 'maddox-title', 'maddox-client-agent', 'maddox-client-title'] }, createdAt: { $gte: expect.any(Date), $lte: expect.any(Date) }, 'tokenDetails.cacheRead': { $type: 'number' } })
+    expect(match).not.toHaveProperty('clientId')
+    expect(pipeline.at(-1)).toHaveProperty('$group')
     expect(kpiValue(result.runKpis, 'run-cache-rate')).toBe(30)
+  })
+
+  it('Taxa de cache sem registro com cache informado no período: "—" (o `$group` não devolve linha)', async () => {
+    mocks.consumption = []
+    const result = await getAgentMetrics('mentor', agentMetricsQuerySchema.parse({}), NOW)
+    expect(mocks.consumptionAggregate).toHaveBeenCalled()
+    expect(kpiValue(result.runKpis, 'run-cache-rate')).toBeNull()
   })
 
   it('aplica RUN_KPIS_COVERED: o Revisor não repete Duração média nem % de falhas', async () => {

@@ -13,6 +13,7 @@ import { concludedColumnKeys, getTask, publishTasksUpdated } from "@/features/ta
 import type { TaskTagDef } from "@/features/tasks/tags"
 import { buildJevTagQuestions, buildTaskTagsInstructions, buildTaskTagsPrompt, needsTags, parseTaskTags, selectJevTags, taskTagsSourceHash, type TaskTagsInput, type TaskTagsSource } from "../task-tags"
 import type { TaskTagsSettings } from "../schemas"
+import { TASK_TAGS_CONSUMPTION_ORIGIN } from "../constants"
 import { availabilityOfTaskTags, loadTaskTagsSettings } from "./settings"
 
 const log = loggerFor({ module: "ai", feature: "task-tags" })
@@ -86,7 +87,7 @@ async function resolveTags(prepared: PreparedTaskTags): Promise<{ tags: string[]
             instructions: buildTaskTagsInstructions(settings, taxonomy, settings.maxTags),
             prompt: buildTaskTagsPrompt(input),
             title: `Tags da tarefa ${prepared.taskCode}`,
-            consumption: { origin: "task-tags", subject: prepared.taskId || null },
+            consumption: { origin: TASK_TAGS_CONSUMPTION_ORIGIN, subject: prepared.taskId || null },
         })) {
             if (event.type === "delta") text += event.text
             if (event.type === "done" || event.type === "error") last = event

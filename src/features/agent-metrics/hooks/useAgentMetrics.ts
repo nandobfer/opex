@@ -19,6 +19,7 @@ import { REFINEMENT_UPDATED_EVENT } from "@/features/refinement/constants"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import type { AgentId } from "../catalog"
 import { AGENT_METRICS_UPDATED_EVENT } from "../constants"
+import { consumptionConcernsAgent } from "../consumption-origins"
 import type { AgentHistoryPageDto, AgentMetricsDto } from "../types"
 import type { OpexSessionDetailDto } from "@/features/opex-agent/types"
 
@@ -83,12 +84,18 @@ export function useAgentMetricsRealtime(agent: AgentId): void {
                 void queryClient.invalidateQueries({ queryKey: [AGENT_METRICS_QUERY_KEY, agent] })
             }, DEBOUNCE_MS)
         }
-        // `ai-consumption-updated`: a Taxa de cache (OPE-205) reflete o consumo de qualquer origem do agente.
-        const events = [...new Set([...AGENT_REALTIME_EVENTS[agent], AGENT_METRICS_UPDATED_EVENT, AI_CONSUMPTION_UPDATED_EVENT])]
+        const events = [...AGENT_REALTIME_EVENTS[agent], AGENT_METRICS_UPDATED_EVENT]
         for (const event of events) channel.bind(event, handler)
+        // Taxa de cache (OPE-205): só o consumo das origens do agente (quem já ouve o evento inteiro não repete).
+        const onConsumption = (payload: unknown) => {
+            if (consumptionConcernsAgent(agent, payload)) handler()
+        }
+        const filtersConsumption = !events.includes(AI_CONSUMPTION_UPDATED_EVENT)
+        if (filtersConsumption) channel.bind(AI_CONSUMPTION_UPDATED_EVENT, onConsumption)
         return () => {
             if (timer) clearTimeout(timer)
             for (const event of events) channel.unbind(event, handler)
+            if (filtersConsumption) channel.unbind(AI_CONSUMPTION_UPDATED_EVENT, onConsumption)
             releaseChannel(name)
         }
     }, [agent, queryClient])

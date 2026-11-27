@@ -41,12 +41,17 @@ export interface OpencodeStepTokens {
 
 /**
  * Tokens separados de um passo do OpenCode de sessão, no mesmo formato da SDK (OPE-205): a entrada total só é
- * conhecida quando o cache vem informado; a saída total soma o raciocínio (convenção do `TokenDetails`).
+ * conhecida quando o cache vem informado; a saída total soma o raciocínio (convenção do `TokenDetails`). O cache
+ * só vale com lido E escrito informados: com um deles faltando, os dois ficam não informados, porque `inputTokens`
+ * do OpenCode é só a entrada sem cache e a entrada total não seria conhecida.
  */
 export function tokensFromOpencode(tokens: OpencodeStepTokens): TokenBreakdown {
     const noCache = num(tokens.input)
-    const cacheRead = num(tokens.cacheRead)
-    const cacheWrite = num(tokens.cacheWrite)
+    const read = num(tokens.cacheRead)
+    const write = num(tokens.cacheWrite)
+    const cacheComplete = read !== null && write !== null
+    const cacheRead = cacheComplete ? read : null
+    const cacheWrite = cacheComplete ? write : null
     const output = num(tokens.output)
     const reasoning = num(tokens.reasoning)
     return {

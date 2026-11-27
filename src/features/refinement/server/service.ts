@@ -31,7 +31,7 @@ import {
 import { getTask } from "@/features/tasks/server/service"
 import { updateTask } from "@/features/tasks/server/service"
 import { availabilityOfTaskRefinement, loadTaskRefinementSettings } from "@/features/ai/server/settings"
-import { REFINEMENT_AUDIT_ENTITY, REFINEMENT_INSTRUCTIONS_KEY, REFINEMENT_MAX_RECOVERY_ATTEMPTS, REFINEMENT_SPEC_MISSING_ERROR, REFINEMENT_SPEC_SAVE_ERROR, REFINEMENT_STAGE_LABEL, REFINEMENT_UPDATED_EVENT, REFINEMENT_WORKBENCH_ADVANCED_REASON, refinementFilesOwner } from "../constants"
+import { REFINEMENT_AUDIT_ENTITY, REFINEMENT_CONSUMPTION_ORIGIN, REFINEMENT_INSTRUCTIONS_KEY, REFINEMENT_MAX_RECOVERY_ATTEMPTS, REFINEMENT_SPEC_MISSING_ERROR, REFINEMENT_SPEC_SAVE_ERROR, REFINEMENT_STAGE_LABEL, REFINEMENT_UPDATED_EVENT, REFINEMENT_WORKBENCH_ADVANCED_REASON, refinementFilesOwner } from "../constants"
 import { extractTechnicalSpec, extractTechnicalSpecDetail, refinementConcluded } from "../logic"
 import {
     buildRefinementFinalizePrompt,
@@ -452,7 +452,7 @@ async function executeTurn(id: string, text: string, controller: AbortController
                         signal: controller.signal,
                         attach: attachThisTurn,
                         ...(attachThisTurn ? { startedAt } : {}),
-                        consumption: { origin: "refinement", subject: doc.taskId },
+                        consumption: { origin: REFINEMENT_CONSUMPTION_ORIGIN, subject: doc.taskId },
                         providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
                     },
                     { ...hooks, publish },

@@ -1,6 +1,8 @@
 /** Constantes do "Agente Revisor" (módulo puro: tela e servidor). */
 
 export const PR_REVIEW_FEATURE = "pr-review"
+/** Origem do consumo de IA da revisão de PR (`ai_consumption_logs`). */
+export const PR_REVIEW_CONSUMPTION_ORIGIN = "pr-review"
 
 /** Quais PRs (dos repositórios das centrais) entram na revisão automática. */
 export const PR_REVIEW_SCOPES = ["all", "not_mine", "review_requested"] as const

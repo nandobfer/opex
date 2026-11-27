@@ -44,12 +44,4 @@ registerMigrations(
     { name: "ensure-plugin-indexes", run: () => ensurePluginIndexes() },
     // OPE-194: observações de evento do Agente Opex (`opex_watches`), os fatos das transições (`opex_watch_facts`) e a referência `watch.ids` nas mensagens.
     { name: "ensure-opex-watch-indexes", run: () => ensureOpexIndexes() },
-    // OPE-205: "Dados desde" da Taxa de cache (`$setOnInsert`, idempotente) e o índice `{ origin, createdAt }` do consumo.
-    {
-        name: "agent-metrics-tracking-cache-tokens",
-        run: async () => {
-            await startAgentMetricsTracking()
-            await ensureAiConsumptionIndexes()
-        },
-    },
 )

@@ -81,4 +81,13 @@ describe('consumo do passo do OpenCode (OPE-205)', () => {
     )
     expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({ tokenDetails: { noCache: 10, cacheRead: null, cacheWrite: null, output: 5, reasoning: 0 } }))
   })
+
+  it('`tokens.cache` com o lido e sem o escrito: o cache fica não informado (o passo sai da Taxa de cache)', async () => {
+    await runAgentTurn(
+      scripted([ev('session.step.ended', { assistantMessageID: 'm3', cost: 0, tokens: { input: 100, output: 5, reasoning: 0, cache: { read: 900 } } })]),
+      base,
+      {},
+    )
+    expect(mocks.record).toHaveBeenCalledWith(expect.objectContaining({ inputTokens: 100, tokenDetails: { noCache: 100, cacheRead: null, cacheWrite: null, output: 5, reasoning: 0 } }))
+  })
 })

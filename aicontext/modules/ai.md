@@ -340,7 +340,8 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   `finish.totalUsage` em `streamAi` e no turno do Agente Opex (inclui o chat dos rotineiros). O total da SDK
   soma os detalhes disponíveis, que podem ser parciais se algum passo não os informar. Nas sessões OpenCode,
   a fonte é `session.step.ended`: `tokens.input` é entrada sem cache, `tokens.cache.read/write` são separados
-  e `tokens.reasoning` compõe a saída total detalhada. Os totais antigos continuam como antes, inclusive
+  e `tokens.reasoning` compõe a saída total detalhada; o cache só é gravado com o lido e o escrito
+  informados (com um deles faltando, os dois ficam `null`, porque a entrada total seria desconhecida). Os totais antigos continuam como antes, inclusive
   `inputTokens` sem cache no OpenCode de sessão. Detalhe ausente é `null`; zero explícito é preservado,
   inclusive quando o servidor OpenCode já converteu ausência em zero. Não há estimativa de tokens históricos.
 

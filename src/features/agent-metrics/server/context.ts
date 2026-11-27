@@ -10,7 +10,7 @@ import { TaskBoardColumn } from "@/lib/db/models/TaskBoard"
 import { dayKey, type BucketMode } from "@/lib/time/buckets"
 import { agentDef, type AgentId } from "../catalog"
 import { METRICS_TIME_ZONE, type TrackingKey } from "../constants"
-import { cacheRateTotals, runTotals, usageSeries, type BucketContext, type CacheTotals, type RunTotals } from "../logic/common"
+import { cacheRatePipeline, EMPTY_CACHE_TOTALS, runTotals, usageSeries, type BucketContext, type CacheTotals, type RunTotals } from "../logic/common"
 import { AGENT_CONSUMPTION_ORIGINS } from "../consumption-origins"
 import { metricsBucketMode, parseMargin, resolveMetricsRange, type AgentMetricsQuery, type MetricsRange } from "../period"
 import type { MetricKpiDto, MetricFormat, UsagePointDto } from "../types"
@@ -104,11 +104,10 @@ export async function runTotalsOf(ctx: MetricsContext): Promise<RunTotals> {
  */
 export async function cacheTotalsOf(ctx: Pick<MetricsContext, "agent" | "range">): Promise<CacheTotals> {
     const origins = AGENT_CONSUMPTION_ORIGINS[ctx.agent]
-    if (!origins.length) return cacheRateTotals([])
-    const rows = await AiConsumption.find({ origin: { $in: [...origins] }, createdAt: { $gte: ctx.range.from, $lte: ctx.range.to }, "tokenDetails.cacheRead": { $ne: null } })
-        .select({ inputTokens: 1, tokenDetails: 1 })
-        .lean()
-    return cacheRateTotals(rows)
+    if (!origins.length) return EMPTY_CACHE_TOTALS
+    // Somado no banco (nunca traz os registros do período ao Node), com a mesma regra de `cacheRateTotals`.
+    const [group] = await AiConsumption.aggregate<CacheTotals>(cacheRatePipeline({ origin: { $in: [...origins] }, createdAt: { $gte: ctx.range.from, $lte: ctx.range.to } }))
+    return group ? { cacheReadSum: group.cacheReadSum, inputSum: group.inputSum, count: group.count } : EMPTY_CACHE_TOTALS
 }
 
 /** Opções dos filtros (clientes e repositórios). */

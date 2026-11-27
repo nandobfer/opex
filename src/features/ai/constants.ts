@@ -46,6 +46,10 @@ export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]>
 }
 
 /** Features do app que usam IA (uma configuração salva por feature). */
+/** Origens do consumo de IA do Catalogador (`ai_consumption_logs`). */
+export const TASK_SUMMARY_CONSUMPTION_ORIGIN = "task-summary"
+export const TASK_TAGS_CONSUMPTION_ORIGIN = "task-tags"
+
 export const AI_FEATURE_IDS = ["task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review", "plugin-version-summary"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 

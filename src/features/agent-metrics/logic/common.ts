@@ -222,6 +222,34 @@ export interface CacheTotalsItem {
  * que não informa: nunca vira 0). A entrada é sem cache + cache lido + cache escrito quando os três vêm informados
  * (no OpenCode de sessão, `inputTokens` é só a entrada sem cache); senão, `inputTokens` (pela SDK, já o total).
  */
+export const EMPTY_CACHE_TOTALS: CacheTotals = Object.freeze({ cacheReadSum: 0, inputSum: 0, count: 0 })
+
+const isNum = (path: string) => ({ $isNumber: path })
+
+/**
+ * A mesma regra de `cacheRateTotals` como agregação do Mongo (OPE-205): `$match` do período e das origens, entrada
+ * por linha (partes ou `inputTokens`), só cache lido numérico e entrada positiva, e um `$group` com as somas.
+ */
+export function cacheRatePipeline(match: Record<string, unknown>) {
+    return [
+        { $match: { ...match, "tokenDetails.cacheRead": { $type: "number" } } },
+        {
+            $project: {
+                cacheRead: "$tokenDetails.cacheRead",
+                input: {
+                    $cond: [
+                        { $and: [isNum("$tokenDetails.noCache"), isNum("$tokenDetails.cacheWrite")] },
+                        { $add: ["$tokenDetails.noCache", "$tokenDetails.cacheRead", "$tokenDetails.cacheWrite"] },
+                        { $cond: [isNum("$inputTokens"), "$inputTokens", null] },
+                    ],
+                },
+            },
+        },
+        { $match: { input: { $gt: 0 } } },
+        { $group: { _id: null, cacheReadSum: { $sum: "$cacheRead" }, inputSum: { $sum: "$input" }, count: { $sum: 1 } } },
+    ]
+}
+
 export function cacheRateTotals(rows: readonly CacheTotalsItem[]): CacheTotals {
     const totals: CacheTotals = { cacheReadSum: 0, inputSum: 0, count: 0 }
     for (const row of rows) {

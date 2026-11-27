@@ -47,6 +47,11 @@ describe('tokensFromOpencode (sessão OpenCode 2.x)', () => {
     expect(tokensFromOpencode({ input: 100, output: 30, reasoning: 0 })).toMatchObject({ input: null, cacheRead: null, cacheWrite: null })
   })
 
+  it('só um lado do cache informado: os dois ficam null (a entrada total seria desconhecida e a taxa passaria de 100%)', () => {
+    expect(tokensFromOpencode({ input: 100, output: 5, reasoning: 0, cacheRead: 900, cacheWrite: null })).toMatchObject({ input: null, noCache: 100, cacheRead: null, cacheWrite: null })
+    expect(tokensFromOpencode({ input: 100, output: 5, reasoning: 0, cacheRead: null, cacheWrite: 40 })).toMatchObject({ input: null, cacheRead: null, cacheWrite: null })
+  })
+
   it('cache com zero informado não impede a entrada total (o servidor OpenCode converte ausência em 0)', () => {
     expect(tokensFromOpencode({ input: 100, output: 5, reasoning: 0, cacheRead: 0, cacheWrite: 0 })).toMatchObject({ input: 100, cacheRead: 0, cacheWrite: 0 })
   })
