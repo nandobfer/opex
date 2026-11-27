@@ -15,7 +15,7 @@ describe('html-guard (OPE-210)', () => {
     ['<img srcset="data:image/png;base64,AA 1x, http://x/b.png 2x">', 'srcset'],
     ['<svg><image href="http://x/a.png"/></svg>', 'SVG'],
     ['<meta http-equiv="refresh" content="0;url=http://x">', 'refresh'],
-    ['<body onload="new Image().src=\'http://10.0.0.5:8080/x\'">', 'evento'],
+    ['<body onload="fetch(\'http://10.0.0.5:8080/x\')">', 'evento'],
     ['<svg/onload=alert(1)>', 'evento'],
     ['<img src="data:image/png;base64,AA" onerror="fetch(1)">', 'evento'],
     ['<a href="javascript:alert(1)">x</a>', 'javascript:'],
@@ -23,7 +23,15 @@ describe('html-guard (OPE-210)', () => {
     ['<style>div{background:-webkit-image-set("http://x" 1x)}</style>', 'image-set'],
     ['<style>div{background:u\\72l(http://10.0.0.1/a)}</style>', 'barra invertida'],
     ['<style>@im\\70ort "x.css";</style>', 'barra invertida'],
-    ['<div style="background:u&#114;l(http://x)">', 'entidade'],
+    ['<div style="background:u&#114;l(http://x)">', 'url('],
+    ['<div style="background:url&lpar;http://x)">', 'entidade'],
+    // Rodada 2: <style> sem fechamento, comentário CSS com aspas e ">" dentro de um valor de atributo.
+    ['<style>body{background:u\\72l(http://10.0.0.5:8080/x)}', 'barra invertida'],
+    ['<style>a{background:/*"*/u\\72l(http://mongodb:27017/)/*"*/}</style>', 'barra invertida'],
+    ['<body title=">" onload="fetch(\'http://10.0.0.5/x\')">', 'evento'],
+    ['<img title=">" src="http://10.0.0.5/x">', 'src'],
+    ['<a href="java&#x09;script:alert(1)">x</a>', 'javascript:'],
+    ['<svg><style>a{background:u&#114;l(http://x)}</style></svg>', 'url('],
   ])('recusa %s', (html, fragment) => {
     expect(externalResourceReason(html)).toContain(fragment)
   })
@@ -34,7 +42,7 @@ describe('html-guard (OPE-210)', () => {
   })
 
   it('aceita o modelo do currículo (escape dentro de string do CSS) e texto com "JavaScript:" ou "on"', () => {
-    const html = '<style>li:before{content:"\\2013";position:absolute}</style><ul><li class="sk"><b>JavaScript:</b> one = two, on-call</li></ul>'
+    const html = '<style>li:before{content:"\\2013";position:absolute}</style><ul><li class="sk" title="Learn JavaScript: basics"><b>JavaScript:</b> one = two, on-call &amp; more</li></ul>'
     expect(externalResourceReason(html)).toBeNull()
   })
 

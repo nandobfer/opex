@@ -67,9 +67,15 @@ recursos embutidos. `html-guard.ts` recusa (400 `AGENT_PDF_HTML_EXTERNAL`, orien
 `url(...)` que não seja `data:`/`#`, `src`/`srcset`/`poster`/`background`/`data` que não sejam `data:`, `href` de
 `<image>`/`<use>`/`<feImage>` do SVG, atributos de evento (`on...=` em qualquer tag, inclusive `<svg/onload=>`),
 `javascript:` como valor de atributo, funções de CSS que buscam por string (`image-set(`, `image(`, `src(`,
-`cross-fade(`, `element(`), escape com barra invertida no CSS fora de strings (`u\72l(`, `@im\70ort`) e entidade
-HTML dentro de `style=` (`u&#114;l(`). Strings do CSS continuam aceitas (o `content:"\2013"` do currículo). `<a href>`
-é aceito (o link não é buscado). A guarda por regex é a primeira camada; a do host abaixo é a que fecha a rede. Defesa em profundidade no host
+`cross-fade(`, `element(`), CSS executável (`expression(`, `behavior:`), escape com barra invertida no CSS (a única
+aceita é uma string de um caractere escapado, como o `content:"\2013"` do currículo) e entidade nomeada desconhecida
+em CSS ou URL (`&lpar;`). `<a href>` é aceito (o link não é buscado).
+
+Duas camadas no app: regras globais por regex sobre o documento inteiro e um tokenizador das tags que respeita aspas
+(um `>` dentro de `title=">"` não fecha a tag), lê o `<style>` até o `</style` ou até o fim do documento (sem
+fechamento), decodifica entidades numéricas antes de conferir CSS e URLs (inclusive `java&#x09;script:` e o `<style>`
+do SVG) e trata comentários `<!-- -->` como texto (recusa a mais, nunca a menos). A camada do host abaixo é a que fecha
+a rede de vez. Defesa em profundidade no host
 (Variáveis extras do ambiente `gotenberg`): `CHROMIUM_DENY_PRIVATE_IPS=true` e `CHROMIUM_DISABLE_JAVASCRIPT=true`
 (opções `--chromium-deny-private-ips` e `--chromium-disable-javascript` do Gotenberg 9.10). São pré-requisito de
 deploy do Gotenberg compartilhado: o código do Opex não as impõe (o compose do Gotenberg vive fora do repositório).
