@@ -26,7 +26,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   deploy): diálogo com os 30 últimos (`GET /api/environments/[id]/deploys`, guardados 90 dias), cada
   um com data/hora e "há X", duração (`formatDuration`; "em andamento" sem fim), tipo (Deploy/Mover),
   build → execução (PC ou servidor), resultado, ref @ commit, versão implantada, as marcas **Build
-  reaproveitado** e **Recuperado após reinício** e o erro resumido. Clicar abre o log no drawer.
+  reaproveitado** e **Recuperado após reinício** e o erro resumido. Cada linha é o link para a página do log
+  (`/ambientes/deploys/<id>`, ver "Página do log do deploy").
   Skeleton, vazio e erro com "Tentar novamente"; atualiza pelo tempo real e a cada 10 s.
 - **Não gerenciados**: projetos do compose descobertos pelos labels
   (`com.docker.compose.project`, `…project.working_dir`, `…project.config_files`) nos dois Dockers,
@@ -71,15 +72,28 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
     aviso "Nenhuma variável encontrada" e a lista intacta. Nada é gravado antes de **Salvar**; **Cancelar**
     descarta o importado.
   - Portal do cliente e ferramentas do Agente Opex não mudam: sem valores (ver "Agente Opex").
-- **Log do deploy ao vivo** num drawer com o xterm (NDJSON, pedaços da saída via
+- **Página do log do deploy** (OPE-208, no lugar da gaveta lateral, decisão do dono): `/ambientes/deploys/[deployId]`
+  (`deployPath`). Server Component que lê `loadDeployPage` (`server/deploy-page.ts`: o resumo do deploy, sem o log, e o
+  nome do ambiente; ambiente apagado aparece como "Ambiente removido"; id inválido ou deploy inexistente → 404) e
+  renderiza a `DeployLogPage`: cabeçalho `AgentPageHeader` com a seta **Voltar para os ambientes**, o título "Deploy de
+  <ambiente>" ("Mudança de máquina de" / "Remoção de" nos outros tipos) e a linha build → execução · ref @ commit ·
+  início; abaixo, o cartão do log (`DeployLog`) com o status animado, a barra de progresso e o terminal ocupando o resto
+  da tela (`useFillViewportHeight`, mínimo 320 px). Skeleton com as mesmas classes (`deploy-page-layout.ts`,
+  `loading.tsx`). Quem abre a página: o Deploy/Redeploy e o Mover iniciados (`router.push`, como a gaveta abria
+  sozinha), o "Último deploy …" da linha e as linhas do Histórico (links). O Voltar do navegador volta para Ambientes;
+  sair no meio não interrompe o deploy e reabrir o link mostra o log inteiro de novo (o stream reenvia tudo a cada conexão).
+  Regra geral de qual padrão usar: `use-para-atualizar-tema-e-componentes-ui.md`, "Qual padrão usar para cada tipo de
+  conteúdo".
+- **Log do deploy ao vivo** na página acima, com o xterm (NDJSON, pedaços da saída via
   `HostRunOptions.onOutput`), guardado em `environment_deploys`. Os passos, levantar/derrubar/
   reiniciar, o derrubar de Apagar e o `garbage-collect` rodam pelo **executor desacoplado** do
   Builder Machine (`detached: true`): o OpenCode descartar o shell no meio (diretório reciclado) não
   derruba o deploy. Logs e as leituras da descoberta usam `retryOnLost`. Se a conexão do log cair
-  (o servidor reiniciou) ou o stream fechar sem o status final, o drawer mostra "Reconectando ao
+  (o servidor reiniciou) ou o stream fechar sem o status final, a página mostra "Reconectando ao
   servidor…" e tenta de novo a cada 3 s por até 3 min **contados desde a queda** (uma conexão que
-  volta a entregar eventos zera a contagem), redesenhando o log inteiro ao reconectar.
-- **Barra de progresso do deploy** (OPE-202), entre o cabeçalho do drawer e o terminal, só enquanto o deploy está
+  volta a entregar eventos zera a contagem), redesenhando o log inteiro ao reconectar. Desistindo, o status vira
+  "Falhou: Sem conexão com o servidor … Recarregue a página para tentar de novo."
+- **Barra de progresso do deploy** (OPE-202), entre o status e o terminal da página do log, só enquanto o deploy está
   em andamento:
   - Vem do evento `meta` (`DeployMetaEvent`: `startedAt`, `serverNow`, `estimateMs`, `sampleSize`, `initial`), a primeira linha
     do NDJSON de um deploy `running` (inclusive quando outro processo conduz o deploy e o stream fecha sem status).
@@ -122,7 +136,7 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   - A retomada roda no tick do agendador (`runEnvironmentsTick`), na lista (no máximo a cada 10 s por
     processo, em segundo plano) e ao abrir o log de um deploy órfão (o stream passa a seguir o
     deploy retomado). Deploy com o sinal de vida recente (outro processo vivo) não é tocado: o stream
-    manda o log gravado e fecha sem status, e o drawer reconecta.
+    manda o log gravado e fecha sem status, e a página do log reconecta.
   - Se a pasta do job sumiu entre o fim do passo e a gravação do índice seguinte, o passo roda de novo
     (`up -d`, saúde e repasses são idempotentes; um build repetido só custa tempo).
 - **Lendo o compose**: a saída do `docker compose config` traz as variáveis já resolvidas (segredos)

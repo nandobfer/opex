@@ -9,12 +9,13 @@ import { cn } from "@/lib/utils"
 
 /**
  * Folha que sobe do pé da tela (celular, `< lg`, OPE-166): "Mais ações", pedidos do agente e a decisão do
- * adversário. Rola por dentro e nunca passa de 85% da altura visível.
+ * adversário. O `SheetContent` já é a folha de baixo (borda arredondada, rola por dentro e nunca passa de 85% da
+ * altura visível, OPE-208).
  */
 export function ActionSheet({ open, onOpenChange, title, description, children, testId }: { open: boolean; onOpenChange: (open: boolean) => void; title: string; description?: string; children: ReactNode; testId?: string }) {
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent side="bottom" className="max-h-[85dvh] overflow-y-auto rounded-t-xl p-4" data-testid={testId}>
+            <SheetContent className="p-4" data-testid={testId}>
                 <SheetHeader className="mb-3 pr-8 text-left">
                     <SheetTitle className="text-base">{title}</SheetTitle>
                     <SheetDescription className={cn(!description && "sr-only")}>{description ?? title}</SheetDescription>

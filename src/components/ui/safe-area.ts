@@ -18,15 +18,11 @@ export const SAFE_AREA_INSET_6 =
     "top-[max(1.5rem,env(safe-area-inset-top))] right-[max(1.5rem,env(safe-area-inset-right))] bottom-[max(1.5rem,env(safe-area-inset-bottom))] left-[max(1.5rem,env(safe-area-inset-left))]"
 
 /**
- * Folhas (`Sheet`): o respiro padrão (`p-6`) ou o inset, o que for maior. O `SheetContent` aplica a
- * classe **depois** do `className` do chamador, para um padding dele (`p-0`, `p-4`) não descartá-la.
+ * Folha de baixo (`Sheet`, o único lado desde a OPE-208): o respiro padrão (`p-6`) ou o inset da barra de gestos,
+ * o que for maior. O `SheetContent` aplica a classe **depois** do `className` do chamador, para um padding dele
+ * (`p-0`, `p-4`) não descartá-la.
  */
-export const SAFE_AREA_SHEET = {
-    top: "pt-[max(1.5rem,env(safe-area-inset-top))]",
-    bottom: "pb-[max(1.5rem,env(safe-area-inset-bottom))]",
-    left: "pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]",
-    right: "pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))]",
-} as const
+export const SAFE_AREA_SHEET = "pb-[max(1.5rem,env(safe-area-inset-bottom))]"
 
 /** Barra flutuante presa à base (`bottom-6` + o inset inferior). */
 export const SAFE_AREA_FLOATING_BOTTOM = "bottom-[calc(1.5rem+env(safe-area-inset-bottom))]"
