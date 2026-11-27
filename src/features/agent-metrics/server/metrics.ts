@@ -4,7 +4,7 @@ import type { AgentMetricsDto, AgentMetricsPart } from "../types"
 import { finalizeLineChart, runKpis, type RunKpiId } from "../logic/common"
 import { styleBarChart, styleLineChart } from "../series-style"
 import { adversarialMetrics, architectMetrics, budgetMetrics, catalogMetrics, conversationMetrics, mentorMetrics, routineMetrics, refinerMetrics, reviewerMetrics } from "./agents"
-import { createMetricsContext, filterOptions, lastUsedAt, runTotalsOf, usageOf, type MetricsContext } from "./context"
+import { cacheTotalsOf, createMetricsContext, filterOptions, iso, lastUsedAt, runTotalsOf, usageOf, type MetricsContext } from "./context"
 import { developerMetrics } from "./developer"
 import { ensureFreshRuns } from "./usage-daily"
 import { agentAvailability } from "./availability"
@@ -58,7 +58,7 @@ const COMPUTE: Record<AgentId, (ctx: MetricsContext) => Promise<AgentMetricsPart
 export async function getAgentMetrics(agent: AgentId, query: AgentMetricsQuery, now: Date = new Date()): Promise<AgentMetricsDto> {
     await ensureFreshRuns(agent, now.getTime())
     const ctx = await createMetricsContext(agent, query, now)
-    const [specific, usage, last, options, availability, totals] = await Promise.all([COMPUTE[agent](ctx), usageOf(ctx), lastUsedAt(agent), filterOptions(), agentAvailability(agent), runTotalsOf(ctx)])
+    const [specific, usage, last, options, availability, totals, cache] = await Promise.all([COMPUTE[agent](ctx), usageOf(ctx), lastUsedAt(agent), filterOptions(), agentAvailability(agent), runTotalsOf(ctx), cacheTotalsOf(ctx)])
     return {
         agent,
         range: { from: ctx.range.from.toISOString(), to: ctx.range.to.toISOString() },
@@ -67,7 +67,7 @@ export async function getAgentMetrics(agent: AgentId, query: AgentMetricsQuery, 
         usageUnit: USAGE_UNITS[agent],
         usage,
         kpis: specific.kpis ?? [],
-        runKpis: runKpis(totals, RUN_KPIS_COVERED[agent] ?? []),
+        runKpis: runKpis(totals, RUN_KPIS_COVERED[agent] ?? [], { totals: cache, since: iso(ctx.since("cache-tokens")) }),
         lines: (specific.lines ?? []).map((chart) => finalizeLineChart(styleLineChart(chart))),
         bars: (specific.bars ?? []).map(styleBarChart),
         baseCount: specific.baseCount ?? 0,

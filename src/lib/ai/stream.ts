@@ -7,6 +7,7 @@ import { opencodeGoStatusMessage } from "./opencode-go-errors"
 import { commandCodeStatusMessage } from "./command-code-errors"
 import { isAiSdkReasoningLevel } from "./reasoning-levels"
 import { recordAiConsumption } from "./consumption"
+import { tokenDetailsOf, tokensFromUsage } from "./pricing/usage"
 import { addStepCost, opencodeSessionStepCost, type AiStepCost } from "./provider-cost"
 import { isOpencodeGoReasoningLevel } from "./opencode-go-models"
 
@@ -283,6 +284,7 @@ export async function* streamAi(request: AiStreamRequest): AsyncGenerator<AiStre
                                 ...usage,
                                 apiKeyId: prepared.apiKeyId,
                                 billing: cost?.billing ?? null,
+                                tokenDetails: tokenDetailsOf(tokensFromUsage(part.totalUsage)),
                             })
                         }
                         yield {

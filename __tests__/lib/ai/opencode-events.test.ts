@@ -15,7 +15,9 @@ describe('normalizeOpencodeEvent', () => {
     expect(normalizeOpencodeEvent(ev('session.tool.input.started', { id: 't1', name: 'bash' }), 's1')).toEqual({ kind: 'tool-start', id: 't1', name: 'bash' })
     expect(normalizeOpencodeEvent(ev('session.tool.success', { id: 't1', content: [{ type: 'text', text: 'ok' }] }), 's1')).toEqual({ kind: 'tool-done', id: 't1', output: 'ok' })
     expect(normalizeOpencodeEvent(ev('session.tool.failed', { id: 't1', error: { message: 'boom' } }), 's1')).toMatchObject({ kind: 'tool-error', message: 'boom' })
-    expect(normalizeOpencodeEvent(ev('session.step.ended', { assistantMessageID: 'm1', cost: 0.5, tokens: { input: 10, output: 5, reasoning: 2 } }), 's1')).toEqual({ kind: 'step', stepId: 'm1', costUsd: 0.5, tokens: { input: 10, output: 5, reasoning: 2 } })
+    expect(normalizeOpencodeEvent(ev('session.step.ended', { assistantMessageID: 'm1', cost: 0.5, tokens: { input: 10, output: 5, reasoning: 2 } }), 's1')).toEqual({ kind: 'step', stepId: 'm1', costUsd: 0.5, tokens: { input: 10, output: 5, reasoning: 2, cacheRead: null, cacheWrite: null } })
+    // OPE-205: com `tokens.cache`, o cache vem separado (0 informado fica 0); sem ele, `null` (não informado).
+    expect(normalizeOpencodeEvent(ev('session.step.ended', { assistantMessageID: 'm2', cost: 0, tokens: { input: 10, output: 5, reasoning: 0, cache: { read: 90, write: 0 } } }), 's1')).toMatchObject({ tokens: { input: 10, cacheRead: 90, cacheWrite: 0 } })
     // Sem `assistantMessageID`, cai no id do evento (para a deduplicação do consumo).
     expect(normalizeOpencodeEvent({ type: 'session.step.ended', id: 'e9', data: { sessionID: 's1', cost: 0, tokens: {} } }, 's1')).toMatchObject({ kind: 'step', stepId: 'e9' })
     expect(normalizeOpencodeEvent(ev('session.execution.succeeded', {}), 's1')).toEqual({ kind: 'end', outcome: 'succeeded' })

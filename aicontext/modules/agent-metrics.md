@@ -61,8 +61,20 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
     Aparecem **mesmo sem base** no período, depois dos KPIs do agente. Decisão do dono: quando o agente
     já mostra um KPI com o mesmo significado, fica o dele e o comum não se repete (`RUN_KPIS_COVERED`
     em `server/metrics.ts`): Revisor sem Duração média e % de falhas, Mentor e Catalogador sem % de
-    falhas, Agentes rotineiros sem Execuções e % de falhas. O esqueleto mostra 10 cartões
+    falhas, Agentes rotineiros sem Execuções e % de falhas. O esqueleto mostra 11 cartões
     (`OVERVIEW_SKELETON_KPIS`).
+  - **Taxa de cache** (OPE-205), ao lado de Tokens: soma do cache lido ÷ soma da entrada dos registros
+    de `ai_consumption_logs` do período com cache lido informado e entrada positiva. A entrada é a soma
+    das três partes, quando informadas, ou o total da SDK. Sem base aparece **“—”**; zero informado com
+    entrada positiva pode dar **0%**. Ignora Clientes e Repositórios, como explica o cartão. O marcador
+    `cache-tokens` indica desde quando a coleta foi ampliada; não há estimativa retroativa. A soma roda no
+    banco (`cacheRatePipeline`: `$match` + `$project` + `$group`, implementação única da regra), sem
+    trazer os registros do período ao servidor. No OpenCode de sessão, o cache só conta com o lido e o
+    escrito informados; com um deles faltando, os dois ficam não informados e o passo sai da base.
+  - O mapa `consumption-origins.ts` inclui turnos e títulos (dono e portal) do Opex e Maddox; estimativas e
+    prévias do Orçamentista; resumos e tags do Catalogador; refinamentos, mesas e forks, diagramas, rodadas
+    do Adversário e revisões de PR; as seis origens do Mentor; execuções, chat, títulos e provisionamento dos
+    rotineiros; e turno, decisão e análise do Secretário (sem simulações).
   - **Gráfico de linhas único** por agente com as porcentagens ao longo do tempo (eixo X = data, uma
     linha por métrica; `MultiLineChart`): a legenda tem uma **caixa de seleção por linha**; a seleção
     fica salva no navegador por gráfico (`usePersistentState`, chave
@@ -136,8 +148,10 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
 - **Tempo real** (`useAgentMetricsRealtime`): os eventos que já existem de cada agente
   (`agentic-updated`, `adversarial-review-updated`, `adversarial-mentor-updated`, `pr-review-updated`,
   `refinement-updated`, `architect-diagram-updated`, `opex-/maddox-session-*`, `tasks-updated`,
-  `orcamentos-updated`, `ai-consumption-updated`) e o `agent-metrics-updated` (`{ agents }`, publicado
-  pela rotina) invalidam a Visão geral e o Histórico, agrupados em 1 s.
+  `orcamentos-updated`), o `ai-consumption-updated` (Taxa de cache; nos agentes que não o ouviam
+  inteiro, só o `origin` do payload que está em `AGENT_CONSUMPTION_ORIGINS`) e o
+  `agent-metrics-updated` (`{ agents }`, publicado pela rotina) invalidam a Visão geral e o Histórico,
+  agrupados em 1 s.
 
 ## Métricas (servidor)
 
@@ -259,6 +273,10 @@ Extraídos dos Dashboards (que passaram a usá-los): `charts/` (`ChartCard`, `Tr
 `MetricsOverviewSkeleton`. Buckets de tempo em `src/lib/time/buckets.ts` (também dos Dashboards).
 
 ## Testes
+
+OPE-205: `run-kpis` cobre a base e o denominador da taxa de cache; `run-totals-wiring` cobre o pipeline
+(origens, período, independência dos filtros) e o "—" sem linha; `consumption-origins` fixa as origens de cada
+agente; `metrics-realtime` cobre o filtro do evento de consumo; `agent-page` cobre o cartão e o esqueleto.
 
 `__tests__/features/agent-metrics/` (`period`, `developer-logic`, `agents-logic`, `record` — falha do
 banco não rejeita, rotina e marcadores —, `routes`, `agent-page` — KPIs das execuções também sem base —,

@@ -474,6 +474,8 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   da lista da integração DeepSeek fora de pico), OpenCode Go (`list_cost` da própria resposta), Command Code
   (`pricing` do catálogo `?view=client`, com cache e faixas de contexto) e Anthropic/OpenAI/Gemini (models.dev). Ver
   `modules/ai.md`, "Custo de tabela".
+- O motor OpenCode de sessão também grava `tokenDetails` desde a OPE-205, pelo runner compartilhado em
+  `session.step.ended`, sem duplicar a linha no `onUsage`. A medição de custo de tabela por passo não muda.
 - **Custo efetivo** (derivado na leitura, `src/features/ai-billing/effective.ts`): pelo plano de cobrança da chave que
   respondeu (`modules/ai.md`, "Plano de cobrança"). Pago por uso = tabela; Créditos = tabela × (pago ÷ face), fora da
   validade/esgotados/antes do início = tabela com aviso; Assinatura = cota do dia × min(1, uso do passo ÷ uso total do

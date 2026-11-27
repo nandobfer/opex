@@ -30,7 +30,10 @@ export interface EngineInput {
     onUsage: (step: EngineUsage) => void
 }
 
-/** Uso de um passo do motor. `tokenDetails` e `listCost` (OPE-203) só no motor Opex. */
+/**
+ * Uso de um passo do motor. `tokenDetails` e `listCost` (OPE-203) vêm só do motor Opex; o motor OpenCode grava o
+ * consumo (com os tokens separados, OPE-205) no próprio runner de sessão (`recorded: true`).
+ */
 export interface EngineUsage {
     tokens: number
     inputTokens: number | null

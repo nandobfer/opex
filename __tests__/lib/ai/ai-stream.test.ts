@@ -95,6 +95,17 @@ describe('streamAi', () => {
     expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ provider: 'opencode', apiKeyId: null }))
   })
 
+  it('grava os tokens de cache e de raciocínio informados pela SDK (OPE-205); sem o detalhe, ficam null (nunca 0)', async () => {
+    const detailed = { ...usage, inputTokenDetails: { noCacheTokens: 20, cacheReadTokens: 70, cacheWriteTokens: 10 }, outputTokenDetails: { textTokens: 15, reasoningTokens: 5 } }
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: detailed }]
+    await collect({ provider: 'anthropic', model: 'claude', instructions: 'i', prompt: 'p', consumption: { origin: 'adversarial-mentor-writer' } })
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ inputTokens: 100, tokenDetails: { noCache: 20, cacheRead: 70, cacheWrite: 10, output: 20, reasoning: 5 } }))
+
+    mocks.parts = [{ type: 'finish', finishReason: 'stop', totalUsage: usage }]
+    await collect({ provider: 'anthropic', model: 'claude', instructions: 'i', prompt: 'p', consumption: { origin: 'adversarial-mentor-writer' } })
+    expect(mocks.record).toHaveBeenLastCalledWith(expect.objectContaining({ tokenDetails: { noCache: null, cacheRead: null, cacheWrite: null, output: 20, reasoning: null } }))
+  })
+
   it('com o rodízio (OPE-179), o consumo vai para a chave que respondeu, lida no registro', async () => {
     mocks.parts = [{ type: 'text-delta', id: 'x', text: 'ok' }, () => (mocks.anthropicKey = 'key_reserva'), { type: 'finish', finishReason: 'stop', totalUsage: usage }]
     await collect({ provider: 'anthropic', model: 'claude', instructions: 'i', prompt: 'p', consumption: { origin: 'task-tags' } })

@@ -332,9 +332,18 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   `ai-consumption-updated` em `private-app`. A medição começou com o painel: o histórico anterior não
   é somado (decisão "precisão daqui em diante"). O registro aceita `billing` (`source`, `allowanceUsd`,
   `listCostUsd`, só o OpenCode Go; `null` nos demais). O Agente Opex grava o custo do turno quando o
-  provedor informa (antes, sempre `null`). Desde a OPE-203 aceita também `tokenDetails` (tokens separados) e
-  `listCost` (custo de tabela com origem e preço congelados), gravados hoje só pelo motor Opex dos rotineiros; o
-  `costUsd` não mudou de significado (os painéis de consumo dos provedores seguem iguais).
+  provedor informa (antes, sempre `null`). `listCost` (custo de tabela com origem e preço congelados, OPE-203)
+  continua sendo medido pelo motor Opex dos rotineiros. `costUsd` não muda de significado.
+- **Tokens detalhados (OPE-205)**: todas as origens de consumo gravam `tokenDetails` (`noCache`, `cacheRead`,
+  `cacheWrite`, `output`, `reasoning`) usando `pricing/usage.ts`. Pela SDK `ai` v7, os detalhes vêm de
+  `inputTokenDetails` e `outputTokenDetails`: por passo no Secretário e no motor Opex dos rotineiros; pelo
+  `finish.totalUsage` em `streamAi` e no turno do Agente Opex (inclui o chat dos rotineiros). O total da SDK
+  soma os detalhes disponíveis, que podem ser parciais se algum passo não os informar. Nas sessões OpenCode,
+  a fonte é `session.step.ended`: `tokens.input` é entrada sem cache, `tokens.cache.read/write` são separados
+  e `tokens.reasoning` compõe a saída total detalhada; o cache só é gravado com o lido e o escrito
+  informados (com um deles faltando, os dois ficam `null`, porque a entrada total seria desconhecida). Os totais antigos continuam como antes, inclusive
+  `inputTokens` sem cache no OpenCode de sessão. Detalhe ausente é `null`; zero explícito é preservado,
+  inclusive quando o servidor OpenCode já converteu ausência em zero. Não há estimativa de tokens históricos.
 
 ## OpenCode Go (`opencode-go`, OPE-154)
 

@@ -94,7 +94,7 @@ describe("secretaryInference (SDK real, modelo fake)", () => {
         expect(call.toolChoice).toEqual({ type: "required" })
         expect(call.tools).toContainEqual(expect.objectContaining({ name: "entregar", inputSchema: expect.objectContaining({ properties: { ok: { type: "boolean" } } }) }))
         // 1M de entrada a US$ 1 + 0,5M de saída a US$ 2 = US$ 2.
-        expect(mocks.consumption).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", origin: "secretary-agent", costUsd: 2, apiKeyId: "k1" }))
+        expect(mocks.consumption).toHaveBeenCalledWith(expect.objectContaining({ provider: "anthropic", origin: "secretary-agent", costUsd: 2, apiKeyId: "k1", tokenDetails: { noCache: 1_000_000, cacheRead: 0, cacheWrite: 0, output: 500_000, reasoning: 0 } }))
     })
 
     it("resposta fora do schema falha (o turno registra erro em vez de enviar lixo)", async () => {
