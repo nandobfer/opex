@@ -1,7 +1,8 @@
 import type { TokenBreakdown, TokenDetails } from "./types"
 
 /**
- * Tokens separados de um passo a partir do `usage` da SDK `ai` v7 (módulo PURO, OPE-203):
+ * Tokens separados de um passo a partir do `usage` da SDK `ai` v7 (módulo PURO, OPE-203; fonte única de todo o
+ * consumo desde a OPE-205, com `tokensFromOpencode` para o OpenCode de sessão):
  * `inputTokenDetails.{noCacheTokens, cacheReadTokens, cacheWriteTokens}` e `outputTokenDetails.{textTokens, reasoningTokens}`.
  * Campo que o provedor não informa fica `null` (nunca zero).
  */
@@ -23,6 +24,38 @@ export function tokensFromUsage(usage: SdkStepUsage | null | undefined): TokenBr
         cacheWrite: num(usage?.inputTokenDetails?.cacheWriteTokens),
         output: num(usage?.outputTokens),
         reasoning: num(usage?.outputTokenDetails?.reasoningTokens),
+    }
+}
+
+/** Tokens de um passo do OpenCode de sessão (`session.step.ended`, OPE-205). */
+export interface OpencodeStepTokens {
+    /** Entrada SEM cache (o OpenCode 2.x separa o cache em `cache.read/write`). */
+    input: number
+    /** Saída visível (sem o raciocínio). */
+    output: number
+    reasoning: number
+    /** `null`/ausente = o evento não trouxe `tokens.cache` (não informado). */
+    cacheRead?: number | null
+    cacheWrite?: number | null
+}
+
+/**
+ * Tokens separados de um passo do OpenCode de sessão, no mesmo formato da SDK (OPE-205): a entrada total só é
+ * conhecida quando o cache vem informado; a saída total soma o raciocínio (convenção do `TokenDetails`).
+ */
+export function tokensFromOpencode(tokens: OpencodeStepTokens): TokenBreakdown {
+    const noCache = num(tokens.input)
+    const cacheRead = num(tokens.cacheRead)
+    const cacheWrite = num(tokens.cacheWrite)
+    const output = num(tokens.output)
+    const reasoning = num(tokens.reasoning)
+    return {
+        input: noCache !== null && cacheRead !== null && cacheWrite !== null ? noCache + cacheRead + cacheWrite : null,
+        noCache,
+        cacheRead,
+        cacheWrite,
+        output: output !== null ? output + (reasoning ?? 0) : null,
+        reasoning,
     }
 }
 

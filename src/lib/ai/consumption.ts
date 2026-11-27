@@ -29,7 +29,7 @@ export interface AiConsumptionInput {
     apiKeyId?: string | null
     /** Detalhe da cobrança do OpenCode Go (cota, preço de tabela e origem). */
     billing?: AiBilling | null
-    /** Tokens separados do passo (OPE-203); ausente = não gravado. */
+    /** Tokens separados do passo (OPE-203; todas as origens desde a OPE-205); ausente = não gravado. */
     tokenDetails?: TokenDetails | null
     /** Custo de tabela com origem e preço congelados (OPE-203); ausente = não calculado. */
     listCost?: ListCost | null
