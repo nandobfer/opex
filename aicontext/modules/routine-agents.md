@@ -30,7 +30,7 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D12 | Com o cursor sobre a partícula de uma memória, o nome aparece **completo e destacado** (antes sumia), em todos os universos. |
 | D13 | As ferramentas de memória do rotineiro funcionam em **qualquer canal assinado e não arquivado** (próprio, global dos rotineiros, `opex` e extras do provisionamento), com o token do agente. Sem `canal`, vale o próprio. |
 | D14 | **Gravação por chave**: `remember` aceita `canal`, `chave`, `titulo` e `tags`; com `chave` é idempotente (upsert do Engramind: a mesma chave atualiza a entrada, `criada: false`). `update_memory` edita por id com a versão lida. |
-| D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. |
+| D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. Desde a OPE-209, o uso normal é por `chave`, começando pela memória `indice` do canal; listar o canal inteiro é exceção. |
 | D16 | O catálogo do Indexador fica em `experiencia/desenvolvimento` com chave `catalogo-<dono>-<repo>`; as 18 memórias de catálogo em prosa (sem chave) do canal próprio foram arquivadas (`scripts/routine-indexador-cleanup.ts`, reversível). |
 | D18 | `/agentes-rotineiros` mostra **uma linha por agente** (card na largura inteira: identificação, 4 KPIs e "Execuções por dia") com os filtros padrão `ListFilters`: busca, status, motor e período, na URL. |
 | D19 | No cabeçalho da página de agente, **"Configurar" e as ações ficam na linha do título**, sempre juntos (sem quebrar entre si); a descrição longa fica abaixo, na largura inteira, sem aumentar a distância entre título e descrição (escolha do dono na implementação, no lugar de cortar a descrição em 2 linhas). |
@@ -218,7 +218,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
     `expected_version`; versão diferente → 409 acionável; memória de canal fora da lista é recusada.
   - `list_my_memories` (`canal?`, `chave?`, `formato`, `cursor?`, `limite`): texto inteiro (sem corte),
     `titulos` com `fields=title` (até 200 por página; 50 no completo), `parcial` + `proximoCursor` + aviso
-    quando há mais páginas (D15).
+    quando há mais páginas (D15). A descrição da ferramenta (igual nos dois motores, sem citar outras
+    ferramentas pelo nome) trata a consulta por `chave` como uso normal, começando pela chave `indice`
+    (`ROUTINE_MEMORY_INDEX_KEY`, `constants.ts`), e a listagem `titulos` do canal inteiro como exceção (OPE-209).
   - Sem limite de gravações por turno: `remember` e `update_memory` gravam quantas o trabalho exigir (o
     teto de 5 caiu na OPE-163; a memória própria dos outros agentes mantém o `SELF_MEMORY_TURN_LIMIT`).
     Decisão do dono no planejamento da OPE-163: **não** há configuração de limite (nem nas configurações do
@@ -227,8 +229,29 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
     canal (já conferido na lista), com aviso no log e na execução. Escrita negada no canal
     (`SCOPE_REQUIRED`/`CHANNEL_NOT_SUBSCRIBED`) → `ROUTINE_CHANNEL_FORBIDDEN` (reprovisionar); outros
     erros sobem sem repetir. Auditoria na entidade das memórias (`canal`, `chave`, `execucao`, sem texto).
-  - As instruções da execução listam os canais graváveis e mandam consultar o canal (formato `titulos`)
-    antes de trabalhar e usar chave fixa por item.
+  - As instruções da execução listam os canais graváveis e mandam usar chave fixa por item.
+  - **Memórias por índice (OPE-209)**: as instruções não mandam mais listar o canal inteiro antes de
+    trabalhar (em canais grandes, a listagem de títulos ocupava dezenas de milhares de caracteres reenviados
+    em todos os passos). A regra geral, nos dois motores e com o prefixo das ferramentas no OpenCode:
+    - ler primeiro a memória de chave `indice` do canal (`list_my_memories` com `chave: "indice"`, o mapa
+      das chaves, uma por linha `chave — o que guarda`) e buscar o resto por `chave`;
+    - listar os títulos do canal inteiro (formato `titulos`, seguindo o cursor) só quando o canal não tem
+      `indice` ou o item não está nele, acrescentando ao índice o que encontrar;
+    - canal sem `indice`: o agente cria o índice uma única vez, com as chaves que já existem, por `remember`
+      com `chave: "indice"`. Não há verificação no servidor: conferir a cada execução custaria uma chamada ao
+      Engramind e mudaria as instruções (quebra o cache); depois de criado, a regra de leitura passa a valer.
+      Se o índice não couber numa memória (`ROUTINE_MEMORY_TEXT_MAX`, 20 mil caracteres, o teto do `texto` de
+      `remember`/`update_memory`), o `indice` fica como mapa curto e o resto vai para índices por tema
+      (`indice-<tema>`), citados nele — como o `indice-receitas` do Candidatador;
+    - chave nova criada na execução entra no `indice` do mesmo canal na mesma execução, editado com
+      `update_memory` com o id e a `versao` lidos: duas gravações simultâneas no índice de um canal
+      compartilhado dão o 409 "releia e tente de novo", em vez de uma apagar a outra (`remember` com a mesma
+      chave sobrescreveria sem conferir a versão);
+    - leituras e consultas independentes (várias chaves, canais diferentes) saem juntas, no mesmo passo;
+    - instruções próprias do agente (ex.: o Candidatador, com `indice` e `indice-receitas`) valem por cima da
+      regra geral. A listagem continua disponível: nenhum agente perde acesso a memória nenhuma.
+    - Validação depois da implantação: comparar tokens por execução e taxa de cache por agente em
+      `ai_consumption_logs.tokenDetails` (origem `routine-agent`) antes e depois da mudança.
 - Aba **Memórias** da página: um card só (`AgentUniverseCard`, compartilhado com os demais agentes desde a
   OPE-148) com o universo do agente `opex/rotineiro-<slug>`; "Nova memória" começa no canal próprio. O card
   inteiro ocupa a altura visível da tela (`fill="viewport"`, ver `aicontext/modules/engramind.md`, "Altura dos
@@ -315,7 +338,8 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   a hora (`Data e hora atual: … (horário de Brasília).`) vão na mensagem de cada ativação
   (`activationMessage`), logo depois do cabeçalho, no disparo e na retomada (com a hora da retomada); na
   mensagem combinada da retomada sem histórico (disparo + retomada), aparecem uma vez só, na parte da retomada.
-  Vale para os dois motores.
+  Vale para os dois motores. A regra das memórias por índice (OPE-209) é texto fixo e mantém as instruções
+  idênticas entre execuções.
 - **Motor Opex** (`server/engines/opex.ts`): `prepareModel` + `streamText` (o mesmo loop do Agente
   Opex; o `streamAi` não aceita ferramentas), o registro do Agente Opex filtrado pelas liberadas, os
   MCPs liberados (`loadMcpTools(..., { serverIds })`) e o histórico do modelo em `messages` para a

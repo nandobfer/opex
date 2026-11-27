@@ -55,6 +55,15 @@ export const routineRunsHref = (agentId: string) => `${routineAgentHref(agentId)
 /** Página de uma execução (OPE-208: substituiu a gaveta `?execucao=`). */
 export const routineRunPath = (agentId: string, runId: string) => `${routineAgentHref(agentId)}/execucoes/${runId}`
 
+/**
+ * Chave da memória-índice de um canal (OPE-209): o mapa das chaves do canal, lido antes de consultar o resto
+ * por chave (listar o canal inteiro é exceção).
+ */
+export const ROUTINE_MEMORY_INDEX_KEY = "indice"
+
+/** Teto do texto de uma memória gravada pelo agente rotineiro (`remember`/`update_memory`). */
+export const ROUTINE_MEMORY_TEXT_MAX = 20_000
+
 /** Ferramentas internas da execução (sempre liberadas, nos dois motores). */
 export const ROUTINE_INTERNAL_TOOLS = ["remember", "list_my_memories", "wait", "hibernate", "request_confirmation", "finish"] as const
 export type RoutineInternalTool = (typeof ROUTINE_INTERNAL_TOOLS)[number]
