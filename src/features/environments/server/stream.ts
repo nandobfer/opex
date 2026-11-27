@@ -1,6 +1,7 @@
 import { isValidObjectId } from "mongoose"
 import { DomainError } from "@/lib/api/route"
-import type { DeployEvent } from "../types"
+import type { DeployMetaEvent, DeployStreamEvent } from "../types"
+import { loadDeployEstimate } from "./estimate"
 import { hasLiveDeploy, subscribeDeploy } from "./hub"
 import { EnvironmentDeploy, environmentsDb, type IEnvironmentDeploy } from "./models"
 import { ensureDeployResumed } from "./resume"
@@ -11,7 +12,8 @@ const PING_MS = 15_000
  * Log de um deploy em NDJSON: `log` com o que já saiu e, ao vivo, os pedaços novos até o `status`
  * final. Deploy já encerrado: o log gravado e o status. Em andamento fora da memória (o app reiniciou
  * no meio): retoma o deploy e segue ao vivo; se outro processo vivo cuida dele, manda o log gravado e
- * fecha sem `status` — o cliente reconecta.
+ * fecha sem `status` — o cliente reconecta. Em andamento, a primeira linha é o `meta` (início e
+ * duração estimada) para a barra de progresso da gaveta.
  */
 export async function openDeployStream(deployId: string, signal: AbortSignal): Promise<Response> {
     if (!isValidObjectId(deployId)) throw new DomainError(404, "Deploy não encontrado")
@@ -22,12 +24,17 @@ export async function openDeployStream(deployId: string, signal: AbortSignal): P
         saved = (await EnvironmentDeploy.findById(deployId).lean<IEnvironmentDeploy>()) ?? saved
     }
     const final = saved
+    let meta: DeployMetaEvent | null = null
+    if (final.status === "running") {
+        const estimate = await loadDeployEstimate(final)
+        meta = { type: "meta", startedAt: new Date(final.startedAt).toISOString(), serverNow: new Date().toISOString(), estimateMs: estimate.estimateMs, sampleSize: estimate.sampleSize, initial: estimate.initial }
+    }
     const encoder = new TextEncoder()
     let cleanup = () => {}
     const stream = new ReadableStream<Uint8Array>({
         async start(controller) {
             let closed = false
-            const write = (event: DeployEvent | { type: "ping" }) => {
+            const write = (event: DeployStreamEvent | { type: "ping" }) => {
                 if (!closed) controller.enqueue(encoder.encode(`${JSON.stringify(event)}\n`))
             }
             const close = () => {
@@ -40,6 +47,7 @@ export async function openDeployStream(deployId: string, signal: AbortSignal): P
                 write(event)
                 if (event.type === "status" && event.status !== "running") close()
             }) : null
+            if (meta) write({ ...meta, serverNow: new Date().toISOString() })
             if (!live) {
                 write({ type: "log", text: final.log })
                 if (final.status !== "running") write({ type: "status", status: final.status, error: final.error })

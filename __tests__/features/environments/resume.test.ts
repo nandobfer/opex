@@ -203,9 +203,50 @@ describe('retomada do deploy depois de o app reiniciar', () => {
     host()
     const response = await openDeployStream(id, new AbortController().signal)
     const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line) as { type: string; text?: string; status?: string })
-    expect(events[0]).toMatchObject({ type: 'log', text: expect.stringContaining('Deploy de opex-4500') })
+    expect(events[0]).toMatchObject({ type: 'meta', estimateMs: null, sampleSize: 0 })
+    expect(events[1]).toMatchObject({ type: 'log', text: expect.stringContaining('Deploy de opex-4500') })
     expect(events.at(-1)).toEqual({ type: 'status', status: 'success', error: null })
     expect(JSON.stringify(events)).not.toContain('interrompido')
     await settleResumes()
+  })
+
+  it('OPE-202: deploy em andamento abre com o meta (início absoluto e mediana dos anteriores com sucesso)', async () => {
+    const environmentId = await adopted()
+    const past = (hex: string, minutes: number, status = 'success') => {
+      const startedAt = new Date(Date.now() - 24 * 3_600_000)
+      deploys.docs.push({ _id: hex.repeat(24), environmentId, kind: 'deploy', status, log: '', startedAt, finishedAt: new Date(startedAt.getTime() + minutes * 60_000) })
+    }
+    past('a', 3)
+    past('b', 5)
+    past('c', 4)
+    past('e', 90, 'failed')
+    const id = orphan(environmentId, { heartbeatAt: new Date(), runnerId: 'outro-processo-vivo' })
+    const response = await openDeployStream(id, new AbortController().signal)
+    const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    const startedAt = deploys.docs.find((doc) => doc._id === id)!.startedAt as Date
+    expect(events[0]).toEqual({ type: 'meta', startedAt: startedAt.toISOString(), serverNow: expect.any(String), estimateMs: 4 * 60_000, sampleSize: 3, initial: false })
+    expect(Math.abs(Date.parse(events[0]!.serverNow as string) - Date.now())).toBeLessThan(5_000)
+    expect(events[1]).toMatchObject({ type: 'log' })
+  })
+
+  it('OPE-202: deploy encerrado não manda meta (a gaveta não mostra barra)', async () => {
+    const environmentId = await adopted()
+    const id = orphan(environmentId, { status: 'success', finishedAt: new Date(), checkpoint: null })
+    const response = await openDeployStream(id, new AbortController().signal)
+    const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line) as { type: string })
+    expect(events.map((event) => event.type)).toEqual(['log', 'status'])
+  })
+
+  it('OPE-202: falha ao ler o histórico não derruba o stream (meta sem estimativa)', async () => {
+    const environmentId = await adopted()
+    const id = orphan(environmentId, { heartbeatAt: new Date(), runnerId: 'outro-processo-vivo' })
+    const find = vi.spyOn(EnvironmentDeploy, 'find').mockImplementationOnce(() => {
+      throw new Error('mongo fora')
+    })
+    const response = await openDeployStream(id, new AbortController().signal)
+    const events = (await response.text()).trim().split('\n').map((line) => JSON.parse(line) as Record<string, unknown>)
+    expect(events[0]).toMatchObject({ type: 'meta', estimateMs: null })
+    expect(events[1]).toMatchObject({ type: 'log' })
+    find.mockRestore()
   })
 })

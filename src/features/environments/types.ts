@@ -137,6 +137,16 @@ export interface EnvironmentDeployDto extends EnvironmentDeploySummaryDto {
 /** Linha do NDJSON do log ao vivo. */
 export type DeployEvent = { type: "log"; text: string } | { type: "status"; status: DeployStatus; error: string | null }
 
+/**
+ * Primeira linha do stream de um deploy em andamento (só o stream envia, não o hub): início absoluto e
+ * a duração estimada pelos deploys anteriores do ambiente (`null` sem histórico). Reenviada a cada conexão.
+ * `serverNow` é o instante do servidor ao enviar: a tela corrige o próprio relógio pela diferença.
+ */
+export type DeployMetaEvent = { type: "meta"; startedAt: string; serverNow: string; estimateMs: number | null; sampleSize: number; initial: boolean }
+
+/** Linhas que o stream do log entrega ao cliente. */
+export type DeployStreamEvent = DeployEvent | DeployMetaEvent
+
 export interface EnvironmentsSettingsDto {
     settings: EnvironmentsSettings
     isDefault: boolean

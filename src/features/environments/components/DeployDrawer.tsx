@@ -6,7 +6,9 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react"
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet"
 import { readNdjson } from "@/lib/ndjson-client"
 import { IntegrationConsole, type IntegrationConsoleHandle } from "@/features/integrations/components/IntegrationConsole"
-import type { DeployEvent, DeployStatus } from "../types"
+import { clockSkewMs } from "../deploy-progress"
+import type { DeployStatus, DeployStreamEvent } from "../types"
+import { DeployProgress, type DeployProgressMeta } from "./DeployProgress"
 
 /** Log do deploy ao vivo (NDJSON) num drawer com o terminal. */
 export function DeployDrawer({ deployId, title, onClose }: { deployId: string | null; title: string; onClose: () => void }) {
@@ -28,6 +30,9 @@ type LogState = { value: DeployStatus; error: string | null; reconnecting: boole
 function DeployLog({ deployId, title }: { deployId: string; title: string }) {
     const consoleRef = useRef<IntegrationConsoleHandle>(null)
     const [status, setStatus] = useState<LogState>({ value: "running", error: null, reconnecting: false })
+    // Início e estimativa do deploy em andamento (o `meta` chega de novo a cada conexão; o relógio segue o `startedAt`,
+    // corrigido pela diferença para o relógio do servidor, medida de novo a cada `meta`).
+    const [meta, setMeta] = useState<DeployProgressMeta | null>(null)
 
     useEffect(() => {
         const controller = new AbortController()
@@ -46,7 +51,7 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
                 if (lines.length) consoleRef.current?.writeLines(lines)
             }
             try {
-                await readNdjson<DeployEvent | { type: "ping" }>(
+                await readNdjson<DeployStreamEvent | { type: "ping" }>(
                     `/api/environments/deploys/${deployId}/events`,
                     (event) => {
                         if (first && event.type !== "ping") {
@@ -55,7 +60,9 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
                             consoleRef.current?.clear()
                             setStatus((current) => (current.reconnecting ? { ...current, reconnecting: false } : current))
                         }
-                        if (event.type === "log") {
+                        if (event.type === "meta") {
+                            setMeta({ ...event, skewMs: clockSkewMs(event.serverNow, Date.now()) })
+                        } else if (event.type === "log") {
                             pending += event.text
                             flush()
                         } else if (event.type === "status") {
@@ -103,6 +110,13 @@ function DeployLog({ deployId, title }: { deployId: string; title: string }) {
                     </AnimatePresence>
                 </SheetDescription>
             </SheetHeader>
+            <AnimatePresence initial={false}>
+                {meta && status.value === "running" && (
+                    <motion.div key="deploy-progress" initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }} className="shrink-0 overflow-hidden">
+                        <DeployProgress meta={meta} />
+                    </motion.div>
+                )}
+            </AnimatePresence>
             <IntegrationConsole ref={consoleRef} className="min-h-0 flex-1" placeholder="Aguardando o log…" />
         </>
     )
