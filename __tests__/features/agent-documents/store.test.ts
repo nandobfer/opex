@@ -58,6 +58,7 @@ import {
   decodeUploadContent,
   finalizePending,
   lookupAgentFiles,
+  readAgentFileText,
   saveAgentFile,
   toAgentFileDto,
   urlTtl,
@@ -95,6 +96,47 @@ describe('motor de arquivos dos agentes (OPE-210)', () => {
     const audit = mocks.audit.mock.calls[0]![0]
     expect(audit).toMatchObject({ entidade: 'DocumentoAgente', acao: 'CRIAR', depois: { operacao: 'gravar', nome: 'notas.txt', origem: { type: 'routine', agentName: 'Candidatador' } } })
     expect(JSON.stringify(audit)).not.toContain('conteúdo secreto')
+  })
+
+  it('falha no catálogo depois do envio remove o objeto do bucket (sem órfão)', async () => {
+    const { AgentFile } = await import('@/lib/db/models/AgentFile')
+    const create = vi.spyOn(AgentFile, 'create').mockRejectedValueOnce(new Error('Mongoose maps do not support keys that contain "."') as never)
+    mocks.deleteFile.mockResolvedValueOnce(undefined)
+    await expect(saveAgentFile({ name: 'a.txt', mimeType: 'text/plain', body: Buffer.from('a'), origin, actorId: 'local' })).rejects.toThrow('Mongoose maps')
+    const key = mocks.upload.mock.calls[0]![0]
+    expect(mocks.deleteFile).toHaveBeenCalledWith(key)
+    expect(mocks.audit).not.toHaveBeenCalled()
+    create.mockRestore()
+  })
+
+  it('enquanto a URL de envio vale, um novo PUT é conferido: o tamanho acompanha e acima do limite remove', async () => {
+    const pending = await createAgentFileUpload({ name: 'cv.pdf', mimeType: 'application/pdf', size: 1000, origin, actorId: 'local' })
+    mocks.headFile.mockResolvedValueOnce({ contentLength: 1000 })
+    const ready = await finalizePending(pending.doc as IAgentFile)
+    expect(ready).toMatchObject({ status: 'ready', size: 1000 })
+    mocks.headFile.mockResolvedValueOnce({ contentLength: 800 })
+    expect(await finalizePending(ready)).toMatchObject({ size: 800 })
+    mocks.headFile.mockResolvedValueOnce({ contentLength: 50_000 })
+    mocks.deleteFile.mockResolvedValueOnce(undefined)
+    await expect(finalizePending({ ...ready, size: 800 })).rejects.toMatchObject({ status: 413 })
+    expect(mocks.deleteFile).toHaveBeenCalledWith(pending.doc.key)
+  })
+
+  it('arquivo pronto com a URL de envio vencida não é conferido de novo', async () => {
+    const pending = await createAgentFileUpload({ name: 'cv.pdf', mimeType: 'application/pdf', size: 1000, origin, actorId: 'local' })
+    const expired = { ...pending.doc, status: 'ready', size: 1000, upload: { maxBytes: 1000, expiresAt: new Date(Date.now() - 1000) } } as IAgentFile
+    expect(await finalizePending(expired)).toBe(expired)
+    expect(mocks.headFile).not.toHaveBeenCalled()
+  })
+
+  it('texto inline só é lido quando o tamanho real cabe em 64 KB', async () => {
+    const saved = await saveAgentFile({ name: 'a.txt', mimeType: 'text/plain', body: Buffer.from('abc'), origin, actorId: 'local' })
+    const cancel = vi.fn(async () => undefined)
+    mocks.getFileObject.mockResolvedValueOnce({ body: { cancel }, contentLength: 10 * 1024 * 1024 })
+    expect(await readAgentFileText(saved)).toBeNull()
+    expect(cancel).toHaveBeenCalled()
+    mocks.getFileObject.mockResolvedValueOnce({ body: new Response('abc').body, contentLength: 3 })
+    expect(await readAgentFileText(saved)).toBe('abc')
   })
 
   it('DTO não expõe a chave do bucket', async () => {
@@ -155,6 +197,15 @@ describe('motor de arquivos dos agentes (OPE-210)', () => {
   it('id de outro tipo é recusado na busca por PDF', async () => {
     const saved = await saveAgentFile({ name: 'a.txt', mimeType: 'text/plain', body: Buffer.from('a'), origin, actorId: 'local' })
     await expect(lookupAgentFiles({ id: String(saved._id) }, { mimeType: 'application/pdf' })).rejects.toMatchObject({ status: 404 })
+  })
+})
+
+describe('metadados (OPE-210)', () => {
+  it('recusam chave com ponto ou $ (Map do Mongoose e filtro metadata.<chave>)', async () => {
+    const { metadataSchema } = await import('@/features/agent-documents/schemas')
+    expect(metadataSchema.safeParse({ 'vaga.id': '1' }).success).toBe(false)
+    expect(metadataSchema.safeParse({ $x: '1' }).success).toBe(false)
+    expect(metadataSchema.safeParse({ job_id: '1', 'vaga-id': '2' }).success).toBe(true)
   })
 })
 

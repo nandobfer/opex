@@ -11,7 +11,8 @@ import { AGENT_DOCUMENT_LIMITS as L, PDF_DEFAULT_MIN_SCALE, PDF_MIN_SCALE_FLOOR,
 export const agentFileIdSchema = z.string().regex(/^[a-f0-9]{24}$/, "Id inválido: use o id devolvido pelas ferramentas de documentos")
 
 export const metadataSchema = z
-    .record(z.string().regex(new RegExp(`^[A-Za-z0-9_.-]{1,${L.metadataKeyChars}}$`), `Chave de metadado inválida (letras, números, _ . -, até ${L.metadataKeyChars})`), z.string().max(L.metadataValueChars))
+    // Sem ponto nem `$`: o Mongoose não aceita essas chaves num Map e o filtro `metadata.<chave>` viraria caminho aninhado.
+    .record(z.string().regex(new RegExp(`^[A-Za-z0-9_-]{1,${L.metadataKeyChars}}$`), `Chave de metadado inválida (só letras, números, _ e -, sem ponto, até ${L.metadataKeyChars})`), z.string().max(L.metadataValueChars))
     .refine((value) => Object.keys(value).length <= L.metadataKeys, `No máximo ${L.metadataKeys} metadados`)
     .describe("Metadados livres para achar o arquivo depois (ex.: { empresa, vaga, jobId })")
 

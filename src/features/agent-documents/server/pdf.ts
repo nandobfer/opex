@@ -89,6 +89,8 @@ export async function generateAgentPdf(input: GeneratePdfInput, context: { origi
     const result = await renderHtmlPdf({ html: input.html, options, maxPages: input.maxPaginas, minScale: input.escalaMinima, signal: context.signal })
     assertPdfSize(result.output)
     const name = withExtension(input.nome ?? `documento-${new Date().toISOString().slice(0, 10)}`, "pdf")
+    // A prévia é gerada antes de qualquer gravação (como no currículo): falha nela não deixa PDF órfão.
+    const png = input.previaPng ? await renderPreviewPng(input.html, { options, scale: result.scale }, context.signal) : null
     const id = new Types.ObjectId()
     const saved = await saveAgentFile({
         id,
@@ -104,8 +106,7 @@ export async function generateAgentPdf(input: GeneratePdfInput, context: { origi
     })
     const ttl = await urlTtl(input.validadeMinutos)
     let preview: { id: string; url: string } | undefined
-    if (input.previaPng) {
-        const png = await renderPreviewPng(input.html, { options, scale: result.scale }, context.signal)
+    if (png) {
         const savedPng = await saveAgentFile({ name: withExtension(name.replace(/\.pdf$/i, ""), "png"), mimeType: "image/png", body: png, origin: context.origin, metadata: input.metadados, parentId: id, actorId: context.actorId })
         preview = { id: String(savedPng._id), url: await agentFileDownloadUrl(savedPng, ttl.seconds) }
     }

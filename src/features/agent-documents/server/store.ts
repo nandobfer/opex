@@ -148,7 +148,15 @@ export interface SaveAgentFileInput {
     actorId: string
 }
 
-/** Grava no bucket (chave gerada aqui) e registra no catálogo. Falha no bucket = nada no catálogo. */
+/** Remove do bucket um objeto que não chegou ao catálogo (falha logada, nunca lança). */
+async function removeOrphan(key: string, id: Types.ObjectId): Promise<void> {
+    await deleteFile(key).catch((error: unknown) => agentDocsLog.warn({ id: String(id), err: error instanceof Error ? error.message : String(error) }, "[agent-documents] falha ao remover objeto sem registro no catálogo"))
+}
+
+/**
+ * Grava no bucket (chave gerada aqui) e registra no catálogo. Falha no bucket = nada no catálogo; falha no
+ * catálogo = o objeto recém-enviado é removido do bucket (sem órfão em `agent-files/`).
+ */
 export async function saveAgentFile(input: SaveAgentFileInput): Promise<AgentFileDoc> {
     await dbConnect()
     const id = input.id ?? new Types.ObjectId()
@@ -168,6 +176,9 @@ export async function saveAgentFile(input: SaveAgentFileInput): Promise<AgentFil
         parentId: input.parentId ?? null,
         pdf: input.pdf ?? null,
         resume: input.resume ?? null,
+    }).catch(async (error: unknown) => {
+        await removeOrphan(key, id)
+        throw error
     })
     const saved = doc.toObject() as AgentFileDoc
     await audit(input.actorId, saved, "gravar", AcaoAuditoria.CRIAR)
@@ -225,13 +236,17 @@ export async function createAgentFileUpload(input: { name: string; mimeType: str
     return { doc: saved, uploadUrl, expiresAt: ttl.expiresAt }
 }
 
+/** A URL de envio ainda vale (um novo PUT pode trocar o objeto)? */
+const uploadUrlAlive = (doc: AgentFileDoc, now = Date.now()) => Boolean(doc.upload?.expiresAt && new Date(doc.upload.expiresAt).getTime() > now)
+
 /**
  * Finaliza um envio pela URL: confere o objeto no bucket (`headFile`), grava o tamanho e marca pronto.
- * Acima do limite declarado (ou do teto), o objeto é removido e o registro continua pendente. Ainda
- * não enviado: continua pendente.
+ * Acima do limite declarado (ou do teto), o objeto é removido e o registro volta a pendente. Ainda
+ * não enviado: continua pendente. Enquanto a URL de envio vale, um arquivo já pronto é conferido de novo a
+ * cada leitura (outro PUT pode ter trocado o objeto): o tamanho do catálogo acompanha o real.
  */
 export async function finalizePending(doc: AgentFileDoc): Promise<AgentFileDoc> {
-    if (doc.status !== "pending") return doc
+    if (doc.status !== "pending" && !uploadUrlAlive(doc)) return doc
     assertAgentKey(doc.key)
     let head
     try {
@@ -244,10 +259,13 @@ export async function finalizePending(doc: AgentFileDoc): Promise<AgentFileDoc> 
     const max = Math.min(L.putUploadBytes, doc.upload?.maxBytes ?? L.putUploadBytes)
     if (size > max) {
         await deleteFile(doc.key).catch((error: unknown) => agentDocsLog.warn({ id: String(doc._id), err: error instanceof Error ? error.message : String(error) }, "[agent-documents] falha ao remover envio acima do limite"))
+        await AgentFile.updateOne({ _id: doc._id }, { $set: { status: "pending", size: null } })
         agentDocsLog.warn({ id: String(doc._id), bytes: size, max }, "[agent-documents] envio acima do limite removido")
         throw new DomainError(413, `O arquivo enviado tem ${formatBytes(size)}, acima do limite de ${formatBytes(max)}: ele foi removido. Gere outra URL de envio com o tamanho certo.`, "AGENT_FILE_TOO_LARGE")
     }
-    const updated = await AgentFile.findOneAndUpdate({ _id: doc._id, status: "pending" }, { $set: { status: "ready", size, upload: null } }, { new: true }).lean<AgentFileDoc>()
+    if (doc.status === "ready" && doc.size === size) return doc
+    // A URL de envio continua em `upload` até expirar, para a próxima leitura conferir de novo.
+    const updated = await AgentFile.findOneAndUpdate({ _id: doc._id }, { $set: { status: "ready", size } }, { new: true }).lean<AgentFileDoc>()
     return updated ?? { ...doc, status: "ready", size }
 }
 
@@ -264,6 +282,12 @@ export async function readAgentFileText(doc: AgentFileDoc): Promise<string | nul
     assertAgentKey(doc.key)
     const object = await getFileObject(doc.key)
     if (!object.body) return null
+    // O tamanho real manda (o catálogo pode estar desatualizado): acima do limite, não lê o corpo.
+    if (object.contentLength === undefined || object.contentLength > L.inlineTextBytes) {
+        await object.body.cancel().catch(() => undefined)
+        if (object.contentLength !== undefined && object.contentLength !== doc.size) await AgentFile.updateOne({ _id: doc._id }, { $set: { size: object.contentLength } })
+        return null
+    }
     const text = await new Response(object.body).text()
     return Buffer.byteLength(text) > L.inlineTextBytes ? null : text
 }

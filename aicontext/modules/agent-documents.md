@@ -64,10 +64,15 @@ Teto de renderizações: 6 por padrão, máximo 8. A contagem de páginas (`coun
 O Chromium roda na rede interna; pela mesma razão de a Chamada HTTP ficar fora dos tokens, o HTML só pode trazer
 recursos embutidos. `html-guard.ts` recusa (400 `AGENT_PDF_HTML_EXTERNAL`, orientando a usar `data:` URI):
 `<script>`, `<iframe>`, `<object>`, `<embed>`, `<link>`, `<frame>`, `<base>`, `<meta http-equiv=refresh>`, `@import`,
-`url(...)` que não seja `data:`/`#`, `src`/`srcset`/`poster`/`background`/`data` que não sejam `data:`, e `href` de
-`<image>`/`<use>`/`<feImage>` do SVG. `<a href>` é aceito (o link não é buscado). Defesa em profundidade no host
+`url(...)` que não seja `data:`/`#`, `src`/`srcset`/`poster`/`background`/`data` que não sejam `data:`, `href` de
+`<image>`/`<use>`/`<feImage>` do SVG, atributos de evento (`on...=` em qualquer tag, inclusive `<svg/onload=>`),
+`javascript:` como valor de atributo, funções de CSS que buscam por string (`image-set(`, `image(`, `src(`,
+`cross-fade(`, `element(`), escape com barra invertida no CSS fora de strings (`u\72l(`, `@im\70ort`) e entidade
+HTML dentro de `style=` (`u&#114;l(`). Strings do CSS continuam aceitas (o `content:"\2013"` do currículo). `<a href>`
+é aceito (o link não é buscado). A guarda por regex é a primeira camada; a do host abaixo é a que fecha a rede. Defesa em profundidade no host
 (Variáveis extras do ambiente `gotenberg`): `CHROMIUM_DENY_PRIVATE_IPS=true` e `CHROMIUM_DISABLE_JAVASCRIPT=true`
-(opções `--chromium-deny-private-ips` e `--chromium-disable-javascript` do Gotenberg 9.10).
+(opções `--chromium-deny-private-ips` e `--chromium-disable-javascript` do Gotenberg 9.10). São pré-requisito de
+deploy do Gotenberg compartilhado: o código do Opex não as impõe (o compose do Gotenberg vive fora do repositório).
 
 ## Arquivos dos agentes (espaço isolado no bucket)
 
@@ -91,7 +96,15 @@ recursos embutidos. `html-guard.ts` recusa (400 `AGENT_PDF_HTML_EXTERNAL`, orien
 - Envio pela URL: cria o registro `pending` e devolve a URL PUT (o cliente manda `Content-Type` igual ao `tipo`). A
   primeira leitura ou busca chama `finalizePending`: `headFile` → grava o tamanho e marca `ready`; ainda não enviado
   → continua "aguardando envio" (sem URL de download); acima do tamanho declarado (ou de 25 MB) → o objeto é
-  removido e a leitura responde 413. A assinatura não fixa o tamanho: o limite é conferido na finalização.
+  removido, o registro volta a pendente e a leitura responde 413. A assinatura não fixa o tamanho: o limite é
+  conferido na finalização. Enquanto a URL de envio vale (`upload.expiresAt`), um novo PUT pode trocar o objeto: cada
+  leitura confere de novo pelo `headFile` e o tamanho do catálogo acompanha o real (acima do limite, remove).
+- O texto inline do `get_s3` só é lido quando o `contentLength` real do objeto cabe em 64 KB; acima disso o corpo não
+  é lido (só a URL) e o tamanho do catálogo é corrigido.
+- Falha ao registrar no catálogo depois do envio ao bucket remove o objeto recém-gravado (sem órfão em `agent-files/`).
+- **Sem limpeza automática** (decisão desta entrega, plano aprovado): registros `pending` com a URL vencida e nunca
+  usada ficam no catálogo como "aguardando envio", e os arquivos dos agentes não expiram. Uma rotina de limpeza
+  (pendentes vencidos e o objeto, se houver) pode entrar depois no agendador.
 - Busca (`agentFileQuery`): id; origem (`agente` = id ou nome exato sem diferenciar maiúsculas, `execucao`,
   `ferramenta`); metadados exatos; período (`de`/`ate`, só a data inclui o dia inteiro); parte do nome (escapada).
   Mais recentes primeiro, 10 por padrão, até 20.
@@ -107,14 +120,14 @@ recursos embutidos. `html-guard.ts` recusa (400 `AGENT_PDF_HTML_EXTERNAL`, orien
 | PDF gerado | 10 MB (não é gravado) | 413 `AGENT_PDF_TOO_LARGE` |
 | Envio pela URL | 25 MB declarados, conferidos na finalização | 413 |
 | Conteúdo inline do `get_s3` (texto, JSON, XML, YAML, SVG) | 64 KB | acima disso só a URL |
-| Metadados | 20 chaves (`[A-Za-z0-9_.-]`, até 40), valores até 200 | validação |
+| Metadados | 20 chaves (`[A-Za-z0-9_-]`, até 40; sem ponto nem `$`, que o Map do Mongoose e o filtro `metadata.<chave>` não aceitam), valores até 200 | validação |
 | Páginas / escala mínima | 1–20 / 0,5–1 | validação |
 
 ## Ferramentas (grupo `documents`, "Documentos")
 
 | Ferramenta | Risco | Faz |
 |---|---|---|
-| `gerar_pdf` | write | HTML + opções (formato, orientação, margens mm, fundo, `usarCssDaPagina`, `maxPaginas`, `escalaMinima`, `previaPng`, nome, metadados, `validadeMinutos`) → id, nome, páginas, tamanho, `coube`, escala, aviso, URL, prévia |
+| `gerar_pdf` | write | HTML + opções (a prévia PNG é gerada antes de gravar: falha nela não deixa PDF guardado) (formato, orientação, margens mm, fundo, `usarCssDaPagina`, `maxPaginas`, `escalaMinima`, `previaPng`, nome, metadados, `validadeMinutos`) → id, nome, páginas, tamanho, `coube`, escala, aviso, URL, prévia |
 | `obter_pdf` | read | PDFs (`application/pdf`) por id ou filtros → metadados e URLs novas, sem conteúdo |
 | `upload_s3` | write | `modo: conteudo` (texto ou base64) → id e URL; `modo: url` (nome, tipo, tamanho) → URL de envio PUT, cabeçalhos e validade. Não baixa URL informada pelo agente |
 | `get_s3` | read | Qualquer arquivo do catálogo por id ou filtros → metadados, URL e o texto (até 64 KB) |

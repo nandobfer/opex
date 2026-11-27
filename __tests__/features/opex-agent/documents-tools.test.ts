@@ -104,6 +104,12 @@ describe('ferramentas de documentos (motor mockado no S3 e no Gotenberg)', () =>
     expect(mocks.convert).not.toHaveBeenCalled()
   })
 
+  it('gerar_pdf: falha na prévia PNG não deixa PDF gravado', async () => {
+    mocks.screenshot.mockRejectedValueOnce(Object.assign(new Error('O Gotenberg não respondeu em 30 s'), { status: 504 }))
+    await expect(run('gerar_pdf', { html: '<p>x</p>', previaPng: true })).rejects.toMatchObject({ status: 504 })
+    expect(mocks.saved).toHaveLength(0)
+  })
+
   it('gerar_pdf: o histórico guarda só o tamanho do HTML', () => {
     const redacted = tool('gerar_pdf').redact!(tool('gerar_pdf').input.parse({ html: '<p>documento</p>' })) as { html: string }
     expect(redacted.html).toBe('<16 caracteres>')
