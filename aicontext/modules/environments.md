@@ -44,7 +44,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   gerenciado: nome do projeto, serviços e, só no Novo, o editor do `docker-compose.yml` (ver "Compose gerenciado").
   Adotado: só leitura + "git pull no redeploy" quando há git; variáveis extras **cifradas**, com os valores à
   vista (ver "Variáveis extras no formulário"); **limites de recursos** (RAM, swap e CPUs, ver "Limites de
-  recursos"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
+  recursos"); **serviços do compose** (imagem, command, environment, portas, volumes... por serviço e o YAML avançado, ver
+  "Serviços do compose"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
   desabilitado com o motivo quando o túnel está fechado).
 - A linha do ambiente mostra os limites **aplicados** nos containers ("limites: RAM 4 GiB · swap padrão · 2 CPUs"
   ou por serviço) e o selo "Limites salvos diferem dos aplicados: faça Deploy" (ver "Limites de recursos").
@@ -257,6 +258,81 @@ servidor (`~/opex-envs/<slug>`, como a central) a cada deploy. As variáveis, o 
   aceita `limits: null` (as ferramentas sem `limits` mantêm o que está salvo, inclusive o `null`); a tela sempre
   envia o objeto. O portal do cliente não recebe limites. Auditoria: `limites` (texto) no antes/depois.
 
+### Serviços do compose (OPE-211)
+
+Ajustes dos dados de cada serviço do compose pela tela, sem mexer no repositório (nas três origens, inclusive no
+compose gerenciado, por cima da revisão vigente). Entram no override `docker-compose.opex.yml` do próximo **Deploy**.
+
+- **Dados** (`composeOverridesSchema`, `schemas.ts`): `environments.composeOverrides = { services: ServiceOverride[], yaml }`
+  (`null`/ausente = nunca configurado, igual a sem ajustes) e `environments.deployedComposeOverrides` (os do último deploy
+  com sucesso, vindos do ponto de retomada `checkpoint.overrides`). Sem migração. **Texto simples** (decisão do dono: nada
+  é cifrado), mas o log do deploy e a auditoria mostram só as **chaves** do `environment`.
+- **Por serviço** (`ServiceOverride`; em cada campo `null` = o valor do compose, "Personalizar" desligado; um valor
+  substitui o do compose **por inteiro**, inclusive lista vazia):
+
+| Campo | Formato | No override |
+|---|---|---|
+| `image` | referência sem espaços/aspas | `image: X` + `build: !reset null` |
+| `command`, `entrypoint` | lista (um argumento por item) | lista; vazia = `!reset null` (o padrão da imagem) |
+| `environment`, `labels` | `{ key, value }[]` (labels `com.docker.compose.*` recusados) | mapa com `!override` |
+| `ports` | `{ target, published ("8080", "8000-8010" ou ""), protocol, hostIp }[]` | forma longa com `!override` |
+| `volumes` | `{ type: bind\|volume\|tmpfs, source, target, readOnly }[]` | forma longa com `!override`; volume nomeado declarado no topo (`volumes: { nome: {} }`) |
+| `restart` | `no`, `always`, `on-failure`, `unless-stopped` | `restart: X` |
+| `healthcheck` | `{ mode: "disable" }` ou `{ mode: shell\|exec, test, interval, timeout, startPeriod, retries }` | `!override` (`CMD-SHELL`/`CMD`; duração vazia = padrão) |
+| `dependsOn` | `{ service, condition, restart }[]` | `depends_on` com `!override` |
+
+  Os valores vão como estão, com a semântica do compose: `${VAR}` é interpolado (`$$` = literal), diferente das
+  Variáveis extras. O `environment` do serviço **vence** as Variáveis extras (`env_file`) com o mesmo nome (a tela avisa).
+- **YAML avançado** (`yaml`, `override-yaml.ts`): o conteúdo do bloco `services:` (serviço → chaves), até 64 KB, com as
+  tags `!reset`/`!override`. A validação (`overrideYamlProblem`, a mesma na tela e no servidor) recusa YAML inválido (com a
+  linha), conteúdo que não seja mapa de serviços, as chaves que o Opex controla (`env_file`, `build`, `deploy`, `mem_limit`,
+  `memswap_limit`, `cpus`) e a mesma chave personalizada no bloco guiado do mesmo serviço ("app.image está no bloco guiado e
+  no YAML avançado: deixe em um só"). `image` no YAML avançado também conta como imagem própria.
+- **Deploy** (`server/deploy.ts`, `overrideYaml`, `serviceOverrideLines`):
+  1. Ordem no serviço: imagem do registry ou nenhuma (imagem própria), `env_file`, limites, campos guiados, `build: !reset
+     null` (imagem própria) e, por último, as chaves do YAML avançado.
+  2. **Imagem própria** (`ownImageServices`): o serviço sai de `buildServices` (não builda, não vai ao registry, não recebe
+     `localhost:<porta>/opex-env/...`). No compose gerenciado, a recusa de `build` ignora esses serviços. Com build e execução
+     na mesma máquina entra o passo **"Pull das imagens prontas"** (`compose pull <serviços>`, antes de subir; a tag nova de
+     um `latest` vem a cada deploy); em máquinas diferentes, o `Pull` de sempre já os busca. Os serviços do pull vão no ponto
+     de retomada (`checkpoint.pullServices`).
+  3. Serviço dos ajustes que não está no compose: "Ajustes do serviço X ignorados: o serviço não está no compose." (não
+     bloqueia).
+  4. Executar no PC: os bind mounts dos ajustes entram no bloqueio (`withOverrideMounts`; volumes personalizados substituem
+     os do compose).
+  5. Log: "Serviços: app imagem nginx:1.27, ports (2); db environment (3: A, B, C)" e "YAML avançado: serviços app,
+     worker". O override é gravado com o debug "gravar docker-compose.opex.yml (conteúdo omitido)".
+  6. **Conferência do override** (só com ajustes): passo "Conferindo o override" (`docker compose … -f
+     docker-compose.opex.yml config --quiet`, sem saída) antes de qualquer build. YAML avançado ruim ou um Compose sem as
+     tags (exigem v2.24.4 ou mais nova; o servidor tem a v5) falham aqui com a última linha do erro.
+  7. Sucesso: `deployedComposeOverrides`. Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
+- **"Ler compose"** (`POST /api/environments/compose-services`) passa a devolver também `values` por serviço
+  (`normalizeServiceValues`, `service-overrides.ts`): do JSON do `config --no-env-resolution --no-interpolate` (central e
+  adotado; `${VAR}` volta como escrito) ou do YAML bruto da revisão vigente (gerenciado; formas curtas de portas com IP e
+  intervalo, volumes `:ro`, `environment` em lista, `command` em texto, `depends_on` em lista).
+- **Tela** (`EnvironmentServicesField` + `components/services/`), entre os limites e as portas:
+  - Bloco **recolhido** até o dono abrir (aberto quando já há ajustes salvos; recolhido, mostra o resumo). Em Editar, abrir
+    lê o compose **uma vez** sozinho para mostrar os valores "Do compose" (sem preencher os limites).
+  - **Uma leitura serve os dois blocos** (`ComposeReadProvider`/`useComposeRead`, `hooks/useFormComposeRead.tsx`, dentro do
+    diálogo: fechar descarta). O "Ler compose" pedido pelo dono (de qualquer bloco) também preenche os limites declarados.
+  - Abas (`OptionTabs`): **Guiado** e **YAML avançado** (as duas são salvas). Guiado: um item recolhível por serviço com os
+    selos "imagem própria", "N personalizados" e "não está no compose", remover os ajustes e **Adicionar serviço**
+    (`SearchPicker` com os serviços lidos ou, antes da leitura, os do host). Cada campo tem o interruptor **Personalizar**
+    (`OverrideToggle`): desligado mostra "Do compose: …" (ou "não declarado"); ligar começa com o valor do compose (ou
+    vazio, sem leitura). Editores: imagem (`Input`), command/entrypoint (um argumento por linha), environment e labels
+    (`KeyValueRows`, compartilhado com as Variáveis extras), portas, volumes e dependências em linhas (`OptionTabs` para
+    protocolo, tipo e condição; serviço da dependência por `SearchPicker`), restart (`OptionTabs`) e healthcheck
+    (Shell/Exec/Desligado + durações). Avisos: chave do environment também nas Variáveis extras e, executando no PC, porta
+    publicada fora de **Portas** (o repasse não é automático).
+  - YAML avançado: o `ComposeEditorField` (limite de 64 KB, exemplo e ajuda próprios) com o erro em tempo real.
+  - Falha da leitura: aviso com "Tentar novamente"; Salvar continua livre (campo desligado não grava nada). Skeleton dos
+    itens durante a leitura (`ServicesSkeleton`, mesma caixa e cabeçalho do item).
+- **Linha**: "serviços: app imagem nginx:1.27 · 3 ajustes" (os implantados) e o selo **"Ajustes dos serviços salvos diferem
+  dos implantados: faça Deploy"** (`composeOverridesPendingDeploy`: salvo × `deployedComposeOverrides`, só em ambiente
+  implantado; serviço sem campo personalizado, ordem e espaços nas pontas do YAML não contam).
+- **Auditoria**: `servicos` (resumo em texto, do environment só as chaves) no antes/depois. O portal do cliente não recebe
+  nada disso.
+
 ### Builder do servidor (OPE-186)
 
 - **O que é**: o builder do buildx do host do OpenCode usado pelos deploys com build no servidor (e, quando é o
@@ -350,6 +426,10 @@ mesma validação, auditoria, Pusher e erros.
   em si só se edita pela tela (não há ferramenta de revisões); `start_environment`, `create_environments_builder`, `start_environments_builder`.
 - `create_environment` e `update_environment` aceitam `limits` (o mesmo `environmentLimitsSchema` da tela; substitui os
   limites salvos inteiros, `null` num campo = sem limite).
+- `create_environment` e `update_environment` aceitam `composeOverrides` (OPE-211, o mesmo `composeOverridesSchema` da tela;
+  substitui os ajustes salvos inteiros; ausente mantém; `null` no editar = sem ajustes). `get_environment` traz
+  `ajustesDosServicos: { salvos, configuracao, implantados, diferem }` e `list_environments`, `ajustesImplantados` e
+  `ajustesNaoImplantados`. Texto simples, por decisão do dono: sem `redact` desse campo.
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; no gerenciado,
   `projectName` e `services`; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
@@ -402,7 +482,8 @@ mesma validação, auditoria, Pusher e erros.
   lembra de cadastrá-la em **Variáveis extras**.
 - **Override** `docker-compose.opex.yml` (regravado a cada deploy; os comandos do compose só o
   incluem quando existe — um adotado ainda não implantado pelo app derruba/reinicia/apaga sem ele): `env_file`, os limites de
-  recursos preenchidos e, com build e execução em máquinas diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`.
+  recursos preenchidos, os ajustes dos serviços (OPE-211, ver "Serviços do compose") e, com build e execução em máquinas
+  diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>` (menos nos serviços com imagem própria).
 - Combinações (`pipeline.ts`, `deploySteps`):
 
 | Build → Execução | Passos |
@@ -437,6 +518,11 @@ mesma validação, auditoria, Pusher e erros.
 - Limites dos ambientes: campo vazio não escreve chave no override, então um limite declarado no próprio compose do
   projeto continua valendo (aparece em "No host hoje" no Editar); tirá-lo exige editar o compose. Limites novos só
   entram com Deploy (Reiniciar/Levantar não). "Ler compose" de uma central só traz os YAML da ref: `include`/`extends` de arquivos com outra extensão falham.
+
+- Serviços do compose: as tags `!reset`/`!override` exigem Docker Compose v2.24.4 ou mais nova na máquina dos arquivos (a
+  conferência do override falha cedo). `depends_on` para um serviço fora dos serviços escolhidos na origem sobe a
+  dependência mesmo assim (regra do compose). Pasta (bind) relativa é a partir da pasta do primeiro arquivo do compose. O
+  YAML avançado não declara `networks`/`volumes` de topo. Valores em texto simples no banco e nas ferramentas do Agente Opex.
 
 - Builder do servidor: só os builds conhecidos pela fila global do build deste processo contam como "build
   em andamento"; um `docker build` manual no host não é detectado (recriar/derrubar/apagar o derrubaria).
@@ -496,7 +582,8 @@ mesma validação, auditoria, Pusher e erros.
   `hooks/useEnvironmentsBuilder.ts`, `components/builder/` (`BuilderCard`, `BuilderRow`, `BuilderFormDialog`,
   `BuilderConfirmDialog`),
   `compose-config.ts`, `pipeline.ts`, `view.ts`, `opex-format.ts`, `managed-compose.ts` (regras puras do compose
-  gerenciado), `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
+  gerenciado), `service-overrides.ts`, `override-yaml.ts` e `services-form.ts` (serviços do compose, puros),
+  `hooks/useFormComposeRead.tsx`, `components/EnvironmentServicesField.tsx` e `components/services/`, `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
   `EnvironmentStatus.tsx` com o botão e os selos compartilhados com o portal), `hooks/`,
   `portal/` (página, linha e hooks do portal) e `server/` (`models`, `service`, `deploy`, `resume`,
   `hub`, `stream`, `forwards`, `registry`, `settings`, `opex-notice`, `portal`).
@@ -511,7 +598,7 @@ mesma validação, auditoria, Pusher e erros.
   gerenciado, sem TTL; saem ao apagar o ambiente), `environments_state`; auditoria
   `entidade: "Ambiente"`.
 - Testes: `__tests__/features/environments/` (`commands`, `deploy`, `resume`, `environments-ui`, `managed-compose`,
-  `compose-revisions`, `compose-ui`,
+  `compose-revisions`, `compose-ui`, `service-overrides`, `services-ui`,
   `opex-tools`, `portal`, `portal-ui`, `builder-commands`, `builder`, `builder-ui`),
   `__tests__/features/agentic/build-queue.test.ts` (`runExclusiveBuild` e a recriação pendente antes da
   próxima mesa), `__tests__/features/opex-agent/client-tools.test.ts` (grupo do portal).
