@@ -62,6 +62,9 @@ export async function appToolsFor(names: readonly string[], disabledTools: reado
     return tools
 }
 
+/** Por código de caractere (não `localeCompare`), para não depender do locale do processo. */
+const byToolName = (a: OpexTool, b: OpexTool) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+
 export async function mcpToolsFor(ids: readonly string[], signal: AbortSignal, warnings: string[]): Promise<McpTurnTools | null> {
     if (!ids.length) return null
     const { loadEnabledMcpServers } = await import("@/features/opex-agent/server/mcp/service")
@@ -107,7 +110,8 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         const appTools = await appToolsFor(engine.enabledTools, settings.disabledTools, activation.warnings)
         mcp = await mcpToolsFor(engine.enabledMcpServers, signal, activation.warnings)
         const internalNames = new Set(input.internalTools.map((tool) => tool.name))
-        const external = [...appTools, ...(mcp?.tools ?? [])].filter((tool) => !internalNames.has(tool.name))
+        // Ordem fixa entre execuções (cache de prompt, OPE-204): externas por nome, internas num bloco depois.
+        const external = [...appTools, ...(mcp?.tools ?? [])].filter((tool) => !internalNames.has(tool.name)).sort(byToolName)
         // Mesma política do runner do Agente Opex: ajustes dos MCPs, depois os do dono (que vencem).
         const overrides = { ...(mcp?.overrides ?? {}), ...settings.confirmationOverrides }
         const byName = new Map<string, OpexTool>([...external, ...input.internalTools].map((tool) => [tool.name, tool]))

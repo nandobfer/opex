@@ -187,7 +187,7 @@ describe('credencial do agente', () => {
 describe('instruções da execução (D13)', () => {
   it('listam os canais graváveis e mandam consultar o catálogo e usar chave fixa', async () => {
     const { routineInstructions } = await import('@/features/routine-agents/run-prompt')
-    const text = routineInstructions({ name: 'Agente Indexador', objective: 'Catalogar', instructions: '', engine: 'opex', confirmIrreversible: false, maxLiveWaitMinutes: null, memoryBlock: '', memoryChannels: ALLOWED, toolPrefix: '', warnings: [], now: new Date('2026-11-05T12:00:00Z') })
+    const text = routineInstructions({ name: 'Agente Indexador', objective: 'Catalogar', instructions: '', engine: 'opex', confirmIrreversible: false, maxLiveWaitMinutes: null, memoryBlock: '', memoryChannels: ALLOWED, toolPrefix: '', warnings: [] })
     expect(text).toContain('experiencia/desenvolvimento')
     expect(text).toContain('formato "titulos"')
     expect(text).toContain('`chave`')

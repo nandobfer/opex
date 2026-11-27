@@ -213,13 +213,14 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                 ? setTimeout(() => stopActivation(runId, "active"), Math.max(1_000, remaining))
                 : setTimeout(() => stopActivation(runId, "turn_timeout"), ROUTINE_TURN_TIMEOUT_MS)
         let activationStep = 0
-        const messageInput = { origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote }
+        // Data e hora vão na mensagem da ativação, nunca nas instruções (cache de prompt, OPE-204).
+        const messageInput = { origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote, now: new Date() }
         // Turno interrompido antes de salvar o histórico (motor Opex sem `messages`, OpenCode sem sessão):
         // a retomada leva também a mensagem do disparo, senão o modelo perde a solicitação.
         const noHistory = run.snapshot.engine === "opex" ? !run.messages : !run.opencodeSessionId
         const message =
             resume && noHistory && (run.interruptions ?? 0) > 0
-                ? [activationMessage({ kind: "start", ...messageInput }), "", activationMessage({ kind: "resume", ...messageInput })].join("\n")
+                ? [activationMessage({ kind: "start", ...messageInput, now: null }), "", activationMessage({ kind: "resume", ...messageInput })].join("\n")
                 : activationMessage({ kind: resume ? "resume" : "start", ...messageInput })
         const input: EngineInput = {
             agent,
@@ -240,7 +241,6 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                     http: httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
                     warnings: activation.warnings,
                     skillsBlock: skillsCatalogBlock(skills.catalog, toolPrefix),
-                    now: new Date(),
                 }),
             internalTools,
             onStep: (step) => recordRunStep(run, { kind: step.kind, label: step.label.slice(0, 200), detail: step.detail ?? null, toolName: step.toolName ?? null, durationMs: step.durationMs ?? null, error: step.error ?? false }),

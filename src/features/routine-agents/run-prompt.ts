@@ -5,6 +5,9 @@ import { DEFAULT_LIVE_WAIT_MINUTES, MAX_WEBHOOK_PAYLOAD_BYTES } from "./constant
 /**
  * Textos da execução (OPE-130, módulo PURO): instruções do sistema (obrigam a confirmação antes de
  * ações irreversíveis quando o switch está ligado) e a mensagem de cada ativação (disparo ou retomada).
+ *
+ * Cache de prompt (OPE-204): as instruções não levam nada que mude a cada execução (data e hora vão na
+ * mensagem da ativação), para que o prefixo do prompt se repita byte a byte e o provedor acerte o cache.
  */
 
 export interface RoutineInstructionInput {
@@ -20,7 +23,6 @@ export interface RoutineInstructionInput {
     /** Prefixo das ferramentas internas no OpenCode (`rotina_xxxx_`); vazio no motor Opex. */
     toolPrefix: string
     warnings: readonly string[]
-    now: Date
     /** Chamada HTTP liberada (nome da ferramenta no motor) e o catálogo dos segredos, sem valores. */
     http?: { tool: string; secrets: readonly { name: string; description: string; allowedHosts: readonly string[] }[] } | null
     /** Bloco "Skills disponíveis" (motor Opex: só as skills da seleção; o corpo vem sob demanda). */
@@ -47,7 +49,6 @@ export function routineInstructions(input: RoutineInstructionInput): string {
     const live = input.maxLiveWaitMinutes ?? DEFAULT_LIVE_WAIT_MINUTES
     return [
         `Você é o agente rotineiro "${input.name}" do Opex: um agente autônomo que planeja e executa a solicitação SOZINHO, sem conversar com o dono (ninguém responde no meio do turno).`,
-        `Data e hora atual: ${input.now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (horário de Brasília).`,
         "",
         "## Objetivo",
         input.objective,
@@ -81,7 +82,11 @@ export interface ActivationMessageInput {
     /** Motivo da hibernação ou resultado da confirmação (retomada). */
     resumeNote: string | null
     previousStatus?: RoutineRunStatus | null
+    /** Instante da ativação (na retomada, o da retomada); `null` omite a linha (parte do disparo na mensagem combinada). */
+    now: Date | null
 }
+
+const nowLine = (now: Date) => `Data e hora atual: ${now.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })} (horário de Brasília).`
 
 const formatDelay = (ms: number) => (ms >= 3_600_000 ? `${Math.round(ms / 3_600_000)} h` : ms >= 60_000 ? `${Math.round(ms / 60_000)} min` : `${Math.round(ms / 1000)} s`)
 
@@ -96,13 +101,17 @@ export function activationMessage(input: ActivationMessageInput): string {
     if (input.kind === "resume") {
         return [
             `[Retomada da execução${input.delayMs && input.delayMs > 60_000 ? `, com ${formatDelay(input.delayMs)} de atraso` : ""}]`,
+            input.now ? nowLine(input.now) : "",
             input.resumeNote ?? "Continue de onde parou.",
             "Verifique a condição e siga: conclua, espere, hiberne de novo ou peça confirmação.",
-        ].join("\n")
+        ]
+            .filter(Boolean)
+            .join("\n")
     }
     const payload = payloadText(input.payload)
     return [
         `[Execução disparada por: ${ROUTINE_TRIGGER_ORIGIN_LABELS[input.origin]}${input.delayMs && input.delayMs > 60_000 ? ` — rodando com ${formatDelay(input.delayMs)} de atraso` : ""}]`,
+        input.now ? nowLine(input.now) : "",
         input.request?.trim() ? `Solicitação desta execução:\n${input.request.trim()}` : "Sem solicitação específica: cumpra o objetivo.",
         payload ? `\nDados recebidos (payload do webhook):\n\`\`\`json\n${payload}\n\`\`\`` : "",
     ]
