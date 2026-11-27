@@ -527,6 +527,24 @@ describe('limites ligados ao turno', () => {
     expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 5, apiKeyId: null }))
   })
 
+  it('OPE-203: o custo de tabela e os tokens separados do passo chegam ao registro de consumo; sem eles, nada é gravado no lugar', async () => {
+    const agent = seedAgent()
+    consumption.record.mockClear()
+    const listCost = { usd: 0.0011, source: 'models.dev' as const, price: null, estimated: false, missingReason: null }
+    const tokenDetails = { noCache: 600, cacheRead: 300, cacheWrite: 100, output: 500, reasoning: 100 }
+    holder.engine = async (input) => {
+      input.onUsage({ tokens: 1500, inputTokens: 1000, outputTokens: 500, costUsd: null, stepId: '1', model: 'claude', provider: 'anthropic', apiKeyId: 'key_x', tokenDetails, listCost })
+      input.onUsage({ tokens: 5, inputTokens: 4, outputTokens: 1, costUsd: null, stepId: '2', model: 'claude', provider: 'anthropic' })
+      return { error: null, text: '' }
+    }
+    await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 1500, apiKeyId: 'key_x', tokenDetails, listCost }))
+    const second = consumption.record.mock.calls.map((call) => call[0] as Record<string, unknown>).find((call) => call.totalTokens === 5)!
+    expect(second).not.toHaveProperty('listCost')
+    expect(second).not.toHaveProperty('tokenDetails')
+  })
+
   it('o uso de um passo que alcança o máximo de tokens interrompe o turno → Erro "Limite de tokens atingido"', async () => {
     const agent = seedAgent({ limits: { ...EMPTY_ROUTINE_LIMITS, maxTokens: 100 } })
     holder.engine = async (input) => {

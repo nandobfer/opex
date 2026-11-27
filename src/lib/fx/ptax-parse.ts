@@ -56,7 +56,7 @@ export function dateKeysBetween(from: string, to: string): string[] {
  */
 export function fillCalendarRates(quotes: readonly PtaxQuote[], from: string, to: string, seed: PtaxQuote | null = null): { date: string; usdBrl: number; quotedDate: string }[] {
     const byDate = new Map(quotes.map((quote) => [quote.date, quote]))
-    let last = seed
+    let last = seed ?? [...quotes].filter((quote) => quote.date < from).sort((a, b) => a.date.localeCompare(b.date)).at(-1) ?? null
     const rows: { date: string; usdBrl: number; quotedDate: string }[] = []
     for (const date of dateKeysBetween(from, to)) {
         const own = byDate.get(date)
