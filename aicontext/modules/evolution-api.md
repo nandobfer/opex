@@ -133,13 +133,13 @@ por `remoteJid` exato, e as tabelas `Contact`, `Chat` e `IsOnWhatsapp` da Evolut
 - `lidAliasOf` (puro, `message.ts`): `@lid` com `remoteJidAlt` de número gera `{ lid, pn }`.
 - O contato do número guarda `lidJid` (`evolution_contacts`, índice `instance_lid`), aprendido no webhook
   (`MESSAGES_UPSERT`) e preenchido pelo **Sincronizar** a partir da `lastMessage` de cada conversa do `findChats`
-  (`server/lid.ts`, `rememberLidAliases`). Conversas cuja última mensagem não traz o `remoteJidAlt` só ganham a
+  (`server/lid.ts`, `rememberLidAliases`, que também marca o contato do número como conversa, `hasChat`). Conversas cuja última mensagem não traz o `remoteJidAlt` só ganham a
   correspondência na próxima mensagem que trouxer.
 - O webhook troca o `chatJid` de uma mensagem `@lid` **sem** `remoteJidAlt` pelo número quando a correspondência já é
   conhecida (ex.: resposta do dono pelo celular): prévia, não lidas, evento da conversa e turno do Secretário ficam na
   conversa do número. O mesmo vale para os JIDs de `MESSAGES_UPDATE`.
 - `conversationJids` devolve as duas metades (número primeiro); a linha do tempo e o histórico do Secretário leem as
-  duas. `aliasedLids` lista os LIDs com número, para a lista de conversas esconder a metade LID. A análise de
+  duas. `lidAliases` devolve LID → número, para a lista de conversas juntar a metade LID na do número. A análise de
   personalidade ainda lê cada conversa pelo próprio JID (pendência).
 
 ## Debug, auditoria e tempo real

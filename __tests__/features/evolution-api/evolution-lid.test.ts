@@ -19,7 +19,7 @@ vi.mock("@/features/evolution-api/server/client", () => ({
 vi.mock("@/features/evolution-api/server/models", () => ({
     evolutionDb: vi.fn(),
     contactKey: (instance: string, jid: string) => `${instance}:${jid}`,
-    EvolutionContact: { bulkWrite: mocks.bulkWrite, findOne: (filter: unknown) => ({ select: () => ({ lean: async () => mocks.findOne(filter) }) }), distinct: mocks.distinct },
+    EvolutionContact: { bulkWrite: mocks.bulkWrite, findOne: (filter: unknown) => ({ select: () => ({ lean: async () => mocks.findOne(filter) }) }), find: (filter: unknown) => ({ select: () => ({ lean: async () => mocks.distinct(filter) }) }) },
 }))
 vi.mock("@/features/evolution-api/server/instances", () => ({ defaultInstanceName: async () => "opex" }))
 vi.mock("@/features/evolution-api/server/shared", () => ({ AcaoAuditoria: { EXECUTAR: "EXECUTAR" }, auditEvolution: vi.fn(), evolutionLog: { info: vi.fn() }, publishEvolution: vi.fn() }))
@@ -27,7 +27,7 @@ vi.mock("@/features/evolution-api/server/webhook", () => ({ upsertContacts: mock
 
 import { lidAliasOf } from "@/features/evolution-api/message"
 import { fetchConversationMessages } from "@/features/evolution-api/server/chat"
-import { aliasedLids, conversationJids, rememberLidAliases } from "@/features/evolution-api/server/lid"
+import { conversationJids, lidAliases, rememberLidAliases } from "@/features/evolution-api/server/lid"
 import { syncContacts } from "@/features/evolution-api/server/contacts"
 
 const PN = "554196988060@s.whatsapp.net"
@@ -96,28 +96,27 @@ describe("correspondência LID ↔ número (OPE-207)", () => {
         expect(await conversationJids("opex", "120363000000000000@g.us")).toEqual(["120363000000000000@g.us"])
     })
 
-    it("rememberLidAliases grava lidJid no contato do número; aliasedLids devolve os LIDs com número", async () => {
+    it("rememberLidAliases grava lidJid no contato do número e o marca como conversa; lidAliases devolve LID → número", async () => {
         mocks.bulkWrite.mockResolvedValue({ modifiedCount: 1, upsertedCount: 0 })
         expect(await rememberLidAliases("opex", [{ lid: LID, pn: PN }, { lid: LID, pn: PN }])).toBe(1)
         const ops = mocks.bulkWrite.mock.calls[0]![0] as { updateOne: { filter: unknown; update: { $set: unknown } } }[]
         expect(ops).toHaveLength(1)
         expect(ops[0]!.updateOne.filter).toEqual({ _id: `opex:${PN}` })
-        expect(ops[0]!.updateOne.update.$set).toEqual({ lidJid: LID })
-        mocks.distinct.mockResolvedValue([LID, null])
-        expect(await aliasedLids("opex")).toEqual(new Set([LID]))
+        expect(ops[0]!.updateOne.update.$set).toEqual({ lidJid: LID, hasChat: true })
+        mocks.distinct.mockResolvedValue([{ jid: PN, lidJid: LID }, { jid: "5531999999999@s.whatsapp.net", lidJid: null }])
+        expect(await lidAliases("opex")).toEqual(new Map([[LID, PN]]))
     })
 
-    it("Sincronizar preenche a correspondência das conversas @lid cuja última mensagem traz o número", async () => {
+    it("Sincronizar preenche a correspondência das conversas @lid cuja última mensagem traz o número, mesmo só com o chat LID (a metade do número vira conversa)", async () => {
         mocks.findContacts.mockResolvedValue([])
         mocks.fetchGroups.mockResolvedValue([])
         mocks.findChats.mockResolvedValue([
             { remoteJid: LID, lastMessage: { key: { id: "M", remoteJid: LID, remoteJidAlt: PN, fromMe: false } } },
             { remoteJid: "777@lid", lastMessage: { key: { id: "N", remoteJid: "777@lid", fromMe: true } } },
-            { remoteJid: PN, lastMessage: null },
         ])
         mocks.bulkWrite.mockResolvedValue({ modifiedCount: 1, upsertedCount: 0 })
         await syncContacts("local")
         const ops = mocks.bulkWrite.mock.calls[0]![0] as { updateOne: { filter: unknown; update: { $set: unknown } } }[]
-        expect(ops.map((op) => [op.updateOne.filter, op.updateOne.update.$set])).toEqual([[{ _id: `opex:${PN}` }, { lidJid: LID }]])
+        expect(ops.map((op) => [op.updateOne.filter, op.updateOne.update.$set])).toEqual([[{ _id: `opex:${PN}` }, { lidJid: LID, hasChat: true }]])
     })
 })

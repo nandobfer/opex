@@ -112,7 +112,7 @@ describe("processEvolutionEvent", () => {
         const pn = "554196988060@s.whatsapp.net"
         await processEvolutionEvent({ ...message("L1"), data: { key: { id: "L1", remoteJid: lid, remoteJidAlt: pn, fromMe: false }, message: { conversation: "Como foram as interviews?" } } } as never)
         const ops = mocks.bulkWrite.mock.calls.flatMap((call) => call[0] as { updateOne: { filter: { _id: string }; update: { $set: Record<string, unknown> } } }[])
-        expect(ops).toContainEqual(expect.objectContaining({ updateOne: expect.objectContaining({ filter: { _id: `opex:${pn}` }, update: expect.objectContaining({ $set: { lidJid: lid } }) }) }))
+        expect(ops).toContainEqual(expect.objectContaining({ updateOne: expect.objectContaining({ filter: { _id: `opex:${pn}` }, update: expect.objectContaining({ $set: { lidJid: lid, hasChat: true } }) }) }))
         expect(mocks.updateContact).toHaveBeenCalledWith({ _id: `opex:${pn}` }, expect.anything())
         expect(mocks.publishChat).toHaveBeenCalledWith("opex", [pn])
     })

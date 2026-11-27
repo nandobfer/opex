@@ -8,6 +8,8 @@ Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|de
 (links das seções por `secretarySectionPath` em `links.ts`).
 Página do agente: `/agente-secretario`, com as abas **Conversas** (padrão, fora da URL; OPE-207), Visão geral, Histórico e
 Memórias (`?aba=visao-geral|historico|memorias`; links por `secretaryPagePath` e `SECRETARY_PAGE_TABS` em `links.ts`).
+Decisão do dono no planejamento da OPE-207: a aba e a conversa aberta ficam em query string (`?aba=`, `?conversa=`), no
+mesmo padrão de todas as páginas de agente (`AgentPage`) e da aba de Integrações, e não em segmentos de caminho.
 O custo da Visão geral inclui turno, análise e decisões de assunto (modelo de texto ou JEV), mas não Simulação.
 O painel separa **Mensagens em pausa** (mensagens barradas) de **Intervenções do dono** (mensagens do dono
 registradas como assunção da conversa no WhatsApp).
@@ -310,8 +312,9 @@ transcrição sob demanda do áudio, que depende do recurso de transcrição do 
   padrão do WhatsApp, prévia com o ícone do tipo, **não lidas do WhatsApp**, selo do estado do Secretário (pausado
   até…, nunca responder, aguardando o dono) e o menu ⋮ com as ações; busca por nome ou número (fuse.js), chips
   **Todas / Não lidas** e o filtro **Secretário** por estado (equivalente ao "Com o agente" do Atendimento);
-  virtualizada acima de 50. A metade `@lid` de uma conversa com número conhecido não aparece como conversa separada
-  (OPE-207; conversas só LID continuam como `lid-<dígitos>`). Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
+  virtualizada acima de 50. A metade `@lid` de uma conversa com número conhecido entra na do número (OPE-207,
+  `mergeLidHalves`): a linha fica com a prévia e o horário mais recentes e a soma das não lidas; sem a metade do
+  número na lista, a do LID continua visível. Conversas só LID continuam como `lid-<dígitos>`. Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
   (`EvolutionSyncAction`; sem instância escolhida, o link para a aba Instância da integração).
 - **Ações** (decisão do dono D4, 26/11/2026): Pausar/Retomar (pelo tempo da pausa configurado), Nunca responder/Voltar
   a responder (entra ou sai de `criteria.audience.blocked`, com confirmação ao bloquear) e Abrir memórias ficam **no

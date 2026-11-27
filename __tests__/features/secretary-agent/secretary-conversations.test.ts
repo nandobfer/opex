@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_SECRETARY_SETTINGS } from "@/features/secretary-agent/schemas"
 
 const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), contacts: vi.fn(), states: vi.fn(), notices: vi.fn(), update: vi.fn(), audit: vi.fn(), publish: vi.fn(), lids: vi.fn() }))
-vi.mock("@/features/evolution-api/server/lid", () => ({ aliasedLids: mocks.lids }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ lidAliases: mocks.lids }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" }, recordAudit: mocks.audit }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/features/evolution-api/server/contacts", () => ({ listContacts: mocks.contacts }))
@@ -23,7 +23,7 @@ const blockedSettings = { ...settings, criteria: { ...settings.criteria, audienc
 beforeEach(() => {
     vi.clearAllMocks()
     mocks.load.mockResolvedValue({ settings })
-    mocks.lids.mockResolvedValue(new Set())
+    mocks.lids.mockResolvedValue(new Map())
 })
 
 describe("conversas do Secretário", () => {
@@ -61,14 +61,33 @@ describe("conversas do Secretário", () => {
         expect(rows.map((row) => [row.chatId, row.unreadCount, row.lastMessage])).toEqual([["5521999999999", 3, lastMessage], [chatId, 0, null]])
     })
 
-    it("OPE-207: esconde a metade @lid de uma conversa com número conhecido e mantém as conversas só LID", async () => {
-        mocks.contacts.mockResolvedValueOnce([{ jid }, { jid: "158879933534209@lid" }, { jid: "40686980210703@lid" }])
+    it("OPE-207: a metade @lid entra na conversa do número (prévia mais recente e soma das não lidas); conversas só LID continuam", async () => {
+        const lidPreview = { text: "Como foram as interviews?", kind: "text", fromMe: false }
+        mocks.contacts.mockResolvedValueOnce([
+            { jid: "158879933534209@lid", lastMessageAt: "2026-11-27T13:48:34.000Z", lastMessage: lidPreview, unreadCount: 1 },
+            { jid: "5521999999999@s.whatsapp.net", lastMessageAt: "2026-11-26T10:00:00.000Z", lastMessage: null, unreadCount: 0 },
+            { jid: "40686980210703@lid", lastMessageAt: "2026-11-26T09:00:00.000Z", lastMessage: null, unreadCount: 0 },
+            { jid, lastMessageAt: "2026-11-25T13:51:02.000Z", lastMessage: { text: "hhahaha", kind: "text", fromMe: false }, unreadCount: 2 },
+        ])
         mocks.states.mockResolvedValueOnce([])
         mocks.notices.mockResolvedValueOnce([])
-        mocks.lids.mockResolvedValueOnce(new Set(["158879933534209@lid"]))
+        mocks.lids.mockResolvedValueOnce(new Map([["158879933534209@lid", jid]]))
         const rows = await listSecretaryConversations()
         expect(mocks.lids).toHaveBeenCalledWith("opex")
-        expect(rows.map((row) => row.chatId)).toEqual([chatId, "lid-40686980210703"])
+        expect(rows.map((row) => [row.chatId, row.lastMessageAt, row.lastMessage?.text ?? null, row.unreadCount])).toEqual([
+            [chatId, "2026-11-27T13:48:34.000Z", "Como foram as interviews?", 3],
+            ["5521999999999", "2026-11-26T10:00:00.000Z", null, 0],
+            ["lid-40686980210703", "2026-11-26T09:00:00.000Z", null, 0],
+        ])
+    })
+
+    it("OPE-207: sem a metade do número na lista, a metade @lid continua visível (a conversa não some)", async () => {
+        mocks.contacts.mockResolvedValueOnce([{ jid: "158879933534209@lid", lastMessageAt: "2026-11-27T13:48:34.000Z", lastMessage: null, unreadCount: 1 }])
+        mocks.states.mockResolvedValueOnce([])
+        mocks.notices.mockResolvedValueOnce([])
+        mocks.lids.mockResolvedValueOnce(new Map([["158879933534209@lid", jid]]))
+        const rows = await listSecretaryConversations()
+        expect(rows.map((row) => row.chatId)).toEqual(["lid-158879933534209"])
     })
 
     it("lista estados de exclusão, pausa, pergunta ao dono e conversa ativa", async () => {

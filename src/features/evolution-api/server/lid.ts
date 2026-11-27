@@ -12,7 +12,10 @@ export interface LidAlias {
     pn: string
 }
 
-/** Grava `lidJid` no contato do número (cria o contato se ainda não existir). */
+/**
+ * Grava `lidJid` no contato do número (cria o contato se ainda não existir) e o marca como conversa: a correspondência só
+ * vem de mensagens, então a conversa existe, e a lista precisa da metade do número para esconder a do LID.
+ */
 export async function rememberLidAliases(instance: string, aliases: readonly LidAlias[]): Promise<number> {
     const unique = [...new Map(aliases.map((alias) => [alias.pn, alias])).values()]
     if (unique.length === 0) return 0
@@ -22,7 +25,7 @@ export async function rememberLidAliases(instance: string, aliases: readonly Lid
             unique.map((alias) => ({
                 updateOne: {
                     filter: { _id: contactKey(instance, alias.pn) },
-                    update: { $set: { lidJid: alias.lid }, $setOnInsert: { instance, jid: alias.pn, isGroup: false, updatedAt: new Date() } },
+                    update: { $set: { lidJid: alias.lid, hasChat: true }, $setOnInsert: { instance, jid: alias.pn, isGroup: false, updatedAt: new Date() } },
                     upsert: true,
                 },
             })),
@@ -61,9 +64,9 @@ export async function conversationJids(instance: string, jid: string): Promise<s
     return [jid]
 }
 
-/** LIDs que já têm contato com número (a "metade LID" de uma conversa: as listas mostram só a do número). */
-export async function aliasedLids(instance: string): Promise<Set<string>> {
+/** Correspondências conhecidas, LID → número (a "metade LID" de uma conversa: as listas mostram só a do número). */
+export async function lidAliases(instance: string): Promise<Map<string, string>> {
     await evolutionDb()
-    const lids = await EvolutionContact.distinct("lidJid", { instance, lidJid: { $type: "string" } })
-    return new Set(lids.filter((item): item is string => typeof item === "string"))
+    const rows = await EvolutionContact.find({ instance, lidJid: { $type: "string" } }).select("jid lidJid").lean<{ jid: string; lidJid?: string | null }[]>()
+    return new Map(rows.flatMap((row) => (row.lidJid ? [[row.lidJid, row.jid] as [string, string]] : [])))
 }
