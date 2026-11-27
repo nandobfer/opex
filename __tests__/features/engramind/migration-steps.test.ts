@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /**
  * OPE-104: etapas da migração de memórias antes da importação — backup (hash estável, só leitura na

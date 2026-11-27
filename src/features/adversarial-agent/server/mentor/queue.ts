@@ -105,6 +105,8 @@ export async function enqueueMentorLearning(input: MentorLearningInput, settings
     const previous = state.chains.get(input.workbenchId) ?? Promise.resolve()
     const next = previous
         .catch(() => undefined)
+        // Migração dos nomes dos canais de memória (OPE-206): a execução espera na fila (o batimento continua).
+        .then(async () => (await import("@/features/engramind/server/instance")).waitForMemoryMaintenance())
         .then(() => processMentorLearning(runId, input, settings, targets, { maxMs: options.maxMs }))
         .finally(() => {
             clearInterval(beat)

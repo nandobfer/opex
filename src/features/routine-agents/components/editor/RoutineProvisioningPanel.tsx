@@ -7,6 +7,8 @@ import type { RoutineAgentDto } from "../../types"
 import { useRoutineProvisioning } from "../../hooks/useRoutineAgents"
 import { RoutineBlockedChannels } from "./RoutineBlockedChannels"
 import { RoutineExtraChannelsList } from "./RoutineExtraChannelsList"
+import { channelDisplay } from "@/features/engramind/channel-namespace"
+import { useChannelNamespace } from "@/features/engramind/hooks/useChannelNamespace"
 
 /**
  * Resultado do subagente de provisionamento: o agente no Engramind, os canais base e os extras com o
@@ -14,6 +16,7 @@ import { RoutineExtraChannelsList } from "./RoutineExtraChannelsList"
  */
 export function RoutineProvisioningPanel({ agent }: { agent: RoutineAgentDto }) {
     const provisioning = useRoutineProvisioning()
+    const ns = useChannelNamespace().data
     const state = agent.provisioning
     const running = state.status === "running" || state.status === "pending"
     return (
@@ -37,7 +40,7 @@ export function RoutineProvisioningPanel({ agent }: { agent: RoutineAgentDto }) 
             <div className="space-y-1">
                 <p className="text-xs font-semibold">Canais assinados sempre</p>
                 <ul className="flex flex-wrap gap-1.5 text-xs">
-                    {(state.channels.length ? state.channels : ["opex", "agentes/rotineiros/global", agent.channel]).map((channel) => (
+                    {(state.channels.length ? state.channels.map((channel) => channelDisplay(ns, channel)) : ["opex", "agentes/rotineiros/global", channelDisplay(ns, agent.channel)]).map((channel) => (
                         <li key={channel} className="rounded-full bg-muted px-2 py-0.5">
                             <code>{channel}</code>
                         </li>

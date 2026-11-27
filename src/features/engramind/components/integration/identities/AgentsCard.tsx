@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { isOpexMemoryAgent } from "@/features/ai/agents"
+import { useChannelNamespace } from "../../../hooks/useChannelNamespace"
 import { Bot, ChevronRight, Pencil, Plus, Power, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
@@ -17,6 +18,7 @@ import { AgentDialog } from "./AgentDialog"
 
 /** Agentes: criar, editar, desativar/reativar e excluir; cada um mostra as assinaturas (só leitura). */
 export function AgentsCard({ agents, apps, subscriptions, onOpen }: { agents: EngramindAgent[]; apps: EngramindApp[]; subscriptions: EngramindSubscription[]; onOpen?: (agent: EngramindAgent) => void }) {
+    const instanceApp = useChannelNamespace().data?.app ?? ""
     const [editing, setEditing] = useState<EngramindAgent | null | "new">(null)
     const [deleting, setDeleting] = useState<EngramindAgent | null>(null)
     const toggle = useEngramindMutation((agent: EngramindAgent) => engramindSend("patch", route("agents", agent.qualified_slug), { disabled: !agent.disabled_at }), {
@@ -51,7 +53,7 @@ export function AgentsCard({ agents, apps, subscriptions, onOpen }: { agents: En
                                         <p className="flex flex-wrap items-center gap-1.5 font-medium">
                                             {agent.name} <span className="font-mono text-xs text-muted-foreground">{agent.qualified_slug}</span>
                                             {agent.disabled_at && <HelpBadge value="desativado" tone="warning" help={IDENTITY_HELP.disabled} />}
-                                            {isOpexMemoryAgent(agent.app.slug, agent.slug) && <HelpBadge value="Memórias do Opex" tone="secondary" help="Agente das memórias dos agentes do Opex (criado pelo passo Memórias dos agentes)." />}
+                                            {isOpexMemoryAgent(agent.app.slug, agent.slug, instanceApp) && <HelpBadge value="Memórias do Opex" tone="secondary" help="Agente das memórias dos agentes do Opex (criado pelo passo Memórias dos agentes)." />}
                                         </p>
                                         <div className="flex flex-wrap items-center gap-1 text-xs text-muted-foreground">
                                             {own.length === 0 ? (

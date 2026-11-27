@@ -2,6 +2,7 @@
 
 import { useState } from "react"
 import { isOpexMemoryAgent } from "@/features/ai/agents"
+import { useChannelNamespace } from "../../../hooks/useChannelNamespace"
 import { AnimatePresence } from "framer-motion"
 import { Ban, KeyRound, Pencil, Plus, RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -35,6 +36,7 @@ interface TokensCardProps {
 
 /** Tokens: prefixo, dono, tipo, escopos, rótulo, status, expiração, último uso e alertas; emitir, editar, rotacionar e revogar. */
 export function TokensCard({ tokens, apps, agents, ownTokenIds, title = "Tokens", info, issuePreset, emptyDescription = "Emita um token para um app ou agente." }: TokensCardProps) {
+    const instanceApp = useChannelNamespace().data?.app ?? ""
     const [issuing, setIssuing] = useState(false)
     const [editing, setEditing] = useState<EngramindToken | null>(null)
     const [revoking, setRevoking] = useState<EngramindToken | null>(null)
@@ -69,7 +71,7 @@ export function TokensCard({ tokens, apps, agents, ownTokenIds, title = "Tokens"
                                         <div className="flex flex-wrap items-center gap-1.5">
                                             <span className="font-mono text-xs">{token.prefix}</span>
                                             {own && <HelpBadge value="Este Opex" tone="secondary" help={IDENTITY_HELP.ownToken} />}
-                                            {token.kind === "agent" && isOpexMemoryAgent(token.app.slug, token.agent?.slug) && <HelpBadge value="Memórias do Opex" tone="secondary" help="Token do agente nas memórias dos agentes do Opex (contexto e aprendizado autônomo). Revogado, o Opex emite outro na próxima conferência." />}
+                                            {token.kind === "agent" && isOpexMemoryAgent(token.app.slug, token.agent?.slug, instanceApp) && <HelpBadge value="Memórias do Opex" tone="secondary" help="Token do agente nas memórias dos agentes do Opex (contexto e aprendizado autônomo). Revogado, o Opex emite outro na próxima conferência." />}
                                             <HelpBadge value={token.kind} help={TOKEN_KIND_HELP[token.kind]} />
                                             <HelpBadge value={token.status} tone={toneOf(token.status)} help={TOKEN_STATUS_HELP[token.status]} />
                                             {token.scopes.map((scope) => (

@@ -10,6 +10,7 @@ import { useEngramindList } from "@/features/engramind/hooks/useEngramind"
 import type { EngramindChannel } from "@/features/engramind/types"
 import { formatDateTime } from "../../format"
 import { isEligibleExtraChannel } from "../../provision-plan"
+import { useChannelNamespace } from "@/features/engramind/hooks/useChannelNamespace"
 import { useRoutineChannelAction } from "../../hooks/useRoutineAgents"
 import type { RoutineAgentDto } from "../../types"
 
@@ -24,14 +25,17 @@ export function RoutineBlockedChannels({ agent, disabled }: { agent: RoutineAgen
     const { blocked, extras, channels: base } = agent.provisioning
     const action = useRoutineChannelAction()
     const channels = useEngramindList<EngramindChannel>("channels", "channels", undefined, { all: true })
+    const ns = useChannelNamespace().data
     const [picked, setPicked] = useState("")
     const [pending, setPending] = useState<Pending | null>(null)
     const options = useMemo(() => {
-        const taken = new Set([...base, "opex", "agentes/rotineiros/global", agent.channel, ...extras.map((item) => item.channel), ...blocked.map((item) => item.channel)])
+        // Sem o espaço de nomes ainda, nenhuma opção (os canais reservados dependem do app da instância, OPE-206).
+        if (!ns) return []
+        const taken = new Set([...base, agent.channel, ...extras.map((item) => item.channel), ...blocked.map((item) => item.channel)])
         return channels.items
-            .filter((channel) => !channel.archived_at && isEligibleExtraChannel(channel.slug) && !taken.has(channel.slug))
+            .filter((channel) => !channel.archived_at && isEligibleExtraChannel(channel.slug, ns) && !taken.has(channel.slug))
             .map((channel) => ({ value: channel.slug, label: channel.slug, description: channel.name !== channel.slug ? channel.name : undefined }))
-    }, [channels.items, base, agent.channel, extras, blocked])
+    }, [channels.items, base, agent.channel, extras, blocked, ns])
     const busy = disabled || action.isPending
     const run = (input: { action: "block" | "unblock" | "resubscribe"; channel: string }, after?: () => void) => action.mutate({ id: agent.id, ...input }, { onSuccess: after, onSettled: () => setPending(null) })
     return (

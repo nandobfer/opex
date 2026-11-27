@@ -12,6 +12,7 @@ import { tokensOfAgent } from "../../../identities"
 import type { EngramindAgent, EngramindApp, EngramindMemory, EngramindSubscription, EngramindToken } from "../../../types"
 import { engramindSend, route, useEngramindList, useEngramindMutation } from "../../../hooks/useEngramind"
 import { useAgentActivity } from "../../../hooks/useAgentActivity"
+import { useChannelNamespace } from "../../../hooks/useChannelNamespace"
 import { HelpBadge } from "../../shared/Badges"
 import { formatDateTime } from "../../shared/format"
 import { Section } from "../../shared/Section"
@@ -57,7 +58,8 @@ export function AgentDetail({ agent, apps, agents, tokens, subscriptions, ownTok
     const [editing, setEditing] = useState(false)
     const own = subscriptions.filter((subscription) => subscription.agent.id === agent.id)
     const reached = [...new Set(own.flatMap((subscription) => subscription.reaches))]
-    const opexIdentity = isOpexMemoryAgent(agent.app.slug, agent.slug) && (MEMORY_IDENTITIES as readonly string[]).includes(agent.slug) ? (agent.slug as MemoryIdentity) : null
+    const instanceApp = useChannelNamespace().data?.app ?? ""
+    const opexIdentity = isOpexMemoryAgent(agent.app.slug, agent.slug, instanceApp) && (MEMORY_IDENTITIES as readonly string[]).includes(agent.slug) ? (agent.slug as MemoryIdentity) : null
     const activity = useAgentActivity(Boolean(opexIdentity))
     const toggle = useEngramindMutation(() => engramindSend("patch", route("agents", agent.qualified_slug), { disabled: !agent.disabled_at }), { invalidate: ["agents"], success: agent.disabled_at ? "Agente reativado" : "Agente desativado" })
     return (

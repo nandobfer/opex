@@ -16,4 +16,8 @@ export async function register() {
     // Kernel de plugins (OPE-172): sobe sem bloquear o boot. Ver aicontext/modules/plugins.md.
     const { startPluginKernel } = await import("@/features/plugins/server/boot")
     void startPluginKernel()
+
+    // Engramind (OPE-206): confere a rede das memórias e revoga tokens gravados de outro app (migração A), fora da prévia.
+    const { scheduleEngramindStartupCheck } = await import("@/features/engramind/server/memory-network")
+    scheduleEngramindStartupCheck()
 }

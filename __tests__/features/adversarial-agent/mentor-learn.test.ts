@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /**
  * OPE-165: aprendizado do Agente Mentor na conclusão da mesa — transcrição → digestor (casos) → decisor →

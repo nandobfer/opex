@@ -100,6 +100,12 @@ export async function getAgentMemoryContext(consumer: ContextConsumer, channels:
     } catch (error) {
         engramindLog.warn({ err: error instanceof Error ? error.message : String(error), consumer }, "[engramind] não foi possível ler o cache do contexto das memórias")
     }
+    // Migração dos nomes dos canais (OPE-206): o turno segue com o último contexto em cache, sem chamar o Engramind.
+    const { isMemoryMaintenance, MEMORY_MAINTENANCE_NOTICE } = await import("./instance")
+    if (await isMemoryMaintenance()) {
+        if (cached) return { block: cached.content, source: "cache", cachedAt: new Date(cached.fetchedAt).toISOString(), counts: cached.counts ?? EMPTY_COUNTS, reason: MEMORY_MAINTENANCE_NOTICE, focusMode: null }
+        return { block: "", source: "none", cachedAt: null, counts: EMPTY_COUNTS, reason: MEMORY_MAINTENANCE_NOTICE, focusMode: null }
+    }
     try {
         const target = options.target ?? (consumer.startsWith("rotineiro-") ? null : await agentTarget(consumer as MemoryConsumer))
         if (!target) throw new Error("token do agente de memórias indisponível (confira canais e agentes na aba Migração de memórias)")

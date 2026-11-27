@@ -196,7 +196,9 @@ sem pedido explícito.
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
   `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
-- Engramind: `engramind-updated` (`{ type, channel?, keys? }`, abas de gestor de `/integracoes/engramind`)
+- Engramind: `engramind-updated` (`{ type, channel?, keys? }`, abas de gestor de `/integracoes/engramind`;
+  `type: "namespace"` quando o espaço de nomes dos canais muda e `type: "channel-migration"` a cada passo da migração
+  dos nomes dos canais — OPE-206, ver `aicontext/modules/engramind.md`)
   e o consumo de memórias pelos agentes `engramind-consumption`
   (`{ agent, kind, channels, delivered, memoryIds, titleIds?, version? }`, só ids e slugs) em `private-app`.
   O `engramind-consumption` é montado pelo servidor a partir do webhook `memory.consumed` do Engramind,

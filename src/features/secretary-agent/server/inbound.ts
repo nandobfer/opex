@@ -70,5 +70,7 @@ export async function handleIncomingMessage(instance: string, message: ParsedMes
     const token = randomUUID()
     await SecretaryConversation.updateOne({ _id: id }, { $set: { token }, $setOnInsert: { instance, jid: message.chatJid }, $push: { pending: message } }, { upsert: true, setDefaultsOnInsert: false })
     await sleep(settings.human.groupingSeconds * 1000)
+    // Migração dos nomes dos canais de memória (OPE-206): a resposta automática espera a retomada.
+    await (await import("@/features/engramind/server/instance")).waitForMemoryMaintenance()
     await runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLid, token, message })
 }

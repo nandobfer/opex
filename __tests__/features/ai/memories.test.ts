@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engramind'
 
 /** Memórias dos agentes no Engramind (OPE-104): serviço, regras de escopo, autoria, auditoria e tempo real. */

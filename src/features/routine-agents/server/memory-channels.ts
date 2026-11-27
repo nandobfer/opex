@@ -7,6 +7,12 @@ import { engramindCodeOf } from "@/features/engramind/server/errors"
 import type { EngramindMemory, MemoryWrite } from "@/features/engramind/types"
 import { AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "@/features/ai/constants"
 import { routineLog } from "./shared"
+import type { ChannelNamespace } from "@/features/engramind/channel-namespace"
+
+async function assertWritable(): Promise<void> {
+    const { assertNoMemoryMaintenance } = await import("@/features/engramind/server/instance")
+    await assertNoMemoryMaintenance()
+}
 
 /**
  * Memória do agente rotineiro em qualquer canal que ele assina (OPE-130, D13–D15): gravação por
@@ -37,6 +43,8 @@ export interface RoutineMemoryEnv {
     target: EngramindTarget
     /** Canais assinados e não arquivados (o primeiro é o próprio do agente). */
     allowed: readonly string[]
+    /** Espaço de nomes dos canais da instância (OPE-206): canal próprio e global dos rotineiros. */
+    ns: ChannelNamespace
     /** Aviso que vai para a execução (passo/log) quando a credencial do agente é recusada. */
     warn?: (message: string) => void
 }
@@ -121,6 +129,7 @@ export interface RememberInput {
 
 export async function rememberInChannel(env: RoutineMemoryEnv, input: RememberInput) {
     const channel = assertAllowedChannel(env, input.canal)
+    await assertWritable()
     const { parseText, resolveCategory } = await import("@/features/ai/server/agent-memory-service")
     const text = await parseText(input.texto, channel)
     const category = await resolveCategory(input.categoria ?? null)
@@ -151,6 +160,7 @@ export interface UpdateInput {
 }
 
 export async function updateInChannel(env: RoutineMemoryEnv, input: UpdateInput) {
+    await assertWritable()
     const path = `/v1/memories/${encodeURIComponent(input.id)}`
     const current = await call<EngramindMemory>(env, "GET", { path })
     assertAllowedChannel(env, current.channel)

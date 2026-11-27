@@ -105,7 +105,8 @@ export async function processWebhookEvent(event: WebhookEvent): Promise<boolean>
  */
 export async function publishMemoryList(event: Pick<WebhookEvent, "type" | "channel">): Promise<boolean> {
     if (!event.type.startsWith("memory.")) return false
-    const list = listOfChannel(event.channel)
+    const { channelNamespaceOrLegacy } = await import("./instance")
+    const list = listOfChannel(event.channel, await channelNamespaceOrLegacy())
     if (!list) {
         engramindLog.debug({ type: event.type, channel: event.channel }, "[engramind] memória num canal fora das listas dos agentes: ignorada pelos cards")
         return false

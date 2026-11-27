@@ -35,17 +35,23 @@ beforeEach(() => {
 
 describe('nome do agente rotineiro no Engramind', () => {
   it('cadastra com "Agente <nome>", sem mudar app, slug nem descrição', async () => {
-    await expect(ensureRoutineEngramindAgent('curador', 'Curador', 'Cuidar do acervo', target)).resolves.toBe('created')
+    await expect(ensureRoutineEngramindAgent('opex', 'curador', 'Curador', 'Cuidar do acervo', target)).resolves.toBe('created')
     expect(posted()).toEqual([{ app: 'opex', slug: 'rotineiro-curador', name: 'Agente Curador', description: 'Cuidar do acervo' }])
   })
 
+  it('OPE-206: cadastra no app da instância e consulta pelo agente desse app', async () => {
+    await ensureRoutineEngramindAgent('alfredopex', 'curador', 'Curador', '', target)
+    expect(posted()[0]).toMatchObject({ app: 'alfredopex', slug: 'rotineiro-curador' })
+    expect(holder.calls[0]).toMatchObject({ method: 'GET', path: '/v1/agents/alfredopex%2Frotineiro-curador' })
+  })
+
   it('não duplica o prefixo quando o nome já começa com "Agente "', async () => {
-    await ensureRoutineEngramindAgent('curador', 'Agente Curador', '', target)
+    await ensureRoutineEngramindAgent('opex', 'curador', 'Agente Curador', '', target)
     expect(posted()[0]?.name).toBe('Agente Curador')
   })
 
   it('respeita o limite de 120 caracteres', async () => {
-    await ensureRoutineEngramindAgent('longo', 'X'.repeat(200), '', target)
+    await ensureRoutineEngramindAgent('opex', 'longo', 'X'.repeat(200), '', target)
     const name = String(posted()[0]?.name)
     expect(name).toHaveLength(120)
     expect(name.startsWith('Agente X')).toBe(true)
@@ -53,7 +59,7 @@ describe('nome do agente rotineiro no Engramind', () => {
 
   it('reprovisionar um agente que já existe não o renomeia', async () => {
     holder.exists = true
-    await expect(ensureRoutineEngramindAgent('curador', 'Curador', '', target)).resolves.toBe('exists')
+    await expect(ensureRoutineEngramindAgent('opex', 'curador', 'Curador', '', target)).resolves.toBe('exists')
     expect(posted()).toEqual([])
   })
 })

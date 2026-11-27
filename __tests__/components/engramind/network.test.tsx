@@ -4,6 +4,8 @@ import React from 'react'
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// OPE-206: a instância do dono nos nomes antigos.
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 import { openStats } from '../../helpers/engramind-stats'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import { fitBounds, flowItems, flowState, setCenter, xyflowMock } from '../../helpers/xyflow'

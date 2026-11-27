@@ -47,10 +47,13 @@ const PendingWrites = (models.EngramindPendingWrite as Model<PendingWrite> | und
 const log = loggerFor({ feature: "engramind-pending-writes" })
 export const PENDING_ID_PREFIX = "pendente:"
 
-/** Engramind fora do ar ou inalcançável (só então a gravação vai para a fila). */
+/**
+ * Engramind fora do ar ou inalcançável (só então a gravação vai para a fila). A migração dos nomes dos canais
+ * (`ENGRAMIND_MIGRATING`, OPE-206) conta como indisponível: a gravação espera na fila e entra no canal novo depois.
+ */
 export function isEngramindUnavailable(error: unknown): boolean {
     if (!(error instanceof DomainError)) return false
-    return error.code === "ENGRAMIND_UNREACHABLE" || error.code === "ENGRAMIND_PROXY_MASKED" || error.code === "ENGRAMIND_DATABASE_UNAVAILABLE" || error.code === "ENGRAMIND_REQUEST_TIMEOUT" || error.code === "ENGRAMIND_MIGRATIONS_PENDING"
+    return error.code === "ENGRAMIND_MIGRATING" || error.code === "ENGRAMIND_UNREACHABLE" || error.code === "ENGRAMIND_PROXY_MASKED" || error.code === "ENGRAMIND_DATABASE_UNAVAILABLE" || error.code === "ENGRAMIND_REQUEST_TIMEOUT" || error.code === "ENGRAMIND_MIGRATIONS_PENDING"
 }
 
 export function pendingKey(channel: string, write: PendingOp): string {
@@ -83,6 +86,8 @@ export interface FlushResult {
 /** Reprocessa a fila (mais antigas primeiro). Para no primeiro sinal de Engramind ainda fora do ar. */
 export async function flushPendingWrites(limit = 50): Promise<FlushResult> {
     await dbConnect()
+    const { isMemoryMaintenance } = await import("./instance")
+    if (await isMemoryMaintenance()) return { done: 0, failed: 0, remaining: await PendingWrites.countDocuments() }
     const rows = await PendingWrites.find().sort({ createdAt: 1, _id: 1 }).limit(limit).lean<PendingWrite[]>()
     const service = await import("@/features/ai/server/agent-memory-service")
     let done = 0

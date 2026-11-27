@@ -5,6 +5,8 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+// OPE-206: a instância do dono nos nomes antigos.
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**

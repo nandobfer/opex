@@ -67,12 +67,19 @@ export async function listRoutineAgents(filter: RoutineListFilter = "current"): 
     const query = filter === "archived" ? RoutineAgent.find({ status: "archived" }) : RoutineAgent.find({ status: { $ne: "archived" } })
     const docs = await query.sort({ name: 1 }).lean<RoutineAgentDoc[]>()
     const summaries = await runSummaries(docs.map((doc) => String(doc._id)))
-    return docs.map((doc) => toAgentDto(doc, summaries.get(String(doc._id))))
+    const ns = await channelNs()
+    return docs.map((doc) => toAgentDto(doc, ns, summaries.get(String(doc._id))))
+}
+
+/** Espaço de nomes dos canais da instância (OPE-206), sem lançar com o Engramind fora do ar. */
+async function channelNs() {
+    const { channelNamespaceOrLegacy } = await import("@/features/engramind/server/instance")
+    return channelNamespaceOrLegacy()
 }
 
 export async function getRoutineAgent(id: string): Promise<RoutineAgentDto> {
     const doc = await loadAgentDoc(id)
-    return toAgentDto(doc, (await runSummaries([id])).get(id))
+    return toAgentDto(doc, await channelNs(), (await runSummaries([id])).get(id))
 }
 
 /**
@@ -129,7 +136,7 @@ export async function createRoutineAgent(input: RoutineAgentInput, actorId: stri
     await auditAgent(actorId, id, AcaoAuditoria.CRIAR, { depois: { ...auditView(doc), slug } })
     await publishAgentUpdated(id)
     void startProvisioning(id, "create", actorId)
-    return toAgentDto(doc)
+    return toAgentDto(doc, await channelNs())
 }
 
 export async function updateRoutineAgent(id: string, input: RoutineAgentInput, actorId: string): Promise<RoutineAgentDto> {

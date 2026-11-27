@@ -42,8 +42,8 @@ async function agentCreatedAt(): Promise<Map<string, string>> {
     }
     try {
         const { engramindCall } = await import("./client")
-        const { OPEX_APP_SLUG } = await import("../constants")
-        const list = await engramindCall<{ agents?: { slug: string; created_at: string }[] }>("GET", { path: "/v1/agents", query: { app: OPEX_APP_SLUG, limit: 200 } }, { timeoutMs: 3_000 })
+        const { instanceApp } = await import("./instance")
+        const list = await engramindCall<{ agents?: { slug: string; created_at: string }[] }>("GET", { path: "/v1/agents", query: { app: await instanceApp(), limit: 200 } }, { timeoutMs: 3_000 })
         for (const agent of list?.agents ?? []) out.set(agent.slug, agent.created_at)
     } catch {
         // Engramind fora do ar: fica a data do token.

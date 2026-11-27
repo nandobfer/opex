@@ -3,6 +3,8 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+// OPE-206: a instância do dono nos nomes antigos.
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 import { framerMotionMock } from '../../helpers/framer-motion'
 
 /** OPE-117: aba Identidades em dois níveis (apps → detalhe do app/agente), token em uso e rotação. */

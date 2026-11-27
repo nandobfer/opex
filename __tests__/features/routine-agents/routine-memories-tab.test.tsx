@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { cleanup, render, screen } from '@testing-library/react'
 
 /** Aba Memórias do rotineiro (critério aprovado OPE-130, D10/D11): um card com o universo do agente da lib. */
@@ -22,7 +23,7 @@ afterEach(() => cleanup())
 
 describe('aba Memórias do agente rotineiro', () => {
   it('um card só, com o universo do agente opex/rotineiro-<slug> e o canal próprio como inicial da Nova memória', () => {
-    render(<RoutineMemoriesTab slug="vagas" />)
+    render(<RoutineMemoriesTab agent={{ engramindAgent: 'opex/rotineiro-vagas', channel: 'agentes/rotineiros/vagas' }} />)
     expect(screen.getAllByTestId('agent-universe')).toHaveLength(1)
     expect(screen.getByText('Rede de memórias')).toBeTruthy()
     // OPE-148: card compartilhado, sem filtro de canais nem avisos. OPE-151: o card inteiro na altura visível
@@ -31,5 +32,10 @@ describe('aba Memórias do agente rotineiro', () => {
     expect(seen.props.at(-1)).not.toHaveProperty('className')
     expect(screen.getByTestId('agent-universe-card').getAttribute('data-network-fill-root')).toBe('block')
     expect(screen.queryByTestId('memories-notices')).toBeNull()
+  })
+
+  it('OPE-206: agente e canal próprio vêm do DTO, já no app da instância', () => {
+    render(<RoutineMemoriesTab agent={{ engramindAgent: 'alfredopex/rotineiro-vagas', channel: 'alfredopex/agentes/rotineiros/vagas' }} />)
+    expect(seen.props.at(-1)).toMatchObject({ agent: 'alfredopex/rotineiro-vagas', defaultCreateChannel: 'alfredopex/agentes/rotineiros/vagas' })
   })
 })

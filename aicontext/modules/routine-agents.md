@@ -134,7 +134,11 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 
 Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo sem aprovação:
 
-1. cadastra o agente `opex/rotineiro-<slug>` no Engramind com o nome **"Agente <nome>"** (OPE-170: o
+Os nomes de canal abaixo são **lógicos**: no Engramind eles levam o app da instância na frente
+(`<app>/agentes/rotineiros/<slug>`, OPE-206), e as telas continuam mostrando o nome lógico
+(`channelDisplay`). Ver `modules/engramind.md`, "Isolamento por instância e nomes dos canais (OPE-206)".
+
+1. cadastra o agente `<app>/rotineiro-<slug>` no Engramind (app da chave da instância) com o nome **"Agente <nome>"** (OPE-170: o
    prefixo não é duplicado quando o nome já começa com "Agente ", até 120 caracteres; a rede esconde o
    prefixo e mostra só "<nome>"), com token de app (admin se não houver). Reprovisionar não renomeia:
    agente que já existe mantém o nome;
@@ -144,7 +148,8 @@ Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo s
    `opex`, o global e o próprio (`inject`);
 4. lista os canais (`GET /v1/channels`), pede ao modelo de D2 um JSON com `subscribe`/`create`
    (`provision-plan.ts`): canal inexistente é descartado com aviso, `create` que já existe vira
-   assinatura, canais `agentes/...` de outros agentes e `opex` ficam de fora, no máximo 8 extras;
+   assinatura, os canais reservados (`isReservedChannel`: a raiz do app, `<app>/agentes/...` e os nomes
+   antigos `agentes/...`) ficam de fora, no máximo 8 extras; canais de **outros apps** continuam elegíveis;
 5. motor OpenCode: cria `~/opex-rotineiros/<slug>` no host pelo OpenCode (`workdir`).
 
 Cada passo marca `provisioning.steps.*`. Falha → status **"Provisionamento com erro"** com a

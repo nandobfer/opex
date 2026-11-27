@@ -1,6 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { framerMotionMock } from '../../helpers/framer-motion'
 

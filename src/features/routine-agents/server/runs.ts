@@ -165,11 +165,13 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         if (!target) throw new Error("Token do agente rotineiro indisponível no Engramind: use \"Reprovisionar\" na configuração do agente")
         // Canal arquivado no Engramind depois do provisionamento sai do contexto e da lista de memória (D13);
         // as ferramentas de memória leem e gravam nos ativos, o próprio primeiro.
+        const ns = await (await import("@/features/engramind/server/instance")).channelNamespaceOrLegacy()
         const { channels, memoryChannels } = await routineMemoryChannels(
             agent,
             target,
             (message) => activation.warnings.push(message),
             (error) => routineLog.warn({ err: error, runId }, "[routine-agents] não foi possível conferir os canais arquivados"),
+            ns,
         )
         const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
         const memory = await getAgentMemoryContext(routineIdentityOf(agent.slug), channels, { target, focus: [agent.objective, run.request ?? ""].join("\n").slice(0, 1_000) })
@@ -198,7 +200,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         const secretCatalog = httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? activation.secrets.list() : []
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
-            ...routineMemoryTools({ slug: agent.slug, label, target, runId, allowed: memoryChannels, warn: (message) => activation.warnings.push(message) }),
+            ...routineMemoryTools({ slug: agent.slug, label, target, runId, allowed: memoryChannels, ns, warn: (message) => activation.warnings.push(message) }),
             // Motor OpenCode: a Chamada HTTP com segredos sai do servidor Opex, pelo MCP da execução.
             ...opencodeHttp,
             ...skills.tools,

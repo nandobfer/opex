@@ -1,5 +1,6 @@
 import type { NoticeMemoryAction, WorkbenchNoticeMemoryRef } from "@/features/agentic/types"
-import { AI_AGENTS, memoryChannelOf, type AiAgentId, type MemoryListScope } from "./agents"
+import { channelDisplay, LEGACY_NAMESPACE } from "@/features/engramind/channel-namespace"
+import { AI_AGENTS, memoryChannelOf, type AiAgentId, type ChannelNamespace, type MemoryListScope } from "./agents"
 
 /**
  * Referência de memória nos avisos da mesa (OPE-139), módulo puro: o aviso guarda só lista, id e escopo;
@@ -30,9 +31,10 @@ export function memoryDetailPath(ref: NoticeMemoryRef): string {
     return `${memoryListBasePath(ref.agentId, ref)}/${encodeURIComponent(ref.memoryId)}`
 }
 
-/** Canal da memória: título da lista e slug no Engramind (sem consulta). */
-export function memoryChannelInfo(agentId: AiAgentId, scope: MemoryListScope = {}): { title: string; slug: string | null } {
-    return { title: AI_AGENTS[agentId].title, slug: memoryChannelOf(agentId, scope) }
+/** Canal da memória: título da lista e o slug LÓGICO mostrado na tela (sem consulta; OPE-206: o real leva o app). */
+export function memoryChannelInfo(agentId: AiAgentId, scope: MemoryListScope = {}, ns: ChannelNamespace = LEGACY_NAMESPACE): { title: string; slug: string | null } {
+    const real = memoryChannelOf(agentId, scope, ns)
+    return { title: AI_AGENTS[agentId].title, slug: real ? channelDisplay(ns, real) : null }
 }
 
 /** Rótulo da ação no rodapé do painel. */

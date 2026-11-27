@@ -96,7 +96,7 @@ export function RoutineAgentPage({ id }: { id: string }) {
                 )}
                 {aba === "execucoes" && <RoutineRunsTab agentId={agent.id} onOpen={(runId) => setPage((current) => ({ ...current, execucao: runId }))} />}
                 {aba === "entradas" && <RoutineEntriesTab agentId={agent.id} />}
-                {aba === "memorias" && <RoutineMemoriesTab slug={agent.slug} />}
+                {aba === "memorias" && <RoutineMemoriesTab agent={agent} />}
                 {aba === "segredos" && <RoutineSecretsTab agentId={agent.id} />}
             </AgentPageFrame>
             <RoutineAgentEditor agentId={agent.id} open={configurar === "1"} onClose={() => setPage((current) => ({ ...current, configurar: "" }))} />

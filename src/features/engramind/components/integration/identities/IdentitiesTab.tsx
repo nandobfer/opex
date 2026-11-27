@@ -6,7 +6,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import type { EngramindAgent, EngramindApp, EngramindSubscription, EngramindToken } from "../../../types"
 import { useEngramindList } from "../../../hooks/useEngramind"
 import { useEngramindConnection } from "../../../hooks/useEngramindConnection"
-import { BOOTSTRAP_APP_SLUG, OPEX_APP_SLUG } from "../../../constants"
+import { instanceAppOf } from "../../../channel-namespace"
 import { adminTokens } from "../../../identities"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { AgentDetail } from "./AgentDetail"
@@ -31,7 +31,7 @@ export function IdentitiesTab({ onConfigure }: { onDirtyChange: (dirty: boolean)
     const connection = useEngramindConnection()
     const [view, setView] = useState<View>({ kind: "list" })
     const whoami = connection.data?.whoami ?? null
-    const ownApp = whoami ? (whoami.app.slug === BOOTSTRAP_APP_SLUG ? OPEX_APP_SLUG : whoami.app.slug) : null
+    const ownApp = whoami ? instanceAppOf(whoami.app.slug) : null
     const ownTokenIds = [whoami?.token_id ?? null, connection.data?.appTokenId ?? null]
     const error = apps.error ?? agents.error ?? tokens.error
     const app = view.kind === "app" ? apps.items.find((item) => item.slug === view.slug) : undefined
