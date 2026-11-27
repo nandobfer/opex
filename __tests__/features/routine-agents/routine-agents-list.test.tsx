@@ -16,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   metrics: {} as Record<string, unknown>,
   metricsParams: [] as Record<string, string>[],
   push: vi.fn(),
+  replace: vi.fn(),
 }))
 
 vi.mock('@/hooks/useInstanceInfo', () => ({ useInstanceInfo: () => ({ data: undefined }) }))
@@ -24,7 +25,7 @@ vi.mock('@/features/routine-agents/components/chat/RoutineChatColumn', () => ({
   RoutineChatColumn: ({ agent }: { agent: { id: string; title: string } }) => <aside data-testid="routine-chat" data-agent-id={agent.id} data-agent-title={agent.title} />,
 }))
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: vi.fn() }), useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: mocks.push, replace: mocks.replace }), useSearchParams: () => new URLSearchParams(window.location.search), usePathname: () => window.location.pathname }))
 vi.mock('@/components/metrics/UsageByDateChart', () => ({ UsageByDateChart: ({ points }: { points: { runs: number }[] }) => <div data-testid="usage-chart">{points.reduce((sum, point) => sum + point.runs, 0)}</div> }))
 vi.mock('@/features/routine-agents/hooks/useRoutineRealtime', () => ({ useRoutineRealtime: () => {} }))
 vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
@@ -37,6 +38,7 @@ vi.mock('@/features/routine-agents/hooks/useRoutineRuns', () => ({
     return { data: mocks.metrics, isLoading: false, isError: false, refetch: vi.fn() }
   },
   useTriggerRoutineRun: () => ({ mutate: vi.fn(), isPending: false }),
+  useRoutineRuns: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
 }))
 vi.mock('@/features/routine-agents/components/editor/RoutineAgentEditor', () => ({
   RoutineAgentEditor: ({ open, agentId, onClose }: { open: boolean; agentId: string; onClose: () => void }) =>
@@ -49,7 +51,6 @@ vi.mock('@/features/routine-agents/components/editor/RoutineAgentEditor', () => 
       </div>
     ) : null,
 }))
-vi.mock('@/features/routine-agents/components/runs/RoutineRunDetailSheet', () => ({ RoutineRunDetailSheet: () => null }))
 vi.mock('@/features/routine-agents/components/page/secrets/RoutineSecretsTab', () => ({ RoutineSecretsTab: () => <div>segredos</div> }))
 vi.mock('@/features/routine-agents/components/page/RoutineOverviewTab', () => ({ RoutineOverviewTab: () => <div>visão geral</div> }))
 
@@ -206,6 +207,19 @@ describe('critério aprovado (OPE-130, D19/D20): cabeçalho e Configurar da pág
     fireEvent.click(screen.getByRole('button', { name: 'Fechar editor' }))
     expect(screen.queryByRole('dialog', { name: 'Editor do agente' })).toBeNull()
     expect(window.location.search).not.toContain('configurar')
+  })
+
+  it('regressão OPE-208: link antigo da gaveta (?execucao=) vai para a página da execução', () => {
+    window.history.replaceState(null, '', '/agentes-rotineiros/Indexador?aba=execucoes&execucao=r7')
+    render(<RoutineAgentPage id="Indexador" />)
+    expect(mocks.replace).toHaveBeenCalledWith('/agentes-rotineiros/Indexador/execucoes/r7')
+    expect(screen.queryByRole('dialog')).toBeNull()
+  })
+
+  it('sem ?execucao= a página não redireciona', () => {
+    window.history.replaceState(null, '', '/agentes-rotineiros/Indexador')
+    render(<RoutineAgentPage id="Indexador" />)
+    expect(mocks.replace).not.toHaveBeenCalled()
   })
 })
 

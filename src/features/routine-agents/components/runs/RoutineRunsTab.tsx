@@ -12,8 +12,8 @@ import { ROUTINE_RUN_ROW_HEIGHT, RoutineRunRow } from "./RoutineRunRow"
 
 const scrollRef = { get current() { return typeof document === "undefined" ? null : document.getElementById(APP_SCROLL_CONTAINER_ID) } }
 
-/** Aba **Execuções**: lista ao vivo (tempo real), a mais recente primeiro; o detalhe abre ao clicar. */
-export function RoutineRunsTab({ agentId, onOpen }: { agentId: string; onOpen: (runId: string) => void }) {
+/** Aba **Execuções**: lista ao vivo (tempo real), a mais recente primeiro; cada linha leva à página da execução. */
+export function RoutineRunsTab({ agentId }: { agentId: string }) {
     const query = useRoutineRuns(agentId)
     const runs = query.data ?? []
     if (query.isLoading)
@@ -33,7 +33,7 @@ export function RoutineRunsTab({ agentId, onOpen }: { agentId: string; onOpen: (
             scrollRef={scrollRef}
             estimateSize={ROUTINE_RUN_ROW_HEIGHT + 8}
             getKey={(index) => runs[index]!.id}
-            renderItem={(index) => <RoutineRunRow run={runs[index]!} onOpen={() => onOpen(runs[index]!.id)} />}
+            renderItem={(index) => <RoutineRunRow run={runs[index]!} />}
         />
     )
 }

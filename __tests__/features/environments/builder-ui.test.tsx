@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('sonner', () => ({ toast: mocks.toast }))
+// A página navega para o log do deploy iniciado (OPE-208).
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn(), replace: vi.fn() }) }))
 vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: mocks.post, put: vi.fn() } }))
 
 const config = (overrides: Partial<EnvironmentsBuilder> = {}): EnvironmentsBuilder => ({ name: 'limited-builder', memoryGb: 24, cpus: 6, swapGb: 16, useAsDefault: true, allowNetworkHost: true, ...overrides })

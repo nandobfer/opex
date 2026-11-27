@@ -1,6 +1,8 @@
 "use client"
 
+import Link from "next/link"
 import { ChevronRight } from "lucide-react"
+import { routineRunPath } from "../../constants"
 import { ROUTINE_TRIGGER_ORIGIN_LABELS } from "../../status"
 import type { RoutineRunDto } from "../../types"
 import { formatCostPair, formatDateTime, formatDuration, formatTime, formatTokens } from "../../format"
@@ -19,12 +21,11 @@ function costCell(run: RoutineRunDto, kind: "list" | "effective"): { text: strin
     return { text: usd === null ? `—${marks}` : `${formatUsd(usd)}${marks}`, title: `${label}: ${formatCostPair(usd, brl, { partial: run.cost.partial, estimated: run.cost.estimated })}` }
 }
 
-/** Linha de uma execução: status, origem, início, duração, tokens, custo de tabela e custo efetivo. */
-export function RoutineRunRow({ run, onOpen }: { run: RoutineRunDto; onOpen: () => void }) {
+/** Linha de uma execução (link para a página dela): status, origem, início, duração, tokens, custo de tabela e custo efetivo. */
+export function RoutineRunRow({ run }: { run: RoutineRunDto }) {
     return (
-        <button
-            type="button"
-            onClick={onOpen}
+        <Link
+            href={routineRunPath(run.agentId, run.id)}
             className="flex min-h-[64px] w-full items-center gap-3 rounded-lg border bg-card px-3 py-2 text-left transition-colors hover:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             aria-label={`Abrir a execução #${run.seq}`}
         >
@@ -50,6 +51,6 @@ export function RoutineRunRow({ run, onOpen }: { run: RoutineRunDto; onOpen: () 
                 )
             })}
             <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden />
-        </button>
+        </Link>
     )
 }

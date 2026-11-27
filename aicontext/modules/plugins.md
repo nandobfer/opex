@@ -428,6 +428,10 @@ O fluxo da mesa está em `agentic-dev.md`, "Mesa Plugin (OPE-172)".
 | `skeleton/owner` e `skeleton/client` | Esqueletos com testes |
 | `GUIA.md` | Contrato completo para o agente |
 
+`@opex/ui/sheet` continua exposto com os mesmos nomes, mas desde a OPE-208 o `SheetContent` é só a folha de baixo (sem
+`side`): plugins seguem a mesma regra do app ("Qual padrão usar para cada tipo de conteúdo" em
+`use-para-atualizar-tema-e-componentes-ui.md`) e não abrem gavetas laterais. Nenhum plugin publicado usava o `Sheet`.
+
 Fica fora do `tsconfig` e do ESLint do app.
 
 ## Testes

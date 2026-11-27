@@ -167,6 +167,23 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
   `{ id, label, icon }`, `maxReachable`, `pending` (campos pendentes por etapa, calculados com o
   schema Zod) e trilha animada. Troca de etapa com `AnimatePresence mode="wait"` (`tabSwap`).
 
+## Qual padrão usar para cada tipo de conteúdo
+
+Decisão do dono na OPE-208: gavetas laterais desperdiçam espaço e saíram do app. Um mesmo tipo de conteúdo abre
+sempre no mesmo padrão; nenhuma tela inventa o seu.
+
+| Conteúdo | Padrão | Exemplos |
+|---|---|---|
+| Acompanhar um processo longo ou ao vivo (log, passos, execução) | **Página própria**, com link, seta de voltar no cabeçalho (`AgentPageHeader` com `backHref`) e o Voltar do navegador | `/ambientes/deploys/[id]`, `/agentes-rotineiros/[id]/execucoes/[runId]` |
+| Ação ou gestão rápida de um item sem perder o contexto da tela | **Dialog** centralizado (`Dialog`; fecha com Esc e clique fora, foco preso e devolvido ao gatilho) | Histórico de deploys, execução do Mentor; painel do canal do Engramind quando a lib 0.15.0 for publicada (pendente: ainda é gaveta, ver `modules/engramind.md`) |
+| Lista curta de ações ou filtros **no celular** | **Folha de baixo** (`Sheet`, só `< lg`) | "Mais ações" da mesa, Filtros e Quota da central, filtros da rede no celular |
+| Navegação no celular | **Gaveta lateral** (só o menu do `AppShell`) | menu principal abaixo de 1024 px |
+
+- O `Sheet` só tem o lado de baixo: não crie gaveta lateral ou de cima (nem com `fixed inset-y-0` à mão).
+- Página com conteúdo ao vivo continua recebendo o tempo real (Pusher ou NDJSON) e, ao reabrir, mostra tudo o que já
+  aconteceu; sair dela não interrompe o processo no servidor.
+- Um link antigo para o conteúdo (ex.: `?execucao=` da gaveta removida) é redirecionado para a página nova.
+
 ## Menu lateral (`AppSidebar`)
 
 Tema escuro com as boas práticas do **SideNavigation/Sidebar/Shell do Design System Sipal**.
@@ -246,7 +263,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 Onde animar:
 
-- entrada/saída de elementos, diálogos, drawers, popovers (`AnimatePresence`);
+- entrada/saída de elementos, diálogos, folhas, popovers (`AnimatePresence`);
 - troca de abas e etapas de assistentes (`mode="wait"`);
 - listas que ganham, perdem ou reordenam itens (tarefas, filas);
 - feedback de sucesso/erro/carregamento de ações;

@@ -81,8 +81,9 @@ evento `online` também recarrega sozinho.
   aprovado (versão 1, seções 1 e 7). Logado, fechar e reabrir mantém a sessão enquanto o Chrome não for
   encerrado pelo sistema. Se o Android encerrar o Chrome, o app abre em `/login`; o critério de aceite "fechar
   e reabrir mantém a sessão" vale com essa ressalva aceita pelo dono. Deslogado, o app abre em `/login`.
-- **Testes das safe areas**: `__tests__/components/safe-area.test.tsx` fixa os insets na casca, na gaveta, nas
-  folhas (inclusive com padding do chamador), na barra de lote, nos logs maximizados e na imagem ampliada.
+- **Testes das safe areas**: `__tests__/components/safe-area.test.tsx` fixa os insets na casca, na gaveta, na
+  folha de baixo (inset inferior e altura máxima de 85dvh, inclusive com padding do chamador; desde a OPE-208 o `Sheet`
+  só tem esse lado), na barra de lote, nos logs maximizados e na imagem ampliada.
 
 ## Verificação visual pendente
 
@@ -93,7 +94,8 @@ HTML). Ainda falta conferir num aparelho Android, pelo domínio com HTTPS:
 - instalação pelo Chrome ("Instalar app"), ícone maskable sem corte e splash no tema escuro;
 - safe areas com notch e barra de gestos (casca, gaveta, folhas, toasts, barra de lote, chat em tela cheia,
   logs maximizados e imagem ampliada);
-- botão voltar do Android (navegação, diálogos com URL e gaveta);
+- botão voltar do Android (navegação, diálogos com URL, gaveta e as páginas do log do deploy e da execução do
+  rotineiro, que voltam para Ambientes e para a aba Execuções, OPE-208);
 - sessão ao fechar e reabrir o app, página offline sem rede e troca de versão depois de um deploy.
 
 ## Requisitos e limites
