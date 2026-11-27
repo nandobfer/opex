@@ -2,6 +2,7 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { getLocalUser } from "@/lib/local-user"
 import { chatMedia, chatTimelinePage, sendChatMedia, sendChatMessage, ChatMediaError } from "@/features/evolution-api/server/chat"
+import { conversationJids } from "@/features/evolution-api/server/lid"
 import type { ChatMediaFields, ChatSendInput } from "@/features/evolution-api/schemas"
 import { SECRETARY_AUDIT_ENTITY } from "../constants"
 import { jidOfConversationId } from "../conversation-id"
@@ -44,15 +45,19 @@ async function agentMessageIdsOf(instance: string, chatId: string, ids: string[]
     return [...out]
 }
 
-export async function conversationTimeline(chatId: string, page: number): Promise<ChatTimelinePageDto> {
+/**
+ * Página da linha do tempo (`before` ausente = mais recentes). A conversa é lida nas duas metades que a Evolution guarda
+ * quando o contato passou a ser endereçado por LID (número e `@lid`, OPE-207).
+ */
+export async function conversationTimeline(chatId: string, before: Date | null): Promise<ChatTimelinePageDto> {
     const { instance, jid } = await target(chatId)
     await secretaryDb()
-    const timeline = await chatTimelinePage(instance, jid, page)
+    const timeline = await chatTimelinePage(instance, await conversationJids(instance, jid), before)
     const oldest = timeline.items[0]?.timestamp
     // Sem limite superior: o cliente junta as páginas e descarta as repetidas pelo id.
     const range = timeline.hasOlder && oldest ? { at: { $gte: new Date(oldest) } } : {}
     const [decisions, agentMessageIds] = await Promise.all([
-        timeline.items.length || page === 1
+        timeline.items.length || !before
             ? SecretaryDecisionRecord.find({ instance, chatId, ...range }).sort({ at: -1 }).limit(DECISIONS_PER_PAGE).select("decision reason at").lean()
             : Promise.resolve([]),
         agentMessageIdsOf(instance, chatId, timeline.items.map((item) => item.id)),

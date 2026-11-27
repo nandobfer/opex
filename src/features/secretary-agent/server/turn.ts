@@ -4,6 +4,7 @@ import { getLocalUser } from "@/lib/local-user"
 import { agentMemoryContext } from "@/features/ai/server/agent-memory-context"
 import { selfMemoryEnabled } from "@/features/ai/server/self-memory/settings"
 import { selfMemoryTools } from "@/features/ai/server/self-memory/tools"
+import { recentConversationMessages } from "@/features/evolution-api/server/chat"
 import { evolution } from "@/features/evolution-api/server/client"
 import { mentionsOwner, messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "@/features/evolution-api/message"
 import { evaluateAudience } from "../criteria"
@@ -95,8 +96,8 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
             settings, chatJid: message.chatJid, isGroup: message.isGroup, mentioned,
             text, ownerAnswer, id: token, subject: token, origins: { reply: SECRETARY_CONSUMPTION_ORIGIN, decision: SECRETARY_DECISION_CONSUMPTION_ORIGIN }, observing,
         }, {
-            history: () => (historyCache ??= evolution.findMessages(instance, { remoteJid: message.chatJid, pageSize: SECRETARY_HISTORY_LIMIT })
-                .then((page) => page.records.filter((item) => !pendingIds.has(item.key.id)).reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) })))),
+            history: () => (historyCache ??= recentConversationMessages(instance, message.chatJid, SECRETARY_HISTORY_LIMIT)
+                .then((records) => records.filter((item) => !pendingIds.has(item.key.id)).reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) })))),
             contact: () => resolveSecretaryContact({ jid: message.chatJid, participant: message.participant, pushName: message.pushName, instance }),
             memory: (focus) => agentMemoryContext("secretario", turn, { focus }),
             personality: async () => (await loadPersonality()).snapshot,

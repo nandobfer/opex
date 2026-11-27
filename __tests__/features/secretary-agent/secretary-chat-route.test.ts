@@ -20,7 +20,9 @@ const mocks = vi.hoisted(() => ({
     notices: vi.fn(),
     sent: vi.fn(),
     sentUpsert: vi.fn(),
+    jids: vi.fn(),
 }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ conversationJids: mocks.jids }))
 vi.mock("@/features/auth/server/context", () => ({ requireAdminSession: vi.fn() }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { EXECUTAR: "EXECUTAR" }, recordAudit: mocks.audit }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: mocks.evolution, toDomainError: (error: unknown) => { throw error } }))
@@ -43,7 +45,9 @@ const chatId = "5531999999999"
 const jid = `${chatId}@s.whatsapp.net`
 const params = { params: Promise.resolve({ chatId }) }
 const post = (body: unknown) => POST(new NextRequest(`http://localhost/api/secretary/conversations/${chatId}/messages`, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } }), params)
-const record = (id: string, seconds: number, fromMe = false) => ({ key: { id, remoteJid: jid, fromMe }, message: { conversation: id }, messageTimestamp: seconds })
+const lid = "158879933534209@lid"
+const record = (id: string, seconds: number, fromMe = false, remoteJid = jid) => ({ key: { id, remoteJid, fromMe }, message: { conversation: id }, messageTimestamp: seconds })
+const get = (query = "") => GET(new NextRequest(`http://localhost/api/secretary/conversations/${chatId}/messages${query}`), params)
 
 beforeEach(() => {
     vi.clearAllMocks()
@@ -51,6 +55,7 @@ beforeEach(() => {
     mocks.agentDecisions.mockReturnValue([])
     mocks.notices.mockReturnValue([])
     mocks.sent.mockReturnValue([])
+    mocks.jids.mockImplementation(async (_instance: string, value: string) => [value])
     for (const fn of [mocks.evolution.sendText, mocks.evolution.sendReaction, mocks.evolution.sendLocation, mocks.evolution.sendContact, mocks.evolution.sendMedia, mocks.evolution.sendWhatsAppAudio]) fn.mockResolvedValue({ key: { id: "NEW" } })
 })
 
@@ -61,11 +66,12 @@ describe("GET mensagens da conversa (OPE-197)", () => {
         mocks.agentDecisions.mockReturnValue([{ messageIds: ["B", "fora-da-pagina"] }])
         mocks.notices.mockReturnValue([{ sentMessageId: "C" }])
         mocks.sent.mockReturnValue([{ _id: "opex:D" }])
-        const response = await GET(new NextRequest(`http://localhost/api/secretary/conversations/${chatId}/messages?page=1`), params)
+        const response = await get()
         expect(response.status).toBe(200)
         const { data } = await response.json()
         expect(data.items.map((item: { id: string }) => item.id)).toEqual(["A", "B", "C", "D"])
         expect(data.hasOlder).toBe(true)
+        expect(data.nextBefore).toBe(new Date(1_790_000_100 * 1000).toISOString())
         expect(data.decisions).toEqual([{ id: "opex:A", decision: "replied", reason: "ok", at: "2026-09-21T00:00:00.000Z" }])
         expect(new Set(data.agentMessageIds)).toEqual(new Set(["B", "C", "D"]))
         expect(mocks.decisions).toHaveBeenCalledWith({ instance: "opex", chatId, at: { $gte: new Date(1_790_000_100 * 1000) } })
@@ -75,8 +81,37 @@ describe("GET mensagens da conversa (OPE-197)", () => {
 
     it("D6: abrir a conversa nunca marca como lida no WhatsApp", async () => {
         mocks.evolution.findMessages.mockResolvedValue({ total: 1, pages: 1, page: 1, records: [record("A", 1_790_000_100)] })
-        await GET(new NextRequest(`http://localhost/api/secretary/conversations/${chatId}/messages`), params)
+        await get()
         expect(mocks.evolution.markAsRead).not.toHaveBeenCalled()
+    })
+})
+
+describe("GET conversa endereçada por LID (OPE-207)", () => {
+    it("regressão: a mensagem mais nova gravada só no @lid aparece junto das do número", async () => {
+        mocks.jids.mockResolvedValue([jid, lid])
+        mocks.evolution.findMessages.mockImplementation(async (_instance: string, input: { remoteJid: string }) =>
+            input.remoteJid === lid
+                ? { total: 2, pages: 1, page: 1, records: [record("NOVA", 1_790_000_900, false, lid), record("NOVA", 1_790_000_900, false, lid)] }
+                : { total: 2, pages: 1, page: 1, records: [record("B", 1_790_000_200, true), record("A", 1_790_000_100)] },
+        )
+        const { data } = await (await get()).json()
+        expect(mocks.evolution.findMessages.mock.calls.map(([, input]) => input.remoteJid)).toEqual([jid, lid])
+        expect(data.items.map((item: { id: string }) => item.id)).toEqual(["A", "B", "NOVA"])
+        expect(data.hasOlder).toBe(false)
+        expect(data.nextBefore).toBeNull()
+    })
+
+    it("`antes` pede as anteriores ao cursor (inclusivo) nas duas metades", async () => {
+        mocks.jids.mockResolvedValue([jid, lid])
+        mocks.evolution.findMessages.mockResolvedValue({ total: 0, pages: 0, page: 1, records: [] })
+        const before = "2026-09-21T10:00:00.000Z"
+        expect((await get(`?antes=${encodeURIComponent(before)}`)).status).toBe(200)
+        for (const [, input] of mocks.evolution.findMessages.mock.calls) expect(input).toEqual(expect.objectContaining({ from: new Date(0), to: new Date(before) }))
+    })
+
+    it("`antes` inválido devolve 400", async () => {
+        expect((await get("?antes=ontem")).status).toBe(400)
+        expect(mocks.evolution.findMessages).not.toHaveBeenCalled()
     })
 })
 

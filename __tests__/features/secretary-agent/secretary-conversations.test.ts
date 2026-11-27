@@ -1,7 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_SECRETARY_SETTINGS } from "@/features/secretary-agent/schemas"
 
-const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), contacts: vi.fn(), states: vi.fn(), notices: vi.fn(), update: vi.fn(), audit: vi.fn(), publish: vi.fn() }))
+const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), contacts: vi.fn(), states: vi.fn(), notices: vi.fn(), update: vi.fn(), audit: vi.fn(), publish: vi.fn(), lids: vi.fn() }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ aliasedLids: mocks.lids }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" }, recordAudit: mocks.audit }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/features/evolution-api/server/contacts", () => ({ listContacts: mocks.contacts }))
@@ -22,6 +23,7 @@ const blockedSettings = { ...settings, criteria: { ...settings.criteria, audienc
 beforeEach(() => {
     vi.clearAllMocks()
     mocks.load.mockResolvedValue({ settings })
+    mocks.lids.mockResolvedValue(new Set())
 })
 
 describe("conversas do Secretário", () => {
@@ -57,6 +59,16 @@ describe("conversas do Secretário", () => {
         mocks.notices.mockResolvedValueOnce([])
         const rows = await listSecretaryConversations()
         expect(rows.map((row) => [row.chatId, row.unreadCount, row.lastMessage])).toEqual([["5521999999999", 3, lastMessage], [chatId, 0, null]])
+    })
+
+    it("OPE-207: esconde a metade @lid de uma conversa com número conhecido e mantém as conversas só LID", async () => {
+        mocks.contacts.mockResolvedValueOnce([{ jid }, { jid: "158879933534209@lid" }, { jid: "40686980210703@lid" }])
+        mocks.states.mockResolvedValueOnce([])
+        mocks.notices.mockResolvedValueOnce([])
+        mocks.lids.mockResolvedValueOnce(new Set(["158879933534209@lid"]))
+        const rows = await listSecretaryConversations()
+        expect(mocks.lids).toHaveBeenCalledWith("opex")
+        expect(rows.map((row) => row.chatId)).toEqual([chatId, "lid-40686980210703"])
     })
 
     it("lista estados de exclusão, pausa, pergunta ao dono e conversa ativa", async () => {

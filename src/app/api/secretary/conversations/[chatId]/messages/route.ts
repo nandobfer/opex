@@ -8,14 +8,17 @@ import { conversationTimeline, sendFromInbox, sendMediaFromInbox } from "@/featu
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
 
-const pageSchema = z.coerce.number().int().min(1).max(1000).default(1)
+const beforeSchema = z.iso.datetime({ offset: true, message: "Informe uma data válida em `antes`." }).optional()
 
-/** GET /api/secretary/conversations/[chatId]/messages?page= — página da linha do tempo (aba Conversas, OPE-197). */
+/**
+ * GET /api/secretary/conversations/[chatId]/messages?antes= — página da linha do tempo (aba Conversas, OPE-197). Sem
+ * `antes`, as mais recentes; com `antes` (o `nextBefore` da página anterior), as anteriores a ele (OPE-207).
+ */
 export const GET = withRoute<{ chatId: string }>(async ({ req, params }) => {
     await requireAdminSession(req)
-    const page = pageSchema.safeParse(req.nextUrl.searchParams.get("page") ?? undefined)
-    if (!page.success) return validationError(page.error)
-    return ok(await conversationTimeline(params.chatId, page.data))
+    const before = beforeSchema.safeParse(req.nextUrl.searchParams.get("antes") || undefined)
+    if (!before.success) return validationError(before.error)
+    return ok(await conversationTimeline(params.chatId, before.data ? new Date(before.data) : null))
 })
 
 /**

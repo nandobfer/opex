@@ -42,6 +42,7 @@ vi.mock("@/features/engramind/server/pending-writes", () => ({ enqueuePendingWri
 vi.mock("@/features/evolution-api/server/client", () => ({
     evolution: { findMessages: async () => ({ records: [] }), markAsRead: mocks.markAsRead, sendPresence: mocks.presence },
 }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ conversationJids: async (_instance: string, jid: string) => [jid] }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: vi.fn() }))
 vi.mock("@/features/secretary-agent/server/inbound", async (original) => {
     const actual = (await original()) as typeof import("@/features/secretary-agent/server/inbound")

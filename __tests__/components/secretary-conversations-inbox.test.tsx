@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, renderHook, screen, waitFor, within } from "@testing-library/react"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../helpers/framer-motion"
@@ -28,6 +28,10 @@ vi.mock("@/features/secretary-agent/hooks/useSecretaryChat", () => ({
 
 import { ConversationsInbox } from "@/features/secretary-agent/components/conversations/ConversationsInbox"
 import { chatOutbox } from "@/features/secretary-agent/hooks/chat-outbox"
+import { useConversationActions } from "@/features/secretary-agent/components/conversations/ConversationActions"
+import { SecretaryMemoriesLinkProvider } from "@/features/secretary-agent/components/conversations/memories-link"
+import { SECRETARY_PAGE_TABS, secretaryPagePath, secretarySectionPath } from "@/features/secretary-agent/links"
+import { CONVERSATION_PARAM } from "@/features/secretary-agent/memory-focus"
 
 const row = (patch: Partial<SecretaryConversationDto>): SecretaryConversationDto => ({ jid: "5531999999999@s.whatsapp.net", chatId: "5531999999999", name: "Ana", number: "5531999999999", pictureUrl: null, isGroup: false, lastMessageAt: new Date().toISOString(), lastMessage: { text: "oi", kind: "text", fromMe: false }, unreadCount: 2, state: "active", pausedUntil: null, ...patch })
 const message = (id: string, patch: Partial<ChatMessageDto> = {}): ChatMessageDto => ({ id, chatJid: "5531999999999@s.whatsapp.net", fromMe: false, author: null, authorName: null, timestamp: "2026-11-26T10:00:00.000Z", kind: "text", text: id, media: null, quoted: null, location: null, contacts: [], reactions: [], edited: false, status: null, ...patch })
@@ -49,12 +53,27 @@ const submitSpy = vi.fn((event: { preventDefault: () => void }) => event.prevent
 beforeEach(() => {
     chatOutbox.reset()
     mocks.rows = [row({}), row({ chatId: "5521988887777", jid: "5521988887777@s.whatsapp.net", name: "Bruno", unreadCount: 0, state: "paused", pausedUntil: "2026-11-26T12:00:00.000Z" })]
-    mocks.page = { page: 1, hasOlder: false, effects: { reactions: [], edits: [], revoked: [] }, items: [message("Oi Ana"), message("Já vou", { fromMe: true, timestamp: "2026-11-26T10:02:00.000Z" })], decisions: [{ id: "d1", decision: "replied", reason: "Passou nos critérios", at: "2026-11-26T10:01:00.000Z" }], agentMessageIds: ["Já vou"] } satisfies ChatTimelinePageDto
+    mocks.page = { nextBefore: null, hasOlder: false, effects: { reactions: [], edits: [], revoked: [] }, items: [message("Oi Ana"), message("Já vou", { fromMe: true, timestamp: "2026-11-26T10:02:00.000Z" })], decisions: [{ id: "d1", decision: "replied", reason: "Passou nos critérios", at: "2026-11-26T10:01:00.000Z" }], agentMessageIds: ["Já vou"] } satisfies ChatTimelinePageDto
     window.history.replaceState(null, "", "/integracoes/ia?aba=agente-secretario&secao=conversas")
 })
 afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+})
+
+describe("Abrir memórias depende da tela (OPE-207)", () => {
+    const conversation = { chatId: "5531999999999", name: "Ana", state: "active" as const }
+
+    it("sem provider: seção Memórias de Integrações › IA › Agente Secretário", () => {
+        const { result } = renderHook(() => useConversationActions(conversation, 30))
+        expect(result.current.memoriesHref).toBe(secretarySectionPath("memorias", { [CONVERSATION_PARAM]: "5531999999999" }))
+    })
+
+    it("com o provider da página do agente: aba Memórias da própria página", () => {
+        const href = (chatId: string) => secretaryPagePath(SECRETARY_PAGE_TABS.memorias, { [CONVERSATION_PARAM]: chatId })
+        const { result } = renderHook(() => useConversationActions(conversation, 30), { wrapper: ({ children }) => <SecretaryMemoriesLinkProvider href={href}>{children}</SecretaryMemoriesLinkProvider> })
+        expect(result.current.memoriesHref).toBe(secretaryPagePath(SECRETARY_PAGE_TABS.memorias, { [CONVERSATION_PARAM]: "5531999999999" }))
+    })
 })
 
 describe("aba Conversas como conversa (OPE-197)", () => {

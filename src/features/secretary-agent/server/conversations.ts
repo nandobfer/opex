@@ -2,6 +2,7 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { listContacts } from "@/features/evolution-api/server/contacts"
+import { aliasedLids } from "@/features/evolution-api/server/lid"
 import { SECRETARY_AUDIT_ENTITY, SECRETARY_CONVERSATION_EVENT, type ConversationAgentState } from "../constants"
 import { conversationIdOfJid, jidOfConversationId } from "../conversation-id"
 import type { ConversationActionInput } from "../schemas"
@@ -13,9 +14,16 @@ export async function listSecretaryConversations() {
     const { settings } = await loadSecretarySettings()
     if (!settings.instance) return []
     const instance = settings.instance
-    const [contacts, states, notices] = await Promise.all([listContacts("chats", instance), SecretaryConversation.find({ instance }).select("jid pausedUntil").lean(), SecretaryNotice.distinct("chatId", { instance, status: "pending" })])
+    const [contacts, states, notices, lids] = await Promise.all([
+        listContacts("chats", instance),
+        SecretaryConversation.find({ instance }).select("jid pausedUntil").lean(),
+        SecretaryNotice.distinct("chatId", { instance, status: "pending" }),
+        aliasedLids(instance),
+    ])
     const byJid = new Map(states.map((row) => [row.jid, row]))
     return contacts.flatMap((contact) => {
+        // A metade `@lid` de uma conversa com número conhecido aparece só dentro da conversa do número (OPE-207).
+        if (lids.has(contact.jid)) return []
         const chatId = conversationIdOfJid(contact.jid)
         if (!chatId) return []
         const paused = byJid.get(contact.jid)?.pausedUntil

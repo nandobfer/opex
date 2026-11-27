@@ -6,7 +6,8 @@ Tem memórias próprias no Engramind, aprende sozinho e pergunta ao dono o que n
 
 Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|decisoes|simulacao|personalidade|memorias|conversas|avisos>`
 (links das seções por `secretarySectionPath` em `links.ts`).
-Página de métricas: `/agente-secretario` (Visão geral, Histórico e Memórias).
+Página do agente: `/agente-secretario`, com as abas **Conversas** (padrão, fora da URL; OPE-207), Visão geral, Histórico e
+Memórias (`?aba=visao-geral|historico|memorias`; links por `secretaryPagePath` e `SECRETARY_PAGE_TABS` em `links.ts`).
 O custo da Visão geral inclui turno, análise e decisões de assunto (modelo de texto ou JEV), mas não Simulação.
 O painel separa **Mensagens em pausa** (mensagens barradas) de **Intervenções do dono** (mensagens do dono
 registradas como assunção da conversa no WhatsApp).
@@ -296,6 +297,12 @@ cliente, campanha, vincular contato, seleção em lote, filtros de filial/respon
 transcrição sob demanda do áudio, que depende do recurso de transcrição do Zaturno). Componentes em
 `components/conversations/`.
 
+- **Duas telas, o mesmo componente** (OPE-207): o `ConversationsInbox` aparece em Integrações › IA › Agente Secretário ›
+  Conversas e na aba **Conversas** de `/agente-secretario` (`SecretaryConversationsTab`, que carrega a configuração salva
+  para a pausa e os contatos pelas mesmas chaves de cache, com skeleton na estrutura do inbox e erro com "Tentar
+  novamente"). O tempo real do Secretário é o mesmo nas duas (`useSecretaryRealtime`). **Abrir memórias** vai para a
+  aba Memórias da tela em que a pessoa está: em Integrações, a seção Memórias; na página do agente,
+  `?aba=memorias&conversa=<id>` (contexto `SecretaryMemoriesLinkProvider`).
 - **Layout**: card na altura visível da tela (mínimo 480 px), lista à esquerda (340/380 px) e conversa à direita; no
   celular, uma de cada vez, com Voltar. A conversa aberta e os filtros ficam na URL (`conversa=<id>`, `busca`, `filtro`,
   `secretario`); a troca de conversa é animada e, sem nenhuma aberta, aparece "Selecione uma conversa".
@@ -303,13 +310,17 @@ transcrição sob demanda do áudio, que depende do recurso de transcrição do 
   padrão do WhatsApp, prévia com o ícone do tipo, **não lidas do WhatsApp**, selo do estado do Secretário (pausado
   até…, nunca responder, aguardando o dono) e o menu ⋮ com as ações; busca por nome ou número (fuse.js), chips
   **Todas / Não lidas** e o filtro **Secretário** por estado (equivalente ao "Com o agente" do Atendimento);
-  virtualizada acima de 50. Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
+  virtualizada acima de 50. A metade `@lid` de uma conversa com número conhecido não aparece como conversa separada
+  (OPE-207; conversas só LID continuam como `lid-<dígitos>`). Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
   (`EvolutionSyncAction`; sem instância escolhida, o link para a aba Instância da integração).
 - **Ações** (decisão do dono D4, 26/11/2026): Pausar/Retomar (pelo tempo da pausa configurado), Nunca responder/Voltar
   a responder (entra ou sai de `criteria.audience.blocked`, com confirmação ao bloquear) e Abrir memórias ficam **no
   cabeçalho do chat e num menu em cada item da lista**, com resposta otimista e reversão com toast em falha.
-- **Linha do tempo** (`GET /api/secretary/conversations/[chatId]/messages?page=`): as mensagens vêm da Evolution sob
-  demanda (50 por página, sem cópia no Opex; ver `evolution-api.md`, "Conversa"), com divisores de data, balões (texto,
+- **Linha do tempo** (`GET /api/secretary/conversations/[chatId]/messages?antes=`): as mensagens vêm da Evolution sob
+  demanda (50 por página, sem cópia no Opex; ver `evolution-api.md`, "Conversa"), lidas nas duas metades da conversa
+  quando o contato passou a ser endereçado por LID (número e `@lid`, OPE-207). A paginação é por cursor: sem `antes`,
+  as mais recentes; a página devolve `hasOlder` e `nextBefore` (instante da mais antiga, inclusivo; mensagens repetidas
+  entre páginas são descartadas pelo id; `antes` inválido é 400). Com divisores de data, balões (texto,
   foto/vídeo com visualizador em tela cheia, áudio com player e velocidade, documento com baixar, localização, contatos,
   citação com salto até a mensagem, reações, editada, apagada, autor em grupo e status de envio/entrega/leitura) e
   "Carregar mensagens anteriores". A mídia vem de `GET …/messages/[messageId]/media` (binário, `private`).

@@ -1,7 +1,9 @@
 import { buildChatPage, type ChatEffects, type ChatMessageDto } from "../chat-message"
 import { CAPTION_MEDIA_TYPES, validateMediaFile } from "../chat-media-rules"
+import type { EvolutionMessage } from "../evolution-dto"
 import type { ChatMediaFields, ChatSendInput } from "../schemas"
 import { evolution, toDomainError } from "./client"
+import { conversationJids } from "./lid"
 
 /**
  * Conversa de verdade da aba Conversas do Secretário (OPE-197): página da linha do tempo lida da Evolution sob demanda
@@ -14,16 +16,57 @@ export interface ChatTimelinePage {
     items: ChatMessageDto[]
     /** Reações, edições e apagamentos cujo alvo está em outra página (o cliente reaplica ao juntar as páginas). */
     effects: ChatEffects
-    page: number
     hasOlder: boolean
+    /** Cursor da página anterior (`antes`, inclusivo): o instante da mensagem mais antiga desta página. */
+    nextBefore: string | null
 }
 
-/** Página `page` (1 = mais recentes) já no formato da conversa, mais antigas primeiro. */
-export async function chatTimelinePage(instance: string, jid: string, page: number): Promise<ChatTimelinePage> {
+export interface ConversationMessages {
+    /** Mais novas primeiro, sem repetição de id. */
+    records: EvolutionMessage[]
+    hasOlder: boolean
+    nextBefore: Date | null
+}
+
+function secondsOf(message: EvolutionMessage): number {
+    const value = message.messageTimestamp
+    const seconds = typeof value === "number" ? value : typeof value === "string" ? Number(value) : NaN
+    return Number.isFinite(seconds) ? seconds : 0
+}
+
+/**
+ * Mensagens de uma conversa guardada em um ou mais `remoteJid` (número e `@lid`, OPE-207): lê até `limit` de cada um
+ * (até `before`, inclusivo), junta, descarta ids repetidos (a Evolution grava linhas duplicadas) e corta em `limit`.
+ * O cursor seguinte é o segundo da mais antiga; se ele não andou (tudo no mesmo segundo), recua 1 s.
+ */
+export async function fetchConversationMessages(instance: string, jids: readonly string[], input: { before?: Date | null; limit: number }, options?: { signal?: AbortSignal }): Promise<ConversationMessages> {
+    const { before, limit } = input
+    const pages = await Promise.all(jids.map((jid) => evolution.findMessages(instance, { remoteJid: jid, pageSize: limit, ...(before ? { from: new Date(0), to: before } : {}) }, options)))
+    const byId = new Map<string, EvolutionMessage>()
+    for (const page of pages) for (const record of page.records) if (!byId.has(record.key.id)) byId.set(record.key.id, record)
+    const merged = [...byId.values()].sort((a, b) => secondsOf(b) - secondsOf(a))
+    const records = merged.slice(0, limit)
+    const hasOlder = records.length > 0 && (merged.length > limit || pages.some((page) => page.total > page.records.length))
+    let nextBefore: Date | null = null
+    if (hasOlder) {
+        let cursor = secondsOf(records[records.length - 1]!)
+        if (before && cursor * 1000 >= before.getTime()) cursor = Math.floor(before.getTime() / 1000) - 1
+        nextBefore = new Date(cursor * 1000)
+    }
+    return { records, hasOlder, nextBefore }
+}
+
+/** As `limit` mensagens mais recentes da conversa (mais novas primeiro), juntando número e `@lid` (histórico do Secretário). */
+export async function recentConversationMessages(instance: string, jid: string, limit: number): Promise<EvolutionMessage[]> {
+    return (await fetchConversationMessages(instance, await conversationJids(instance, jid), { limit })).records
+}
+
+/** Página da conversa (sem `before` = mais recentes) já no formato da conversa, mais antigas primeiro. */
+export async function chatTimelinePage(instance: string, jids: readonly string[], before: Date | null): Promise<ChatTimelinePage> {
     try {
-        const result = await evolution.findMessages(instance, { remoteJid: jid, page, pageSize: CHAT_PAGE_SIZE })
+        const result = await fetchConversationMessages(instance, jids, { before, limit: CHAT_PAGE_SIZE })
         const { items, orphanEffects } = buildChatPage(result.records)
-        return { items, effects: orphanEffects, page, hasOlder: result.page < result.pages }
+        return { items, effects: orphanEffects, hasOlder: result.hasOlder, nextBefore: result.nextBefore?.toISOString() ?? null }
     } catch (error) {
         toDomainError(error)
     }

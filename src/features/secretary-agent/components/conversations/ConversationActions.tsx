@@ -7,10 +7,9 @@ import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { cn } from "@/lib/utils"
-import { CONVERSATION_PARAM } from "../../memory-focus"
-import { secretarySectionPath } from "../../links"
 import { useConversationAction } from "../../hooks/useSecretaryChat"
 import type { SecretaryConversationDto } from "../../types"
+import { useMemoriesHref } from "./memories-link"
 
 type Row = Pick<SecretaryConversationDto, "chatId" | "name" | "state">
 
@@ -20,12 +19,13 @@ type Row = Pick<SecretaryConversationDto, "chatId" | "name" | "state">
  */
 export function useConversationActions(row: Row, minutes: number) {
     const action = useConversationAction(row.chatId)
+    const memoriesHrefOf = useMemoriesHref()
     const [confirming, setConfirming] = useState(false)
     const paused = row.state === "paused"
     const excluded = row.state === "excluded"
     const togglePause = () => action.mutate(paused ? { action: "resume" } : { action: "pause", minutes })
     const toggleExclude = () => (excluded ? action.mutate({ action: "include" }) : setConfirming(true))
-    const memoriesHref = secretarySectionPath("memorias", { [CONVERSATION_PARAM]: row.chatId })
+    const memoriesHref = memoriesHrefOf(row.chatId)
     const confirm = (
         <ConfirmDialog
             open={confirming}
