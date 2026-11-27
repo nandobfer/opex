@@ -415,7 +415,8 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `routine-agents-layout.ts` compartilhada com o skeleton):
   - identificação (link para a página do agente): nome, selos de status e provisionamento, objetivo inteiro
     (quebra a linha, sem corte), motor e modelo, última execução e próximo disparo;
-  - KPIs Execuções, Concluídas, Com erro e Tokens, e o gráfico "Execuções por dia" (`UsageByDateChart`
+  - KPIs Execuções, Concluídas, Com erro, Tokens, **Custo efetivo** e **Custo de tabela** (OPE-203, US$ no valor
+    e o R$/parcial/estimado na dica; sem custo "—"), e o gráfico "Execuções por dia" (`UsageByDateChart`
     compacto) do período escolhido; sem execuções → "Sem execuções no período.";
   - filtros (`RoutineAgentsFilters`, `ListFilters`; regras puras em `list-filters.ts`, estado na URL):
     busca por nome/objetivo (fuse.js), Status (Ativo, Pausado, Provisionando, Com erro de provisionamento —
@@ -433,7 +434,8 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   e **"Executar agora"**, na linha do título (D19), (diálogo com "Solicitação desta execução"; desabilitado
   pausado ou sem provisionamento). Abas na URL (`?aba=`): **Visão geral** em duas colunas (OPE-160,
   `RoutineOverviewLayout`): à esquerda o filtro de período compartilhado, os KPIs (execuções, concluídas,
-  com erro, tempo médio, tokens e custo) e os gráficos por dia (`GET /api/routine-agents/[id]/metrics?periodo=`);
+  com erro, tempo médio, tokens e os seis de custo da OPE-203, ver "Custos") e os gráficos (`GET /api/routine-agents/[id]/metrics?periodo=`):
+  "Custo por dia" (largura toda), "Execuções por dia", "Tokens por dia" e "Divisão do custo";
   à direita a conversa com o agente, recolhível (ver "Conversa com o agente"). O carregamento da página
   (`RoutineAgentPageSkeleton`) tem o cabeçalho, as abas e as duas colunas. **Execuções** (lista ao vivo, detalhe em
   `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas**,
@@ -458,6 +460,50 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `routine-agent-updated` refaz as listas de entradas montadas.
 - Toast em qualquer tela (`useRoutineAttentionToasts`, no `AppLayoutShell`): confirmação pendente e
   fim da execução, com **"Abrir execução"**.
+
+## Custos: custo de tabela e custo efetivo (OPE-203, só motor Opex)
+
+- **Custo de tabela por passo**: no início do turno, `createStepPricer` (`src/lib/ai/pricing/server.ts`) carrega o preço
+  do modelo (prazo próprio + sinal da execução; falhou, a última cópia boa em memória e depois em `ai_price_catalogs`,
+  com aviso no log; sem cópia, o passo fica sem preço com o motivo; cancelamento propaga). A cada `finish-step` o
+  motor grava no **mesmo registro** de `ai_consumption_logs` (`origin: routine-agent`, `subject: execução`, `apiKeyId`
+  da chave que respondeu) os tokens separados (`tokenDetails`: sem cache, cache lido, cache escrito, saída, reasoning,
+  de `inputTokenDetails`/`outputTokenDetails` da SDK `ai` v7) e o `listCost` (`usd`, `source`, `price` congelado com a
+  faixa — pico/fora de pico/contexto longo —, `estimated`, `missingReason`). O preço vale pelo **início do passo**
+  (`start-step`). Fontes por provedor: DeepSeek (tabela oficial, pico seg–sex 01–04h e 06–10h UTC, feriados chineses
+  da lista da integração DeepSeek fora de pico), OpenCode Go (`list_cost` da própria resposta), Command Code
+  (`pricing` do catálogo `?view=client`, com cache e faixas de contexto) e Anthropic/OpenAI/Gemini (models.dev). Ver
+  `modules/ai.md`, "Custo de tabela".
+- **Custo efetivo** (derivado na leitura, `src/features/ai-billing/effective.ts`): pelo plano de cobrança da chave que
+  respondeu (`modules/ai.md`, "Plano de cobrança"). Pago por uso = tabela; Créditos = tabela × (pago ÷ face), fora da
+  validade/esgotados/antes do início = tabela com aviso; Assinatura = cota do dia × min(1, uso do passo ÷ uso total do
+  dia) + uso extra do Go. Alterar o plano recalcula o efetivo; o custo de tabela gravado não muda. **Economia** =
+  tabela − efetivo. Valores em US$ e R$ (PTAX do dia do passo em Brasília, `fx_rates_daily`).
+- **Agregação única** (`server/run-costs.ts`): `computeRunCosts` lê os passos, monta o contexto de cobrança
+  (`buildBillingLookup`) e soma por execução; a lista de execuções, o detalhe, a Visão geral e `/agentes-rotineiros`
+  usam a mesma função. O custo de uma execução conta no **dia em que ela foi disparada** (Brasília), como tokens e
+  execuções; o rateio da assinatura usa o dia UTC de cada passo. Falha na leitura dos custos não derruba a tela (custos
+  desconhecidos, com log).
+- **Desconhecido não é zero**: passo sem preço ou sem efetivo deixa o total **Parcial**, e a tela lista os modelos sem
+  preço (`provedor/modelo`) e os avisos (PTAX ausente, dia da assinatura não lido, créditos vencidos/esgotados, chave
+  removida — tratada como pago por uso). Execução do motor Opex com tokens e sem passos gravados = custo desconhecido.
+- **Histórico**: passos antigos sem `listCost` recebem, na primeira leitura, a **estimativa** pelo preço atual e os
+  tokens de entrada e saída (sem a separação do cache), gravada uma vez com `estimated: true` e marcada "estimado"
+  nas telas (no Go o `list_cost` gravado no `billing` é exato, não estimado).
+- **DTOs**: `RoutineRunDto.cost` (`RoutineCostDto`: `listUsd/Brl`, `effectiveUsd/Brl`, `savingsUsd/Brl`, `partial`,
+  `brlPartial`, `missingPrices`, `estimated`, `notices`; `null` no motor OpenCode, "fora desta versão"),
+  `RoutineRunDetailDto.costByModel` e, nas métricas, `cost` (`totals`, `perRun`, `perCalendarDay`, `perActiveDay`,
+  contagens), `days[].cost` e `breakdown` (`providers`, `models`, `plans`).
+- **Telas**: Visão geral com os KPIs "Custo de tabela", "Custo efetivo", "Economia", "Média por execução", "Média por
+  dia" (dias corridos) e "Média por dia ativo" (dias com execução) — valor em US$, R$ no rodapé ("R$ indisponível" sem
+  PTAX) —, os avisos do custo, o gráfico "Custo por dia" (séries tabela e efetivo) e "Divisão do custo" (abas
+  Provedor, Modelo e Chave/plano). Linha da execução com as colunas tabela e efetivo (`*` = parcial; R$ na dica) e o
+  detalhe com tabela, efetivo, economia, custo por modelo e avisos. Skeletons com as mesmas quantidades
+  (`ROUTINE_OVERVIEW_KPI_COUNT` = 11, `ROUTINE_OVERVIEW_CHART_COUNT` = 4, `ROUTINE_ROW_KPI_COUNT` = 6).
+- **Tempo real**: além de `routine-run-updated`, `useRoutineRealtime` relê execuções, detalhe e métricas em
+  `ai-provider-keys-updated` (plano alterado), `ai-billing-updated` (PTAX ou uso das assinaturas gravados) e
+  `ai-consumption-updated` com `origin: routine-agent` (uma vez por rajada de 5 s).
+- **Fora do escopo** desta versão: os outros agentes, o motor OpenCode dos rotineiros, painel geral e orçamento.
 
 ## API
 
@@ -535,6 +581,8 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
   As telas invalidam o TanStack Query (`useRoutineRealtime`).
 - Conversa (OPE-160): `routine-chat-session-updated` / `routine-chat-session-deleted` em `private-app`
   (`{ id, agentId }`); a resposta ao vivo vai pelo NDJSON. Sessões auditadas em `ConversaAgenteRotineiro`.
+- Custos (OPE-203): as telas também reagem a `ai-provider-keys-updated`, `ai-billing-updated` e
+  `ai-consumption-updated` (ver "Custos").
 
 ## Limitações conhecidas
 

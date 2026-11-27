@@ -502,6 +502,26 @@ ambiente `evolution-api` sem expor a chave, instância com pareamento por QR cod
 operações e aba Debug. A rotina interna `engramind-pending-writes` (1 min) entrou nos Crons padrão com a fila de
 pendências do Engramind. Detalhes em `modules/evolution-api.md` e `modules/secretary-agent.md`.
 
+### Custos de IA: PTAX e models.dev (OPE-203)
+
+Duas integrações públicas, sem credencial (externo, sem `env`), usadas pelo custo de tabela e pelo custo efetivo dos
+agentes rotineiros (`modules/ai.md`, "Plano de cobrança" e "Custo de tabela"):
+
+- **Cotação do dólar (PTAX)** (`fx_ptax`): campo `baseUrl` (padrão: serviço OData Olinda do Banco Central). A PTAX de
+  **venda** de `CotacaoDolarPeriodo` é gravada por dia corrido em `fx_rates_daily` (fim de semana e feriado herdam o
+  último dia útil; hoje só é gravado com a cotação do próprio dia, publicada à tarde — até lá a tela usa a última
+  conhecida sem gravar). Rotina **`fx-ptax-daily`** (3 h, ligada) preenche os últimos 45 dias que faltam; a leitura das
+  telas pede o preenchimento em segundo plano quando falta um dia. Tester: lê os últimos 10 dias.
+- **Preços de modelos (models.dev)** (`models_dev`): campo `apiUrl` (padrão `https://models.dev/api.json`); só os
+  preços de Anthropic, OpenAI e Gemini (`google`) ficam em memória (6 h) e a última cópia boa em `ai_price_catalogs`.
+  Tester: relê o catálogo (falha se só houver a cópia antiga).
+- Rotina **`ai-subscription-days`** (30 min, ligada): grava em `ai_subscription_days` o uso total diário das chaves com
+  plano de Assinatura do OpenCode Go (custo por dia do Console, ~40 dias) e do Command Code (créditos por dia do ciclo
+  atual), agrupadas por assinatura. As duas rotinas publicam `ai-billing-updated` (`{ kind: "fx" | "subscription-days" }`)
+  em `private-app` quando gravam dado novo.
+- `ai_deepseek` ganhou o campo público **"Feriados fora de pico"** (`offPeakHolidays`, textarea), lido pela tabela do
+  DeepSeek.
+
 ### Planejado (em desenvolvimento)
 
 - **Google Drive**: fonte de tarefas a partir de planilhas do Google Sheets.
