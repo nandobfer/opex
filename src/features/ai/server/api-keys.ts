@@ -187,9 +187,12 @@ export async function updateAiKeyBilling(provider: AiApiKeyProviderId, keyId: st
     const billing = aiKeyBillingSchema.parse(raw)
     const doc = await loadKeyRing(provider)
     const item = findKey(doc, keyId)
-    const before = stripSetAt(billingOf(item.billing))
+    const previous = billingOf(item.billing)
+    const before = stripSetAt(previous)
     if (JSON.stringify(before) === JSON.stringify(billing)) return listAiApiKeys(provider)
-    const stored: StoredAiKeyBilling = { ...billing, setAt: new Date().toISOString() }
+    // `setAt` é o início padrão dos créditos: só renova quando a modalidade muda (editar a validade não reinicia o histórico).
+    const setAt = previous.mode === billing.mode && previous.setAt ? previous.setAt : new Date().toISOString()
+    const stored: StoredAiKeyBilling = { ...billing, setAt }
     await updateKey(provider, keyId, {}, { $set: { "apiKeys.$.billing": stored, "apiKeys.$.updatedAt": new Date() }, _auditContext: { userId: actorId } })
     return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, name: item.name, plano: before }, { provider, name: item.name, plano: billing }, { primaryChanged: false, poolChanged: false, hasPrimary: primaryIdOf(doc) !== null })
 }

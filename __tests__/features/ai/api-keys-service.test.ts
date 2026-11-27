@@ -426,6 +426,27 @@ describe('plano de cobrança da chave (OPE-203)', () => {
     expect(mocks.clearCatalog).not.toHaveBeenCalled()
   })
 
+  it('editar o plano de créditos (validade, esgotado em) mantém o início padrão; trocar de modalidade o renova', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      vi.setSystemTime(new Date('2026-11-01T12:00:00Z'))
+      const [key] = await createAiApiKey('deepseek', { name: 'Créditos', secret: 'sk-1' }, actor)
+      const credits = { mode: 'credits', faceValueUsd: 100, paidAmount: 50, paidCurrency: 'USD', startsAt: null, expiresAt: '2027-01-31', exhaustedAt: null }
+      await updateAiKeyBilling('deepseek', key!.id, credits, actor)
+      const setAtOf = () => (mocks.docs.get('ai_deepseek')!.apiKeys![0]!.billing as { setAt: string }).setAt
+      expect(setAtOf()).toBe('2026-11-01T12:00:00.000Z')
+      vi.setSystemTime(new Date('2026-11-20T12:00:00Z'))
+      await updateAiKeyBilling('deepseek', key!.id, { ...credits, expiresAt: '2027-02-28' }, actor)
+      await updateAiKeyBilling('deepseek', key!.id, { ...credits, expiresAt: '2027-02-28', exhaustedAt: '2026-11-25' }, actor)
+      expect(setAtOf()).toBe('2026-11-01T12:00:00.000Z')
+      await updateAiKeyBilling('deepseek', key!.id, { mode: 'usage' }, actor)
+      await updateAiKeyBilling('deepseek', key!.id, credits, actor)
+      expect(setAtOf()).toBe('2026-11-20T12:00:00.000Z')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('valores inválidos são recusados; o mesmo plano não grava de novo; o JEV não tem plano', async () => {
     const [key] = await createAiApiKey('opencode-go', { name: 'Go', secret: 'oc_sk_1' }, actor)
     await expect(updateAiKeyBilling('opencode-go', key!.id, { mode: 'subscription', amount: 0, currency: 'USD', renewalDay: 40, iofPercent: null }, actor)).rejects.toThrow()

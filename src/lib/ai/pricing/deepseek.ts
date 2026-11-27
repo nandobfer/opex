@@ -11,6 +11,35 @@ import type { ModelPrice, PriceRates } from "./types"
 
 export const DEEPSEEK_PRICING_URL = "https://api-docs.deepseek.com/quick_start/pricing"
 
+const range = (from: string, days: number): string[] => Array.from({ length: days }, (_, index) => new Date(Date.parse(`${from}T00:00:00Z`) + index * 86_400_000).toISOString().slice(0, 10))
+
+/**
+ * Feriados oficiais da China (dias de folga, sem os sábados/domingos de trabalho compensatório), semeados como valor
+ * padrão do campo "Feriados fora de pico" da integração DeepSeek (editável). Fonte: avisos do Conselho de Estado
+ * 国办发明电〔2025〕7号 (2026) e 国办发明电〔2026〕10号 (2027), em gov.cn.
+ */
+export const DEEPSEEK_DEFAULT_HOLIDAYS: readonly string[] = [
+    // 2026
+    ...range("2026-01-01", 3),
+    ...range("2026-02-15", 9),
+    ...range("2026-04-04", 3),
+    ...range("2026-05-01", 5),
+    ...range("2026-06-19", 3),
+    ...range("2026-09-25", 3),
+    ...range("2026-10-01", 7),
+    // 2027
+    ...range("2027-01-01", 3),
+    ...range("2027-02-05", 9),
+    ...range("2027-04-03", 3),
+    ...range("2027-05-01", 5),
+    "2027-06-09",
+    "2027-09-15",
+    ...range("2027-10-01", 7),
+]
+
+/** Texto padrão do campo (uma data por linha). */
+export const DEEPSEEK_DEFAULT_HOLIDAYS_TEXT = DEEPSEEK_DEFAULT_HOLIDAYS.join("\n")
+
 interface DeepseekModelTable {
     peak: PriceRates
     offPeak: PriceRates

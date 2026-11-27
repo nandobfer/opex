@@ -245,8 +245,8 @@ motor Opex dos agentes rotineiros — `modules/routine-agents.md`, "Custos"):
   entre os passos dos rotineiros do dia). Dia sem o total da API → efetivo do dia **Parcial**, com o motivo. O uso
   extra cobrado à parte (`usage.cost` do Go) soma ao efetivo. Dias sem uso nenhum são **ociosidade**: aparecem no
   item da chave ("Ciclo atual: N dia(s) sem uso, ociosidade de …") e não são atribuídos a nenhum agente.
-- **Créditos**: valor de face (US$), valor pago (0 = concedidos) e a moeda, início (vazio = a data em que o plano foi
-  salvo), validade e "esgotado em" opcional. Efetivo = tabela × (pago ÷ face; pago em R$ convertido pela PTAX do
+- **Créditos**: valor de face (US$), valor pago (0 = concedidos) e a moeda, início (vazio = a data em que o plano de
+  créditos foi salvo pela primeira vez; editar validade ou "esgotado em" não muda esse início, só trocar de modalidade), validade e "esgotado em" opcional. Efetivo = tabela × (pago ÷ face; pago em R$ convertido pela PTAX do
   início). Os créditos se esgotam quando o custo de tabela somado do Opex desde o início passa do valor de face (o
   passo que cruza ainda é coberto) ou na data manual. Fora da validade, antes do início ou esgotados → custo de
   tabela (pago por uso), com aviso na tela e no item da chave ("Opex já usou US$ X de US$ Y").
@@ -269,7 +269,9 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   `deepseek-flash` (V4.1 Flash; `deepseek-v4-flash` e `deepseek-v4-flash-vision-exp` são cobrados como ele) e
   `deepseek-v4-pro`, pico/fora de pico (o fora de pico é a metade). Pico: seg–sex, 01:00–04:00 e 06:00–10:00 UTC, pelo
   início da chamada; fins de semana e os feriados chineses do campo **"Feriados fora de pico"** da integração DeepSeek
-  (uma data `AAAA-MM-DD` por linha, calendário de Pequim) são fora de pico. Sem escrita de cache cobrada à parte.
+  (uma data `AAAA-MM-DD` por linha, calendário de Pequim) são fora de pico. O campo já vem semeado com os feriados
+  oficiais de 2026 e 2027 (`DEEPSEEK_DEFAULT_HOLIDAYS`, avisos do Conselho de Estado em gov.cn, sem os dias de trabalho
+  compensatório) e continua editável. Sem escrita de cache cobrada à parte.
 - **OpenCode Go**: o `list_cost` que a própria resposta traz (`billing.listCostUsd`).
 - **Command Code** (`command-code.ts`): `pricing` do catálogo `?view=client` (`inputCost`, `outputCost`,
   `cacheReadCost`, `cacheWriteCost`, faixas `contextTiers`); exposto por `commandCodePricingCatalog` (mesmo prazo e

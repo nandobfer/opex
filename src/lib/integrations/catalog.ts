@@ -16,6 +16,7 @@
  */
 
 import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
+import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT } from "@/lib/ai/pricing/deepseek"
 import type { Schedule } from "./schedule"
 
 export const INTEGRATION_IDS = ["pusher", "internal_api", "crons", "github", "ai", "ai_opencode", "ai_gemini", "ai_anthropic", "ai_openai", "ai_deepseek", "ai_opencode_go", "ai_command_code", "ai_jev", "orcamentos", "smtp", "storage_s3", "builder_machine", "engramind", "evolution-api", "fx_ptax", "models_dev"] as const
@@ -754,9 +755,10 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             {
                 key: "offPeakHolidays",
                 label: "Feriados fora de pico",
-                description: "Feriados chineses em que o dia inteiro usa a tarifa fora de pico no custo de tabela: uma data AAAA-MM-DD por linha (calendário de Pequim)",
+                description: "Feriados chineses em que o dia inteiro usa a tarifa fora de pico no custo de tabela: uma data AAAA-MM-DD por linha (calendário de Pequim). Já vem com os feriados oficiais de 2026 e 2027; acrescente os anos seguintes quando o Conselho de Estado publicar",
                 kind: "textarea",
-                placeholder: "2027-01-01\n2027-02-06",
+                defaultValue: DEEPSEEK_DEFAULT_HOLIDAYS_TEXT,
+                placeholder: "2027-01-01\n2027-02-05",
             },
         ],
         secretFields: [{ key: "apiKey", label: "API key", description: "Chave da plataforma DeepSeek (platform.deepseek.com/api_keys); gerenciada na lista Chaves de API (várias em uso, uma principal)", required: true, keyRing: true }],

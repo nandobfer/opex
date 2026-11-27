@@ -2,7 +2,7 @@ import { loggerFor } from "@/lib/logger"
 import type { AiBilling } from "../provider-cost"
 import { commandCodePrice, type CommandCodePricing } from "./command-code"
 import { listCostOf, missingCost, reportedListCost } from "./compute"
-import { deepseekPrice, parseHolidayList } from "./deepseek"
+import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT, deepseekPrice, parseHolidayList } from "./deepseek"
 import { isModelsDevProvider, modelsDevPrice, parseModelsDevCatalog, type ModelsDevCatalog } from "./models-dev"
 import type { ListCost, ModelPrice, TokenBreakdown } from "./types"
 
@@ -118,7 +118,7 @@ export async function loadCommandCodePricing(signal?: AbortSignal): Promise<Cata
 async function deepseekHolidays(): Promise<Set<string>> {
     try {
         const { getIntegrationConfig } = await import("@/lib/integrations/config")
-        return parseHolidayList((await getIntegrationConfig("ai_deepseek")).offPeakHolidays)
+        return parseHolidayList((await getIntegrationConfig("ai_deepseek")).offPeakHolidays ?? DEEPSEEK_DEFAULT_HOLIDAYS_TEXT)
     } catch (error) {
         log().warn({ err: errorText(error) }, "[ai] feriados do DeepSeek indisponíveis: nenhum feriado considerado")
         return new Set()

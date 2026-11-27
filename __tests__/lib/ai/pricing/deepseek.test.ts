@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { listCostOf } from '@/lib/ai/pricing/compute'
-import { deepseekPrice, deepseekTableModel, isDeepseekPeak, parseHolidayList } from '@/lib/ai/pricing/deepseek'
+import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT, deepseekPrice, deepseekTableModel, isDeepseekPeak, parseHolidayList } from '@/lib/ai/pricing/deepseek'
+import { getIntegrationDef } from '@/lib/integrations/catalog'
 
 /**
  * OPE-203: tabela oficial do DeepSeek (api-docs.deepseek.com/quick_start/pricing, 26/11/2026). Pico: seg–sex, 01–04h e
@@ -36,6 +37,26 @@ describe('janela de pico do DeepSeek (UTC)', () => {
     // 23/11 07:00 UTC ainda é 23/11 em Pequim; 24/11 02:00 UTC é 24/11 (fora da lista): pico.
     expect(isDeepseekPeak(monday('07:00'), holidays)).toBe(false)
     expect(isDeepseekPeak(new Date('2026-11-24T02:00:00Z'), holidays)).toBe(true)
+  })
+})
+
+describe('lista padrão de feriados (gov.cn, 2026 e 2027)', () => {
+  const defaults = parseHolidayList(DEEPSEEK_DEFAULT_HOLIDAYS_TEXT)
+
+  it('vem semeada no campo editável da integração DeepSeek', () => {
+    const field = getIntegrationDef('ai_deepseek').publicFields.find((item) => item.key === 'offPeakHolidays')!
+    expect(field.defaultValue).toBe(DEEPSEEK_DEFAULT_HOLIDAYS_TEXT)
+    expect(String(field.defaultValue).length).toBeLessThanOrEqual(2000)
+  })
+
+  it('feriado em dia útil dentro da janela de pico é fora de pico com a lista padrão (Ano-Novo Chinês, Dia Nacional)', () => {
+    // 23/02/2026 (segunda) e 05/10/2027 (terça), 02:00 UTC.
+    expect(defaults.has('2026-02-23')).toBe(true)
+    expect(isDeepseekPeak(new Date('2026-02-23T02:00:00Z'), defaults)).toBe(false)
+    expect(isDeepseekPeak(new Date('2027-10-05T02:00:00Z'), defaults)).toBe(false)
+    // Dia útil comum continua pico; o sábado de trabalho compensatório (28/02/2026) não é feriado.
+    expect(isDeepseekPeak(new Date('2026-02-24T02:00:00Z'), defaults)).toBe(true)
+    expect(defaults.has('2026-02-28')).toBe(false)
   })
 })
 
