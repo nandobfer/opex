@@ -7,6 +7,7 @@ import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
 import { contextTools } from "./context"
 import { docTools } from "./docs"
+import { documentTools } from "./documents"
 import { engramindTools } from "./engramind"
 import { environmentTools } from "./environments"
 import { fileTools } from "./files"
@@ -36,6 +37,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...contextTools,
     ...docTools,
     ...fileTools,
+    ...documentTools,
     ...memoryTools,
     ...taskTools,
     ...previewTools,

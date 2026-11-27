@@ -65,6 +65,7 @@ export interface IntegrationConfigMap {
     engramind: { baseUrl?: string; opexPublicUrl?: string; environmentId?: string; adminToken?: string; webhookSecret?: string }
     fx_ptax: { baseUrl: string }
     models_dev: { apiUrl: string }
+    gotenberg: { url?: string; timeoutSeconds: number; urlTtlMinutes: number; urlTtlMaxMinutes: number }
     "evolution-api": { internalUrl?: string; publicUrl?: string; defaultInstance?: string; version?: string; webhookUrl?: string; apiKey?: string; webhookSecret?: string }
 }
 

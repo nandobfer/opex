@@ -522,6 +522,14 @@ agentes rotineiros (`modules/ai.md`, "Plano de cobrança" e "Custo de tabela"):
 - `ai_deepseek` ganhou o campo público **"Feriados fora de pico"** (`offPeakHolidays`, textarea), lido pela tabela do
   DeepSeek.
 
+### Gotenberg (PDF) (OPE-210)
+
+Integração `gotenberg` (interno, sem `env`, sem segredos): conversão de HTML em PDF e PNG dos documentos dos agentes
+pelo Gotenberg compartilhado no host (rede `gotenberg-network`). Campos: `url` (URL interna, `http://gotenberg:3000`),
+`timeoutSeconds` (30 s), `urlTtlMinutes` (validade padrão das URLs dos documentos, 15 min) e `urlTtlMaxMinutes`
+(validade máxima, 60 min; abaixo da padrão vale a menor). Tester: `GET /health` com o Chromium `up`. Debug sem o
+conteúdo do HTML. Detalhes em `modules/agent-documents.md`.
+
 ### Planejado (em desenvolvimento)
 
 - **Google Drive**: fonte de tarefas a partir de planilhas do Google Sheets.

@@ -213,6 +213,22 @@ const testModelsDev: IntegrationTester = async (context) => {
     return run(context)
 }
 
+/** Gotenberg (OPE-210): `GET /health` com o Chromium no ar. */
+export const testGotenberg: IntegrationTester = async ({ emit, signal }) => {
+    const { gotenbergHealth } = await import("@/lib/pdf/gotenberg")
+    emit("step", "Consultando GET /health do Gotenberg")
+    let health
+    try {
+        health = await gotenbergHealth(stepSignal(signal))
+    } catch (error) {
+        fail(`Não foi possível falar com o Gotenberg: ${describeFetchError(error)}`)
+    }
+    if (health.status !== "up") fail(`O Gotenberg respondeu "${health.status}" no /health`)
+    if (health.chromium !== "up") fail(`O Chromium do Gotenberg está "${health.chromium ?? "indisponível"}": a conversão de HTML não funciona`)
+    emit("success", "Gotenberg e Chromium no ar")
+    return "Gotenberg no ar (Chromium disponível)"
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -235,4 +251,5 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     "evolution-api": testEvolution,
     fx_ptax: testFxPtax,
     models_dev: testModelsDev,
+    gotenberg: testGotenberg,
 }

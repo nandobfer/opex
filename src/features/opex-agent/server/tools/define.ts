@@ -27,6 +27,8 @@ export interface OpexToolContext {
     origin?: { kind: "api-token"; tokenId: string; nome: string; prefixo: string; /** Escopos do token (o que ele pode conceder adiante). */ scopes?: readonly string[] }
     /** Segredos do agente rotineiro da execução (Chamada HTTP, OPE-130); ausente fora dos rotineiros. */
     secrets?: HttpSecretVault
+    /** Agente rotineiro que chamou (OPE-210): execução (`runId`) ou conversa com o rotineiro (`runId: null`). */
+    routine?: { agentId: string; runId: string | null }
 }
 
 /** Sessão do agente da chamada, ou `null` sem conversa (token de sistema). */

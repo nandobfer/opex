@@ -66,7 +66,7 @@ async function executeConfirmedTool(run: RoutineRunDoc): Promise<string> {
                 reject(new Error(`tempo esgotado (${Math.round(CONFIRMED_TOOL_TIMEOUT_MS / 60_000)} min sem resposta da ferramenta)`))
             }, CONFIRMED_TOOL_TIMEOUT_MS)
         })
-        const output = await Promise.race([tool.execute(tool.input.parse(raw), { sessionId: "", actorId: "local", scope: OWNER_SCOPE, secrets, signal: controller.signal }), timeout]).finally(() => clearTimeout(timer))
+        const output = await Promise.race([tool.execute(tool.input.parse(raw), { sessionId: "", actorId: "local", scope: OWNER_SCOPE, secrets, signal: controller.signal, routine: { agentId: String(run.agentId), runId: String(run._id) } }), timeout]).finally(() => clearTimeout(timer))
         return `Resultado de "${tool.label}" (executada pelo Opex após a confirmação): ${JSON.stringify(compactToolOutput(output)).slice(0, 8_000)}`
     } catch (error) {
         return `A ação confirmada falhou: ${messageOf(error)}`
