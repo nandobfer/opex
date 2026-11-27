@@ -12,8 +12,10 @@ import { runDetached } from "./detached"
 export interface HostResult {
     exitCode: number | null
     output: string
-    /** A saída passou do teto de leitura (`maxOutput`): `output` traz só o começo. */
+    /** A saída está incompleta: passou do teto de leitura (`maxOutput`) ou a leitura falhou no meio (`readError`). */
     truncated?: boolean
+    /** Uma página da saída não pôde ser lida do OpenCode (mesmo repetindo): `output` traz só o que veio antes. */
+    readError?: boolean
 }
 
 export interface HostRunOptions {
@@ -70,20 +72,31 @@ interface OutputRead {
     text: string
     cursor: number
     truncated: boolean
+    readError?: boolean
+}
+
+/** Uma página da saída; repete uma vez se a leitura falhar (`null` = falhou duas vezes). */
+async function readPage(client: OpencodeClient, id: string, cursor: number) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+        const chunk = await client.shell.output({ id, cursor, limit: HOST_OUTPUT_PAGE }).catch(() => null)
+        if (chunk) return chunk
+    }
+    return null
 }
 
 /**
  * Lê a saída do shell em páginas a partir de `cursor`, seguindo o `cursor` devolvido pelo OpenCode, até não haver mais
  * (`truncated`/`cursor < size`), a página vir vazia ou o cursor não avançar. Para no teto `maxChars` (devolve o começo
- * e `truncated: true`).
+ * e `truncated: true`). Leitura que falha (mesmo repetindo) devolve o que veio antes com `truncated` e `readError`.
  */
 async function readAll(client: OpencodeClient, id: string, startCursor: number, maxChars: number, onChunk?: (chunk: string) => void): Promise<OutputRead> {
     let cursor = startCursor
     let text = ""
     const maxPages = Math.ceil(maxChars / HOST_OUTPUT_PAGE) + 1
     for (let page = 0; page < maxPages; page++) {
-        const chunk = await client.shell.output({ id, cursor, limit: HOST_OUTPUT_PAGE }).catch(() => null)
-        if (!chunk || !chunk.data.output) return { text, cursor, truncated: false }
+        const chunk = await readPage(client, id, cursor)
+        if (!chunk) return { text, cursor, truncated: true, readError: true }
+        if (!chunk.data.output) return { text, cursor, truncated: false }
         const { output, cursor: next, size, truncated } = chunk.data
         text += output
         onChunk?.(output)
@@ -144,14 +157,21 @@ async function runOnce(builderDebug: HostDebug, command: string, timeoutMs: numb
     let info = created.data
     const deadline = Date.now() + timeoutMs + 5_000
     try {
+        const maxOutput = options.maxOutput ?? HOST_OUTPUT_MAX
         let cursor = 0
         let streamed = ""
+        let overflow = false
         const drain = async () => {
+            if (overflow) return
             const chunk = await client.shell.output({ id, cursor, limit: HOST_OUTPUT_PAGE }).catch(() => null)
             if (!chunk || !chunk.data.output) return
             cursor = chunk.data.cursor
             streamed += chunk.data.output
             options.onOutput?.(chunk.data.output)
+            if (streamed.length >= maxOutput) {
+                overflow = true
+                streamed = streamed.slice(0, maxOutput)
+            }
         }
         while (info.status === "running" && Date.now() < deadline) {
             await sleep(300)
@@ -166,19 +186,24 @@ async function runOnce(builderDebug: HostDebug, command: string, timeoutMs: numb
             }
             if (options.onOutput) await drain()
         }
-        const maxOutput = options.maxOutput ?? HOST_OUTPUT_MAX
         let text: string
         let truncated: boolean
-        if (options.onOutput) {
-            const rest = await readAll(client, id, cursor, Math.max(0, maxOutput - streamed.length), options.onOutput)
+        let readError = false
+        if (options.onOutput && overflow) {
+            text = streamed.trim()
+            truncated = true
+        } else if (options.onOutput) {
+            const rest = await readAll(client, id, cursor, maxOutput - streamed.length, options.onOutput)
             text = (streamed + rest.text).trim()
             truncated = rest.truncated
+            readError = rest.readError === true
         } else {
             const read = await readAll(client, id, 0, maxOutput)
             text = read.text.trim()
             truncated = read.truncated
+            readError = read.readError === true
         }
-        const result: HostResult = { exitCode: typeof info.exit === "number" ? info.exit : null, output: text, ...(truncated ? { truncated: true } : {}) }
+        const result: HostResult = { exitCode: typeof info.exit === "number" ? info.exit : null, output: text, ...(truncated ? { truncated: true } : {}), ...(readError ? { readError: true } : {}) }
         const line = `exit ${result.exitCode ?? "?"}${result.output ? ` — ${clip(lastLine(result.output), 300)}` : ""}`
         if (options.quiet) return result
         if (result.exitCode === 0) builderDebug.response(line)

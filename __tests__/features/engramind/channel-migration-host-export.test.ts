@@ -84,6 +84,15 @@ describe('runHostExport', () => {
     await expect(runHostExport(DIR, { scriptPath: SCRIPT })).rejects.toMatchObject({ code: 'ENGRAMIND_EXPORT_TOO_LARGE' })
   })
 
+  it('leitura que falha no meio: ENGRAMIND_EXPORT_READ_FAILED (não “resumo inválido”)', async () => {
+    const page = paged(`${digestLine(800)}\n`)
+    mocks.output.mockImplementation(async (input) => {
+      if ((input?.cursor ?? 0) > 0) throw new Error('timeout')
+      return page(input)
+    })
+    await expect(runHostExport(DIR, { scriptPath: SCRIPT })).rejects.toMatchObject({ code: 'ENGRAMIND_EXPORT_READ_FAILED' })
+  })
+
   it('sem o marcador do resumo: ENGRAMIND_EXPORT_INVALID', async () => {
     mocks.output.mockImplementation(paged('nada aqui\n'))
     await expect(runHostExport(DIR, { scriptPath: SCRIPT })).rejects.toMatchObject({ code: 'ENGRAMIND_EXPORT_INVALID' })
