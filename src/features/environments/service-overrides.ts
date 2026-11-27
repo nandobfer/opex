@@ -50,49 +50,90 @@ function keyValues(value: unknown): ComposeKeyValue[] | null {
     return null
 }
 
-/** Porta na forma curta: `[ip:][publicada:]alvo[/protocolo]`. */
+/** Divide por `separator` fora de `${...}` (ex.: `${PORT:-3000}:3000` → `${PORT:-3000}`, `3000`). */
+export function splitOutsideVars(raw: string, separator: string): string[] {
+    const parts: string[] = []
+    let depth = 0
+    let current = ""
+    for (let index = 0; index < raw.length; index++) {
+        const char = raw[index]!
+        if (char === "$" && raw[index + 1] === "{") {
+            depth++
+            current += "${"
+            index++
+            continue
+        }
+        if (char === "}" && depth > 0) depth--
+        if (char === separator && depth === 0) {
+            parts.push(current)
+            current = ""
+            continue
+        }
+        current += char
+    }
+    parts.push(current)
+    return parts
+}
+
+/** Porta na forma curta: `[ip:][publicada:]alvo[/protocolo]` (`${VAR:-x}` fica inteiro). */
 function shortPort(raw: string): PortOverride | null {
-    const [main = "", protocol = "tcp"] = raw.split("/")
+    const [main = "", protocol = "tcp"] = splitOutsideVars(raw, "/")
     const ipMatch = /^(\[[^\]]+\]|\d{1,3}(?:\.\d{1,3}){3}):(.*)$/.exec(main)
     const hostIp = ipMatch ? ipMatch[1]!.replace(/^\[|\]$/g, "") : ""
     const rest = ipMatch ? ipMatch[2]! : main
-    const parts = rest.split(":")
+    const parts = splitOutsideVars(rest, ":")
+    if (parts.length > 2) return null
     const target = Number((parts.length > 1 ? parts[1] : parts[0])?.split("-")[0])
     if (!Number.isInteger(target) || target < 1) return null
     return { target, published: parts.length > 1 ? parts[0]! : "", protocol: protocol === "udp" ? "udp" : "tcp", hostIp }
 }
 
+/** Uma porta do compose (`null` = não dá para ler, ex.: alvo `${VAR}`). */
+function portItem(item: unknown): PortOverride | null {
+    if (typeof item === "number") return { target: item, published: "", protocol: "tcp", hostIp: "" }
+    if (typeof item === "string") return shortPort(item)
+    if (!isRecord(item)) return null
+    const target = Number(item.target)
+    if (!Number.isInteger(target) || target < 1) return null
+    return { target, published: text(item.published), protocol: item.protocol === "udp" ? "udp" : "tcp", hostIp: text(item.host_ip) }
+}
+
 function ports(value: unknown): PortOverride[] | null {
     if (!Array.isArray(value)) return value === undefined || value === null ? null : []
-    return value
-        .map((item): PortOverride | null => {
-            if (typeof item === "number") return { target: item, published: "", protocol: "tcp", hostIp: "" }
-            if (typeof item === "string") return shortPort(item)
-            if (!isRecord(item)) return null
-            const target = Number(item.target)
-            if (!Number.isInteger(target) || target < 1) return null
-            return { target, published: text(item.published), protocol: item.protocol === "udp" ? "udp" : "tcp", hostIp: text(item.host_ip) }
-        })
-        .filter((item): item is PortOverride => item !== null)
+    return value.map(portItem).filter((item): item is PortOverride => item !== null)
 }
 
 const isPath = (source: string) => source.startsWith(".") || source.startsWith("/") || source.startsWith("~") || source.startsWith("$")
 
+/** Um volume do compose (`null` = não dá para ler). */
+function volumeItem(item: unknown): VolumeOverride | null {
+    if (typeof item === "string") {
+        const parts = splitOutsideVars(item, ":")
+        if (parts.length > 3) return null
+        if (parts.length === 1) return { type: "volume", source: "", target: parts[0]!, readOnly: false }
+        const source = parts[0]!
+        return { type: isPath(source) ? "bind" : "volume", source, target: parts[1]!, readOnly: (parts[2] ?? "").split(",").includes("ro") }
+    }
+    if (!isRecord(item) || typeof item.target !== "string") return null
+    const type = item.type === "bind" || item.type === "tmpfs" ? item.type : "volume"
+    return { type, source: text(item.source), target: item.target, readOnly: item.read_only === true }
+}
+
 function volumes(value: unknown): VolumeOverride[] | null {
     if (!Array.isArray(value)) return value === undefined || value === null ? null : []
-    return value
-        .map((item): VolumeOverride | null => {
-            if (typeof item === "string") {
-                const parts = item.split(":")
-                if (parts.length === 1) return { type: "volume", source: "", target: parts[0]!, readOnly: false }
-                const source = parts[0]!
-                return { type: isPath(source) ? "bind" : "volume", source, target: parts[1]!, readOnly: (parts[2] ?? "").split(",").includes("ro") }
-            }
-            if (!isRecord(item) || typeof item.target !== "string") return null
-            const type = item.type === "bind" || item.type === "tmpfs" ? item.type : "volume"
-            return { type, source: text(item.source), target: item.target, readOnly: item.read_only === true }
-        })
-        .filter((item): item is VolumeOverride => item !== null)
+    return value.map(volumeItem).filter((item): item is VolumeOverride => item !== null)
+}
+
+const itemText = (item: unknown) => (typeof item === "string" || typeof item === "number" ? String(item) : JSON.stringify(item))
+
+/**
+ * Portas e volumes do compose que não dá para ler na forma da tela (ex.: alvo com `${VAR}`): ficam fora dos
+ * valores, e a tela avisa que, ao personalizar o campo, eles saem do override.
+ */
+export function unreadableServiceItems(raw: unknown): { ports: string[]; volumes: string[] } {
+    const service = isRecord(raw) ? raw : {}
+    const pick = (value: unknown, parse: (item: unknown) => unknown) => (Array.isArray(value) ? value.filter((item) => parse(item) === null).map(itemText) : [])
+    return { ports: pick(service.ports, portItem), volumes: pick(service.volumes, volumeItem) }
 }
 
 const duration = (value: unknown) => (typeof value === "number" ? `${Math.round(value / 1_000_000)}ms` : text(value))

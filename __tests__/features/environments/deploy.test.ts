@@ -54,12 +54,12 @@ const CONFIG = (bind: boolean) =>
   JSON.stringify({ services: { app: { build: { context: '.' }, environment: { CLERK_SECRET_KEY: 'sk_test_vazado' }, volumes: bind ? [{ type: 'bind', source: '/srv/app', target: '/app' }] : [] }, db: { image: 'mongo:7' } } })
 
 /** `envFiles`: arquivos de variáveis que o compose declara; `existing`: os que já existem na pasta. */
-function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string; config?: string } = {}) {
+function host(options: { bind?: boolean; fail?: string; failOutput?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string; config?: string } = {}) {
   const calls: string[] = []
   const run = vi.fn(async (command: string, _timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
     calls.push(command)
     opts?.onOutput?.('ok\n')
-    if (options.fail && command.includes(options.fail)) return { exitCode: 1, output: 'erro' }
+    if (options.fail && command.includes(options.fail)) return { exitCode: 1, output: options.failOutput ?? 'erro' }
     if (command.includes('config --no-env-resolution --no-interpolate')) {
       const files = options.envFiles ?? []
       return { exitCode: 0, output: JSON.stringify({ services: { app: files.length ? { env_file: files.map((path) => ({ path, required: true })) } : {} } }) }
@@ -672,6 +672,32 @@ describe('serviços do compose no deploy (OPE-211)', () => {
     expect(deploys.docs[0]!.error).toContain('Conferindo o override falhou')
     expect(calls.some((command) => / build( |$)/.test(command) || command.includes('up -d'))).toBe(false)
     expect(envs.docs[0]!.deployedComposeOverrides ?? null).toBeNull()
+  })
+
+  it('regressão: a saída da conferência nunca vai para o log (nem o valor do environment citado no erro)', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { environment: [{ key: 'SENHA', value: 'abc$xyz-secreto' }] })], yaml: '' } }), 'local')
+    const { run } = host({ fail: 'config --quiet', failOutput: 'linha 1 abc$xyz-secreto\ninvalid interpolation format for services.app.environment.SENHA: "abc$xyz-secreto"' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const deploy = deploys.docs[0]!
+    expect(String(deploy.log)).not.toContain('abc$xyz-secreto')
+    expect(String(deploy.error)).not.toContain('abc$xyz-secreto')
+    expect(String(deploy.error)).toContain('invalid interpolation format for services.app.environment.SENHA: "[valor oculto]"')
+    const check = run.mock.calls.find(([command]) => String(command).includes('config --quiet'))!
+    expect(check[2]).not.toHaveProperty('onOutput')
+  })
+
+  it('regressão: conferência que falha deixa no host o override sem os ajustes (Reiniciar, Derrubar e Levantar seguem funcionando)', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { restart: 'always' })], yaml: 'app:\n  ports: abc\n' } }), 'local')
+    const { run, calls } = host({ fail: 'config --quiet' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('failed')
+    const last = lastOverride(calls)
+    expect(last).not.toContain('restart')
+    expect(last).not.toContain('ports: abc')
+    expect(last).toContain('env_file:')
+    // O override válido é regravado depois da conferência que falhou.
+    const check = calls.findIndex((command) => command.includes('config --quiet'))
+    expect(calls.findLastIndex((command) => command.includes('docker-compose.opex.yml') && command.includes('base64 -d'))).toBeGreaterThan(check)
   })
 
   it('log sem os valores do environment; serviço fora do compose avisa e não bloqueia; o override não aparece no debug', async () => {

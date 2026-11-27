@@ -82,6 +82,31 @@ describe('leitura dos dados do serviço no compose', () => {
     expect(minio!.values.healthcheck).toEqual({ mode: 'disable' })
   })
 
+  it('regressão: ${VAR:-padrão} nas formas curtas fica inteiro; o que não dá para ler é sinalizado, nunca some calado', () => {
+    const [app] = parseComposeYaml(`services:
+  app:
+    image: app
+    ports:
+      - "\${PORT:-3000}:3000"
+      - "\${PORT}:80"
+      - "8080:\${ALVO}"
+    volumes:
+      - "\${DIR:-./d}:/x:ro"
+      - "dados:\${DESTINO}"
+`)!
+    expect(app!.values.ports).toEqual([
+      { target: 3000, published: '${PORT:-3000}', protocol: 'tcp', hostIp: '' },
+      { target: 80, published: '${PORT}', protocol: 'tcp', hostIp: '' },
+    ])
+    expect(app!.values.volumes).toEqual([
+      { type: 'bind', source: '${DIR:-./d}', target: '/x', readOnly: true },
+      { type: 'volume', source: 'dados', target: '${DESTINO}', readOnly: false },
+    ])
+    expect(app!.unreadable).toEqual({ ports: ['8080:${ALVO}'], volumes: [] })
+    // O que foi lido passa na mesma validação da tela (ligar "Personalizar" e salvar não dá erro).
+    expect(composeOverridesSchema.safeParse(overrides([override('app', { ports: app!.values.ports, volumes: [app!.values.volumes![0]!] })])).success).toBe(true)
+  })
+
   it('o que o compose não declara fica null', () => {
     expect(normalizeServiceValues({ image: 'mongo:7' })).toEqual({ ...EMPTY_SERVICE_VALUES, image: 'mongo:7' })
   })

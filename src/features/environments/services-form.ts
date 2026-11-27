@@ -95,5 +95,5 @@ export function shadowedEnvKeys(override: ServiceOverride, envKeys: string[]): s
 /** Executar no PC: portas publicadas que não estão em Portas (o repasse do PC não é automático). */
 export function unforwardedPorts(override: ServiceOverride, ports: number[], runOn: Machine): string[] {
     if (runOn !== "pc") return []
-    return (override.ports ?? []).map((port) => port.published).filter((published) => published && !published.includes("-") && !ports.includes(Number(published)))
+    return (override.ports ?? []).map((port) => port.published).filter((published) => published && !published.includes("-") && !published.includes("$") && !ports.includes(Number(published)))
 }

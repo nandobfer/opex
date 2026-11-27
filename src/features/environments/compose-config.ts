@@ -3,7 +3,7 @@ import { ENV_FILE } from "./constants"
 import { overrideYamlServices } from "./override-yaml"
 import { round2, type ResourceLimits } from "./resource-limits"
 import type { ComposeOverrides, ServiceValues } from "./schemas"
-import { composeOverridesOf, namedVolumes, overrideBindMounts, normalizeServiceValues, ownImageServices, serviceOverrideLines } from "./service-overrides"
+import { composeOverridesOf, namedVolumes, overrideBindMounts, normalizeServiceValues, ownImageServices, serviceOverrideLines, unreadableServiceItems } from "./service-overrides"
 
 /** Onde o compose declara o limite: no serviço (`mem_limit`/`cpus`) ou em `deploy.resources.limits`. */
 export type LimitStyle = "service" | "deploy"
@@ -21,6 +21,8 @@ export interface ComposeService {
     limitStyle: { memory: LimitStyle; cpus: LimitStyle }
     /** Dados do serviço declarados no compose (OPE-211; `null` = não declarado). */
     values: ServiceValues
+    /** Portas e volumes do compose que a tela não consegue ler (ex.: alvo com `${VAR}`). */
+    unreadable: { ports: string[]; volumes: string[] }
 }
 
 interface RawService {
@@ -84,6 +86,7 @@ export function parseComposeConfig(output: string): ComposeService[] | null {
         hasWatch: Array.isArray(service.develop?.watch) && service.develop.watch.length > 0,
         ...declaredLimits(service),
         values: normalizeServiceValues(service),
+        unreadable: unreadableServiceItems(service),
     }))
 }
 
@@ -119,7 +122,7 @@ export function parseComposeYaml(content: string): ComposeService[] | null {
     if (!parsed.services || typeof parsed.services !== "object") return null
     return Object.entries(parsed.services).map(([name, service]) => {
         const watch = service.develop?.watch
-        return { name, hasBuild: Boolean(service.build), bindMounts: yamlBindMounts(service.volumes), hasWatch: Array.isArray(watch) && watch.length > 0, ...declaredLimits(service), values: normalizeServiceValues(service) }
+        return { name, hasBuild: Boolean(service.build), bindMounts: yamlBindMounts(service.volumes), hasWatch: Array.isArray(watch) && watch.length > 0, ...declaredLimits(service), values: normalizeServiceValues(service), unreadable: unreadableServiceItems(service) }
     })
 }
 

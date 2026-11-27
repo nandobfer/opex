@@ -107,8 +107,12 @@ export type ComposeKeyValue = z.infer<typeof composeKeyValueSchema>
 export const PORT_PROTOCOLS = ["tcp", "udp"] as const
 export const portOverrideSchema = z.object({
     target: z.number().int().min(1, "Porta de 1 a 65535").max(65535, "Porta de 1 a 65535"),
-    /** Porta (ou intervalo `8000-8010`) publicada no host; vazio = sem publicar (só na rede do compose). */
-    published: z.string().trim().regex(/^(\d{1,5}(-\d{1,5})?)?$/, "Porta publicada: número ou intervalo (8000-8010)"),
+    /** Porta (ou intervalo `8000-8010`) publicada no host; vazio = sem publicar (só na rede do compose). `${VAR}` é interpolado. */
+    published: z
+        .string()
+        .trim()
+        .max(200)
+        .regex(/^((\d{1,5}(-\d{1,5})?)|(\$\{[^}\s]+\}))?$/, "Porta publicada: número, intervalo (8000-8010) ou ${VARIAVEL}"),
     protocol: z.enum(PORT_PROTOCOLS),
     /** IP do host (vazio = todos). */
     hostIp: z.string().trim().max(64).regex(/^[0-9a-fA-F.:[\]]*$/, "IP inválido"),
@@ -121,7 +125,7 @@ export const volumeOverrideSchema = z
         type: z.enum(VOLUME_TYPES),
         /** Caminho (bind, relativo à pasta do compose) ou nome do volume; vazio = volume anônimo/tmpfs. */
         source: z.string().trim().max(400).regex(/^[^\n\r]*$/),
-        target: z.string().trim().min(1, "Informe o destino").max(400).regex(/^\//, "O destino é um caminho absoluto no container"),
+        target: z.string().trim().min(1, "Informe o destino").max(400).regex(/^(\/|\$\{)/, "O destino é um caminho absoluto no container (ou ${VARIAVEL})"),
         readOnly: z.boolean(),
     })
     .superRefine((value, ctx) => {

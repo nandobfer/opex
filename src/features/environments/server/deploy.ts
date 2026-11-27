@@ -33,7 +33,8 @@ import {
     type ComposePlan,
 } from "../commands"
 import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices, withOverrideMounts, type ComposeService } from "../compose-config"
-import { overrideYamlKeys } from "../override-yaml"
+import { HIDDEN_VALUE } from "../opex-format"
+import { overrideYamlKeys, overrideYamlServices } from "../override-yaml"
 import { composeOverridesOf, customizedFields, overrideServiceNames, ownImageServices, serviceOverrideText } from "../service-overrides"
 import { DEPLOY_HEARTBEAT_MS, DEPLOY_LOG_MAX, ENVIRONMENTS_AUDIT_ENTITY, ENV_FILE, MANAGED_COMPOSE_FILE, OVERRIDE_FILE } from "../constants"
 import { executionSteps, type DeployStep } from "../pipeline"
@@ -235,14 +236,38 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild && !ownImages.includes(service.name)).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
     const limits = deployLimits(ctx, environmentLimitsOf(env.limits), services)
     deployOverrides(ctx, overrides, services)
-    await runStep(
-        ctx,
-        { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits, overrides })), timeoutMs: 30_000 },
-        { redactedAs: `gravar ${OVERRIDE_FILE} (conteúdo omitido)` },
-    )
+    const overrideInput = { services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits }
+    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ ...overrideInput, overrides })), timeoutMs: 30_000 }, { redactedAs: `gravar ${OVERRIDE_FILE} (conteúdo omitido)` })
     // Antes de qualquer build: YAML avançado ruim ou um Compose sem `!reset`/`!override` (< 2.24.4) falham aqui.
-    if (overrideServiceNames(overrides).length) await runStep(ctx, { label: "Conferindo o override", command: overrideCheckCommand(plan, access.targets.server), timeoutMs: 60_000 }, { redactedAs: "docker compose config --quiet (conferir o override)" })
+    if (overrideServiceNames(overrides).length) await checkOverride(ctx, plan, access, overrides, overrideYaml({ ...overrideInput, overrides: null }))
     return { services, envFiles, composeVersion, ownImages }
+}
+
+/** Textos dos ajustes que podem ser segredo (valores do environment, dos labels e do YAML avançado). */
+function overrideSecrets(overrides: ComposeOverrides): string[] {
+    const values = overrides.services.flatMap((item) => [...(item.environment ?? []), ...(item.labels ?? [])].map((entry) => entry.value))
+    const collect = (node: unknown): void => {
+        if (typeof node === "string") values.push(node)
+        else if (Array.isArray(node)) node.forEach(collect)
+        else if (node && typeof node === "object") Object.values(node).forEach(collect)
+    }
+    for (const node of overrideYamlServices(overrides.yaml).values()) collect(node.toJSON())
+    return [...new Set(values.map((value) => value.trim()).filter((value) => value.length >= 3))].sort((a, b) => b.length - a.length)
+}
+
+/**
+ * Confere o override gravado (`config --quiet`). A saída nunca vai para o log (o erro do compose pode citar um
+ * valor): só a última linha, com os valores dos ajustes ocultos. Na falha, o override volta a ser o sem ajustes
+ * (válido): Reiniciar, Derrubar e Levantar não ficam presos a um override quebrado.
+ */
+async function checkOverride(ctx: DeployContext, plan: ComposePlan, access: MachineAccess, overrides: ComposeOverrides, safeOverride: string): Promise<void> {
+    ctx.write(`\n\u001b[36m▸ Conferindo o override\u001b[0m\n`)
+    const result = await ctx.run(overrideCheckCommand(plan, access.targets.server), 60_000, { detached: true, redactedAs: "docker compose config --quiet (conferir o override; saída omitida)" })
+    if (result.exitCode === 0) return
+    let detail = configError(result.output)
+    for (const secret of overrideSecrets(overrides)) detail = detail.split(secret).join(HIDDEN_VALUE)
+    await runStep(ctx, { label: "Override sem os ajustes (a conferência falhou)", command: writeFileCommand(plan, OVERRIDE_FILE, safeOverride), timeoutMs: 30_000 }, { redactedAs: `gravar ${OVERRIDE_FILE} (sem os ajustes dos serviços)` })
+    throw new StepError(`Conferindo o override falhou (código ${result.exitCode ?? "?"})${detail}. Revise os ajustes dos serviços (ou o YAML avançado); o Docker Compose precisa ser 2.24.4 ou mais novo.`)
 }
 
 /**

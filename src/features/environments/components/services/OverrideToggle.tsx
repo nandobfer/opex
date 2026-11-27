@@ -13,6 +13,8 @@ interface Props {
     /** Valor do compose (desligado); `null` = não declarado; `undefined` = compose ainda não lido. */
     composeText: string | null | undefined
     error?: string | null
+    /** Aviso do campo (ex.: item do compose que não pôde ser lido), nos dois estados. */
+    warning?: string | null
     children: ReactNode
 }
 
@@ -20,7 +22,7 @@ interface Props {
  * Um campo do serviço com o interruptor "Personalizar" (OPE-211): desligado, mostra o valor do compose e
  * não escreve nada no override; ligado, o editor do campo substitui o valor do compose por inteiro.
  */
-export function OverrideToggle({ id, label, customized, onToggle, composeText, error, children }: Props) {
+export function OverrideToggle({ id, label, customized, onToggle, composeText, error, warning, children }: Props) {
     return (
         <div className="space-y-2 rounded-md border border-border p-3" data-field={id}>
             <div className="flex items-center justify-between gap-2">
@@ -43,6 +45,7 @@ export function OverrideToggle({ id, label, customized, onToggle, composeText, e
                     </motion.p>
                 )}
             </AnimatePresence>
+            {warning && <p className="text-xs text-warning">{warning}</p>}
             {customized && error && <p className="text-xs text-destructive">{error}</p>}
         </div>
     )

@@ -120,6 +120,7 @@ export function EnvironmentServicesField({ form, env }: { form: UseFormReturn<En
                                                     <ServiceOverrideItem
                                                         override={item}
                                                         compose={read.result ? (read.result.services.find((service) => service.name === item.service)?.values ?? null) : undefined}
+                                                        unreadable={read.result?.services.find((service) => service.name === item.service)?.unreadable}
                                                         orphan={orphans.includes(item.service)}
                                                         services={known}
                                                         envKeys={envKeys}

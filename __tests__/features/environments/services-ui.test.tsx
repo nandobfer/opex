@@ -56,8 +56,8 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
 
 const COMPOSE: ComposeServicesDto = {
   services: [
-    { name: 'app', hasBuild: true, declared: { memoryGb: null, swapGb: null, cpus: null }, values: { ...EMPTY_SERVICE_VALUES, command: ['npm', 'start'], restart: 'unless-stopped', environment: [{ key: 'TOKEN', value: 'do-compose' }] } },
-    { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null }, values: { ...EMPTY_SERVICE_VALUES, image: 'mongo:7' } },
+    { name: 'app', hasBuild: true, declared: { memoryGb: null, swapGb: null, cpus: null }, values: { ...EMPTY_SERVICE_VALUES, command: ['npm', 'start'], restart: 'unless-stopped', environment: [{ key: 'TOKEN', value: 'do-compose' }] }, unreadable: { ports: ['8080:${ALVO}'], volumes: [] } },
+    { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null }, values: { ...EMPTY_SERVICE_VALUES, image: 'mongo:7' }, unreadable: { ports: [], volumes: [] } },
   ],
 }
 
@@ -96,6 +96,8 @@ describe('serviços do compose no formulário', () => {
     expect(screen.getByText('imagem própria')).toBeTruthy()
     expect(screen.getByText('Do compose: unless-stopped')).toBeTruthy()
     expect(screen.getByText('Do compose: npm start')).toBeTruthy()
+    // Porta do compose que a tela não consegue ler: aviso, em vez de sumir calada ao personalizar.
+    expect(document.body.textContent).toContain('Não foi possível ler este item do compose: 8080:${ALVO}')
     fireEvent.click(screen.getByLabelText('Personalizar Command'))
     await waitFor(() => expect((screen.getByLabelText('command de app') as HTMLTextAreaElement).value).toBe('npm\nstart'))
     // O environment do serviço vence as Variáveis extras com o mesmo nome: a tela avisa.

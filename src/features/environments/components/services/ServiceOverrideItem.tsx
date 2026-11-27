@@ -29,10 +29,12 @@ interface Props {
     errors: Partial<Record<ServiceField, string>>
     onFieldChange: <F extends ServiceField>(field: F, value: ServiceValues[F]) => void
     onRemove: () => void
+    /** Portas e volumes do compose que a tela não conseguiu ler (ex.: alvo com `${VAR}`). */
+    unreadable?: { ports: string[]; volumes: string[] }
 }
 
 /** Um serviço do bloco "Serviços do compose" (OPE-211): cabeçalho recolhível e os campos com "Personalizar". */
-export function ServiceOverrideItem({ override, compose, orphan, services, envKeys, ports, runOn, errors, onFieldChange, onRemove }: Props) {
+export function ServiceOverrideItem({ override, compose, orphan, services, envKeys, ports, runOn, errors, onFieldChange, onRemove, unreadable }: Props) {
     const [open, setOpen] = useState(true)
     const count = customizedCount(override)
     const shadowed = shadowedEnvKeys(override, envKeys)
@@ -67,6 +69,7 @@ export function ServiceOverrideItem({ override, compose, orphan, services, envKe
                                     onToggle={(customized) => onFieldChange(field, customized ? initialFieldValue(field, compose ?? null) : null)}
                                     composeText={compose === undefined ? undefined : composeFieldText(field, compose)}
                                     error={errors[field]}
+                                    warning={(field === "ports" || field === "volumes") && unreadable?.[field].length ? `Não foi possível ler este item do compose: ${unreadable[field].join(", ")}. Ao personalizar, ele sai do serviço: inclua-o à mão se precisar.` : null}
                                 >
                                     {override[field] !== null && (
                                         <ServiceFieldEditor id={`${contentId}-${field}-input`} service={override.service} field={field} value={override[field]!} onChange={(value) => onFieldChange(field, value)} services={services} />

@@ -303,13 +303,19 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
   5. Log: "Serviços: app imagem nginx:1.27, ports (2); db environment (3: A, B, C)" e "YAML avançado: serviços app,
      worker". O override é gravado com o debug "gravar docker-compose.opex.yml (conteúdo omitido)".
   6. **Conferência do override** (só com ajustes): passo "Conferindo o override" (`docker compose … -f
-     docker-compose.opex.yml config --quiet`, sem saída) antes de qualquer build. YAML avançado ruim ou um Compose sem as
-     tags (exigem v2.24.4 ou mais nova; o servidor tem a v5) falham aqui com a última linha do erro.
+     docker-compose.opex.yml config --quiet`) antes de qualquer build. YAML avançado ruim ou um Compose sem as
+     tags (exigem v2.24.4 ou mais nova; o servidor tem a v5) falham aqui. A saída da conferência **nunca vai para o log**:
+     o erro do deploy leva só a última linha, com os valores do environment, dos labels e do YAML avançado trocados por
+     `[valor oculto]`. Na falha, o override volta a ser gravado **sem os ajustes** (passo "Override sem os ajustes (a
+     conferência falhou)"), para Reiniciar, Derrubar e Levantar não ficarem presos a um override quebrado.
   7. Sucesso: `deployedComposeOverrides`. Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
 - **"Ler compose"** (`POST /api/environments/compose-services`) passa a devolver também `values` por serviço
   (`normalizeServiceValues`, `service-overrides.ts`): do JSON do `config --no-env-resolution --no-interpolate` (central e
   adotado; `${VAR}` volta como escrito) ou do YAML bruto da revisão vigente (gerenciado; formas curtas de portas com IP e
-  intervalo, volumes `:ro`, `environment` em lista, `command` em texto, `depends_on` em lista).
+  intervalo, volumes `:ro`, `environment` em lista, `command` em texto, `depends_on` em lista). `${VAR:-padrão}` fica inteiro
+  ao separar por `:` (porta publicada e destino do volume aceitam `${VAR}`). Porta ou volume que não dá para ler na forma da
+  tela (ex.: alvo `${VAR}`) vem em `unreadable` e o campo avisa "Não foi possível ler este item do compose: …" (ao
+  personalizar, ele sai do serviço), em vez de sumir calado.
 - **Tela** (`EnvironmentServicesField` + `components/services/`), entre os limites e as portas:
   - Bloco **recolhido** até o dono abrir (aberto quando já há ajustes salvos; recolhido, mostra o resumo). Em Editar, abrir
     lê o compose **uma vez** sozinho para mostrar os valores "Do compose" (sem preencher os limites).
