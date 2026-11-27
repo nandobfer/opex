@@ -1,5 +1,6 @@
 import type { OpencodeClient } from "@/lib/ai/opencode-client"
 import { recordAiConsumption } from "@/lib/ai/consumption"
+import { tokenDetailsOf, tokensFromOpencode } from "@/lib/ai/pricing/usage"
 import { appendTextDelta, joinTextBlocks } from "@/lib/ai/opencode-text"
 import {
     describeToolInput,
@@ -420,6 +421,8 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                         outputTokens: event.tokens.output,
                         totalTokens: event.tokens.input + event.tokens.output + event.tokens.reasoning,
                         costUsd: event.costUsd,
+                        // OPE-205: `inputTokens` segue a entrada sem cache do OpenCode; o cache vai separado.
+                        tokenDetails: tokenDetailsOf(tokensFromOpencode(event.tokens)),
                     })
                 }
                 break

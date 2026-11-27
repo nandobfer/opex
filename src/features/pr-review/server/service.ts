@@ -15,7 +15,7 @@ import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWork
 import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { availabilityOfPrReview, loadPrReviewSettings } from "@/features/ai/server/settings"
-import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_PAGE_LIMIT, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
+import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_CONSUMPTION_ORIGIN, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_PAGE_LIMIT, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
 import { parsePrUrl, parseReviewResult, reviewMarker, reviewWorktreePath, verdictFromGithubState } from "../logic"
 import { buildPrReviewInstructions, buildPrReviewPrompt } from "../prompt"
 import type { PrReviewListQuery } from "../schemas"
@@ -164,7 +164,7 @@ async function executeReview(id: string, controller: AbortController): Promise<v
                     text: body,
                     timeoutMs: settings.timeoutMinutes * 60_000,
                     signal: controller.signal,
-                    consumption: { origin: "pr-review", subject: `${doc.repo}#${doc.number}` },
+                    consumption: { origin: PR_REVIEW_CONSUMPTION_ORIGIN, subject: `${doc.repo}#${doc.number}` },
                     providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
                 },
                 {

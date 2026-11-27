@@ -16,6 +16,8 @@ import { beginTurn, endTurn, enqueueFollowUp, isTurnActive, liveMessageOf, publi
 import { OpexMessage, OpexSession, type IOpexFileRef, type IOpexMessage } from "@/lib/db/models/Opex"
 import { claimOpexFiles, fileMarkers } from "./files"
 import { addStepCost, type AiStepCost } from "@/lib/ai/provider-cost"
+import type { TokenDetails } from "@/lib/ai/pricing/types"
+import { tokenDetailsOf, tokensFromUsage } from "@/lib/ai/pricing/usage"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle, refreshSessionTitleWith, type TitleTurn } from "./titler"
@@ -501,6 +503,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     let timedOut = false
     let timer: ReturnType<typeof setTimeout> | null = null
     let usage: OpexUsageDto | null = null
+    let tokenDetails: TokenDetails | null = null
     let cost: AiStepCost | null = null
     let responseMessages: unknown[] | null = null
     const toolNames: string[] = []
@@ -594,6 +597,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     break
                 case "finish":
                     usage = { inputTokens: numberOrNull(part.totalUsage.inputTokens), outputTokens: numberOrNull(part.totalUsage.outputTokens), totalTokens: numberOrNull(part.totalUsage.totalTokens) }
+                    tokenDetails = tokenDetailsOf(tokensFromUsage(part.totalUsage))
                     if (part.finishReason === "error" && !errorMessage) errorMessage = "O modelo terminou com erro"
                     break
             }
@@ -618,7 +622,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     // Teto técnico: o turno vira erro com o motivo (não "interrompido pelo usuário").
     if (timedOut) aborted = false
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames, apiKeyId: (prepared as PreparedModel | null)?.apiKeyId ?? null })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, tokenDetails, cost, responseMessages, toolNames, apiKeyId: (prepared as PreparedModel | null)?.apiKeyId ?? null })
 }
 
 /** Título da conversa com um rotineiro: o subagente de título do Agente Opex; sem modelo dele, o do agente. */
@@ -632,6 +636,8 @@ interface TurnOutcome {
     errorMessage: string | null
     aborted: boolean
     usage: OpexUsageDto | null
+    /** Tokens separados do turno (cache e raciocínio, OPE-205), somados pela SDK; `null` sem `finish`. */
+    tokenDetails?: TokenDetails | null
     /** Custo informado pelo provedor no turno (OpenCode Go). */
     cost: AiStepCost | null
     responseMessages: unknown[] | null
@@ -697,6 +703,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             costUsd: outcome.cost?.costUsd ?? null,
             billing: outcome.cost?.billing ?? null,
             apiKeyId: outcome.apiKeyId,
+            tokenDetails: outcome.tokenDetails ?? null,
         })
     }
     if (status !== "interrupted" || text) {

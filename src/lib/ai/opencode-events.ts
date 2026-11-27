@@ -8,6 +8,9 @@ export interface OpencodeTokenUsage {
     input: number
     output: number
     reasoning: number
+    /** Cache lido/escrito (`tokens.cache`, OPE-205); `null`/ausente = o evento não informou. */
+    cacheRead?: number | null
+    cacheWrite?: number | null
 }
 
 export interface OpencodeFormFieldOption {
@@ -86,6 +89,7 @@ type Raw = Record<string, unknown>
 const isObj = (value: unknown): value is Raw => typeof value === "object" && value !== null && !Array.isArray(value)
 const str = (value: unknown): string | null => (typeof value === "string" ? value : null)
 const num = (value: unknown): number => (typeof value === "number" && Number.isFinite(value) ? value : 0)
+const numOrNull = (value: unknown): number | null => (typeof value === "number" && Number.isFinite(value) ? value : null)
 const errorMessage = (value: unknown, fallback: string) => (isObj(value) ? (str(value.message) ?? fallback) : fallback)
 
 /** Erro do provedor (`{ type, message, status }`) do evento; o que faltar fica nulo. */
@@ -206,7 +210,13 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
             return id ? { kind: "tool-error", id, message: errorMessage(data.error, "Falha na ferramenta"), output: toolContentText(data.content) } : null
         case "session.step.ended": {
             const tokens = isObj(data.tokens) ? data.tokens : {}
-            return { kind: "step", stepId: str(data.assistantMessageID) ?? str(event.id), costUsd: num(data.cost), tokens: { input: num(tokens.input), output: num(tokens.output), reasoning: num(tokens.reasoning) } }
+            const cache = isObj(tokens.cache) ? tokens.cache : null
+            return {
+                kind: "step",
+                stepId: str(data.assistantMessageID) ?? str(event.id),
+                costUsd: num(data.cost),
+                tokens: { input: num(tokens.input), output: num(tokens.output), reasoning: num(tokens.reasoning), cacheRead: cache ? numOrNull(cache.read) : null, cacheWrite: cache ? numOrNull(cache.write) : null },
+            }
         }
         case "session.step.failed":
             return { kind: "notice", message: `Passo do modelo falhou: ${errorMessage(data.error, "erro desconhecido")}` }

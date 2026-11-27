@@ -19,6 +19,7 @@ import {
     parseEstimateHours,
 } from "../preview-prompt"
 import type { DraftPreviewDto } from "../types"
+import { ESTIMATE_HOURS_CONSUMPTION_ORIGIN } from "../constants"
 import { findSimilarTasks } from "./similar"
 
 /**
@@ -150,7 +151,7 @@ export async function* estimateHours(prepared: PreparedEstimateHours, hooks: { o
                 prompt,
                 title: prepared.title,
                 signal,
-                consumption: { origin: "estimate-hours", subject: prepared.subject },
+                consumption: { origin: ESTIMATE_HOURS_CONSUMPTION_ORIGIN, subject: prepared.subject },
             })) {
                 if (event.type === "delta") {
                     text += event.text

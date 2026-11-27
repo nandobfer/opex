@@ -97,6 +97,30 @@ describe('página de um agente (OPE-122)', () => {
     expect(screen.getByText('Custo')).toBeTruthy()
   })
 
+  it('Taxa de cache (OPE-205): o cartão aparece ao lado dos KPIs das execuções', () => {
+    mocks.metrics.mockReturnValue(
+      ok(
+        data({
+          runKpis: [
+            { id: 'runs', label: 'Execuções', hint: 'No período', value: 7, format: 'count', since: null },
+            { id: 'run-tokens', label: 'Tokens', hint: 'Soma', value: 12_000, format: 'tokens', since: null },
+            { id: 'run-cache-rate', label: 'Taxa de cache', hint: 'Cache lido ÷ entrada', value: 42.5, format: 'percent', since: '2026-11-27T00:00:00.000Z' },
+          ],
+        }),
+      ),
+    )
+    render(<DesenvolvedorAgentPage />)
+    expect(screen.getByText('Taxa de cache')).toBeTruthy()
+    expect(screen.getAllByText('42,5%').length).toBeGreaterThan(0)
+  })
+
+  it('skeleton da Visão geral acompanha os 11 cartões (OPE-205)', () => {
+    mocks.metrics.mockReturnValue({ data: undefined, isLoading: true, isError: false, error: null, refetch: mocks.refetch })
+    render(<DesenvolvedorAgentPage />)
+    const block = screen.getByLabelText('Carregando a visão geral')
+    expect(block.firstElementChild?.children.length).toBe(11)
+  })
+
   it('erro mostra Tentar novamente; agente desligado mostra o aviso', () => {
     mocks.metrics.mockReturnValue({ data: undefined, isLoading: false, isError: true, error: new Error('x'), refetch: mocks.refetch })
     const { unmount } = render(<DesenvolvedorAgentPage />)

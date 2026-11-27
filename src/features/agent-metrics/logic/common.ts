@@ -204,19 +204,69 @@ export function runTotals(rows: readonly RunTotalsItem[]): RunTotals {
     return totals
 }
 
-export type RunKpiId = "runs" | "run-failures" | "run-cost" | "run-tokens" | "run-duration"
+/** Totais do cache no período (OPE-205): só os registros de consumo com o cache lido informado. */
+export interface CacheTotals {
+    cacheReadSum: number
+    inputSum: number
+    count: number
+}
+
+export const EMPTY_CACHE_TOTALS: CacheTotals = Object.freeze({ cacheReadSum: 0, inputSum: 0, count: 0 })
+
+const isNum = (path: string) => ({ $isNumber: path })
+
+/**
+ * Regra única da Taxa de cache (OPE-205), como agregação do Mongo: soma do cache lido e da entrada dos registros
+ * do `match` (período e origens). Fica fora o registro sem o cache lido informado (histórico ou provedor que não
+ * informa: nunca vira 0) e o de entrada não positiva. A entrada é sem cache + cache lido + cache escrito quando os
+ * três vêm informados (no OpenCode de sessão, `inputTokens` é só a entrada sem cache); senão, `inputTokens` (pela
+ * SDK, já o total).
+ */
+export function cacheRatePipeline(match: Record<string, unknown>) {
+    return [
+        { $match: { ...match, "tokenDetails.cacheRead": { $type: "number" } } },
+        {
+            $project: {
+                cacheRead: "$tokenDetails.cacheRead",
+                input: {
+                    $cond: [
+                        { $and: [isNum("$tokenDetails.noCache"), isNum("$tokenDetails.cacheWrite")] },
+                        { $add: ["$tokenDetails.noCache", "$tokenDetails.cacheRead", "$tokenDetails.cacheWrite"] },
+                        { $cond: [isNum("$inputTokens"), "$inputTokens", null] },
+                    ],
+                },
+            },
+        },
+        { $match: { input: { $gt: 0 } } },
+        { $group: { _id: null, cacheReadSum: { $sum: "$cacheRead" }, inputSum: { $sum: "$input" }, count: { $sum: 1 } } },
+    ]
+}
+
+export type RunKpiId = "runs" | "run-failures" | "run-cost" | "run-tokens" | "run-cache-rate" | "run-duration"
 
 /**
  * KPIs comuns das execuções (OPE-141, porte do `runKpis` do MT-40 do my-tasks): Execuções, % de falhas,
  * Custo (soma), Tokens (soma) e Duração média. Sem registro, "—" (nunca 0). `covered` tira os que o
  * agente já mostra com o mesmo significado (decisão do dono: fica o KPI do agente).
  */
-export function runKpis(totals: RunTotals, covered: readonly RunKpiId[] = []): MetricKpiDto[] {
+export function runKpis(totals: RunTotals, covered: readonly RunKpiId[] = [], cache: { totals: CacheTotals; since: string | null } | null = null): MetricKpiDto[] {
     const all: MetricKpiDto[] = [
         { id: "runs", label: "Execuções", hint: "No período", value: totals.runs, format: "count", since: null },
         { id: "run-failures", label: "% de falhas", hint: "Execuções que terminaram com erro", value: pct(totals.failures, totals.runs), format: "percent", since: null },
         { id: "run-cost", label: "Custo", hint: "Soma das execuções com custo registrado", value: totals.costCount ? totals.costSum : null, format: "usd", since: null },
         { id: "run-tokens", label: "Tokens", hint: "Soma das execuções com tokens registrados", value: totals.tokenCount ? totals.tokenSum : null, format: "tokens", since: null },
+        ...(cache
+            ? [
+                  {
+                      id: "run-cache-rate",
+                      label: "Taxa de cache",
+                      hint: "Cache lido ÷ entrada, nos registros com o cache informado; ignora os filtros de cliente e repositório",
+                      value: cache.totals.count ? pct(cache.totals.cacheReadSum, cache.totals.inputSum) : null,
+                      format: "percent" as const,
+                      since: cache.since,
+                  },
+              ]
+            : []),
         { id: "run-duration", label: "Duração média", hint: "Das execuções com duração registrada, em minutos", value: totals.durationCount ? totals.durationSum / totals.durationCount / 60_000 : null, format: "duration", since: null },
     ]
     return all.filter((item) => !covered.includes(item.id as RunKpiId))

@@ -22,6 +22,8 @@ export const REFINEMENT_SPEC_SAVE_ERROR = "Não foi possível gravar a especific
 
 /** Evento em `private-app` quando o estado de um refinamento muda. Payload: `{ taskId }`. */
 export const REFINEMENT_UPDATED_EVENT = "refinement-updated"
+/** Origem do consumo de IA do refinamento (`ai_consumption_logs`). */
+export const REFINEMENT_CONSUMPTION_ORIGIN = "refinement"
 
 /** Rótulo exibido na saída do agente como nome do turno. */
 export const REFINEMENT_STAGE_LABEL = "Refinando"

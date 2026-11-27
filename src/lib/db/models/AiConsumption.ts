@@ -28,7 +28,10 @@ export interface IAiConsumption {
     apiKeyId?: string | null
     /** Detalhe da cobrança informado pelo OpenCode Go (`costUsd` = cobrado + cota); `null` nos demais. */
     billing?: { source: string | null; allowanceUsd: number | null; listCostUsd: number | null } | null
-    /** Tokens separados do passo (OPE-203, motor Opex dos rotineiros); ausente nas demais origens. */
+    /**
+     * Tokens separados do passo (OPE-203; todas as origens desde a OPE-205): sem cache, cache lido, cache escrito,
+     * saída e raciocínio. Campo `null` = o provedor não informou (nunca zero); documento ausente = histórico.
+     */
     tokenDetails?: TokenDetails | null
     /**
      * Custo de tabela do passo com a origem e o preço congelados (OPE-203). Ausente = ainda não calculado (o
@@ -65,6 +68,8 @@ AiConsumptionSchema.index({ provider: 1, createdAt: -1 })
 AiConsumptionSchema.index({ provider: 1, origin: 1, createdAt: -1 })
 AiConsumptionSchema.index({ provider: 1, apiKeyId: 1, createdAt: -1 })
 AiConsumptionSchema.index({ origin: 1, subject: 1 })
+// Taxa de cache por agente e período (OPE-205).
+AiConsumptionSchema.index({ origin: 1, createdAt: -1 })
 AiConsumptionSchema.index({ apiKeyId: 1, createdAt: 1 })
 
 if (process.env.NODE_ENV === "development") {
