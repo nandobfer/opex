@@ -214,6 +214,39 @@ describe('hibernação e confirmação', () => {
     expect(messages[1]).toContain('a vaga abrir')
   })
 
+  it('OPE-204: disparo e retomada levam a data e a hora da própria ativação na mensagem; as instruções não', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const brasilia = (date: Date) => `Data e hora atual: ${date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} (horário de Brasília).`
+      const startAt = new Date('2026-11-05T12:00:00Z')
+      vi.setSystemTime(startAt)
+      const agent = seedAgent()
+      const messages: string[] = []
+      const instructions: string[] = []
+      holder.engine = async (input) => {
+        const turn = input as unknown as { message: string; instructions: (toolPrefix: string) => string }
+        messages.push(turn.message)
+        instructions.push(turn.instructions(''))
+        if (messages.length === 1) await call(input, 'hibernate', { minutes: 5, reason: 'a vaga abrir' })
+        else await call(input, 'finish', { report: 'Feito' })
+        return { error: null, text: '' }
+      }
+      const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+      await flush()
+      const resumeAt = new Date((run(runId).hibernation as { at: Date }).at.getTime() + 1_000)
+      vi.setSystemTime(resumeAt)
+      await runDueRoutineAgents(resumeAt)
+      await flush()
+      expect(run(runId).status).toBe('completed')
+      expect(messages[0]).toContain(brasilia(startAt))
+      expect(messages[1]).toContain(brasilia(resumeAt))
+      expect(messages[1]).not.toContain(brasilia(startAt))
+      expect(instructions.some((text) => text.includes('Data e hora atual'))).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('confirmar retoma com a ação liberada; a segunda resposta recebe 409', async () => {
     const agent = seedAgent()
     const notes: string[] = []
@@ -310,6 +343,8 @@ describe('tick do agendador', () => {
     // Sem histórico salvo (motor Opex): a retomada leva também o disparo, com a nota de interrupção.
     expect(messages[0]).toContain('Ler as vagas')
     expect(messages[0]).toContain(INTERRUPTED_RESUME_NOTE)
+    // OPE-204: na mensagem combinada (disparo + retomada), a data e a hora aparecem uma única vez.
+    expect(messages[0]!.split('Data e hora atual').length - 1).toBe(1)
 
     // Segunda interrupção da mesma execução: o turno vivo some (processo morto) e o batimento envelhece.
     resetActivationsForTests()
