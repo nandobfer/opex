@@ -68,7 +68,7 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
     das três partes, quando informadas, ou o total da SDK. Sem base aparece **“—”**; zero informado com
     entrada positiva pode dar **0%**. Ignora Clientes e Repositórios, como explica o cartão. O marcador
     `cache-tokens` indica desde quando a coleta foi ampliada; não há estimativa retroativa. A soma roda no
-    banco (`cacheRatePipeline`: `$match` + `$group`, a mesma regra da função pura `cacheRateTotals`), sem
+    banco (`cacheRatePipeline`: `$match` + `$project` + `$group`, implementação única da regra), sem
     trazer os registros do período ao servidor. No OpenCode de sessão, o cache só conta com o lido e o
     escrito informados; com um deles faltando, os dois ficam não informados e o passo sai da base.
   - O mapa `consumption-origins.ts` inclui turnos e títulos (dono e portal) do Opex e Maddox; estimativas e

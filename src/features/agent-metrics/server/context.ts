@@ -105,7 +105,7 @@ export async function runTotalsOf(ctx: MetricsContext): Promise<RunTotals> {
 export async function cacheTotalsOf(ctx: Pick<MetricsContext, "agent" | "range">): Promise<CacheTotals> {
     const origins = AGENT_CONSUMPTION_ORIGINS[ctx.agent]
     if (!origins.length) return EMPTY_CACHE_TOTALS
-    // Somado no banco (nunca traz os registros do período ao Node), com a mesma regra de `cacheRateTotals`.
+    // Somado no banco: nunca traz os registros do período ao Node.
     const [group] = await AiConsumption.aggregate<CacheTotals>(cacheRatePipeline({ origin: { $in: [...origins] }, createdAt: { $gte: ctx.range.from, $lte: ctx.range.to } }))
     return group ? { cacheReadSum: group.cacheReadSum, inputSum: group.inputSum, count: group.count } : EMPTY_CACHE_TOTALS
 }

@@ -211,24 +211,16 @@ export interface CacheTotals {
     count: number
 }
 
-/** Registro de `ai_consumption_logs` como `cacheRateTotals` precisa. */
-export interface CacheTotalsItem {
-    inputTokens?: number | null
-    tokenDetails?: { noCache?: number | null; cacheRead?: number | null; cacheWrite?: number | null } | null
-}
-
-/**
- * Soma do cache lido e da entrada (OPE-205). Fica fora o registro sem o cache lido informado (histórico ou provedor
- * que não informa: nunca vira 0). A entrada é sem cache + cache lido + cache escrito quando os três vêm informados
- * (no OpenCode de sessão, `inputTokens` é só a entrada sem cache); senão, `inputTokens` (pela SDK, já o total).
- */
 export const EMPTY_CACHE_TOTALS: CacheTotals = Object.freeze({ cacheReadSum: 0, inputSum: 0, count: 0 })
 
 const isNum = (path: string) => ({ $isNumber: path })
 
 /**
- * A mesma regra de `cacheRateTotals` como agregação do Mongo (OPE-205): `$match` do período e das origens, entrada
- * por linha (partes ou `inputTokens`), só cache lido numérico e entrada positiva, e um `$group` com as somas.
+ * Regra única da Taxa de cache (OPE-205), como agregação do Mongo: soma do cache lido e da entrada dos registros
+ * do `match` (período e origens). Fica fora o registro sem o cache lido informado (histórico ou provedor que não
+ * informa: nunca vira 0) e o de entrada não positiva. A entrada é sem cache + cache lido + cache escrito quando os
+ * três vêm informados (no OpenCode de sessão, `inputTokens` é só a entrada sem cache); senão, `inputTokens` (pela
+ * SDK, já o total).
  */
 export function cacheRatePipeline(match: Record<string, unknown>) {
     return [
@@ -248,20 +240,6 @@ export function cacheRatePipeline(match: Record<string, unknown>) {
         { $match: { input: { $gt: 0 } } },
         { $group: { _id: null, cacheReadSum: { $sum: "$cacheRead" }, inputSum: { $sum: "$input" }, count: { $sum: 1 } } },
     ]
-}
-
-export function cacheRateTotals(rows: readonly CacheTotalsItem[]): CacheTotals {
-    const totals: CacheTotals = { cacheReadSum: 0, inputSum: 0, count: 0 }
-    for (const row of rows) {
-        const details = row.tokenDetails
-        if (!details || !isNumber(details.cacheRead)) continue
-        const input = isNumber(details.noCache) && isNumber(details.cacheWrite) ? details.noCache + details.cacheRead + details.cacheWrite : row.inputTokens
-        if (!isNumber(input) || input <= 0) continue
-        totals.cacheReadSum += details.cacheRead
-        totals.inputSum += input
-        totals.count++
-    }
-    return totals
 }
 
 export type RunKpiId = "runs" | "run-failures" | "run-cost" | "run-tokens" | "run-cache-rate" | "run-duration"

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { cacheRateTotals, runKpis, type RunTotals } from '@/features/agent-metrics/logic/common'
+import { cacheRatePipeline, runKpis, type RunTotals } from '@/features/agent-metrics/logic/common'
+import { runPipeline } from '../../helpers/mongo-pipeline'
 import { RUN_KPIS_COVERED } from '@/features/agent-metrics/server/metrics'
 
 const totals = (over: Partial<RunTotals> = {}): RunTotals => ({ runs: 0, failures: 0, costSum: 0, costCount: 0, tokenSum: 0, tokenCount: 0, durationSum: 0, durationCount: 0, ...over })
@@ -33,26 +34,45 @@ describe('KPIs das execuções (OPE-141, porte do runKpis do my-tasks)', () => {
   })
 })
 
+/** O pipeline real (`cacheRatePipeline`, regra única) avaliado localmente; nenhum `$group` devolvido = sem base. */
+const cacheTotals = (rows: Record<string, unknown>[]) => {
+  const [group] = runPipeline(rows.map((row) => ({ origin: 'agentic', ...row })), cacheRatePipeline({ origin: { $in: ['agentic'] } }))
+  return group ? { cacheReadSum: group.cacheReadSum, inputSum: group.inputSum, count: group.count } : { cacheReadSum: 0, inputSum: 0, count: 0 }
+}
+
 describe('Taxa de cache (OPE-205)', () => {
   it('só entra na base o registro com o cache lido informado; 0 informado é medição, ausente não é', () => {
-    const totals = cacheRateTotals([
+    const totals = cacheTotals([
       { inputTokens: 100, tokenDetails: { noCache: 100, cacheRead: 300, cacheWrite: 0 } },
       { inputTokens: 500, tokenDetails: { noCache: null, cacheRead: null, cacheWrite: null } },
       { inputTokens: 900, tokenDetails: null },
       { inputTokens: 1000 },
+      { inputTokens: 200, tokenDetails: { noCache: null, cacheRead: 0, cacheWrite: null } },
     ])
-    expect(totals).toEqual({ cacheReadSum: 300, inputSum: 400, count: 1 })
+    expect(totals).toEqual({ cacheReadSum: 300, inputSum: 600, count: 2 })
   })
 
   it('entrada pelas partes quando os três vêm informados (OpenCode: inputTokens é sem cache) e pelo inputTokens na falta de alguma', () => {
-    // OpenCode: inputTokens 100 é só a entrada sem cache; a entrada real é 100 + 300 + 0.
-    expect(cacheRateTotals([{ inputTokens: 100, tokenDetails: { noCache: 100, cacheRead: 300, cacheWrite: 0 } }])).toEqual({ cacheReadSum: 300, inputSum: 400, count: 1 })
-    // SDK: sem o cache escrito informado, vale o inputTokens (que já é o total).
-    expect(cacheRateTotals([{ inputTokens: 1000, tokenDetails: { noCache: null, cacheRead: 250, cacheWrite: null } }])).toEqual({ cacheReadSum: 250, inputSum: 1000, count: 1 })
+    // OpenCode: inputTokens 100 é só a entrada sem cache; a entrada real é 100 + 300 + 50 (o cache escrito conta).
+    expect(cacheTotals([{ inputTokens: 100, tokenDetails: { noCache: 100, cacheRead: 300, cacheWrite: 50 } }])).toEqual({ cacheReadSum: 300, inputSum: 450, count: 1 })
+    // SDK: sem o cache escrito informado, vale o inputTokens (que já é o total), mesmo com o sem cache informado.
+    expect(cacheTotals([{ inputTokens: 1000, tokenDetails: { noCache: 700, cacheRead: 250, cacheWrite: null } }])).toEqual({ cacheReadSum: 250, inputSum: 1000, count: 1 })
+    expect(cacheTotals([{ inputTokens: 1000, tokenDetails: { noCache: null, cacheRead: 250, cacheWrite: 50 } }])).toEqual({ cacheReadSum: 250, inputSum: 1000, count: 1 })
   })
 
   it('entrada zerada ou sem total fica fora (não há como dividir)', () => {
-    expect(cacheRateTotals([{ inputTokens: 0, tokenDetails: { noCache: 0, cacheRead: 0, cacheWrite: 0 } }, { inputTokens: null, tokenDetails: { cacheRead: 50 } }])).toEqual({ cacheReadSum: 0, inputSum: 0, count: 0 })
+    expect(cacheTotals([{ inputTokens: 0, tokenDetails: { noCache: 0, cacheRead: 0, cacheWrite: 0 } }, { inputTokens: null, tokenDetails: { cacheRead: 50 } }, { tokenDetails: { cacheRead: 50 } }])).toEqual({ cacheReadSum: 0, inputSum: 0, count: 0 })
+  })
+
+  it('só as origens e o período do `match` entram (outra origem ou fora do intervalo não contam)', () => {
+    const from = new Date('2026-11-01T00:00:00Z')
+    const to = new Date('2026-11-30T23:59:59Z')
+    const rows = [
+      { origin: 'agentic', createdAt: new Date('2026-11-10T00:00:00Z'), inputTokens: 100, tokenDetails: { noCache: 50, cacheRead: 50, cacheWrite: 0 } },
+      { origin: 'routine-agent', createdAt: new Date('2026-11-10T00:00:00Z'), inputTokens: 100, tokenDetails: { noCache: 0, cacheRead: 100, cacheWrite: 0 } },
+      { origin: 'agentic', createdAt: new Date('2026-10-10T00:00:00Z'), inputTokens: 100, tokenDetails: { noCache: 0, cacheRead: 100, cacheWrite: 0 } },
+    ]
+    expect(runPipeline(rows, cacheRatePipeline({ origin: { $in: ['agentic'] }, createdAt: { $gte: from, $lte: to } }))).toEqual([{ _id: null, cacheReadSum: 50, inputSum: 100, count: 1 }])
   })
 
   it('cartão "Taxa de cache" logo depois de Tokens, com "—" sem base e "Dados desde" do marcador', () => {
