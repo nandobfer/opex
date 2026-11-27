@@ -11,7 +11,7 @@ import { SELF_MEMORY_TOOL_METAS } from "../../self-memory"
  * - `search_memories`: busca híbrida/textual de reserva (dicas vazias, sem embeddings), com trecho curto.
  *
  * Sempre com o token do próprio agente e restritas aos canais de contexto do turno (`contextChannelsFor`).
- * O agente `opex`/`maddox` assina `agentes/<agente>/*` e alcançaria canais de outros clientes: por isso o
+ * O agente `opex`/`maddox` assina `<app>/agentes/<agente>/*` e alcançaria canais de outros clientes: por isso o
  * canal da memória lida é conferido **no Opex**. Não entram no cache do turno nem publicam
  * `engramind-consumption`; falha ou timeout vira erro acionável e o turno segue.
  */
@@ -50,8 +50,13 @@ function unavailable(error: unknown, what: string): never {
     throw new DomainError(503, `Não foi possível ${what} agora (Engramind indisponível ou sem suporte). Siga sem essa memória; não invente o conteúdo.`, "SELF_MEMORY_UNAVAILABLE")
 }
 
+/** Canais reais do contexto do turno, no espaço de nomes da instância (OPE-206). */
+export async function turnChannels(context: SelfMemoryReadContext): Promise<string[]> {
+    const { channelNamespaceOrLegacy } = await import("@/features/engramind/server/instance")
+    return contextChannelsFor(context.consumer, context.turn, await channelNamespaceOrLegacy())
+}
+
 export function selfMemoryReadTools(context: SelfMemoryReadContext): OpexTool[] {
-    const channels = contextChannelsFor(context.consumer, context.turn)
     const tools = [
         defineTool({
             name: "get_hints",
@@ -63,6 +68,7 @@ export function selfMemoryReadTools(context: SelfMemoryReadContext): OpexTool[] 
             }),
             async execute(input: { text: string; limit?: number }) {
                 const target = await readTarget(context.consumer)
+                const channels = await turnChannels(context)
                 const { engramindCall } = await import("@/features/engramind/server/client")
                 let hints: { id: string; title: string; channel: string; score: number }[]
                 try {
@@ -82,6 +88,7 @@ export function selfMemoryReadTools(context: SelfMemoryReadContext): OpexTool[] 
             input: z.object({ memoryId }),
             async execute(input: { memoryId: string }) {
                 const target = await readTarget(context.consumer)
+                const channels = await turnChannels(context)
                 const { engramindCall } = await import("@/features/engramind/server/client")
                 const { engramindCodeOf } = await import("@/features/engramind/server/errors")
                 let memory: { id: string; channel: string; text: string; title: string | null; category: string; status: string; version: number } | null
@@ -105,6 +112,7 @@ export function selfMemoryReadTools(context: SelfMemoryReadContext): OpexTool[] 
             }),
             async execute(input: { query: string; limit?: number }) {
                 const target = await readTarget(context.consumer)
+                const channels = await turnChannels(context)
                 const { engramindCall } = await import("@/features/engramind/server/client")
                 let rows: { memory: { id: string; channel: string; title?: string | null; text?: string; category?: string } }[]
                 let mode = "text"

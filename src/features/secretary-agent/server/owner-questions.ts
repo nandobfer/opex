@@ -96,7 +96,8 @@ export async function answerNotice(id: string, answer: string, actorId: string) 
         await withPendingQueue({ list, conversationId: notice.chatId, actorId, write: { op: "create", texto: learned.memory } }, () =>
             createAgentMemory(list, learned.memory, actorId, { ...scope, agent: SECRETARY_MEMORY_AGENT }),
         )
-        memoryChannel = memoryChannelOf(list, scope)
+        const { channelNamespaceOrLegacy } = await import("@/features/engramind/server/instance")
+        memoryChannel = memoryChannelOf(list, scope, await channelNamespaceOrLegacy())
     } catch (error) {
         secretaryLog.error({ ...safeErr(error), noticeId: id, chatId: notice.chatId }, "[secretario] Falha ao aprender a resposta do dono: a pergunta volta para pendente")
         await SecretaryNotice.updateOne({ _id: id, status: "answering" }, { $set: { status: "pending", answeringAt: null } })

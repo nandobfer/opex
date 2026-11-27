@@ -865,6 +865,8 @@ export const INTEGRATIONS: readonly IntegrationDef[] = [
             { key: "baseUrl", label: "URL base do Engramind", description: "Endereço que o servidor do Opex alcança (ex.: http://engramind-api:8000)", kind: "url", placeholder: "http://engramind-api:8000", required: true, group: "card" },
             { key: "opexPublicUrl", label: "URL pública do Opex", description: "Endereço do Opex que o Engramind alcança para entregar os webhooks", kind: "url", placeholder: "http://opex:3100", required: true, group: "card" },
             { key: "environmentId", label: "Ambiente do Engramind", description: "Ambiente (módulo Ambientes) com a instalação, para as variáveis de ambiente", kind: "text", group: "card" },
+            // OPE-206: backup e conferência da migração dos nomes dos canais, rodados no host pelo OpenCode (aba Migração).
+            { key: "memoryExportScript", label: "Script de export das memórias (host)", description: "Caminho absoluto no host do script que exporta todas as memórias para JSON (ex.: /home/usuario/linux-scripts/export-engramind-memories.mjs); usado no backup e na conferência da migração dos canais", kind: "text", placeholder: "/home/usuario/linux-scripts/export-engramind-memories.mjs", group: "card" },
         ],
         secretFields: [
             { key: "adminToken", label: "Token admin", description: "Token eng.tk_… admin com read+write+delete (o de bootstrap é trocado por um próprio do Opex)", required: true },

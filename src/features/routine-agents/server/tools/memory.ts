@@ -1,18 +1,19 @@
 import { z } from "zod"
 import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
-import { routineChannelOf, ROUTINE_GLOBAL_CHANNEL } from "../../constants"
+import { routineChannelOf, routineGlobalChannel } from "../../constants"
 import { listInChannel, memoryKeySchema, memoryTagsSchema, memoryTitleSchema, rememberInChannel, updateInChannel, type RoutineMemoryEnv } from "../memory-channels"
 
 /**
  * Memória própria da execução (OPE-130, D13–D15): o agente rotineiro grava, edita e lista, com o
- * **próprio token**, em qualquer canal que assina (o próprio `agentes/rotineiros/<slug>`, o global dos
+ * **próprio token**, em qualquer canal que assina (o próprio `<app>/agentes/rotineiros/<slug>`, o global dos
  * rotineiros e os extras do provisionamento). `chave` torna a gravação idempotente: uma entrada por item,
  * atualizada nas execuções seguintes. Sem limite de gravações por turno (OPE-163).
  */
 
 export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
-    const own = routineChannelOf(env.slug)
-    const channelOf = (input: { canal?: string; lista?: "agent" | "global" }) => input.canal ?? (input.lista === "global" ? ROUTINE_GLOBAL_CHANNEL : own)
+    const own = routineChannelOf(env.slug, env.ns)
+    const global = routineGlobalChannel(env.ns)
+    const channelOf = (input: { canal?: string; lista?: "agent" | "global" }) => input.canal ?? (input.lista === "global" ? global : own)
     const canal = z.string().trim().min(1).optional().describe(`Canal da memória (um dos assinados: ${env.allowed.join(", ")}). Padrão: ${own}`)
     return [
         defineTool({

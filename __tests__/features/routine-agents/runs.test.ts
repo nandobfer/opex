@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { createFakeCollection, fakeId, type FakeCollection } from '../../helpers/fake-collection'
 
 /**
@@ -860,7 +861,7 @@ describe('critério aprovado (OPE-130, D9): agente gravado com o OpenCode no mot
   it('o DTO chega com o provedor vazio e o disparo é recusado (409) sem criar execução', async () => {
     const agent = seedAgent({ opex: { provider: 'opencode', model: 'anthropic/claude', variant: null, enabledTools: [], enabledMcpServers: [] } })
     const { toAgentDto } = await import('@/features/routine-agents/server/shared')
-    const dto = toAgentDto(agent as never)
+    const dto = toAgentDto(agent as never, { app: 'opex', prefixed: false })
     expect(dto.opex).toMatchObject({ provider: null, model: '' })
     await expect(triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_ENGINE_PROVIDER_INVALID' })
     expect(holder.runs.docs).toHaveLength(0)

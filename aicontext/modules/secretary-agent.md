@@ -270,9 +270,12 @@ Toda mensagem que o agente envia ao dono (conversa consigo mesmo) usa a formata�
 
 ## Memórias (aba Memórias)
 
-- Engramind: identidade `opex/secretario`, canal global `agentes/secretario/global` e um canal por conversa
-  `agentes/secretario/conversas/<id>` (`conversationIdOfJid`: dígitos do contato, `g-<id>` do grupo,
-  `lid-<dígitos>`), criado na primeira gravação. Assinatura só `agentes/secretario/*` (não lê as Memórias do Opex).
+- Engramind: identidade `<app>/secretario` (app da instância, OPE-206), canal global `agentes/secretario/global` e um
+  canal por conversa `agentes/secretario/conversas/<id>` (`conversationIdOfJid`: dígitos do contato, `g-<id>` do grupo,
+  `lid-<dígitos>`), criado na primeira gravação — nomes lógicos; no Engramind eles levam o app na frente
+  (`<app>/agentes/secretario/...`) e as telas mostram o lógico. Assinatura só `agentes/secretario/*` (não lê as
+  Memórias do Opex). O turno automático espera a retomada quando a migração dos nomes dos canais está em andamento
+  (`waitForMemoryMaintenance`).
 - Contexto do turno: só o global e o canal da conversa atual.
 - Aprendizado autônomo (criar, editar, ativar/desativar) com a chave `secretario` em Memórias autônomas.
 - Agente ainda não cadastrado no Engramind: o universo dá lugar ao estado "Agente não encontrado no Engramind" com o

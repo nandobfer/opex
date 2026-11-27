@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { toEngramindError } from '@/features/engramind/server/errors'
 
 /**
@@ -30,7 +31,7 @@ const ALLOWED = ['agentes/rotineiros/indexador', 'opex', 'agentes/rotineiros/glo
 const memory = (id: string, extra: Record<string, unknown> = {}) => ({ id, channel: 'experiencia/desenvolvimento', title: `catalogo: ${id}`, text: 'x'.repeat(2_500), category: 'PROJECT_RULES', status: 'active', version: 1, key: null, tags: [], updated_at: '2026-11-05T00:00:00Z', origin: { source: 'rotineiro' }, ...extra })
 
 function tools(warn = vi.fn()) {
-  const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador #1', runId: 'run_1', target: AGENT, allowed: ALLOWED, warn })
+  const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador #1', runId: 'run_1', target: AGENT, allowed: ALLOWED, warn, ns: { app: 'opex', prefixed: false } })
   const byName = (name: string) => list.find((tool) => tool.name === name) as OpexTool
   const run = (name: string, input: unknown) => byName(name).execute(byName(name).input.parse(input), { sessionId: '', actorId: 'local' })
   return { run, warn }
@@ -197,7 +198,7 @@ describe('instruções da execução (D13)', () => {
 describe('conversa com o agente (OPE-160)', () => {
   it('a auditoria registra a conversa no lugar da execução', async () => {
     engramind.handler = () => ({ memory: memory('m_1'), duplicate: false, created: true, similar: [] })
-    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador · conversa', runId: '', sessionId: 'sess_1', target: AGENT, allowed: ALLOWED })
+    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador · conversa', runId: '', sessionId: 'sess_1', target: AGENT, allowed: ALLOWED, ns: { app: 'opex', prefixed: false } })
     const remember = list.find((tool) => tool.name === 'remember') as OpexTool
     await remember.execute(remember.input.parse({ texto: 'fato dito na conversa' }), { sessionId: 'sess_1', actorId: 'local' })
     expect(audits[0]?.depois).toMatchObject({ conversa: 'sess_1', rotineiro: 'indexador' })

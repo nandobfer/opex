@@ -12,6 +12,8 @@ import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks
 import type { EvolutionContactDto } from "@/features/evolution-api/types"
 import { NOTICE_KIND_LABELS, type SecretaryNoticeKind } from "../constants"
 import type { NoticeActionInput } from "../schemas"
+import { channelDisplay } from "@/features/engramind/channel-namespace"
+import { useChannelNamespace } from "@/features/engramind/hooks/useChannelNamespace"
 interface NoticeDto { _id: string; text: string; contact: EvolutionContactDto; author?: string; excerpt?: string; kind: SecretaryNoticeKind; status: string; answer?: string; memoryChannel?: string }
 export function NoticesTab() {
     const query = useEvolution<{ pending: number; items: NoticeDto[] }>("/secretary/notices")
@@ -24,13 +26,14 @@ export function NoticesTab() {
 }
 function NoticeItem({ notice }: { notice: NoticeDto }) {
     const [answer, setAnswer] = useState("")
+    const ns = useChannelNamespace({ enabled: Boolean(notice.memoryChannel) }).data
     const action = useEvolutionAction<unknown, NoticeActionInput>(`/secretary/notices/${encodeURIComponent(notice._id)}`, "post", "Aviso atualizado")
     return <article className="space-y-2 rounded-lg border p-4">
         <ConversationLabel contact={notice.contact} />
         <p className="text-sm font-medium">{NOTICE_KIND_LABELS[notice.kind]}{notice.author ? ` · ${notice.author}` : ""}</p><p>{notice.text}</p>
         {notice.excerpt && <blockquote className="whitespace-pre-wrap break-words border-l-2 pl-3 text-sm text-muted-foreground">{notice.excerpt}</blockquote>}
         {notice.answer && <p className="text-sm">Sua resposta: {notice.answer}</p>}
-        {notice.memoryChannel && <p className="text-sm text-muted-foreground">Memória gravada em {notice.memoryChannel}</p>}
+        {notice.memoryChannel && <p className="text-sm text-muted-foreground">Memória gravada em {channelDisplay(ns, notice.memoryChannel)}</p>}
         {notice.status === "answering" && <p className="text-sm text-muted-foreground">Aprendendo a resposta… Se travar por mais de 5 minutos, você pode responder de novo ou descartar.</p>}
         {(notice.status === "pending" || notice.status === "answering") && <><Textarea aria-label="Sua resposta" value={answer} onChange={(event) => setAnswer(event.target.value)} /><div className="flex gap-2">
             <Button disabled={!answer.trim() || action.isPending} onClick={() => action.mutate({ action: "answer", answer })}>Responder</Button>

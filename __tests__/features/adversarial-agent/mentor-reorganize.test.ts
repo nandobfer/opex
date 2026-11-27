@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /** Reorganização do acervo do Agente Mentor (OPE-132): prévia, aplicação, fusão e cancelamento. */
 

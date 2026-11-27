@@ -3,6 +3,8 @@
  * `aicontext/modules/routine-agents.md`.
  */
 
+import { realFixedChannel, type ChannelNamespace } from "@/features/engramind/channel-namespace"
+
 export const ROUTINE_AGENT_AUDIT_ENTITY = "AgenteRotineiro"
 export const ROUTINE_RUN_AUDIT_ENTITY = "ExecucaoAgenteRotineiro"
 
@@ -15,10 +17,13 @@ export const ROUTINE_RUN_ATTENTION_EVENT = "routine-run-attention"
 export const ROUTINE_CONSUMPTION_ORIGIN = "routine-agent"
 export const ROUTINE_PROVISIONING_ORIGIN = "routine-agent-provisioning"
 
-/** Canais do Engramind. */
+/** Canais do Engramind (nomes LÓGICOS; o real leva o app da instância na frente, OPE-206). */
 export const ROUTINE_GLOBAL_CHANNEL = "agentes/rotineiros/global"
 export const ROUTINE_CHANNEL_PREFIX = "agentes/rotineiros"
-export const routineChannelOf = (slug: string) => `${ROUTINE_CHANNEL_PREFIX}/${slug}`
+/** Canal real do global dos rotineiros (`<app>/agentes/rotineiros/global`). */
+export const routineGlobalChannel = (ns: ChannelNamespace) => realFixedChannel(ns, ROUTINE_GLOBAL_CHANNEL)
+/** Canal real próprio de um rotineiro (`<app>/agentes/rotineiros/<slug>`). */
+export const routineChannelOf = (slug: string, ns: ChannelNamespace) => realFixedChannel(ns, `${ROUTINE_CHANNEL_PREFIX}/${slug}`)
 
 /** Espera viva máxima sem valor configurado. */
 export const DEFAULT_LIVE_WAIT_MINUTES = 10

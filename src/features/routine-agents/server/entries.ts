@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
 import { RoutineEntry } from "@/lib/db/models/RoutineAgent"
-import { ROUTINE_GLOBAL_CHANNEL, routineChannelOf } from "../constants"
+import { routineChannelOf, routineGlobalChannel } from "../constants"
 import type { RoutineEntryInput } from "../schemas"
 import type { RoutineEntryDto } from "../types"
 import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated, routineLog } from "./shared"
@@ -35,7 +35,8 @@ export async function addRoutineEntry(agentId: string, input: RoutineEntryInput,
         routineLog.warn({ agentId, err: messageOf(error) }, "[routine-agents] entrada não gravada no Engramind")
         throw new DomainError(503, `Não foi possível gravar a entrada no Engramind: ${messageOf(error)}`, "ENGRAMIND_UNAVAILABLE")
     }
-    const channel = input.target === "agent" ? routineChannelOf(agent.slug) : ROUTINE_GLOBAL_CHANNEL
+    const ns = await (await import("@/features/engramind/server/instance")).channelNamespaceOrLegacy()
+    const channel = input.target === "agent" ? routineChannelOf(agent.slug, ns) : routineGlobalChannel(ns)
     const row = await RoutineEntry.create({ agentId: agent._id, target: input.target, channel, text: input.text, memoryId })
     await auditAgent(actorId, agentId, AcaoAuditoria.CRIAR, { depois: { evento: "entrada", canal: channel, memoria: memoryId } })
     await publishAgentUpdated(agentId)

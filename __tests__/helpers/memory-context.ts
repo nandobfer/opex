@@ -1,13 +1,14 @@
 import { vi } from 'vitest'
 import { contextChannelsFor, type MemoryConsumer, type MemoryTurn } from '@/features/ai/agents'
+import { LEGACY_NAMESPACE } from '@/features/engramind/channel-namespace'
 
 /**
  * Mock do contexto das memórias (OPE-104): o bloco de cada turno é montado com os textos por canal do
- * Engramind (`blocks`), na ordem dos canais do turno. Use em `vi.mock('@/features/ai/server/agent-memory-context', …)`.
+ * Engramind (`blocks`), na ordem dos canais do turno (nomes antigos do dono, OPE-206). Use em `vi.mock('@/features/ai/server/agent-memory-context', …)`.
  */
 export function memoryContextModule(blocks: Record<string, string[]> = {}, source: 'live' | 'cache' | 'none' = 'live') {
   const build = (consumer: MemoryConsumer, turn: MemoryTurn) => {
-    const lines = contextChannelsFor(consumer, turn).flatMap((channel) => (blocks[channel] ?? []).map((text) => `- ${text}`))
+    const lines = contextChannelsFor(consumer, turn, LEGACY_NAMESPACE).flatMap((channel) => (blocks[channel] ?? []).map((text) => `- ${text}`))
     return { block: lines.join('\n'), source, cachedAt: source === 'cache' ? '2026-10-30T12:00:00.000Z' : null, counts: { full: lines.length, titles: 0, overflow: 0 }, reason: source === 'live' ? null : 'fora do ar' }
   }
   return {

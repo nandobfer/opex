@@ -19,7 +19,14 @@
  * - **Agente Secretário** (OPE-192): o global do Secretário e uma lista por conversa do WhatsApp
  *   (`scope: "conversation"`, canal `agentes/secretario/conversas/<id>`). Ele NÃO lê as Memórias do Opex: o
  *   contexto do turno tem só o global dele e o canal da conversa atual.
+ *
+ * Desde a OPE-206 os canais de `AI_AGENTS` são LÓGICOS: o nome real no Engramind leva o app da instância na frente
+ * (`opex/agentes/maddox/dono`), calculado por `channel-namespace.ts`. Toda função que devolve canal real exige o
+ * espaço de nomes (`ChannelNamespace`).
  */
+import { isManagedReal, logicalChannel, realChannel, realFixedChannel, realSubscriptionTarget, type ChannelNamespace } from "@/features/engramind/channel-namespace"
+
+export type { ChannelNamespace }
 
 export const AI_AGENT_IDS = [
     "app-global",
@@ -78,7 +85,7 @@ export const MEMORY_TOKEN_SCOPES: Record<MemoryIdentity, string[]> = {
     mentor: ["read", "write"],
 }
 
-/** Canal das memórias globais do app, assinado por todos os agentes. */
+/** Canal (lógico) das memórias globais do app, assinado por todos os agentes. */
 export const APP_MEMORY_CHANNEL = "opex"
 
 export interface AiAgentDef {
@@ -291,8 +298,8 @@ export function isRoutineSlug(value: string | null | undefined): value is string
     return Boolean(value) && ROUTINE_SLUG.test(value!) && value !== "global" && value!.length <= 60
 }
 
-/** Canal do Engramind de uma lista (nas listas com escopo, `null` sem um id válido). */
-export function memoryChannelOf(agentId: AiAgentId, scope: MemoryListScope = {}): string | null {
+/** Canal lógico de uma lista (nas listas com escopo, `null` sem um id válido). */
+function logicalChannelOfList(agentId: AiAgentId, scope: MemoryListScope = {}): string | null {
     const def = AI_AGENTS[agentId]
     if (!def.scope) return def.channel
     if (def.scope === "routine") {
@@ -307,6 +314,25 @@ export function memoryChannelOf(agentId: AiAgentId, scope: MemoryListScope = {})
     return id && OBJECT_ID.test(id) ? `${def.channel}/${id}` : null
 }
 
+/**
+ * Canal real do Engramind de uma lista, no espaço de nomes da instância (OPE-206: `<app>/agentes/...`). Nas listas
+ * com escopo, `null` sem um id válido ou quando o nome passaria dos limites do Engramind.
+ */
+export function memoryChannelOf(agentId: AiAgentId, scope: MemoryListScope, ns: ChannelNamespace): string | null {
+    const logical = logicalChannelOfList(agentId, scope)
+    return logical ? realChannel(ns, logical) : null
+}
+
+/** Canal real de uma lista sem escopo (sempre definido). */
+export function fixedChannelOf(agentId: AiAgentId, ns: ChannelNamespace): string {
+    return realFixedChannel(ns, AI_AGENTS[agentId].channel)
+}
+
+/** Prefixo real (com a barra) dos canais de uma lista com escopo (`<app>/agentes/desenvolvedor/central/`). */
+export function scopedChannelPrefix(agentId: AiAgentId, ns: ChannelNamespace): string {
+    return `${realFixedChannel(ns, AI_AGENTS[agentId].channel)}/`
+}
+
 export interface ResolvedMemoryList {
     agentId: AiAgentId
     centralId?: string
@@ -315,17 +341,18 @@ export interface ResolvedMemoryList {
     conversationId?: string
 }
 
-/** Lista de um canal (webhook, contexto); `null` para canal fora do mapeamento (ignorado pelos cards). */
-export function listOfChannel(slug: string | null | undefined): ResolvedMemoryList | null {
-    if (!slug) return null
+/** Lista de um canal real (webhook, contexto); `null` para canal fora do mapeamento desta instância. */
+export function listOfChannel(slug: string | null | undefined, ns: ChannelNamespace): ResolvedMemoryList | null {
+    if (!slug || !isManagedReal(ns, slug)) return null
+    const logical = logicalChannel(ns, slug)
     for (const agentId of AI_AGENT_IDS) {
         const def = AI_AGENTS[agentId]
         if (!def.scope) {
-            if (def.channel === slug) return { agentId }
+            if (def.channel === logical) return { agentId }
             continue
         }
-        if (!slug.startsWith(`${def.channel}/`)) continue
-        const id = slug.slice(def.channel.length + 1)
+        if (!logical.startsWith(`${def.channel}/`)) continue
+        const id = logical.slice(def.channel.length + 1)
         if (def.scope === "routine") {
             if (!isRoutineSlug(id)) continue
             return { agentId, routineSlug: id }
@@ -369,9 +396,9 @@ export function contextListsFor(consumer: MemoryConsumer, turn: MemoryTurn): { a
 }
 
 /** Canais do contexto do turno (os de listas com escopo inválido ficam de fora). */
-export function contextChannelsFor(consumer: MemoryConsumer, turn: MemoryTurn): string[] {
+export function contextChannelsFor(consumer: MemoryConsumer, turn: MemoryTurn, ns: ChannelNamespace): string[] {
     return contextListsFor(consumer, turn)
-        .map((list) => memoryChannelOf(list.agentId, list.scope))
+        .map((list) => memoryChannelOf(list.agentId, list.scope ?? {}, ns))
         .filter((channel): channel is string => Boolean(channel))
 }
 
@@ -392,7 +419,7 @@ export function writableListsFor(consumer: MemoryConsumer, turn: MemoryTurn): Ai
     return turn.kind === "central" && turn.centralId ? ["app-global", "developer-global", "developer-central"] : ["app-global", "developer-global"]
 }
 
-/** Alvos das assinaturas `inject` de cada agente no Engramind (o canal `opex` é exato). */
+/** Alvos LÓGICOS das assinaturas `inject` de cada agente (o canal `opex` é exato); o real vem de `subscriptionTargetsFor`. */
 export const MEMORY_SUBSCRIPTION_TARGETS: Record<MemoryIdentity, string[]> = {
     opex: [APP_MEMORY_CHANNEL, "agentes/opex/*"],
     maddox: [APP_MEMORY_CHANNEL, "agentes/maddox/*"],
@@ -405,6 +432,17 @@ export const MEMORY_SUBSCRIPTION_TARGETS: Record<MemoryIdentity, string[]> = {
     mentor: ["agentes/adversario", "agentes/desenvolvedor/*"],
 }
 
+/** Alvos reais das assinaturas de uma identidade no espaço de nomes da instância (`opex/agentes/maddox/*`). */
+export function subscriptionTargetsFor(identity: MemoryIdentity, ns: ChannelNamespace): string[] {
+    return MEMORY_SUBSCRIPTION_TARGETS[identity].map((target) => realSubscriptionTarget(ns, target))
+}
+
+/** Canal (real) alcançado por um dos alvos (exato ou prefixo `x/*`). */
+export function channelMatchesTargets(channel: string | null | undefined, targets: readonly string[]): boolean {
+    if (!channel) return false
+    return targets.some((target) => (target.endsWith("*") ? channel.startsWith(target.slice(0, -1)) : target === channel))
+}
+
 /** Nome do canal no Engramind ("Memórias globais · Agente Opex (global)"). */
 export function memoryChannelName(agentId: AiAgentId, scopeName?: string): string {
     const def = AI_AGENTS[agentId]
@@ -413,8 +451,8 @@ export function memoryChannelName(agentId: AiAgentId, scopeName?: string): strin
 }
 
 /** Canais fixos (sem escopo) criados pelo passo "Memórias dos agentes". */
-export function fixedMemoryChannels(): { agentId: AiAgentId; slug: string }[] {
-    return AI_AGENT_IDS.filter((id) => !AI_AGENTS[id].scope).map((id) => ({ agentId: id, slug: AI_AGENTS[id].channel }))
+export function fixedMemoryChannels(ns: ChannelNamespace): { agentId: AiAgentId; slug: string }[] {
+    return AI_AGENT_IDS.filter((id) => !AI_AGENTS[id].scope).map((id) => ({ agentId: id, slug: fixedChannelOf(id, ns) }))
 }
 
 /** Listas de memórias que entram no prompt do Agente Opex, conforme o escopo do turno (sem as Memórias do Opex). */
@@ -427,14 +465,14 @@ export function maddoxMemoryAgentsFor(scope: "owner" | "client"): AiAgentId[] {
     return scope === "owner" ? ["maddox-global", "maddox-owner"] : ["maddox-global", "maddox-client", "maddox-client-specific"]
 }
 
-/** Agente (`app/agente`) de memórias do Opex no Engramind (aba Identidades marca "Memórias do Opex"). */
-export function isOpexMemoryAgent(appSlug: string | null | undefined, agentSlug: string | null | undefined): boolean {
-    if (appSlug !== "opex" || !agentSlug) return false
+/** Agente (`app/agente`) de memórias do Opex no app desta instância (aba Identidades marca "Memórias do Opex"). */
+export function isOpexMemoryAgent(appSlug: string | null | undefined, agentSlug: string | null | undefined, instanceApp: string): boolean {
+    if (!appSlug || appSlug !== instanceApp || !agentSlug) return false
     const slug = agentSlug.split("/").pop()!
     return (MEMORY_IDENTITIES as readonly string[]).includes(slug) || isRoutineAgentIdentity(slug)
 }
 
-/** Prefixo do agente de um rotineiro no Engramind (`opex/rotineiro-<slug>`, OPE-130). */
+/** Prefixo do agente de um rotineiro no Engramind (`<app>/rotineiro-<slug>`, OPE-130). */
 export const ROUTINE_IDENTITY_PREFIX = "rotineiro-"
 export type RoutineIdentity = `rotineiro-${string}`
 

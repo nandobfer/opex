@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { memoryModel, type Doc } from '../../helpers/memory-model'
 import type { TurnEvent, TurnHooks, TurnRequest } from '@/lib/ai/opencode-run'
 

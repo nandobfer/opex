@@ -1,19 +1,27 @@
 import { describe, expect, it } from 'vitest'
 import { channelDisplayHint, channelDisplayName, channelNameParts } from '@engramind/client/react'
-import { CENTRAL_CHANNEL_PREFIX, centralChannelLabels, isCentralChannel } from '@/features/engramind/network/channel-labels'
+import { LEGACY_NAMESPACE } from '@/features/engramind/channel-namespace'
+import { centralChannelLabels, centralChannelPrefix, isCentralChannel } from '@/features/engramind/network/channel-labels'
 
 /**
  * OPE-113: nome legível do canal numa linha (helper único para chips, legendas, trilha e filtros).
  * OPE-116: os helpers vêm de `@engramind/client`; os rótulos das centrais são do Opex (`channelLabels` do provider).
+ * OPE-206: os prefixos seguem o espaço de nomes da instância.
  */
 
-const labels = centralChannelLabels([
-  { id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: 'nandobfer/opex' },
-  { id: 'c2', sigla: '', projectName: 'Produto', repo: null },
-])
+const L = LEGACY_NAMESPACE
+const CENTRAL_CHANNEL_PREFIX = centralChannelPrefix(L)
+const labels = centralChannelLabels(
+  [
+    { id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: 'nandobfer/opex' },
+    { id: 'c2', sigla: '', projectName: 'Produto', repo: null },
+  ],
+  L,
+)
 
 describe('channelDisplayName', () => {
   it('canal de central: a sigla no lugar do id, com o prefixo', () => {
+    expect(CENTRAL_CHANNEL_PREFIX).toBe('agentes/desenvolvedor/central/')
     expect(channelDisplayName(`${CENTRAL_CHANNEL_PREFIX}c1`, labels)).toBe(`${CENTRAL_CHANNEL_PREFIX}OPE`)
   })
 
@@ -33,7 +41,15 @@ describe('channelDisplayName', () => {
 describe('rótulos das centrais (Opex)', () => {
   it('a sigla vira o título do nó e o nome vai na dica; só os canais de central', () => {
     expect(channelNameParts(`${CENTRAL_CHANNEL_PREFIX}c1`, labels)).toEqual({ prefix: CENTRAL_CHANNEL_PREFIX, title: 'OPE', hint: 'Opex · nandobfer/opex' })
-    expect(isCentralChannel(`${CENTRAL_CHANNEL_PREFIX}c1`)).toBe(true)
-    expect(isCentralChannel('agentes/desenvolvedor/global')).toBe(false)
+    expect(isCentralChannel(`${CENTRAL_CHANNEL_PREFIX}c1`, L)).toBe(true)
+    expect(isCentralChannel('agentes/desenvolvedor/global', L)).toBe(false)
+  })
+
+  it('OPE-206: com o nome do app, o rótulo fica no canal real da instância', () => {
+    const ns = { app: 'alfredopex', prefixed: true }
+    const real = centralChannelLabels([{ id: 'c1', sigla: 'OPE', projectName: 'Opex', repo: null }], ns)
+    expect([...real.keys()]).toEqual(['alfredopex/agentes/desenvolvedor/central/c1'])
+    expect(isCentralChannel('alfredopex/agentes/desenvolvedor/central/c1', ns)).toBe(true)
+    expect(isCentralChannel('agentes/desenvolvedor/central/c1', ns)).toBe(false)
   })
 })

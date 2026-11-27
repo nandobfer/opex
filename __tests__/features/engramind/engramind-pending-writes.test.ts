@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+vi.mock("@/features/engramind/server/instance", async () => (await import("../../helpers/engramind-instance")).instanceMock())
 import { DomainError } from "@/lib/api/route"
 
 const mocks = vi.hoisted(() => {

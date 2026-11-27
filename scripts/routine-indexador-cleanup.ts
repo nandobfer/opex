@@ -35,10 +35,12 @@ async function main() {
         } while (cursor)
         return rows
     }
-    const own = routineChannelOf(slug)
+    const { channelNamespace } = await import("@/features/engramind/server/instance")
+    const ns = await channelNamespace()
+    const own = routineChannelOf(slug, ns)
     const rows = await listAll(own)
     const { routineAgentRef } = await import("@/features/routine-agents/server/engramind")
-    const agentRef = routineAgentRef(slug)
+    const agentRef = routineAgentRef(ns.app, slug)
     // Só o que o próprio agente gravou: entradas do dono (ou de outro autor) ficam, mesmo que o texto case.
     const selected = rows.filter((row) => isCatalogProse(row, agentRef))
     const byRepo = new Map<string, number>()

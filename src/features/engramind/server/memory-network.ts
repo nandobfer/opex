@@ -1,6 +1,5 @@
-import { AI_AGENTS, MEMORY_IDENTITIES, memoryChannelName, MEMORY_IDENTITY_DEFS, MEMORY_SUBSCRIPTION_TARGETS, MEMORY_TOKEN_SCOPES, fixedMemoryChannels, type MemoryIdentity } from "@/features/ai/agents"
+import { AI_AGENTS, MEMORY_IDENTITIES, memoryChannelName, MEMORY_IDENTITY_DEFS, MEMORY_TOKEN_SCOPES, fixedMemoryChannels, memoryChannelOf, subscriptionTargetsFor, type ChannelNamespace, type MemoryIdentity } from "@/features/ai/agents"
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
-import { OPEX_APP_SLUG } from "../constants"
 import type { BootstrapStepDto, EngramindAgent, EngramindChannel, EngramindSubscription, EngramindToken, IssuedToken } from "../types"
 import { engramindCall, engramindTarget, type EngramindTarget } from "./client"
 import { engramindCodeOf } from "./errors"
@@ -10,8 +9,8 @@ import { AcaoAuditoria, auditEngramind, engramindLog } from "./shared"
 /**
  * Rede das memórias dos agentes no Engramind (OPE-104): passo "Memórias dos agentes" do bootstrap,
  * idempotente — cria só o que falta:
- * - os canais fixos (`opex` e `agentes/...`, um por lista sem escopo; os das centrais existentes);
- * - um agente por identidade no app `opex` (`opex`, `maddox`, `adversario`, `arquiteto`, `desenvolvedor` e `mentor`,
+ * - os canais fixos (`<app>` e `<app>/agentes/...` desde a OPE-206, um por lista sem escopo; os das centrais existentes);
+ * - um agente por identidade no app da instância (`<app>/opex`, OPE-206; `opex`, `maddox`, `adversario`, `arquiteto`, `desenvolvedor` e `mentor`,
  *   que só escreve e não tem canal próprio);
  * - as assinaturas `inject` de cada agente (`MEMORY_SUBSCRIPTION_TARGETS`: o token de agente só
  *   escreve onde assina);
@@ -29,10 +28,18 @@ import { AcaoAuditoria, auditEngramind, engramindLog } from "./shared"
  */
 
 const enc = encodeURIComponent
-const agentRef = (consumer: MemoryIdentity) => `${OPEX_APP_SLUG}/${consumer}`
+/** Agente de memórias no app da instância (`<app>/<identidade>`, OPE-206). */
+export const agentRef = (app: string, consumer: MemoryIdentity) => `${app}/${consumer}`
+
+async function currentApp(): Promise<string> {
+    const { instanceApp } = await import("./instance")
+    return instanceApp()
+}
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
 export interface MemoryNetworkSummary {
+    /** Tokens de outro app revogados pela migração A (ids `tk_…`, OPE-206). */
+    tokensRevoked: string[]
     channelsCreated: string[]
     channelsRestored: string[]
     agentsCreated: string[]
@@ -82,8 +89,9 @@ export async function archiveMemoryChannel(slug: string): Promise<boolean> {
  * erros (Engramind fora, não configurado) sobem para a tela mostrar o erro com "Tentar novamente".
  */
 export async function agentMemoryStatus(consumer: MemoryIdentity): Promise<{ exists: boolean; disabled: boolean }> {
+    const app = await currentApp()
     try {
-        const agent = await engramindCall<EngramindAgent>("GET", { path: `/v1/agents/${enc(agentRef(consumer))}` })
+        const agent = await engramindCall<EngramindAgent>("GET", { path: `/v1/agents/${enc(agentRef(app, consumer))}` })
         return { exists: true, disabled: Boolean(agent.disabled_at) }
     } catch (error) {
         if (engramindCodeOf(error) === "AGENT_NOT_FOUND") return { exists: false, disabled: false }
@@ -91,17 +99,17 @@ export async function agentMemoryStatus(consumer: MemoryIdentity): Promise<{ exi
     }
 }
 
-async function ensureAgent(consumer: MemoryIdentity, target: EngramindTarget): Promise<"exists" | "created"> {
+async function ensureAgent(app: string, consumer: MemoryIdentity, target: EngramindTarget): Promise<"exists" | "created"> {
     try {
-        const agent = await engramindCall<EngramindAgent>("GET", { path: `/v1/agents/${enc(agentRef(consumer))}` }, { target })
-        if (agent.disabled_at) engramindLog.warn({ agent: agentRef(consumer) }, "[engramind] agente de memórias desativado no Engramind: os tokens dele não autenticam")
+        const agent = await engramindCall<EngramindAgent>("GET", { path: `/v1/agents/${enc(agentRef(app, consumer))}` }, { target })
+        if (agent.disabled_at) engramindLog.warn({ agent: agentRef(app, consumer) }, "[engramind] agente de memórias desativado no Engramind: os tokens dele não autenticam")
         return "exists"
     } catch (error) {
         if (engramindCodeOf(error) !== "AGENT_NOT_FOUND") throw error
     }
     const def = MEMORY_IDENTITY_DEFS[consumer]
     try {
-        const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/agents", body: { app: OPEX_APP_SLUG, slug: consumer, name: def.name, description: def.description } }, { target })
+        const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/agents", body: { app, slug: consumer, name: def.name, description: def.description } }, { target })
         // Idempotência natural (0.11.0): a repetição equivalente devolve o existente com `created: false`.
         return written?.created === false ? "exists" : "created"
     } catch (error) {
@@ -110,14 +118,15 @@ async function ensureAgent(consumer: MemoryIdentity, target: EngramindTarget): P
     }
 }
 
-async function ensureSubscriptions(consumer: MemoryIdentity, target: EngramindTarget): Promise<string[]> {
-    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: agentRef(consumer), limit: 200 } }, { target })
+async function ensureSubscriptions(ns: ChannelNamespace, consumer: MemoryIdentity, target: EngramindTarget): Promise<string[]> {
+    const ref = agentRef(ns.app, consumer)
+    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: ref, limit: 200 } }, { target })
     const present = new Set((list?.subscriptions ?? []).map((item) => item.target))
     const created: string[] = []
-    for (const subscriptionTarget of MEMORY_SUBSCRIPTION_TARGETS[consumer]) {
+    for (const subscriptionTarget of subscriptionTargetsFor(consumer, ns)) {
         if (present.has(subscriptionTarget)) continue
         try {
-            const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/subscriptions", body: { agent: agentRef(consumer), target: subscriptionTarget, mode: "inject" } }, { target })
+            const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/subscriptions", body: { agent: ref, target: subscriptionTarget, mode: "inject" } }, { target })
             if (written?.created !== false) created.push(`${consumer} → ${subscriptionTarget}`)
         } catch (error) {
             if (engramindCodeOf(error) !== "SUBSCRIPTION_EXISTS") throw error
@@ -151,10 +160,10 @@ const TOKEN_LIST_MAX_PAGES = 10
  * Token gravado do agente, achado pela listagem `GET /v1/tokens?agent=opex/<identidade>` (o contrato
  * do Engramind não lê token por id). `null` = não está na lista (excluído, ou além das páginas lidas).
  */
-async function findAgentToken(consumer: MemoryIdentity, tokenId: string, target: EngramindTarget): Promise<EngramindToken | null> {
+async function findAgentToken(app: string, consumer: MemoryIdentity, tokenId: string, target: EngramindTarget): Promise<EngramindToken | null> {
     let cursor: string | null = null
     for (let page = 0; page < TOKEN_LIST_MAX_PAGES; page++) {
-        const query: Record<string, string | number> = { agent: agentRef(consumer), limit: 200 }
+        const query: Record<string, string | number> = { agent: agentRef(app, consumer), limit: 200 }
         if (cursor) query.cursor = cursor
         const list: { tokens?: EngramindToken[]; next_cursor?: string | null } | null = await engramindCall("GET", { path: "/v1/tokens", query }, { target })
         const found = (list?.tokens ?? []).find((token) => token.id === tokenId)
@@ -166,16 +175,16 @@ async function findAgentToken(consumer: MemoryIdentity, tokenId: string, target:
 }
 
 /** Token válido do agente (reemite quando falta, não decifra, foi revogado, expirou ou tem outros escopos). Devolve se emitiu. */
-async function ensureToken(consumer: MemoryIdentity, target: EngramindTarget, actorId: string): Promise<boolean> {
+async function ensureToken(app: string, consumer: MemoryIdentity, target: EngramindTarget, actorId: string): Promise<boolean> {
     const stored = (await loadAgentTokens())[consumer]
     const secret = decryptToken(stored)
     if (stored && secret) {
-        const token = await findAgentToken(consumer, stored.tokenId, target)
+        const token = await findAgentToken(app, consumer, stored.tokenId, target)
         // Ativo e com os escopos esperados: nada a fazer; fora da lista, expirado, revogado ou com escopos
         // diferentes reemite (e revoga o anterior).
         if (token && token.status === "active" && sameScopes(token.scopes, MEMORY_TOKEN_SCOPES[consumer])) return false
     }
-    const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "agent", agent: agentRef(consumer), scopes: MEMORY_TOKEN_SCOPES[consumer], label: `Opex · memórias (${consumer})` } }, { target })
+    const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "agent", agent: agentRef(app, consumer), scopes: MEMORY_TOKEN_SCOPES[consumer], label: `Opex · memórias (${consumer})` } }, { target })
     if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token")
     const record: IEngramindAgentToken = { tokenId: issued.token.id, prefix: issued.token.prefix, secret: encryptSecret(issued.secret), issuedAt: new Date() }
     await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID }, { $set: { [`agentTokens.${consumer}`]: record } }, { upsert: true })
@@ -201,15 +210,16 @@ async function storedAppToken(): Promise<string | null> {
  * (ou inválido), emite UMA vez com o admin, grava no campo privado e revoga o anterior. Devolve o alvo com
  * o token de app, ou `null` (o provisionamento segue com o admin e o motivo vai para os avisos).
  */
-export async function ensureAppToken(adminTarget: EngramindTarget, actorId: string, warnings: string[] = []): Promise<EngramindTarget | null> {
+export async function ensureAppToken(adminTarget: EngramindTarget, actorId: string, warnings: string[] = [], appSlug?: string): Promise<EngramindTarget | null> {
     try {
+        const app = appSlug ?? (await currentApp())
         const current = await storedAppToken()
         if (current) {
             const appTarget = { baseUrl: adminTarget.baseUrl, token: current }
             const whoami = await engramindCall<{ kind?: string; app?: { slug?: string } } | null>("GET", { path: "/v1/whoami" }, { target: appTarget }).catch(() => null)
-            if (whoami?.kind === "app" && whoami.app?.slug === OPEX_APP_SLUG) return appTarget
+            if (whoami?.kind === "app" && whoami.app?.slug === app) return appTarget
         }
-        const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "app", app: OPEX_APP_SLUG, scopes: APP_TOKEN_SCOPES, label: APP_TOKEN_LABEL } }, { target: adminTarget })
+        const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "app", app, scopes: APP_TOKEN_SCOPES, label: APP_TOKEN_LABEL } }, { target: adminTarget })
         if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token de app")
         const { updateIntegration } = await import("@/features/integrations/services/integration-service")
         const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
@@ -230,10 +240,13 @@ export async function ensureAppToken(adminTarget: EngramindTarget, actorId: stri
 }
 
 /** Canais das centrais existentes (import dinâmico: o módulo do agêntico é pesado). */
-async function centralChannels(): Promise<{ slug: string; name: string }[]> {
+async function centralChannels(ns: ChannelNamespace): Promise<{ slug: string; name: string }[]> {
     const { AgenticCentral } = await import("@/lib/db/models/Agentic")
     const centrals = await AgenticCentral.find({}).select({ _id: 1, projectName: 1 }).lean()
-    return centrals.map((central) => ({ slug: `${AI_AGENTS["developer-central"].channel}/${String(central._id)}`, name: memoryChannelName("developer-central", central.projectName ?? String(central._id)) }))
+    return centrals.flatMap((central) => {
+        const slug = memoryChannelOf("developer-central", { centralId: String(central._id) }, ns)
+        return slug ? [{ slug, name: memoryChannelName("developer-central", central.projectName ?? String(central._id)) }] : []
+    })
 }
 
 let inFlight: Promise<{ step: BootstrapStepDto; summary: MemoryNetworkSummary }> | null = null
@@ -247,29 +260,39 @@ export function ensureAgentMemoryNetwork(actorId: string, target?: EngramindTarg
 }
 
 async function runNetwork(actorId: string, explicit?: EngramindTarget): Promise<{ step: BootstrapStepDto; summary: MemoryNetworkSummary }> {
-    const summary: MemoryNetworkSummary = { channelsCreated: [], channelsRestored: [], agentsCreated: [], subscriptionsCreated: [], tokensIssued: [], warnings: [] }
+    const summary: MemoryNetworkSummary = { tokensRevoked: [], channelsCreated: [], channelsRestored: [], agentsCreated: [], subscriptionsCreated: [], tokensIssued: [], warnings: [] }
     try {
         const target = explicit ?? (await engramindTarget())
+        const { channelNamespace, resetInstanceCache } = await import("./instance")
+        // Migração A (OPE-206): tokens gravados que pertencem a outro app são revogados (só pelo id) antes de provisionar.
+        const { migrateForeignTokens } = await import("./foreign-tokens")
+        resetInstanceCache()
+        const foreign = await migrateForeignTokens(actorId, target)
+        summary.tokensRevoked.push(...foreign.revoked)
+        const ns = await channelNamespace()
         const channels = [
-            ...fixedMemoryChannels().map((item) => ({ slug: item.slug, name: memoryChannelName(item.agentId), description: AI_AGENTS[item.agentId].description })),
-            ...(await centralChannels()).map((item) => ({ ...item, description: AI_AGENTS["developer-central"].description })),
+            ...fixedMemoryChannels(ns).map((item) => ({ slug: item.slug, name: memoryChannelName(item.agentId), description: AI_AGENTS[item.agentId].description })),
+            ...(await centralChannels(ns)).map((item) => ({ ...item, description: AI_AGENTS["developer-central"].description })),
         ]
         for (const channel of channels) {
             const outcome = await ensureMemoryChannel(channel.slug, channel.name, channel.description, target)
             if (outcome === "created") summary.channelsCreated.push(channel.slug)
             if (outcome === "restored") summary.channelsRestored.push(channel.slug)
         }
-        // Agentes, assinaturas e tokens de agente: pelo token de app do opex (o admin só emite o de app).
-        const provision = (await ensureAppToken(target, actorId, summary.warnings)) ?? target
+        // Agentes, assinaturas e tokens de agente: pelo token de app da instância (o admin só emite o de app).
+        const provision = (await ensureAppToken(target, actorId, summary.warnings, ns.app)) ?? target
         for (const consumer of MEMORY_IDENTITIES) {
-            if ((await ensureAgent(consumer, provision)) === "created") summary.agentsCreated.push(consumer)
-            summary.subscriptionsCreated.push(...(await ensureSubscriptions(consumer, provision)))
-            if (await ensureToken(consumer, provision, actorId)) summary.tokensIssued.push(consumer)
+            if ((await ensureAgent(ns.app, consumer, provision)) === "created") summary.agentsCreated.push(consumer)
+            summary.subscriptionsCreated.push(...(await ensureSubscriptions(ns, consumer, provision)))
+            if (await ensureToken(ns.app, consumer, provision, actorId)) summary.tokensIssued.push(consumer)
         }
-        const changed = summary.channelsCreated.length + summary.channelsRestored.length + summary.agentsCreated.length + summary.subscriptionsCreated.length + summary.tokensIssued.length
+        if (foreign.revoked.length) await foreign.afterProvision()
+        const changed = summary.tokensRevoked.length + summary.channelsCreated.length + summary.channelsRestored.length + summary.agentsCreated.length + summary.subscriptionsCreated.length + summary.tokensIssued.length
         if (changed) {
             await auditEngramind(actorId, "bootstrap", AcaoAuditoria.EXECUTAR, {
                 passo: "agent-memories",
+                app: ns.app,
+                ...(summary.tokensRevoked.length ? { tokensRevogados: summary.tokensRevoked } : {}),
                 canais: summary.channelsCreated,
                 restaurados: summary.channelsRestored,
                 agentes: summary.agentsCreated,
@@ -279,7 +302,7 @@ async function runNetwork(actorId: string, explicit?: EngramindTarget): Promise<
         }
         engramindLog.info({ ...summary }, "[engramind] memórias dos agentes conferidas")
         const message = changed
-            ? `Memórias dos agentes: ${summary.channelsCreated.length} canal(is) criado(s), ${summary.channelsRestored.length} restaurado(s), ${summary.agentsCreated.length} agente(s), ${summary.subscriptionsCreated.length} assinatura(s) e ${summary.tokensIssued.length} token(s)`
+            ? `Memórias dos agentes (app ${ns.app}): ${summary.tokensRevoked.length ? `${summary.tokensRevoked.length} token(s) de outro app revogado(s), ` : ""}${summary.channelsCreated.length} canal(is) criado(s), ${summary.channelsRestored.length} restaurado(s), ${summary.agentsCreated.length} agente(s), ${summary.subscriptionsCreated.length} assinatura(s) e ${summary.tokensIssued.length} token(s)`
             : "Memórias dos agentes: canais, agentes, tokens e assinaturas já estavam prontos"
         return { step: { id: "agent-memories", status: changed ? "ok" : "skipped", message }, summary }
     } catch (error) {
@@ -287,6 +310,28 @@ async function runNetwork(actorId: string, explicit?: EngramindTarget): Promise<
         summary.warnings.push(messageOf(error))
         return { step: { id: "agent-memories", status: "failed", message: `Memórias dos agentes: ${messageOf(error)}` }, summary }
     }
+}
+
+const STARTUP_DELAY_MS = 30_000
+
+/**
+ * Subida do servidor (OPE-206): confere a rede das memórias em segundo plano, o que inclui a migração A (tokens
+ * gravados que são de outro app). Fora da prévia (banco compartilhado) e só com a integração configurada.
+ */
+export function scheduleEngramindStartupCheck(delayMs = STARTUP_DELAY_MS): void {
+    const timer = setTimeout(() => {
+        void (async () => {
+            const { isPreviewInstance } = await import("@/lib/instance")
+            if (isPreviewInstance()) return
+            const { getIntegrationConfig } = await import("@/lib/integrations/config")
+            const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
+            const config = (await getIntegrationConfig(ENGRAMIND_INTEGRATION_ID)) as Record<string, string | undefined>
+            if (!config.baseUrl || !config.adminToken) return
+            const result = await ensureAgentMemoryNetwork("local")
+            engramindLog.info({ status: result.step.status, revoked: result.summary.tokensRevoked }, "[engramind] conferência da rede na subida")
+        })().catch((error: unknown) => engramindLog.warn({ err: messageOf(error) }, "[engramind] conferência da rede na subida falhou"))
+    }, delayMs)
+    timer.unref?.()
 }
 
 const LAZY_RETRY_MS = 5 * 60_000

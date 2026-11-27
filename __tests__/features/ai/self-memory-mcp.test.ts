@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /** OPE-104: MCP "Memória própria" dos agentes no OpenCode: autorização, agente pela sessão e registro por diretório. */
 

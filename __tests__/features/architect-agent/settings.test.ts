@@ -114,7 +114,7 @@ describe('provedor do Agente Arquiteto', () => {
 
 describe('memórias do Agente Arquiteto', () => {
   it('lê as Memórias do Opex e a lista própria, e grava só nelas', () => {
-    expect(contextChannelsFor('arquiteto', { kind: 'review' })).toEqual(['opex', 'agentes/arquiteto'])
+    expect(contextChannelsFor('arquiteto', { kind: 'review' }, { app: 'opex', prefixed: false })).toEqual(['opex', 'agentes/arquiteto'])
     expect(writableListsFor('arquiteto', { kind: 'review' })).toEqual(['app-global', 'architect'])
   })
 

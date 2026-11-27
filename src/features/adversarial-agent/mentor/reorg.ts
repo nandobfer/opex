@@ -4,7 +4,8 @@
  * Mentor nos canais. A tela e o servidor usam as mesmas funções.
  */
 
-import { MEMORY_SUBSCRIPTION_TARGETS, memoryChannelOf } from "@/features/ai/agents"
+import { channelMatchesTargets, MEMORY_SUBSCRIPTION_TARGETS, memoryChannelOf } from "@/features/ai/agents"
+import { LEGACY_NAMESPACE } from "@/features/engramind/channel-namespace"
 import { MENTOR_TARGETS, type MentorReorgAction, type MentorTarget } from "./constants"
 
 /** Lista de uma memória: o agente e, na lista por central, a central. */
@@ -74,15 +75,17 @@ export function sameList(a: ReorgDestination, b: ReorgDestination): boolean {
     return a.target === b.target && a.centralId === b.centralId
 }
 
-/** O token do Mentor alcança o canal (assinatura exata ou por prefixo)? */
+/**
+ * O token do Mentor alcança o canal LÓGICO (assinatura exata ou por prefixo)? O alcance não depende do app da
+ * instância (OPE-206: canais e assinaturas recebem o mesmo prefixo), por isso a conta é feita nos nomes lógicos.
+ */
 export function mentorReachesChannel(channel: string | null): boolean {
-    if (!channel) return false
-    return MEMORY_SUBSCRIPTION_TARGETS.mentor.some((pattern) => (pattern.endsWith("*") ? channel.startsWith(pattern.slice(0, -1)) : channel === pattern))
+    return channelMatchesTargets(channel, MEMORY_SUBSCRIPTION_TARGETS.mentor)
 }
 
 /** `move_memory` exige `write` na origem e no destino: as duas listas precisam estar no alcance. */
 export function moveAllowed(from: ReorgDestination, to: ReorgDestination): boolean {
-    return mentorReachesChannel(memoryChannelOf(from.target, { centralId: from.centralId })) && mentorReachesChannel(memoryChannelOf(to.target, { centralId: to.centralId }))
+    return mentorReachesChannel(memoryChannelOf(from.target, { centralId: from.centralId }, LEGACY_NAMESPACE)) && mentorReachesChannel(memoryChannelOf(to.target, { centralId: to.centralId }, LEGACY_NAMESPACE))
 }
 
 /**

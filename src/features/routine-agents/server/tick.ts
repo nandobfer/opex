@@ -64,6 +64,14 @@ export async function runDueRoutineAgents(now = new Date()): Promise<{ lost: num
         }
     }
 
+    // Migração dos nomes dos canais de memória (OPE-206): retomadas e disparos agendados esperam (ficam vencidos e
+    // rodam no primeiro tick depois da retomada).
+    const { isMemoryMaintenance } = await import("@/features/engramind/server/instance")
+    if (await isMemoryMaintenance()) {
+        routineLog.info("[routine-agents] migração dos canais de memória em andamento: disparos e retomadas esperam")
+        return summary
+    }
+
     const parked = await RoutineRun.find({ status: { $in: ["hibernating", "awaiting_confirmation"] } }).limit(BATCH * 5).lean<RoutineRunDoc[]>()
     for (const run of parked) {
         const resolvedAt = run.status === "awaiting_confirmation" ? run.pendingAction?.resolvedAt : null

@@ -6,12 +6,14 @@ import { useMemoriesMeta } from "@/features/ai/hooks/useMemories"
 import { useMemoryMigration } from "../../../hooks/useMemoryMigration"
 import { QueryBoundary } from "../../shared/QueryBoundary"
 import { BackupStep } from "./BackupStep"
+import { ChannelNamingCard, ChannelNamingSkeleton } from "./ChannelNamingCard"
 import { CuratorStep } from "./CuratorStep"
 import { ImportStep } from "./ImportStep"
 import { ReviewStep } from "./ReviewStep"
 
 /**
- * Aba "Migração de memórias" (OPE-104): backup → curador → revisão do dono → importação. As etapas rodam
+ * Aba "Migração de memórias": os nomes dos canais (OPE-206, migração B) e a importação da OPE-104 (backup → curador →
+ * revisão do dono → importação). As etapas rodam
  * no servidor (continuam com a tela fechada) e o progresso chega em tempo real (`migration.updated`).
  */
 export function MigrationTab({ onConfigure }: { onDirtyChange: (dirty: boolean) => void; onConfigure: () => void }) {
@@ -22,6 +24,7 @@ export function MigrationTab({ onConfigure }: { onDirtyChange: (dirty: boolean) 
             {migration.data && (
                 <div className="flex flex-col gap-6">
                     <MemoriesNotices meta={meta.data} />
+                    <ChannelNamingCard />
                     <BackupStep state={migration.data} />
                     <CuratorStep state={migration.data} />
                     <ReviewStep state={migration.data} />
@@ -35,6 +38,7 @@ export function MigrationTab({ onConfigure }: { onDirtyChange: (dirty: boolean) 
 export function MigrationSkeleton() {
     return (
         <div className="flex flex-col gap-6" aria-busy="true" data-testid="migration-skeleton">
+            <ChannelNamingSkeleton />
             {[0, 1, 2, 3].map((index) => (
                 <div key={index} className="space-y-3 rounded-xl border p-6">
                     <Skeleton className="h-5 w-40" />

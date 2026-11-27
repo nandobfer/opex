@@ -27,7 +27,8 @@ export const centralOf = (target: MentorTarget, centralId: string | null) => (ta
 export async function targetTextMax(target: MentorTarget, centralId: string | null): Promise<number | undefined> {
     try {
         const { memoryLimitsFor } = await import("@/features/ai/server/memory-settings")
-        return (await memoryLimitsFor(memoryChannelOf(target, { centralId }))).textMax
+        const { channelNamespace } = await import("@/features/engramind/server/instance")
+        return (await memoryLimitsFor(memoryChannelOf(target, { centralId }, await channelNamespace()))).textMax
     } catch (error) {
         log.warn({ target, err: error instanceof Error ? error.message : String(error) }, "[mentor] limites das memórias indisponíveis: usando o padrão")
         return undefined

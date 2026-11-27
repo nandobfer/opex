@@ -1,4 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
+// A migração A (OPE-206) tem teste próprio (foreign-tokens.test.ts): aqui, nenhum token de outro app.
+vi.mock('@/features/engramind/server/foreign-tokens', () => ({ migrateForeignTokens: async () => ({ revoked: [], afterProvision: async () => undefined }) }))
 import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engramind'
 import { toEngramindError } from '@/features/engramind/server/errors'
 
@@ -87,6 +90,24 @@ describe('rede das memórias dos agentes', () => {
     expect(await agentTokenFor('mentor')).toMatch(/^eng\.tk_/)
   })
 
+  it('OPE-206: outra instância cria os agentes, canais e assinaturas no próprio app, com o app na frente dos canais', async () => {
+    const { instanceState } = await import('../../helpers/engramind-instance')
+    instanceState.ns = { app: 'alfredopex', prefixed: true }
+    try {
+      const { step } = await ensureAgentMemoryNetwork('local')
+      expect(step.status).toBe('ok')
+      expect([...holder.fake.state.agents.keys()].sort()).toEqual(MEMORY_IDENTITIES.map((id) => `alfredopex/${id}`).sort())
+      const channels = [...holder.fake.state.channels.keys()]
+      expect(channels).toContain('alfredopex')
+      expect(channels).toContain('alfredopex/agentes/maddox/dono')
+      expect(channels.some((slug) => slug === 'opex' || slug.startsWith('agentes/'))).toBe(false)
+      const maddox = holder.fake.state.subscriptions.filter((item) => item.agent === 'alfredopex/maddox').map((item) => item.target)
+      expect(maddox.sort()).toEqual(['alfredopex', 'alfredopex/agentes/maddox/*'])
+    } finally {
+      instanceState.ns = { app: 'opex', prefixed: false }
+    }
+  })
+
   it('repetir não cria nada de novo (idempotente)', async () => {
     await ensureAgentMemoryNetwork('local')
     const tokens = holder.fake.state.tokens.size
@@ -109,8 +130,8 @@ describe('rede das memórias dos agentes', () => {
   })
 
   it('a aba Identidades marca o agente opex/mentor como das Memórias do Opex', () => {
-    expect(isOpexMemoryAgent('opex', 'mentor')).toBe(true)
-    expect(isOpexMemoryAgent('opex', 'curador')).toBe(false)
+    expect(isOpexMemoryAgent('opex', 'mentor', 'opex')).toBe(true)
+    expect(isOpexMemoryAgent('opex', 'curador', 'opex')).toBe(false)
   })
 
   it('sem token: o turno espera o provisionamento sob demanda só até o limite; ele termina em segundo plano', async () => {
