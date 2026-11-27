@@ -51,6 +51,12 @@ export const routineSettingsHref = (agentId?: string) => `/integracoes/ia?aba=${
 export const ROUTINE_AGENTS_PATH = "/agentes-rotineiros"
 export const routineAgentHref = (agentId: string, runId?: string) => `/agentes-rotineiros/${agentId}${runId ? `?aba=execucoes&execucao=${runId}` : ""}`
 
+/**
+ * Chave da memória-índice de um canal (OPE-209): o mapa das chaves do canal, lido antes de consultar o resto
+ * por chave (listar o canal inteiro é exceção).
+ */
+export const ROUTINE_MEMORY_INDEX_KEY = "indice"
+
 /** Ferramentas internas da execução (sempre liberadas, nos dois motores). */
 export const ROUTINE_INTERNAL_TOOLS = ["remember", "list_my_memories", "wait", "hibernate", "request_confirmation", "finish"] as const
 export type RoutineInternalTool = (typeof ROUTINE_INTERNAL_TOOLS)[number]

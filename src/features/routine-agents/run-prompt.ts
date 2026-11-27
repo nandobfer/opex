@@ -1,6 +1,6 @@
 import type { RoutineRunStatus, RoutineTriggerOrigin } from "./status"
 import { ROUTINE_TRIGGER_ORIGIN_LABELS } from "./status"
-import { DEFAULT_LIVE_WAIT_MINUTES, MAX_WEBHOOK_PAYLOAD_BYTES } from "./constants"
+import { DEFAULT_LIVE_WAIT_MINUTES, MAX_WEBHOOK_PAYLOAD_BYTES, ROUTINE_MEMORY_INDEX_KEY } from "./constants"
 
 /**
  * Textos da execução (OPE-130, módulo PURO): instruções do sistema (obrigam a confirmação antes de
@@ -8,6 +8,9 @@ import { DEFAULT_LIVE_WAIT_MINUTES, MAX_WEBHOOK_PAYLOAD_BYTES } from "./constant
  *
  * Cache de prompt (OPE-204): as instruções não levam nada que mude a cada execução (data e hora vão na
  * mensagem da ativação), para que o prefixo do prompt se repita byte a byte e o provedor acerte o cache.
+ *
+ * Memórias por índice (OPE-209): o agente lê a memória `indice` do canal e consulta o resto por chave; listar
+ * os títulos do canal inteiro é exceção (sem índice ou item fora dele), e o índice é mantido pelo próprio agente.
  */
 
 export interface RoutineInstructionInput {
@@ -47,6 +50,7 @@ function httpSection(http: NonNullable<RoutineInstructionInput["http"]>, engine:
 export function routineInstructions(input: RoutineInstructionInput): string {
     const t = (name: string) => `${input.toolPrefix}${name}`
     const live = input.maxLiveWaitMinutes ?? DEFAULT_LIVE_WAIT_MINUTES
+    const index = ROUTINE_MEMORY_INDEX_KEY
     return [
         `Você é o agente rotineiro "${input.name}" do Opex: um agente autônomo que planeja e executa a solicitação SOZINHO, sem conversar com o dono (ninguém responde no meio do turno).`,
         "",
@@ -57,7 +61,12 @@ export function routineInstructions(input: RoutineInstructionInput): string {
         "## Como trabalhar",
         "- Planeje em poucos passos e execute. Use as ferramentas liberadas; não invente resultados.",
         "- Antes de agir, consulte as memórias abaixo: não repita o que já foi feito e siga as correções do dono.",
-        `- Grave com ${t("remember")} o que precisa lembrar nas próximas execuções (o que já fez, o que aprendeu)${input.memoryChannels?.length ? `, num destes canais: ${input.memoryChannels.join(", ")} (sem \`canal\`, o primeiro)` : ""}. O bloco "Memórias" abaixo é só um recorte: para consultar tudo de um canal, use ${t("list_my_memories")} (formato "titulos", seguindo o cursor) ANTES de trabalhar.`,
+        `- Grave com ${t("remember")} o que precisa lembrar nas próximas execuções (o que já fez, o que aprendeu)${input.memoryChannels?.length ? `, num destes canais: ${input.memoryChannels.join(", ")} (sem \`canal\`, o primeiro)` : ""}.`,
+        `- O bloco "Memórias" abaixo é só um recorte. Para consultar um canal, leia primeiro a memória de chave \`${index}\` (${t("list_my_memories")} com \`chave: "${index}"\`, o mapa das chaves do canal) e depois busque cada item por \`chave\`.`,
+        `- Listar os títulos do canal inteiro (formato "titulos", seguindo o cursor) é exceção: só quando o canal não tem \`${index}\` ou o item procurado não está nele. Acrescente ao \`${index}\` o que encontrar assim. Canal sem \`${index}\`: crie-o uma única vez com as chaves que já existem (uma por linha, \`chave\` — o que guarda), com ${t("remember")} e \`chave: "${index}"\`.`,
+        `- Ao criar uma chave nova, acrescente-a ao \`${index}\` do mesmo canal nesta execução, editando com ${t("update_memory")} (id e \`versao\` da leitura, para não sobrescrever uma gravação feita no meio do caminho).`,
+        "- Leituras e consultas independentes (várias chaves, canais diferentes) saem juntas, no mesmo passo.",
+        "- Se as instruções do dono acima definirem outro jeito de consultar as memórias, elas valem.",
         `- Para manter uma entrada por item (repositório, vaga, cliente), grave sempre com a mesma \`chave\`: a entrada existente é atualizada, nunca duplicada. Para editar uma memória sem chave, use ${t("update_memory")} com o id.`,
         `- Espera curta: ${t("wait")} (espera viva, no máximo ${live} min somados por turno). Espera longa ou condição externa: ${t("hibernate")} com o motivo; a execução volta sozinha no horário e você reagenda até a condição acontecer.`,
         input.confirmIrreversible

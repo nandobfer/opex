@@ -1,13 +1,14 @@
 import { z } from "zod"
 import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
-import { routineChannelOf, routineGlobalChannel } from "../../constants"
+import { ROUTINE_MEMORY_INDEX_KEY, routineChannelOf, routineGlobalChannel } from "../../constants"
 import { listInChannel, memoryKeySchema, memoryTagsSchema, memoryTitleSchema, rememberInChannel, updateInChannel, type RoutineMemoryEnv } from "../memory-channels"
 
 /**
  * Memória própria da execução (OPE-130, D13–D15): o agente rotineiro grava, edita e lista, com o
  * **próprio token**, em qualquer canal que assina (o próprio `<app>/agentes/rotineiros/<slug>`, o global dos
  * rotineiros e os extras do provisionamento). `chave` torna a gravação idempotente: uma entrada por item,
- * atualizada nas execuções seguintes. Sem limite de gravações por turno (OPE-163).
+ * atualizada nas execuções seguintes. Sem limite de gravações por turno (OPE-163). A leitura normal é por
+ * chave, começando pela memória-índice do canal; listar o canal inteiro é exceção (OPE-209).
  */
 
 export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
@@ -63,11 +64,11 @@ export function routineMemoryTools(env: RoutineMemoryEnv): OpexTool[] {
             label: "Listar memórias",
             risk: "read",
             description:
-                "Lista as memórias de um canal assinado com o texto inteiro (formato \"completo\") ou só id, chave e título (\"titulos\", para consultar um catálogo inteiro). Filtra por `chave`. Com `parcial: true` há mais páginas: chame de novo com `cursor`.",
+                `Consulta as memórias de um canal assinado. Uso normal: por \`chave\`. Comece pela chave \`${ROUTINE_MEMORY_INDEX_KEY}\`, o mapa das chaves do canal, e depois busque cada item pela chave; consultas independentes vão no mesmo passo. Listar o canal inteiro no formato "titulos" (só id, chave e título) é exceção: só quando o canal não tem \`${ROUTINE_MEMORY_INDEX_KEY}\` ou o item não está nele; acrescente ao \`${ROUTINE_MEMORY_INDEX_KEY}\` o que encontrar. O formato "completo" (padrão) traz o texto inteiro. Com \`parcial: true\` há mais páginas: chame de novo com \`cursor\`.`,
             input: z.object({
                 canal,
                 lista: z.enum(["agent", "global"]).optional().describe("Compatibilidade: \"global\" = canal dos rotineiros; prefira `canal`"),
-                chave: memoryKeySchema.optional(),
+                chave: memoryKeySchema.optional().describe(`Chave do item; "${ROUTINE_MEMORY_INDEX_KEY}" traz o mapa das chaves do canal`),
                 formato: z.enum(["completo", "titulos"]).default("completo"),
                 cursor: z.string().trim().min(1).optional(),
                 limite: z.number().int().min(1).max(200).optional(),
