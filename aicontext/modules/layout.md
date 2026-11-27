@@ -51,12 +51,13 @@ senha única (ver `modules/auth.md`): a tela `/login` fica **fora do shell**.
 ## Componentes (`src/features/layout/`)
 
 - `AppLayoutShell`: marca "Opex", `APP_NAV`, "Menu principal".
-- **Gavetas (OPE-208)**: a única gaveta lateral do app é a do menu no celular, mantida por decisão do dono: é
-  navegação (a sidebar do computador recolhida), só existe enquanto está aberta e não toma espaço do conteúdo. O
-  componente `Sheet` (`src/components/ui/sheet.tsx`) só tem o lado de baixo (borda arredondada, até 85% da altura
-  visível, rola por dentro): serve às folhas de ações e filtros do celular. Conteúdo que era gaveta virou página
-  própria (log do deploy, execução do rotineiro) ou dialog (painel do canal do Engramind); a regra está em
-  `use-para-atualizar-tema-e-componentes-ui.md`, "Qual padrão usar para cada tipo de conteúdo".
+- **Gavetas (OPE-208)**: a gaveta do menu no celular é mantida por decisão do dono: é navegação (a sidebar do
+  computador recolhida), só existe enquanto está aberta e não toma espaço do conteúdo. O componente `Sheet`
+  (`src/components/ui/sheet.tsx`) só tem o lado de baixo (borda arredondada, até 85% da altura visível, rola por
+  dentro): serve às folhas de ações e filtros do celular. O log do deploy e a execução do rotineiro viraram página
+  própria. **Pendência:** o painel do canal do Engramind (`ChannelPanel`, componente da lib `@engramind/client`) ainda
+  abre como gaveta lateral direita até a lib 0.15.0 ser publicada e a dependência subir (ver `modules/engramind.md`).
+  A regra está em `use-para-atualizar-tema-e-componentes-ui.md`, "Qual padrão usar para cada tipo de conteúdo".
 - `AppShell`: sidebar (desktop) ou gaveta (< 1024px; fecha por Esc, fundo, link do menu e também a
   cada troca de rota, para links que não são itens do menu, como o atalho "Configurar OpenCode no
   host" do painel "Servidor e quota"), `RealtimeStatusBanner` e

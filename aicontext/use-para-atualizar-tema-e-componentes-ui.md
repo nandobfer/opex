@@ -175,7 +175,7 @@ sempre no mesmo padrão; nenhuma tela inventa o seu.
 | Conteúdo | Padrão | Exemplos |
 |---|---|---|
 | Acompanhar um processo longo ou ao vivo (log, passos, execução) | **Página própria**, com link, seta de voltar no cabeçalho (`AgentPageHeader` com `backHref`) e o Voltar do navegador | `/ambientes/deploys/[id]`, `/agentes-rotineiros/[id]/execucoes/[runId]` |
-| Ação ou gestão rápida de um item sem perder o contexto da tela | **Dialog** centralizado (`Dialog`; fecha com Esc e clique fora, foco preso e devolvido ao gatilho) | painel do canal na rede `/engramind`, Histórico de deploys, execução do Mentor |
+| Ação ou gestão rápida de um item sem perder o contexto da tela | **Dialog** centralizado (`Dialog`; fecha com Esc e clique fora, foco preso e devolvido ao gatilho) | Histórico de deploys, execução do Mentor; painel do canal do Engramind quando a lib 0.15.0 for publicada (pendente: ainda é gaveta, ver `modules/engramind.md`) |
 | Lista curta de ações ou filtros **no celular** | **Folha de baixo** (`Sheet`, só `< lg`) | "Mais ações" da mesa, Filtros e Quota da central, filtros da rede no celular |
 | Navegação no celular | **Gaveta lateral** (só o menu do `AppShell`) | menu principal abaixo de 1024 px |
 

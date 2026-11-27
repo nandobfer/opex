@@ -729,11 +729,18 @@ ainda destaca as 3 memórias mais próximas pelo sentido. No modo `text` ("Busca
 **Busca e filtros destacam sem remover** (`matchesFilters`): nos universos as que casam ficam em
 destaque e as demais apagadas, sem recalcular a escala; na visão inicial os canais mostram "N na
 busca" e os sem resultado ficam apagados. **Nova memória** (`create_memory`) no universo de canal
-ativo. `ChannelPanel` (diálogo centralizado desde a lib 0.15.0, OPE-208; antes era uma gaveta lateral): a rede
-fica atrás, com o zoom e o universo intactos; cabeçalho com o nome, Editar (slug imutável), Arquivar / Restaurar /
-Excluir de vez (só arquivado, com confirmação) e "Abrir detalhe" fixos e, rolando por dentro (`max-h-[90dvh]`),
-`SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard` (sobreposições com "Remover sobreposição");
-fecha com Esc e clique fora. A página `/engramind/canais/<slug>` continua (o voltar leva ao universo do canal).
+ativo. `ChannelPanel`: Editar (slug imutável), Arquivar / Restaurar / Excluir de vez (só arquivado, com
+confirmação), "Abrir detalhe", `SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard` (sobreposições
+com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar leva ao universo do canal).
+
+**Pendência da OPE-208 (painel do canal ainda é gaveta no Opex):** com a dependência atual (`@engramind/client`
+`^0.13.1`), o `ChannelPanel` ainda abre como **gaveta lateral direita** (`Sheet side="right"`, até `sm:max-w-2xl`), em
+`/engramind` e nos universos de `/integracoes/ia`. A troca aprovada no plano da OPE-208 (diálogo centralizado,
+`max-h-[90dvh]`, cabeçalho e ações fixos, assinantes e configurações rolando por dentro, fecha com Esc e clique
+fora; a rede fica atrás com o zoom e o universo intactos) está pronta no repositório da lib (`engramind-client`,
+branch `ope-208`, versão 0.15.0 ainda **não publicada** no npm). Ela só vale no Opex depois de publicar a 0.15.0 e
+subir a dependência para `^0.15.0` (a lib não tem ponto de extensão para trocar o painel pelo app). Ao subir,
+apague este parágrafo e descreva o diálogo acima.
 
 **Novo canal** (OPE-129): depois de criar, a tela abre o universo do canal novo (`ChannelDialog.onCreated`),
 onde fica **Nova memória**; como nasce vazio, ele só entra nas redes quando ganhar a primeira memória. O aviso
