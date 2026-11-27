@@ -90,9 +90,17 @@ const agent = (id: string, extra: Partial<RoutineAgentDto> = {}): RoutineAgentDt
   ...extra,
 })
 
-const metric = (runs: number, errors = 0): RoutineAgentMetricsDto => ({
+const NO_PAIR = { listUsd: null, effectiveUsd: null, listBrl: null, effectiveBrl: null }
+const costTotals = (listUsd: number | null, effectiveUsd: number | null) => ({
+  listUsd, listBrl: listUsd === null ? null : listUsd * 5, effectiveUsd, effectiveBrl: effectiveUsd === null ? null : effectiveUsd * 5,
+  savingsUsd: listUsd !== null && effectiveUsd !== null ? listUsd - effectiveUsd : null, savingsBrl: null,
+  partial: false, brlPartial: false, missingPrices: [] as string[], estimated: false, notices: [] as string[],
+})
+const metric = (runs: number, errors = 0, cost: { list: number | null; effective: number | null } = { list: null, effective: null }): RoutineAgentMetricsDto => ({
   kpis: { runs, completed: runs - errors, errors, avgDurationMs: null, tokens: runs * 1000, costUsd: null, costPartial: false },
-  days: [{ day: '2026-11-04', runs, completed: runs - errors, errors, tokens: runs * 1000, costUsd: null }],
+  days: [{ day: '2026-11-04', runs, completed: runs - errors, errors, tokens: runs * 1000, costUsd: null, cost: NO_PAIR }],
+  cost: { totals: costTotals(cost.list, cost.effective), perRun: NO_PAIR, perCalendarDay: NO_PAIR, perActiveDay: NO_PAIR, runsWithCost: 0, calendarDays: 1, activeDays: 0 },
+  breakdown: { providers: [], models: [], plans: [] },
   lastRunAt: null,
 })
 
@@ -101,7 +109,7 @@ beforeEach(() => {
   mocks.agentsLoading = false
   mocks.metricsParams = []
   mocks.agents = [agent('Indexador'), agent('Vagas', { status: 'paused', engine: 'opencode' }), agent('Novo', { provisioning: { status: 'error', error: 'falhou', at: null, channels: [], extras: [], blocked: [], warnings: [], steps: { agent: false, token: false, channels: false, extras: false, workdir: false } } })]
-  mocks.metrics = { Indexador: metric(7, 2), Vagas: metric(0) }
+  mocks.metrics = { Indexador: metric(7, 2, { list: 1.5, effective: 0.25 }), Vagas: metric(0) }
 })
 afterEach(() => cleanup())
 
@@ -116,6 +124,18 @@ describe('critério aprovado (OPE-130, D18): lista /agentes-rotineiros com uma l
     expect(screen.getByTestId('routine-agent-row-Vagas').textContent).toContain('Sem execuções no período.')
     expect(screen.getAllByTestId(/routine-agent-row-/)).toHaveLength(3)
     expect(mocks.metricsParams.at(-1)).toEqual({ periodo: '30d' })
+  })
+
+  it('OPE-203: cada linha mostra o custo efetivo e o de tabela do período, com o R$ na dica; sem custo, "—"', () => {
+    render(<RoutineAgentsPage />)
+    const row = screen.getByTestId('routine-agent-row-Indexador')
+    const effective = row.querySelector('[title^="Custo efetivo"]')!
+    const list = row.querySelector('[title^="Custo de tabela"]')!
+    expect(effective.textContent).toContain('0,25')
+    expect(effective.getAttribute('title')).toContain('R$')
+    expect(list.textContent).toContain('1,50')
+    const empty = screen.getByTestId('routine-agent-row-Vagas')
+    expect(empty.querySelector('[title^="Custo efetivo"]')!.textContent).toContain('—')
   })
 
   it('o skeleton tem a grade das linhas enquanto carrega', () => {

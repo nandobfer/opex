@@ -24,7 +24,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api', 'fx_ptax', 'models_dev']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)
@@ -78,7 +78,7 @@ describe('catálogo de integrações', () => {
   })
 
   it('rotinas padrão: status, GitHub, PRs do agêntico (2 min), fila do agêntico (1 min), resumos de IA (2 min), tags de IA (3 min), tags das concluídas (1 h, desligada), anexos abandonados (30 min), resumo diário dos agentes (1 h) e quota do OpenCode (1 min)', () => {
-    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', 'command-code-usage-refresh', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup', 'engramind-pending-writes'])
+    expect(DEFAULT_CRON_JOBS.map((job) => job.id)).toEqual([HEALTH_CHECK_JOB_ID, 'github-issue-sync', 'agentic-pr-watch', 'agentic-queue-pump', 'ai-task-summary', 'ai-task-tags', TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, 'agent-usage-daily', OPENCODE_QUOTA_JOB_ID, 'opencode-go-usage-refresh', 'command-code-usage-refresh', 'fx-ptax-daily', 'ai-subscription-days', HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, 'environments-registry-cleanup', 'opencode-sessions-cleanup', 'opex-agent-sessions-cleanup', 'maddox-agent-sessions-cleanup', 'engramind-pending-writes'])
     expect(DEFAULT_CRON_JOBS[1]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[2]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 2 } })
     expect(DEFAULT_CRON_JOBS[3]).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 1 } })
@@ -97,6 +97,9 @@ describe('catálogo de integrações', () => {
     expect(DEFAULT_CRON_JOBS.find((job) => job.id === 'command-code-usage-refresh')).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 5 } })
     expect(cronJobIntegration('command-code-usage-refresh')).toBeNull()
     // OPE-145: recursos do servidor a cada 10 segundos, ligada.
+    // OPE-203: PTAX a cada 3 h e o uso diário das assinaturas a cada 30 min, ligadas.
+    expect(DEFAULT_CRON_JOBS.find((job) => job.id === 'fx-ptax-daily')).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 180 } })
+    expect(DEFAULT_CRON_JOBS.find((job) => job.id === 'ai-subscription-days')).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', minutes: 30 } })
     expect(DEFAULT_CRON_JOBS.find((job) => job.id === HOST_METRICS_JOB_ID)).toMatchObject({ kind: 'internal', enabled: true, schedule: { type: 'interval', seconds: 10 } })
     const jobs = getIntegrationDef('crons').publicFields.find((field) => field.key === 'jobs')?.defaultValue
     expect(jobs).toEqual(DEFAULT_CRON_JOBS)
