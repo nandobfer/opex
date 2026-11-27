@@ -387,6 +387,13 @@ async function execute(id: string, actorId: string): Promise<void> {
         engramindLog.warn({ migrationId: id, err: message }, "[engramind] migração dos canais parou: rode de novo para continuar")
         await save(id, { status: "failed", error: message }, { step: "error", message }).catch(() => undefined)
         await audit(actorId, id, "error", { erro: message }).catch(() => undefined)
+        // Antes do primeiro `move` nada mudou no acervo: libera os agentes (a retomada religa a manutenção).
+        const failedAt = await load(id).catch(() => null)
+        if (failedAt && stepIndex(failedAt.step) <= stepIndex("destinations") && (failedAt.movedCount ?? 0) === 0) {
+            const { setMemoryMaintenance } = await import("../instance")
+            await setMemoryMaintenance(null).catch(() => undefined)
+            await save(id, {}, { step: "error", message: "nenhuma memória foi movida: a manutenção foi desligada até a retomada" }).catch(() => undefined)
+        }
     } finally {
         clearInterval(beat)
     }

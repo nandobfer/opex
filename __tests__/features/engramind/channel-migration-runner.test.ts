@@ -20,6 +20,7 @@ const h = vi.hoisted(() => ({
   failMove: null as null | ((id: string) => boolean),
   tamperAfter: null as null | (() => void),
   afterBackup: null as null | (() => void),
+  exportFails: false,
   maintenanceAtExport: [] as number[],
   docs: new Map<string, Record<string, unknown>>(),
   prefixed: false,
@@ -55,6 +56,7 @@ vi.mock('@/features/engramind/server/channel-migration/host-export', async () =>
     EXPORT_ROOT: '/tmp/opex/engramind-migracao',
     exportScriptPath: async () => h.scriptPath,
     runHostExport: async (dir: string) => {
+      if (h.exportFails) throw Object.assign(new Error('O script de export saiu com código 1'), { code: 'ENGRAMIND_EXPORT_FAILED' })
       h.exports++
       h.maintenanceAtExport.push(h.maintenance.length)
       if (h.exports > 1) h.tamperAfter?.()
@@ -189,6 +191,7 @@ beforeEach(() => {
   h.failMove = null
   h.tamperAfter = null
   h.afterBackup = null
+  h.exportFails = false
   h.maintenanceAtExport = []
   h.docs.clear()
   h.prefixed = false
@@ -300,6 +303,29 @@ describe('migração B: ida', () => {
     // A origem que já era arquivada e o destino dela terminam arquivados.
     expect(h.channels.get('agentes/desenvolvedor/central/c1')!.archived_at).not.toBeNull()
     expect(h.channels.get('opex/agentes/desenvolvedor/central/c1')!.archived_at).not.toBeNull()
+  })
+
+  it('backup que falha no host: nada é movido e a manutenção é desligada; a retomada religa e conclui', async () => {
+    h.exportFails = true
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(latest()).toMatchObject({ status: 'failed', step: 'backup' })
+    expect(h.maintenance).toEqual([latest()._id, null])
+    expect(h.calls.some((call) => call.path.endsWith('/move'))).toBe(false)
+    h.exportFails = false
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(latest().status).toBe('done')
+    expect(h.maintenance.at(-2)).toBe(latest()._id)
+    expect(h.maintenance.at(-1)).toBeNull()
+  })
+
+  it('falha depois de mover mantém a manutenção ligada', async () => {
+    h.failMove = (id) => id === 'm_2'
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(latest().status).toBe('failed')
+    expect(h.maintenance.at(-1)).toBe(latest()._id)
   })
 
   it('não começa sem o script de backup', async () => {

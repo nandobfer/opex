@@ -911,7 +911,8 @@ inverso, `moveIdempotencyKey`), `runner.ts` (passos idempotentes e retomáveis) 
    (id, canal, status, fixação, chave, SHA-256 do texto) volta para o Opex. Sem o script, não começa; a
    listagem de cada origem no Engramind é conferida contra o resumo (garante que o export é o mesmo
    Engramind da integração). Se não conferir (antes de qualquer `move`), a migração para e a retomada
-   **refaz o backup**.
+   **refaz o backup**. Qualquer falha antes do primeiro `move` (backup, mapa ou destinos) **desliga a
+   manutenção** (nada mudou no acervo); a retomada religa. Falha depois de mover mantém a manutenção.
 3. **Mapa**: canais gerenciados no nome antigo (raiz e todo `agentes/**`, inclusive arquivados), destino
    pelo nome novo; a raiz e os que já estão no nome novo ficam de fora; destino acima dos limites vai
    para `tooLong` (fica na origem). O mapa (com `wasArchived`) é gravado antes de qualquer origem ser
