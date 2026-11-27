@@ -1,12 +1,12 @@
 import { after } from "next/server"
-import { createIntegrationsServer, type IntegrationsLogger, type ResolvedIntegration as LibResolvedIntegration } from "@nandobfer/integracoes/server"
+import { createIntegrationsServer, createSecretBox, type IntegrationsLogger, type SecretBox, type ResolvedIntegration as LibResolvedIntegration } from "@nandobfer/integracoes/server"
 import { configureIaServer } from "@nandobfer/integracoes/ia/server"
-import { secretBox } from "@/lib/crypto/secretBox"
+import * as appSecretBox from "@/lib/crypto/secretBox"
 import { dbConnect, recordAudit } from "@/lib/db"
 import * as instance from "@/lib/instance"
 import { getLocalUser } from "@/lib/local-user"
 import * as appLogger from "@/lib/logger"
-import { publishAppEvent } from "@/lib/pusher/channels"
+import * as appChannels from "@/lib/pusher/channels"
 import { pusherRealtime } from "@nandobfer/integracoes/pusher/server"
 import type { AcaoAuditoria } from "@/lib/db/models/AuditLog"
 import { integrationsRegistry, type IntegrationId } from "@/features/integrations/registry/definitions"
@@ -19,6 +19,12 @@ import type { IntegrationConfigMap } from "@/features/integrations/registry/conf
  * (`INTEGRATIONS_ENCRYPTION_KEY`), auditoria, Pino, Pusher, o dono como ator e a guarda da prévia
  * (agendador desligado com `OPEX_PREVIEW`).
  */
+
+/** Cofre do app; sem ele (módulo parcial nos testes), um cofre sem chave (fail-closed). */
+const fallbackBox = createSecretBox({ key: () => undefined })
+function box(): SecretBox {
+    return readOptional(() => appSecretBox.secretBox) ?? fallbackBox
+}
 
 /** Lê um valor do app sem derrubar a central quando ele falta (módulo parcial nos testes). */
 function readOptional<T>(read: () => T): T | undefined {
@@ -57,10 +63,17 @@ export const integrations = createIntegrationsServer<IntegrationConfigMap>({
     connect: async () => {
         await dbConnect()
     },
-    secretBox,
+    // Lidos a cada chamada: o cofre e os eventos do app são os mesmos módulos que o resto do Opex usa.
+    secretBox: {
+        isConfigured: () => box().isConfigured(),
+        fingerprint: () => box().fingerprint(),
+        deriveSubkey: (purpose) => box().deriveSubkey(purpose),
+        encrypt: (plain) => box().encrypt(plain),
+        decrypt: (encrypted) => box().decrypt(encrypted),
+    },
     audit: (entry) => recordAudit({ ...entry, acao: entry.acao as AcaoAuditoria }),
     logger: centralLogger(),
-    realtime: { ...pusherRealtime, publishAppEvent },
+    realtime: { ...pusherRealtime, publishAppEvent: (event, payload) => appChannels.publishAppEvent(event as never, payload as never) },
     // O acesso é barrado antes pelo middleware (sessão do dono); toda ação é do usuário local.
     authorize: async () => ({ id: getLocalUser().id }),
     basePath: process.env.NEXT_PUBLIC_BASE_PATH,

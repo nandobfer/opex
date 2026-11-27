@@ -361,7 +361,7 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   (`routineSkillPermissions`; a última regra que casa vence no OpenCode). O curinga bloqueia também as
   nativas, as de projeto e as que surgirem. Falha fechada: sem conseguir listar as skills do host
   (`client.skill.list`) → **Erro** acionável, antes de registrar o MCP da execução. A lista é lida por
-  `listOpencodeSkillsAt` (`src/lib/ai/opencode-skill-list.ts`, OPE-158), que espera o diretório da execução
+  `listOpencodeSkillsAt` (`@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list`, OPE-158), que espera o diretório da execução
   carregar as skills (diretório recém-aberto responde vazio e depois só com as nativas) até as selecionadas
   aparecerem; a seleção casa por id ou nome (`matchOpencodeSkill`, ver `modules/refinement.md`) e o `allow`
   usa sempre o id do OpenCode. Skill selecionada que sumiu do host vira aviso e é ignorada. A sessão reaproveitada recebe as regras novas; sem conseguir
@@ -481,7 +481,7 @@ Roda só no Opex original (na prévia o agendador fica desligado).
 
 ## Custos: custo de tabela e custo efetivo (OPE-203, só motor Opex)
 
-- **Custo de tabela por passo**: no início do turno, `createStepPricer` (`src/lib/ai/pricing/server.ts`) carrega o preço
+- **Custo de tabela por passo**: no início do turno, `createStepPricer` (`@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server`) carrega o preço
   do modelo (prazo próprio + sinal da execução; falhou, a última cópia boa em memória e depois em `ai_price_catalogs`,
   com aviso no log; sem cópia, o passo fica sem preço com o motivo; cancelamento propaga). A cada `finish-step` o
   motor grava no **mesmo registro** de `ai_consumption_logs` (`origin: routine-agent`, `subject: execução`, `apiKeyId`
@@ -494,7 +494,7 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `modules/ai.md`, "Custo de tabela".
 - O motor OpenCode de sessão também grava `tokenDetails` desde a OPE-205, pelo runner compartilhado em
   `session.step.ended`, sem duplicar a linha no `onUsage`. A medição de custo de tabela por passo não muda.
-- **Custo efetivo** (derivado na leitura, `src/features/ai-billing/effective.ts`): pelo plano de cobrança da chave que
+- **Custo efetivo** (derivado na leitura, `@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/effective`): pelo plano de cobrança da chave que
   respondeu (`modules/ai.md`, "Plano de cobrança"). Pago por uso = tabela; Créditos = tabela × (pago ÷ face), fora da
   validade/esgotados/antes do início = tabela com aviso; Assinatura = cota do dia × min(1, uso do passo ÷ uso total do
   dia) + uso extra do Go. Alterar o plano recalcula o efetivo; o custo de tabela gravado não muda. **Economia** =

@@ -1,51 +1,74 @@
 # Módulo: Integrações (Sistema › Integrações)
 
-Cópia do módulo de Integrações do CRM Marketing Campanhas (que veio do Smart Desk): mesmos
-métodos, logs, debug, explorador e segredos cifrados, com o catálogo do Opex e **sem
-permissões** (app de uso pessoal, com login por senha única). Lista as integrações usadas pelo app, mostra o status
-da conexão, permite editar a configuração sem redeploy e acompanhar logs de debug em tempo real.
-Valores que antes viviam no `.env` são persistidos no MongoDB.
+A central de Integrações vem da biblioteca pública **`@nandobfer/integracoes`** (repositório
+`nandobfer/integracoes`, cópia local `~/code/integracoes`, OPE-212), a mesma usada pelo Zaturno CRM e pelo
+dndicas. O Opex só **registra** as integrações e **injeta** os serviços dele: a lista, a página de cada
+integração, os campos, os segredos cifrados, o teste de conexão, o debug ao vivo, o explorador OpenAPI,
+o agendador e as rotas HTTP são da biblioteca. Sem permissões (app de uso pessoal): toda ação é do
+dono. Valores que antes viviam no `.env` são persistidos no MongoDB.
 
 ## Features
 
-### Catálogo e precedência de configuração
+### Biblioteca, registro e adaptadores (OPE-212)
 
-- **Fonte única**: `src/lib/integrations/catalog.ts` (`INTEGRATIONS`). Módulo puro, usado pela
-  tela e pelo servidor. Cada entrada define id, nome, descrição de uma linha, ambiente padrão,
-  campos públicos, campos privados e as variáveis legadas do `.env`.
-- **Integrações ativas**: `pusher`, `internal_api` (API interna: documentação e tokens de sistema
-  dos endpoints públicos, sem campos nem segredos), `crons`, `github` (issues → tarefas — ver
-  `modules/github.md`), `ai` (Inteligência Artificial, com os provedores `ai_opencode`, `ai_gemini` e
-  `ai_jev` — ver `modules/ai.md`), `orcamentos` (nome exibido **Clientes**: clientes do portal
-  público, rota `/integracoes/clientes` — ver `modules/orcamentos.md`) e `smtp` (SMTP) e
-  `storage_s3` (Storage S3).
-- **Integrações-filhas** (`IntegrationDef.parent`): somem da lista de `/integracoes` (a lista traz
-  `parent` e `configured`) e aparecem dentro da página da mãe; o voltar da página leva à mãe.
-  Rotas próprias via `integrationPath` (`/integracoes/ia`, `/integracoes/ia/opencode`,
-  `/integracoes/ia/gemini`, `/integracoes/ia/jev`, `/integracoes/clientes`); `/integracoes/<id>`
-  redireciona (`hasCustomIntegrationPath`), e a rota legada `/integracoes/orcamentos` redireciona
-  para `/integracoes/clientes`.
-- `isIntegrationConfigured(def, resolved)` (`config.ts`): obrigatórios públicos visíveis e segredos
-  legíveis preenchidos (não testa a conexão).
-- **Em desenvolvimento** (`IN_DEVELOPMENT_INTEGRATIONS`): `google_drive` (Google Drive — fonte de
-  tarefas a partir de planilhas do Google Sheets). Aparece na lista com o selo "Em desenvolvimento", sem status, teste, debug,
-  edição ou explorar, e não tem página de detalhe.
-- ⚠️ **Sem `.env` para integrações novas**: só as herdadas do CRM (Pusher, Crons) têm `env`
-  legado. Integração ou campo novo não declara `env` — tudo é configurado em `/integracoes`.
-- **Ambiente** (`interno`/`externo`) é campo editável da integração; o catálogo define só o
-  default: externo para o Pusher; interno para as demais.
-- **Resolvedor** (`src/lib/integrations/config.ts`, somente servidor):
-  `getIntegration(id)` / `getIntegrationConfig(id)`. Precedência por campo: banco → `.env`
-  legado → default do código. Segredo limpo pela tela (`null` no banco) **não** volta ao `.env`.
-  Segredo que não descriptografa (chave trocada) é sinalizado em `secretErrors` e cai no `.env`.
-  Banco indisponível → `.env`, sem derrubar a integração.
-- **Cache**: `src/lib/integrations/store.ts` guarda os documentos por 30 s por instância. Salvar
-  invalida a instância atual.
-- **Singletons** (Pusher do servidor) comparam `version` (hash dos valores efetivos) e se
-  reconstroem quando a configuração muda.
-- **Migração** `seed-integrations-from-env` (roda no boot): cria cada documento com
-  `$setOnInsert` a partir do `.env` e dos defaults do código. Nunca sobrescreve edições; completa
-  apenas segredos nunca gravados. Sem chave de criptografia, não grava segredos e avisa no log.
+- **Dependência**: `"@nandobfer/integracoes": "github:nandobfer/integracoes#vX.Y.Z"` (tag imutável; o
+  `dist/` é versionado, sem token nem registry). O `globals.css` tem `@source` do `dist` e o
+  `vitest.config.ts` põe a biblioteca em `server.deps.inline`. O `dist` não tem bundle (um arquivo por
+  módulo) e cada módulo sai também em `@nandobfer/integracoes/modules/<caminho>` (ex.:
+  `modules/integrations/ia/ai/stream`): o código do Opex importa daí o que precisa e os testes fazem
+  `vi.mock` desse módulo (vale também dentro da biblioteca).
+- **Contrato único de adaptador** (três partes ligadas pelo `id`): definição pura (`defineIntegration`),
+  servidor (`defineIntegrationServer`: teste, rotas, rotinas, `onEnable`, explorador, filhos dinâmicos) e
+  cliente (`defineIntegrationClient`: formulário, cards, abas, páginas próprias). Termos: integração,
+  adaptador e extensão.
+- **Registro do Opex** (ponto único, `src/features/integrations/registry/`):
+  - `definitions.ts` (puro): a lista ordenada (`OPEX_INTEGRATIONS`), `integrationsRegistry`,
+    `INTEGRATION_IDS`/`IntegrationId`, `getIntegrationDef`, `integrationPath`, `INTEGRATIONS`,
+    `IN_DEVELOPMENT_INTEGRATIONS`, `KEY_RING_INTEGRATION_IDS` e a configuração da camada de IA
+    (`configureIa`: nome do app, rótulos das origens de consumo, aviso do Engramind no chaveiro);
+  - `jobs.ts` (puro): as rotinas internas do Opex (`OPEX_CRON_JOBS`, com as capacidades `scope`,
+    `retentionDays` e `integration` declaradas por rotina e os textos de ajuda), `DEFAULT_CRON_JOBS`,
+    `cronJobIntegration`, `retentionHelp`;
+  - `server.ts`: as partes de servidor (`OPEX_SERVER_ADAPTERS`); `client.tsx`: as partes de cliente
+    (`OPEX_CLIENT_ADAPTERS`) e o `OpexIntegrationsProvider` (montado no `app/layout.tsx`);
+  - `config-map.ts`: `IntegrationConfigMap` (valores resolvidos tipados por id).
+- **Comuns da biblioteca**: Pusher, API interna, Crons, GitHub, Inteligência Artificial (hub, 8 provedores,
+  provedores customizados, PTAX e models.dev), SMTP e Storage S3. **Do Opex** (`src/features/integrations/adapters/`):
+  Clientes (`orcamentos`), Builder Machine, Engramind, Evolution API, Gotenberg e Google Drive (em
+  desenvolvimento); e as **extensões** das comuns: rotas do GitHub (vínculos, mapeamento, sincronização),
+  tokens e escopos da API interna, todas as rotinas do Opex nos Crons (abas **Jobs** e **Observações** do
+  Agente Opex) e as abas de agentes e do OpenCode na IA.
+- **Runtime** (`src/lib/integrations/runtime.ts`, só servidor): `createIntegrationsServer` com banco
+  (`dbConnect`), cofre (`INTEGRATIONS_ENCRYPTION_KEY`, `src/lib/crypto/secretBox.ts`), auditoria
+  (`recordAudit`), Pino, Pusher (`publishAppEvent`), o dono como ator, `after()` do Next e a guarda da
+  prévia (`isPreviewInstance` desliga o agendador). Exporta `integrations`, `getIntegration` e
+  `getIntegrationConfig` tipados. O `instrumentation.ts` importa o agendador (que importa o runtime) no
+  boot; o servidor também importa pelas fachadas `src/lib/integrations/server.ts` (todo o
+  `@nandobfer/integracoes/server`) e `src/lib/integrations/scheduler.ts`. `src/lib/pusher/server.ts`,
+  `src/lib/email/mailer.ts` e `src/lib/storage/s3.ts` são fachadas finas dos clientes da biblioteca.
+- **Rotas catch-all** (despacho pelo registro; as rotas estáticas antigas saíram para não sombrear):
+  `src/app/api/integrations/[...path]`, `src/app/api/ai/[...path]`, `src/app/api/opencode/[...path]` e
+  `src/app/api/command-code/[...path]`. URLs, métodos, corpos e status são os de antes. As rotas do
+  OpenCode de sessão (`/api/ai/providers/opencode/{accounts,resources,service,...}`), das features de IA
+  (`/api/ai/features/*`) e das memórias continuam rotas do Opex.
+- **Página catch-all** `src/app/(app)/integracoes/[[...slug]]/page.tsx`: `integrationsRegistry.match(slug)`
+  resolve a lista, a página de cada integração (`/integracoes/<id>` ou o caminho próprio), as páginas
+  próprias dos adaptadores (`ia/centrais/:id`, `clientes/:clientId`), os caminhos legados
+  (`/integracoes/orcamentos` → `/integracoes/clientes`) e o redirecionamento de `/integracoes/<id>` de quem
+  tem caminho próprio; o resto é 404. `/integracoes/ia/custom-<slug>` é resolvido no navegador.
+- **Dados**: mesmas coleções (`integration_configs`, `integration_statuses`, `integration_logs`,
+  `integration_cron_jobs`, `api_tokens` e as de IA), mesmos campos, cifra e ids, mesmos canais e eventos
+  Pusher. A única coleção nova é `ai_custom_providers`. Os modelos vêm de `@nandobfer/integracoes/mongoose`.
+- **Integrações-filhas** (`parent`): somem da lista e aparecem dentro da página da mãe.
+- **Em desenvolvimento** (`status: "in-development"`): `google_drive` (fonte de tarefas a partir de
+  planilhas do Google Sheets), na lista com o selo, sem ações nem página.
+- ⚠️ **Sem `.env` para integrações novas**: só as herdadas do CRM (Pusher, Crons) têm `env` legado.
+- **Ambiente** (`interno`/`externo`) é campo editável; a definição traz só o padrão.
+- **Resolvedor** (biblioteca): precedência por campo banco → `.env` legado → padrão; segredo limpo pela
+  tela (`null`) **não** volta ao `.env`; segredo que não decifra vai para `secretErrors` e cai no `.env`.
+  Cache de 30 s por instância; salvar invalida a instância atual. `isIntegrationConfigured` considera os
+  campos condicionais e o chaveiro.
+- **Migração** `seed-integrations-from-env` (roda no boot): cria cada documento com `$setOnInsert`.
 
 ### Campos privados
 
@@ -185,7 +208,7 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 - `POST /api/integrations/[id]/test` responde em NDJSON: `{type:"log", level, message, ts}` e uma
   final `{type:"result", ok, latencyMs, message}`. O modal mostra num terminal (xterm.js).
 - O resultado vira o status atual (`integration_statuses`), sem auditoria.
-- Testers (`src/features/integrations/testers/testers.ts`):
+- Testers (o `tester` de cada adaptador de servidor; os das comuns são da biblioteca e os do Opex ficam em `src/features/integrations/adapters/`):
   - **Pusher**: `GET /channels`.
   - **API interna**: `GET /api/openapi.json` pela URL interna (exige OpenAPI 3.x) e conta os
     tokens de sistema ativos (zero é só informativo).
@@ -210,7 +233,7 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 
 ### Modo debug
 
-- `integrationDebug(id)` (`src/lib/integrations/debug.ts`) e `debugFetch(...)`: só atuam com o
+- `integrationDebug(id)` (`@nandobfer/integracoes/modules/server/debug`) e `debugFetch(...)`: só atuam com o
   debug ligado — exceto `integrationDebug(id, { always: true })`, para logs operacionais que a tela
   sempre mostra (ex.: as centrais de desenvolvimento). Cada evento vai para o console do servidor, para `integration_logs` (TTL 48 h) e
   para o Pusher `private-integration-{id}`, evento `debug-log`, agrupado a cada 500 ms.
@@ -237,8 +260,9 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 
 ### Crons e agendador interno
 
-- Motor: `src/features/integrations/scheduler/cron-scheduler.ts` (`runSchedulerTick`). O
-  `src/instrumentation.ts` inicia `startCronScheduler()` (tick por `setInterval` a cada minuto) —
+- Motor: agendador da biblioteca (`runSchedulerTick`, pela fachada `src/lib/integrations/scheduler.ts`). Os executores das
+  rotinas são declarados nos adaptadores (`jobs`; os do Opex em `adapters/crons.server.ts`) e os ganchos do fim do tick
+  em `OPEX_SCHEDULER_TICK_HOOKS`. O `src/instrumentation.ts` inicia `startCronScheduler()` (tick por `setInterval` a cada minuto) —
   o app roda só em processo Node persistente (local ou Docker); **não há variante Vercel**.
 - No fim de cada tick, depois dos jobs do Agente Opex, da saúde do Docker local e dos ambientes, roda
   `runDueRoutineAgents` (agentes rotineiros: disparos agendados, retomadas das hibernadas, fila, turnos
@@ -305,7 +329,7 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 - Cada rotina é reivindicada atomicamente em `integration_cron_jobs` (lease de 15 min); a
   reivindicação já avança `nextRunAt`. ⚠️ Nunca combine upsert com filtro
   `scheduleSignature: { $ne }` em `syncJobState`.
-- Agenda amigável (`src/lib/integrations/schedule.ts`, horário de Brasília): intervalo, diário,
+- Agenda amigável (`@nandobfer/integracoes/modules/core/schedule`, horário de Brasília): intervalo, diário,
   semanal e mensal. Editar o agendamento recalcula na hora (`rescheduleJobs`).
 - **Intervalo em segundos** (OPE-145): `{ type: "interval", seconds }` (10 a 3600; `isSecondsSchedule`,
   `intervalMs`), ao lado do formato em minutos, que não muda. Roda no **tick rápido**
@@ -536,6 +560,8 @@ conteúdo do HTML. Detalhes em `modules/agent-documents.md`.
 
 ## APIs
 
+Todas as rotas abaixo de `/api/integrations` são atendidas pelo catch-all (`[...path]`) da biblioteca.
+
 | Rota | Descrição |
 |---|---|
 | `GET /api/integrations` | Lista com ambiente, debug e status |
@@ -568,7 +594,15 @@ conteúdo do HTML. Detalhes em `modules/agent-documents.md`.
 
 ## Testes
 
-`__tests__/lib/integrations/*`, `__tests__/lib/email/mailer.test.ts`, `__tests__/lib/storage/*`,
-`__tests__/features/integrations/*`, `__tests__/features/public-api/public-api-openapi.test.ts` e
-`__tests__/lib/pusher/channel-auth.test.ts`. O setup do Vitest faz mock de
-`@/lib/integrations/store` (store vazio → todos leem o `.env`).
+- Biblioteca: o núcleo (resolvedor, cofre, serviço, teste de conexão, agendador, roteador, IA e
+  provedores customizados) é testado no repositório `nandobfer/integracoes`, inclusive os testes que
+  vieram do Opex.
+- Opex: `__tests__/app/ai-integration-pages.test.tsx` (página catch-all), `__tests__/features/integrations/*`,
+  `__tests__/lib/integrations/*`, `__tests__/lib/email/mailer.test.ts`, `__tests__/lib/storage/*` e os de
+  cada adaptador. Helpers: `__tests__/helpers/integrations-render.tsx` (render dentro do
+  `IntegrationsProvider` com o registro do Opex), `integrations-route.ts` (`legacyRoute`: handlers com a
+  assinatura antiga chamando os catch-alls), `opex-editors.ts` (formulário como o Opex registra) e
+  `opex-testers.ts` (teste de conexão de cada adaptador).
+- O setup define `OPEX_INTEGRATIONS_STORE=memory` (nenhuma configuração salva nem provedor customizado:
+  tudo resolve pelo `.env` e pelos padrões) e liga o runtime antes de cada caso quando o teste alcança o
+  servidor da biblioteca.

@@ -12,7 +12,7 @@ coleção antiga `agent_memories` fica intacta, lida só pelo backup da migraç�
 
 ## Integração `engramind` (`/integracoes/engramind`)
 
-- **Catálogo** (`src/lib/integrations/catalog.ts`): ambiente `externo`, `streamsDebugOverPusher`, sem
+- **Definição** (adaptador do Opex, `src/features/integrations/registry/definitions.ts`; servidor em `adapters/opex.server.ts`): ambiente `externo`, `streamsDebugOverPusher`, sem
   `env`. Públicos, todos `group: "card"` (fora do detalhe e do PATCH genérico, para o card Geral não
   regravar URLs antigas): `baseUrl` (URL que o **servidor** do Opex alcança), `opexPublicUrl` (URL que o
   Engramind alcança para os webhooks) e `environmentId`. Salvar a conexão ou repetir o bootstrap
@@ -121,7 +121,7 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
 | Seção | Opção | Engramind | `base_url` | Chave |
 |---|---|---|---|---|
 | Redator | Gemini / Anthropic | `gemini` / `anthropic` | vazia (oficial) | do Opex |
-| Redator | OpenAI / DeepSeek | `openai_compatible` | `OPENAI_API_URL` / `DEEPSEEK_API_URL` (`src/lib/ai/endpoints.ts`) | do Opex |
+| Redator | OpenAI / DeepSeek | `openai_compatible` | `OPENAI_API_URL` / `DEEPSEEK_API_URL` (`@nandobfer/integracoes/modules/integrations/ia/ai/endpoints`) | do Opex |
 | Embedding | Local | `local` (lista do próprio Engramind) | vazia | — |
 | Embedding | Gemini / OpenAI | `gemini` / `openai_compatible` | vazia / `OPENAI_API_URL` | do Opex |
 | Embedding | Desligado | `off` (só busca textual; o modelo não muda) | vazia | — |

@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { aiTextProviderIdSchema } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
+import { aiTextProviderIdWith } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
 import { agentConfigSchema } from "@/features/agentic/schemas"
 import { ARCHITECT_DEPTH_DEFAULT, ARCHITECT_NODE_KINDS, ARCHITECT_TIMEOUT_DEFAULT, ARCHITECT_TIMEOUT_MAX, ARCHITECT_TIMEOUT_MIN, ARCHITECT_TRIGGERS, ARCHITECT_VIEWS, type ArchitectDepth } from "./constants"
 
@@ -35,7 +35,7 @@ export const architectSettingsSchema = z
          * modelo, variante e fallbacks em `agent`). Os demais: só `agent.model`/`agent.variant`, sem
          * acesso ao código (o diagrama sai do plano e da tarefa).
          */
-        provider: aiTextProviderIdSchema,
+        provider: aiTextProviderIdWith("Escolha um provedor de texto: OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go, Command Code ou um provedor customizado"),
         agent: agentConfigSchema,
         timeoutMinutes: int(ARCHITECT_TIMEOUT_MIN, ARCHITECT_TIMEOUT_MAX),
         instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),

@@ -272,7 +272,7 @@ teto de 100%** (antes mostrava só a chave principal). Regras (puras em `go-logi
 ### Interface (`components/go/` + `subscription-usage/components/`)
 
 Reproduz o card de uso do Console do OpenCode Go. Desde a OPE-190 o cabeçalho, as janelas, o gráfico, a faixa de
-datas, a dica, a legenda, as cores, o layout e o skeleton são **compartilhados** (`src/features/subscription-usage/`,
+datas, a dica, a legenda, as cores, o layout e o skeleton são **compartilhados** (`@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/`,
 ver "Módulo compartilhado de assinatura por ciclo") e o Command Code usa as mesmas peças; ficam em `components/go/`
 só o card, o cabeçalho com o gasto real e as notas de cobertura do Go:
 

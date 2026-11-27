@@ -17,6 +17,18 @@ type Loaded = {
 }
 const central: { loaded?: Loaded } = vi.hoisted(() => ({}))
 
+function readApi(http: Record<string, unknown>): unknown {
+  try {
+    if (http.api) return http.api
+  } catch {
+    // mock sem `api`
+  }
+  const refuse = async () => {
+    throw new Error('sem cliente HTTP no teste')
+  }
+  return { get: refuse, post: refuse, put: refuse, patch: refuse, delete: refuse }
+}
+
 beforeAll(async () => {
   const [query, react, definitions, http] = await Promise.all([
     import('@tanstack/react-query'),
@@ -29,7 +41,8 @@ beforeAll(async () => {
     QueryClientProvider: query.QueryClientProvider as never,
     IntegrationsProvider: react.IntegrationsProvider as never,
     registry: definitions.integrationsRegistry,
-    api: http.api,
+    // `@/lib/api` parcial no teste (sem `api`): a central recebe um cliente que recusa as chamadas.
+    api: readApi(http as unknown as Record<string, unknown>) as never,
   }
 })
 

@@ -58,7 +58,7 @@ export const isInvalidRoutineOpexProvider = (engine: string, provider: string | 
     engine === "opex" && provider !== null && provider !== undefined && !isOpexProviderId(provider)
 
 export const routineOpexEngineSchema = z.object({
-    provider: aiProviderIdIn(ROUTINE_OPEX_PROVIDER_IDS).nullable(),
+    provider: aiProviderIdIn(ROUTINE_OPEX_PROVIDER_IDS, { error: "Escolha o provedor" }).nullable(),
     model: z.string().trim().max(200),
     variant: z.string().trim().max(80).nullable(),
     enabledTools: z.array(z.string().trim().min(1).max(120)).max(500),

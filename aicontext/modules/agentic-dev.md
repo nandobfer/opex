@@ -5,7 +5,7 @@ uma tarefa tem uma **mesa de trabalho**; cada **projeto** (repositório vinculad
 **central** que aponta o repositório na máquina do OpenCode. OpenCode, Docker das prévias e o Opex
 rodam na mesma máquina.
 
-Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
+Código: `src/features/agentic/` (domínio), `@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client` (cliente oficial
 `@opencode/client`), `src/lib/ai/opencode-events.ts` (eventos normalizados, puro) e
 `src/lib/ai/opencode-run.ts` (runner genérico de um turno — compartilhado com o refinamento de
 tarefas, ver `modules/refinement.md`). O texto do turno (`result.text` e os pedaços do `onText`) separa
@@ -1209,9 +1209,9 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   arrastar** (dnd-kit) — a ordem é a ordem de tentativa. Item repetido ou igual ao modelo principal é
   apontado no campo e recusado pelo schema (`agentConfigSchema.fallbacks`, `superRefine`).
 - **Peças compartilhadas (OPE-181)**: a lista, o limite e a validação ficam no módulo puro
-  `src/features/ai/model-fallbacks.ts` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
+  `@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
   `addFallbackIssues`, `normalizeFallbacks`; `agentic/schemas.ts` reexporta `MAX_MODEL_FALLBACKS`,
-  `modelChoiceSchema` e `ModelChoice`) e o campo em `src/features/ai/components/model-picker/FallbackModelsField.tsx`.
+  `modelChoiceSchema` e `ModelChoice`) e o campo em `@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField`.
   As mesmas peças servem ao Agente Adversário, ao Arquiteto (OpenCode), ao Revisor de PR, ao Refinador,
   aos agentes rotineiros (motor OpenCode) e ao Maddox; o `ProviderModelCard` mostra a lista com a prop
   `fallbacksName` (só com o OpenCode). Ao salvar, o `assertCatalog` também confere cada fallback no
