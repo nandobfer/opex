@@ -880,7 +880,9 @@ continuam elegíveis). O que fica gravado no Mongo é sempre o slug **real**.
 **Modo dos nomes.** `channelNamespace()` (`server/instance.ts`, cache de 60 s, zerado ao salvar a conexão
 e pelas migrações) junta o app com `engramind_state.channelNaming` (`legacy | prefixed`). Sem o campo, a
 decisão é tomada uma vez e gravada: `legacy` **só** quando o app é `opex` e existe algum canal
-`agentes/...`; nos outros casos (inclusive a instância do Alfredo) `prefixed`.
+`agentes/...`; nos outros casos (inclusive a instância do Alfredo) `prefixed`. Um `legacy` gravado só vale
+com o app `opex`: com a chave de outro app no mesmo banco (cópia ou troca da chave), a instância usa sempre o
+próprio app na frente e nunca os canais do dono.
 `channelNamespaceOrLegacy()` devolve os nomes antigos do dono sem lançar (telas e leituras de reserva).
 A rota `GET /api/engramind/namespace` e o hook `useChannelNamespace()` (TanStack Query, invalidado por
 `engramind-updated` com `type: "namespace"`) levam o espaço de nomes à tela.
@@ -902,15 +904,18 @@ inverso, `moveIdempotencyKey`), `runner.ts` (passos idempotentes e retomáveis) 
 (backup pelo host). Rotas `GET/POST /api/engramind/channel-migration`; eventos `engramind-updated` com
 `type: "channel-migration"` (progresso) e `"namespace"` (modo trocado).
 
-1. **Backup**: o script do campo público "Script de export das memórias (host)" da integração roda no
+1. **Manutenção** (`engramind_state.channelMigration`), ligada **antes** do backup e em toda retomada: vale o
+   portão da seção "Portão de manutenção", então o backup e a conferência comparam o mesmo acervo parado.
+2. **Backup**: o script do campo público "Script de export das memórias (host)" da integração roda no
    host pelo `createHostRunner` em `/tmp/opex/engramind-migracao/<id>/antes`; só um resumo por memória
    (id, canal, status, fixação, chave, SHA-256 do texto) volta para o Opex. Sem o script, não começa; a
    listagem de cada origem no Engramind é conferida contra o resumo (garante que o export é o mesmo
-   Engramind da integração).
-2. **Manutenção** (`engramind_state.channelMigration`): vale o portão da seção "Portão de manutenção".
+   Engramind da integração). Se não conferir (antes de qualquer `move`), a migração para e a retomada
+   **refaz o backup**.
 3. **Mapa**: canais gerenciados no nome antigo (raiz e todo `agentes/**`, inclusive arquivados), destino
    pelo nome novo; a raiz e os que já estão no nome novo ficam de fora; destino acima dos limites vai
-   para `tooLong` (fica na origem).
+   para `tooLong` (fica na origem). O mapa (com `wasArchived`) é gravado antes de qualquer origem ser
+   restaurada, e a retomada reaproveita o mapa gravado.
 4. **Destinos**: origem arquivada é restaurada para o `move` (registrado em `wasArchived`); destino criado
    com nome, descrição e prioridade e as sobreposições de configuração copiadas.
 5. **`move`** de cada memória com `Idempotency-Key = opex-chmig-<id>-<memória>-<destino>`;
@@ -927,8 +932,9 @@ inverso, `moveIdempotencyKey`), `runner.ts` (passos idempotentes e retomáveis) 
    então arquiva as origens (e os destinos de origem já arquivada), desliga a manutenção e marca `done`
    (`done_with_conflicts` com conflito pendente, e o canal em conflito **não** é arquivado). Conferência
    falha: nada é arquivado, a manutenção continua e rodar de novo retoma (refaz os `move`).
-9. **Volta atrás** (`direction: "revert"`): o mapa salvo invertido, mesmos passos, e ao fim
-   `channelNaming = "legacy"`.
+9. **Volta atrás** (`direction: "revert"`): o mapa salvo invertido mais os canais gerenciados criados depois
+   da ida (`<app>/agentes/...` de central ou rotineiro novos, com o arquivamento atual; `buildRevertMap`),
+   mesmos passos, e ao fim `channelNaming = "legacy"`.
 
 A migração **nunca** exclui memória nem canal: só `move`, `archive`, `restore` e o cancelamento de
 assinatura (coberto por teste).

@@ -92,6 +92,12 @@ describe('channelNamespace', () => {
     await setChannelNaming('prefixed')
     expect((await channelNamespace()).prefixed).toBe(true)
   })
+
+  it('legacy gravado com a chave de outro app no mesmo banco: usa o próprio app na frente (nunca os canais do dono)', async () => {
+    holder.whoami = { token_id: 'tk_7a8c69e7', app: { id: 'app_alf', slug: 'alfredopex' } }
+    holder.state = { channelNaming: 'legacy' }
+    expect(await channelNamespace()).toEqual({ app: 'alfredopex', prefixed: true })
+  })
 })
 
 describe('manutenção (migração B)', () => {

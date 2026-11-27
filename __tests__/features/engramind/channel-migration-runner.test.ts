@@ -19,6 +19,8 @@ const h = vi.hoisted(() => ({
   moves: new Map<string, number>(),
   failMove: null as null | ((id: string) => boolean),
   tamperAfter: null as null | (() => void),
+  afterBackup: null as null | (() => void),
+  maintenanceAtExport: [] as number[],
   docs: new Map<string, Record<string, unknown>>(),
   prefixed: false,
   maintenance: [] as (string | null)[],
@@ -54,8 +56,10 @@ vi.mock('@/features/engramind/server/channel-migration/host-export', async () =>
     exportScriptPath: async () => h.scriptPath,
     runHostExport: async (dir: string) => {
       h.exports++
+      h.maintenanceAtExport.push(h.maintenance.length)
       if (h.exports > 1) h.tamperAfter?.()
       const memories = [...h.memories.values()].map((m) => ({ id: m.id, channel: m.channel, status: m.status, pinned: null, key: m.key, textHash: createHash('sha256').update(m.text).digest('hex') }))
+      if (h.exports === 1) h.afterBackup?.()
       const byStatus: Record<string, number> = {}
       for (const m of memories) byStatus[m.status] = (byStatus[m.status] ?? 0) + 1
       return { file: `${dir}/engramind-memorias.json`, source: 'https://engramind', exportedAt: null, totals: { memories: memories.length, byStatus, byChannel: {} }, memories }
@@ -184,6 +188,8 @@ beforeEach(() => {
   h.moves.clear()
   h.failMove = null
   h.tamperAfter = null
+  h.afterBackup = null
+  h.maintenanceAtExport = []
   h.docs.clear()
   h.prefixed = false
   h.maintenance = []
@@ -268,6 +274,34 @@ describe('migração B: ida', () => {
     expect(h.exports).toBe(2)
   })
 
+  it('a manutenção liga antes do backup', async () => {
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(h.maintenanceAtExport[0]).toBeGreaterThan(0)
+  })
+
+  it('backup que não confere: a retomada refaz o backup e mantém o arquivado de antes do restore', async () => {
+    // Memória gravada entre o backup e o mapa: o backup não confere com o Engramind.
+    h.afterBackup = () => h.memories.set('m_6', mem('m_6', 'agentes/adversario', 'regra 6'))
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(latest()).toMatchObject({ status: 'failed', step: 'backup', backup: null })
+    expect(latest().error).toMatch(/backup não confere/)
+    // O mapa gravado guarda que a central estava arquivada, mesmo com a origem já restaurada.
+    expect(h.channels.get('agentes/desenvolvedor/central/c1')!.archived_at).toBeNull()
+    expect((latest().map as { from: string; wasArchived: boolean }[]).find((item) => item.from === 'agentes/desenvolvedor/central/c1')?.wasArchived).toBe(true)
+    expect(h.calls.some((call) => call.path.endsWith('/move'))).toBe(false)
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    expect(h.docs.size).toBe(1)
+    expect(latest().status).toBe('done')
+    expect(h.exports).toBe(3)
+    expect(h.memories.get('m_6')!.channel).toBe('opex/agentes/adversario')
+    // A origem que já era arquivada e o destino dela terminam arquivados.
+    expect(h.channels.get('agentes/desenvolvedor/central/c1')!.archived_at).not.toBeNull()
+    expect(h.channels.get('opex/agentes/desenvolvedor/central/c1')!.archived_at).not.toBeNull()
+  })
+
   it('não começa sem o script de backup', async () => {
     h.scriptPath = null
     await expect(startChannelMigration({ direction: 'forward' }, 'local')).rejects.toMatchObject({ code: 'CHANNEL_MIGRATION_SCRIPT_REQUIRED' })
@@ -291,5 +325,18 @@ describe('migração B: volta atrás', () => {
     expect(h.channels.get('agentes/desenvolvedor/central/c1')!.archived_at).not.toBeNull()
     expect(h.channels.get('opex/agentes/adversario')!.archived_at).not.toBeNull()
     expect(destructive()).toEqual([])
+  })
+
+  it('canais gerenciados criados depois da ida também voltam para os nomes antigos', async () => {
+    await startChannelMigration({ direction: 'forward' }, 'local')
+    await channelMigrationIdle()
+    h.channels.set('opex/agentes/rotineiros/novo', ch('opex/agentes/rotineiros/novo'))
+    h.memories.set('m_7', mem('m_7', 'opex/agentes/rotineiros/novo', 'do rotineiro novo'))
+    await startChannelMigration({ direction: 'revert' }, 'local')
+    await channelMigrationIdle()
+    expect(latest()).toMatchObject({ direction: 'revert', status: 'done' })
+    expect(h.memories.get('m_7')!.channel).toBe('agentes/rotineiros/novo')
+    expect(h.channels.get('agentes/rotineiros/novo')!.archived_at).toBeNull()
+    expect(h.channels.get('opex/agentes/rotineiros/novo')!.archived_at).not.toBeNull()
   })
 })

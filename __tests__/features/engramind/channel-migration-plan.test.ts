@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildChannelMap, buildSubscriptionPlan, compareDigests, invertChannelMap, mapSubscriptionTarget, parseDigestOutput, remapSlug, type ExportDigest, type MemoryDigest } from '@/features/engramind/channel-migration/plan'
+import { buildChannelMap, buildRevertMap, buildSubscriptionPlan, compareDigests, invertChannelMap, mapSubscriptionTarget, parseDigestOutput, remapSlug, type ExportDigest, type MemoryDigest } from '@/features/engramind/channel-migration/plan'
 import { remapDeep } from '@/features/engramind/server/channel-migration/stored-slugs'
 
 /** Migração B (OPE-206), parte pura: mapa, assinaturas, troca de slug e conferência dos exports. */
@@ -27,6 +27,13 @@ describe('buildChannelMap', () => {
     expect(invertChannelMap(map)[0]).toMatchObject({ from: 'opex/agentes/adversario', to: 'agentes/adversario' })
     expect(remapSlug('agentes/adversario', map)).toBe('opex/agentes/adversario')
     expect(remapSlug('vagas/x', map)).toBe('vagas/x')
+  })
+
+  it('volta atrás inclui os canais gerenciados criados depois da ida (com o arquivamento atual)', () => {
+    const { map } = buildChannelMap([channel('agentes/adversario')], 'opex')
+    const revert = buildRevertMap(map, [channel('opex'), channel('opex/agentes/adversario'), channel('opex/agentes/rotineiros/novo'), channel('opex/agentes/desenvolvedor/central/z', true), channel('vagas/x')], 'opex')
+    expect(revert.map((entry) => `${entry.from}→${entry.to}`)).toEqual(['opex/agentes/adversario→agentes/adversario', 'opex/agentes/desenvolvedor/central/z→agentes/desenvolvedor/central/z', 'opex/agentes/rotineiros/novo→agentes/rotineiros/novo'])
+    expect(revert.find((entry) => entry.from === 'opex/agentes/desenvolvedor/central/z')?.wasArchived).toBe(true)
   })
 })
 

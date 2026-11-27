@@ -96,7 +96,9 @@ export async function channelNamespace(): Promise<ChannelNamespace> {
         naming = await decideNaming(app)
         if (naming) await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID, $or: [{ channelNaming: null }, { channelNaming: { $exists: false } }] }, { $set: { channelNaming: naming } }, { upsert: false })
     }
-    const value: ChannelNamespace = naming === "prefixed" || (naming === null && app !== OPEX_APP_SLUG) ? { app, prefixed: true } : { app, prefixed: false }
+    // Os nomes antigos são os canais do dono: só valem no app `opex`. Com a chave de outro app no mesmo banco (cópia ou
+    // troca da chave), o `legacy` gravado não vale e a instância usa o próprio app na frente.
+    const value: ChannelNamespace = app === OPEX_APP_SLUG && naming !== "prefixed" ? { app, prefixed: false } : { app, prefixed: true }
     namespaceCache = { at: Date.now(), value }
     return value
 }

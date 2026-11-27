@@ -82,6 +82,23 @@ export function invertChannelMap(map: readonly ChannelMapEntry[]): ChannelMapEnt
     return map.map((entry) => ({ ...entry, from: entry.to, to: entry.from }))
 }
 
+/**
+ * Mapa da volta atrás completo: o mapa da ida invertido mais os canais gerenciados com o nome novo criados depois da
+ * ida (central ou rotineiro novos, `<app>/agentes/...`), que voltam para `agentes/...` com o estado de arquivamento
+ * atual. Sem eles, as memórias dessas listas ficariam fora dos nomes antigos.
+ */
+export function buildRevertMap(forward: readonly ChannelMapEntry[], channels: readonly MappableChannel[], app: string): ChannelMapEntry[] {
+    const map = invertChannelMap(forward)
+    const known = new Set(map.map((entry) => entry.from))
+    const prefix = `${app}/${LOGICAL_AGENTS_PREFIX}/`
+    for (const channel of channels) {
+        if (!channel.slug.startsWith(prefix) || known.has(channel.slug)) continue
+        map.push({ from: channel.slug, to: channel.slug.slice(app.length + 1), wasArchived: Boolean(channel.archived_at), name: channel.name, description: channel.description ?? null, priority: channel.priority ?? null })
+    }
+    map.sort((a, b) => a.from.localeCompare(b.from))
+    return map
+}
+
 /** Slug guardado trocado pelo mapa (o que não está no mapa volta igual). */
 export function remapSlug(slug: string, map: readonly Pick<ChannelMapEntry, "from" | "to">[]): string {
     return map.find((entry) => entry.from === slug)?.to ?? slug

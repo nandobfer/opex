@@ -5,7 +5,7 @@ import {
     buildChannelMap,
     buildSubscriptionPlan,
     compareDigests,
-    invertChannelMap,
+    buildRevertMap,
     moveIdempotencyKey,
     type ChannelMapEntry,
     type MigrationDirection,
@@ -144,29 +144,34 @@ async function stepMaintenance(doc: IChannelMigration): Promise<void> {
 
 async function stepMap(doc: IChannelMigration, target: EngramindTarget, actorId: string): Promise<IChannelMapItem[]> {
     let map: ChannelMapEntry[]
-    let tooLong: string[] = []
-    if (doc.direction === "forward") {
-        const channels = await listPaged<EngramindChannel>("/v1/channels", "channels", { include_archived: true }, target)
-        ;({ map, tooLong } = buildChannelMap(channels, doc.app))
+    let tooLong: string[] = doc.tooLong ?? []
+    if (doc.map?.length) {
+        // Retomada: o mapa gravado manda (o `wasArchived` foi lido antes de qualquer origem ser restaurada).
+        map = doc.map
     } else {
-        const forward = await load(doc.revertOf!)
-        map = invertChannelMap(forward.map)
+        const channels = await listPaged<EngramindChannel>("/v1/channels", "channels", { include_archived: true }, target)
+        if (doc.direction === "forward") ({ map, tooLong } = buildChannelMap(channels, doc.app))
+        else map = buildRevertMap((await load(doc.revertOf!)).map, channels, doc.app)
+        // Grava o mapa antes de restaurar qualquer origem arquivada.
+        await save(doc._id, { map: map.map((entry) => ({ ...entry, restoredOrigin: false, ready: false, moved: false })), tooLong })
     }
     const items: IChannelMapItem[] = []
-    for (const entry of map) {
+    for (const raw of map) {
+        const entry: ChannelMapEntry = { from: raw.from, to: raw.to, wasArchived: raw.wasArchived, name: raw.name, description: raw.description, priority: raw.priority }
         const origin = await getChannel(entry.from, target)
         if (!origin) {
             // Origem que não existe mais (volta atrás de um canal que sumiu): nada a mover.
             items.push({ ...entry, restoredOrigin: false, ready: true, moved: true })
             continue
         }
-        let restoredOrigin = false
+        let restoredOrigin = (raw as Partial<IChannelMapItem>).restoredOrigin ?? false
         if (origin.archived_at) {
             await call("POST", { path: `/v1/channels/${enc(entry.from)}/restore`, body: {} }, target)
             restoredOrigin = true
         }
         items.push({ ...entry, restoredOrigin, ready: false, moved: false })
     }
+    await save(doc._id, { map: items })
     // O export precisa ser deste Engramind: os ids de cada origem batem com a listagem do Opex.
     const backupIds = new Map<string, Set<string>>()
     for (const memory of doc.backup?.memories ?? []) backupIds.set(memory.channel, (backupIds.get(memory.channel) ?? new Set()).add(memory.id))
@@ -176,6 +181,8 @@ async function stepMap(doc: IChannelMigration, target: EngramindTarget, actorId:
         const expected = backupIds.get(item.from) ?? new Set<string>()
         const missing = listed.filter((memory) => !expected.has(memory.id))
         if (missing.length || listed.length !== expected.size) {
+            // Antes de qualquer `move`: a próxima execução refaz o backup (com a manutenção já ligada) em vez de repetir o velho.
+            await save(doc._id, { backup: null, step: "backup" }, { step: "map", message: `backup diferente do Engramind no canal ${item.from}: o backup será refeito na retomada` })
             throw new DomainError(409, `O backup não confere com o Engramind no canal ${item.from} (${expected.size} no backup, ${listed.length} na listagem). Confira se o script exporta o mesmo Engramind da integração.`, "CHANNEL_MIGRATION_BACKUP_MISMATCH")
         }
     }
@@ -354,11 +361,12 @@ async function execute(id: string, actorId: string): Promise<void> {
             if (doc.step !== step) await save(id, { step })
             return { ...doc, step }
         }
+        // A manutenção vem ANTES do backup e vale em toda retomada até o arquivamento: com as memórias paradas, o
+        // backup e a conferência comparam o mesmo acervo.
+        await stepMaintenance(await load(id))
         let doc = await at("backup")
         if (doc) await stepBackup(doc, actorId)
-        // A manutenção vale em toda retomada até o arquivamento.
         doc = await load(id)
-        await stepMaintenance(doc)
         await save(id, { step: stepIndex(doc.step) > stepIndex("map") ? doc.step : "map" })
         if ((doc = await at("map"))) await stepMap(doc, target, actorId)
         if ((doc = await at("destinations"))) await stepDestinations(doc, target)
