@@ -14,7 +14,7 @@ import {
     ROUTINE_RUN_UPDATED_EVENT,
     routineChannelOf,
 } from "../constants"
-import type { RoutineAgentDto, RoutinePendingActionDto, RoutineRunDto } from "../types"
+import type { RoutineAgentDto, RoutineCostDto, RoutinePendingActionDto, RoutineRunDto } from "../types"
 import type { RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
 import type { RoutineRunStatus } from "../status"
 import { routineAgentTitle } from "../identity-plan"
@@ -132,7 +132,7 @@ function pendingDto(run: RoutineRunDoc): RoutinePendingActionDto | null {
     }
 }
 
-export function toRunDto(run: RoutineRunDoc, agentName: string): RoutineRunDto {
+export function toRunDto(run: RoutineRunDoc, agentName: string, cost: RoutineCostDto | null = null): RoutineRunDto {
     const snapshot = run.snapshot
     return {
         id: String(run._id),
@@ -153,6 +153,7 @@ export function toRunDto(run: RoutineRunDoc, agentName: string): RoutineRunDto {
         tokens: run.tokens ?? 0,
         costUsd: run.costUsd ?? null,
         costPartial: run.costPartial === true,
+        cost,
         hibernation: run.hibernation ? { at: new Date(run.hibernation.at).toISOString(), reason: run.hibernation.reason } : null,
         pendingAction: pendingDto(run),
         report: run.report ?? null,

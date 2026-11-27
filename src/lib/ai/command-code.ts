@@ -88,6 +88,18 @@ async function catalogForGeneration(signal?: AbortSignal): Promise<CommandCodeRa
     }
 }
 
+/**
+ * Preços do catálogo por modelo, para o custo de tabela (OPE-203): mesmo prazo e mesma cópia anterior da geração;
+ * `null` quando o catálogo não respondeu e não há cópia. Cancelamento de quem pediu propaga.
+ */
+export async function commandCodePricingCatalog(signal?: AbortSignal): Promise<{ pricing: Record<string, NonNullable<CommandCodeRawModel["pricing"]>>; at: string } | null> {
+    const list = await catalogForGeneration(signal)
+    if (!list) return null
+    const pricing: Record<string, NonNullable<CommandCodeRawModel["pricing"]>> = {}
+    for (const model of list) if (model.pricing) pricing[model.id] = model.pricing
+    return { pricing, at: new Date(catalogCache?.at ?? Date.now()).toISOString() }
+}
+
 /** Tipos de entrada do modelo pelo catálogo (cache); `null` quando o catálogo não respondeu. */
 export async function commandCodeModelInputs(modelId: string, signal?: AbortSignal): Promise<string[] | null> {
     const raw = (await catalogForGeneration(signal))?.find((model) => model.id === modelId)

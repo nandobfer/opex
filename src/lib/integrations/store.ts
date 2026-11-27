@@ -17,6 +17,8 @@ export interface StoredApiKey {
     createdAt: Date
     updatedAt: Date
     createdBy?: string
+    /** Plano de cobrança da chave (OPE-203; ausente = pago por uso). Lido por `billingOf`. */
+    billing?: unknown
 }
 
 export interface StoredIntegration {

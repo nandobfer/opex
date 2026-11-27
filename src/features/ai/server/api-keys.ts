@@ -10,6 +10,7 @@ import { invalidateStoredIntegrations, type StoredApiKey } from "@/lib/integrati
 import { getAiProvider } from "@/lib/ai/providers"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
+import { aiKeyBillingSchema, billingOf, type AiKeyBilling, type StoredAiKeyBilling } from "@/features/ai-billing/schemas"
 import {
     AI_PROVIDER_KEYS_UPDATED_EVENT,
     aiApiKeySelectionSchema,
@@ -17,6 +18,7 @@ import {
     feedsEngramind,
     updateAiApiKeySchema,
     type AiApiKeyDto,
+    hasKeyBilling,
     isAiApiKeyProviderId,
     type AiApiKeyProviderId,
 } from "../api-keys"
@@ -35,6 +37,11 @@ import {
  */
 
 const log = loggerFor({ module: "ai", feature: "api-keys" })
+
+function stripSetAt(billing: StoredAiKeyBilling): AiKeyBilling {
+    const { setAt: _setAt, ...plan } = billing
+    return plan as AiKeyBilling
+}
 export const AI_API_KEY_AUDIT_ENTITY = "ChaveApiIA"
 
 interface KeyRingDoc {
@@ -74,6 +81,8 @@ function toDto(item: StoredApiKey, primaryId: string | null, selected: ReadonlyS
         name: item.name,
         active: selected.has(item.id),
         primary: item.id === primaryId,
+        billing: stripSetAt(billingOf(item.billing)),
+        billingNotices: [],
         createdAt: new Date(item.createdAt).toISOString(),
         updatedAt: new Date(item.updatedAt).toISOString(),
     }
@@ -84,9 +93,17 @@ export async function listAiApiKeys(provider: AiApiKeyProviderId): Promise<AiApi
     const doc = await loadKeyRing(provider)
     const primaryId = primaryIdOf(doc)
     const selected = new Set(selectedIdsOf(doc))
-    return (doc?.apiKeys ?? [])
-        .map((item) => toDto(item, primaryId, selected))
-        .sort((a, b) => Number(b.primary) - Number(a.primary) || Number(b.active) - Number(a.active) || b.createdAt.localeCompare(a.createdAt))
+    const keys = (doc?.apiKeys ?? []).map((item) => toDto(item, primaryId, selected))
+    // Avisos do plano (OPE-203): falha na leitura não derruba a lista de chaves.
+    if (hasKeyBilling(provider) && keys.some((key) => key.billing.mode !== "usage")) {
+        const { keyBillingNotices } = await import("@/features/ai-billing/server/key-notices")
+        const notices = await keyBillingNotices(provider, doc?.apiKeys ?? []).catch((error: unknown) => {
+            log.warn({ provider, err: error instanceof Error ? error.message : String(error) }, "[ai] avisos dos planos de cobrança indisponíveis")
+            return new Map<string, string[]>()
+        })
+        for (const key of keys) key.billingNotices = notices.get(key.id) ?? []
+    }
+    return keys.sort((a, b) => Number(b.primary) - Number(a.primary) || Number(b.active) - Number(a.active) || b.createdAt.localeCompare(a.createdAt))
 }
 
 function encrypt(secret: string): EncryptedSecret {
@@ -157,6 +174,23 @@ async function finish(provider: AiApiKeyProviderId, actorId: string, keyId: stri
     if (effects.primaryChanged || effects.poolChanged) await afterKeyRingChange(provider, effects)
     await publishAppEvent(AI_PROVIDER_KEYS_UPDATED_EVENT, { provider })
     return listAiApiKeys(provider)
+}
+
+/**
+ * Plano de cobrança da chave (OPE-203): Pago por uso, Assinatura ou Créditos. Só grava o plano (o custo efetivo é
+ * derivado na leitura, então muda na hora; o custo de tabela gravado nos passos não muda). Auditado, com o evento
+ * `ai-provider-keys-updated`.
+ */
+export async function updateAiKeyBilling(provider: AiApiKeyProviderId, keyId: string, raw: unknown, actorId: string): Promise<AiApiKeyDto[]> {
+    if (!hasKeyBilling(provider)) throw new DomainError(404, "Este provedor não tem plano de cobrança", "AI_PROVIDER_NOT_FOUND")
+    const billing = aiKeyBillingSchema.parse(raw)
+    const doc = await loadKeyRing(provider)
+    const item = findKey(doc, keyId)
+    const before = stripSetAt(billingOf(item.billing))
+    if (JSON.stringify(before) === JSON.stringify(billing)) return listAiApiKeys(provider)
+    const stored: StoredAiKeyBilling = { ...billing, setAt: new Date().toISOString() }
+    await updateKey(provider, keyId, {}, { $set: { "apiKeys.$.billing": stored, "apiKeys.$.updatedAt": new Date() }, _auditContext: { userId: actorId } })
+    return finish(provider, actorId, keyId, AcaoAuditoria.ATUALIZAR, { provider, name: item.name, plano: before }, { provider, name: item.name, plano: billing }, { primaryChanged: false, poolChanged: false, hasPrimary: primaryIdOf(doc) !== null })
 }
 
 /** Nova chave. A primeira do provedor (ou sem principal válida) já entra como principal e em uso; as demais, fora de uso. */

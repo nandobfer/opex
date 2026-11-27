@@ -19,7 +19,7 @@ export interface IIntegration extends Document {
     publicValues: Record<string, PublicFieldValue>
     secretValues: Record<string, EncryptedSecret | null>
     /** Chaveiro de chaves de API nomeadas (provedores de IA, OPE-155); segredo cifrado como `secretValues`. */
-    apiKeys?: { id: string; name: string; secret: EncryptedSecret; createdAt: Date; updatedAt: Date; createdBy?: string }[]
+    apiKeys?: { id: string; name: string; secret: EncryptedSecret; createdAt: Date; updatedAt: Date; createdBy?: string; billing?: unknown }[]
     /** Chave principal do chaveiro (`null` = nenhuma): Engramind, teste e valor `apiKey` da integração. */
     activeApiKeyId?: string | null
     /** Chaves em uso no rodízio (OPE-179), com a principal; ausente = só a principal. */

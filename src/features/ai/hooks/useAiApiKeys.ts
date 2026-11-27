@@ -10,6 +10,7 @@ import type { ApiResponse } from "@/lib/types/api"
 import { INTEGRATIONS_QUERY_KEY } from "@/features/integrations/hooks/useIntegrations"
 import { AI_PROVIDER_KEYS_UPDATED_EVENT, type AiApiKeyDto, type AiApiKeyProviderId, type AiApiKeySelectionInput, type CreateAiApiKeyInput, type UpdateAiApiKeyInput } from "../api-keys"
 import { AI_QUERY_KEY } from "./useAi"
+import type { AiKeyBilling } from "@/features/ai-billing/schemas"
 
 /** Chaves de API nomeadas de um provedor de IA (OPE-155). O segredo nunca volta do servidor. */
 
@@ -57,6 +58,15 @@ export function useUpdateAiApiKey(provider: AiApiKeyProviderId, success = "Chave
         provider,
         async ({ id, input }: { id: string; input: UpdateAiApiKeyInput }) => unwrapApi((await api.patch<ApiResponse<AiApiKeyDto[]>>(`${base(provider)}/${id}`, input)).data),
         { success, error: "Não foi possível salvar a chave" },
+    )
+}
+
+/** Plano de cobrança da chave (OPE-203): o custo efetivo dos rotineiros é recalculado no servidor. */
+export function useUpdateAiKeyBilling(provider: AiApiKeyProviderId) {
+    return useKeysMutation(
+        provider,
+        async ({ id, billing }: { id: string; billing: AiKeyBilling }) => unwrapApi((await api.patch<ApiResponse<AiApiKeyDto[]>>(`${base(provider)}/${id}/billing`, billing)).data),
+        { success: "Plano de cobrança salvo", error: "Não foi possível salvar o plano de cobrança" },
     )
 }
 

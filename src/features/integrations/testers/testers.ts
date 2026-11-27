@@ -203,6 +203,16 @@ const testEvolution: IntegrationTester = async (context) => {
     return run(context)
 }
 
+const testFxPtax: IntegrationTester = async (context) => {
+    const { testFxPtax: run } = await import("@/features/ai-billing/server/testers")
+    return run(context)
+}
+
+const testModelsDev: IntegrationTester = async (context) => {
+    const { testModelsDev: run } = await import("@/features/ai-billing/server/testers")
+    return run(context)
+}
+
 export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     pusher: testPusher,
     internal_api: testInternalApi,
@@ -223,4 +233,6 @@ export const INTEGRATION_TESTERS: Record<IntegrationId, IntegrationTester> = {
     builder_machine: testBuilderMachine,
     engramind: testEngramind,
     "evolution-api": testEvolution,
+    fx_ptax: testFxPtax,
+    models_dev: testModelsDev,
 }

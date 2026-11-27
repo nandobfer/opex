@@ -1,5 +1,6 @@
 import { z } from "zod"
 import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiKeyBilling } from "@/features/ai-billing/schemas"
 
 /**
  * Chaves de API nomeadas dos provedores de IA (OPE-155) — módulo PURO (tela e API). Cada provedor por
@@ -20,6 +21,13 @@ export function isAiApiKeyProviderId(value: string): value is AiApiKeyProviderId
  * O JEV não gera texto; o Go e o Command Code não são fonte do Redator nem do embedding.
  */
 export const AI_API_KEY_ENGRAMIND_PROVIDERS = ["gemini", "anthropic", "openai", "deepseek"] as const satisfies readonly AiApiKeyProviderId[]
+
+/** Provedores com plano de cobrança na chave (OPE-203): os que geram texto (o JEV fica fora). */
+export const AI_BILLING_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code"] as const satisfies readonly AiApiKeyProviderId[]
+
+export function hasKeyBilling(provider: AiApiKeyProviderId): boolean {
+    return (AI_BILLING_PROVIDER_IDS as readonly string[]).includes(provider)
+}
 
 export function feedsEngramind(provider: AiApiKeyProviderId): boolean {
     return (AI_API_KEY_ENGRAMIND_PROVIDERS as readonly string[]).includes(provider)
@@ -57,6 +65,10 @@ export interface AiApiKeyDto {
     active: boolean
     /** Principal (uma por provedor): Engramind, teste do provedor e "Todas" da assinatura do Go. Sempre em uso. */
     primary: boolean
+    /** Plano de cobrança (OPE-203); sem plano salvo = pago por uso. */
+    billing: AiKeyBilling
+    /** Avisos do plano (créditos vencidos/esgotados, assinatura com valores diferentes na mesma conta). */
+    billingNotices: string[]
     createdAt: string
     updatedAt: string
 }
