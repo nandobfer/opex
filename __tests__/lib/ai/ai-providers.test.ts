@@ -5,12 +5,12 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }))
 
-vi.mock("@/lib/integrations/runtime", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("@/lib/integrations/runtime")>()),
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@nandobfer/integracoes/modules/server/config')>()),
   getIntegrationConfig: vi.fn(async (id: string) => mocks.config[id] ?? {}),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 // Provedores por API key leem a chave ATIVA do chaveiro (OPE-155): o documento é montado a partir do `apiKey`.
-vi.mock("@/lib/integrations/server", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   loadStoredIntegration: vi.fn(async (id: string) => {
     const apiKey = mocks.config[id]?.apiKey
     if (typeof apiKey !== 'string') return null
@@ -18,15 +18,15 @@ vi.mock("@/lib/integrations/server", () => ({
     return { integrationId: id, publicValues: {}, secretValues: {}, apiKeys: [{ id: 'key_ativa', name: 'Principal', secret: encryptSecret(apiKey), createdAt: now, updatedAt: now }], activeApiKeyId: 'key_ativa' }
   }),
   invalidateStoredIntegrations: vi.fn(),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 
 import { randomBytes } from 'crypto'
-import { encryptSecret } from "@/lib/crypto/secretBox"
+import { encryptSecret } from '@/lib/crypto/secretBox'
 process.env.INTEGRATIONS_ENCRYPTION_KEY = randomBytes(32).toString('base64')
-vi.mock("@/lib/integrations/server", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 
 import { getOpencodeInfo, listOpencodeAgents, listOpencodeModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode"
 import { listGeminiModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/gemini"
@@ -280,11 +280,11 @@ describe('capacidade dos provedores', () => {
   })
 
   it('Command Code (OPE-190): provedor de texto por API, com chaveiro, Agente Opex e consumo, fora do Engramind e sem agente', async () => {
-    const { AI_API_KEY_PROVIDER_IDS, feedsEngramind } = await import("@/features/ai/api-keys")
-    const { OPEX_PROVIDER_IDS } = await import("@/features/opex-agent/constants")
-    const { ROUTINE_OPEX_PROVIDER_IDS } = await import("@/features/routine-agents/schemas")
+    const { AI_API_KEY_PROVIDER_IDS, feedsEngramind } = await import('@/features/ai/api-keys').then(async (opex) => ({ ...(await import('@nandobfer/integracoes/modules/integrations/ia/features/ai/api-keys')), ...opex }))
+    const { OPEX_PROVIDER_IDS } = await import('@/features/opex-agent/constants')
+    const { ROUTINE_OPEX_PROVIDER_IDS } = await import('@/features/routine-agents/schemas')
     const { USAGE_PROVIDER_IDS, usageProviderReportsCost } = await import('@nandobfer/integracoes/modules/integrations/ia/features/ai/provider-usage')
-    const { AI_PROVIDER_TAB_IDS } = await import("@/features/ai/constants")
+    const { AI_PROVIDER_TAB_IDS } = await import('@/features/ai/constants')
     expect(AI_TEXT_PROVIDER_IDS).toContain('command-code')
     expect(AI_PROVIDERS.find((provider) => provider.id === 'command-code')).toMatchObject({ integrationId: 'ai_command_code', name: 'Command Code', supportsTextGeneration: true, supportsSampling: true, supportsAgent: false })
     expect(AI_API_KEY_PROVIDER_IDS).toContain('command-code')

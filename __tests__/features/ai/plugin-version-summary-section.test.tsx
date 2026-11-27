@@ -10,12 +10,17 @@ import { DEFAULT_PLUGIN_VERSION_SUMMARY_INSTRUCTIONS } from '@/features/ai/const
 const mocks = vi.hoisted(() => ({ query: null as unknown }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   usePluginVersionSummarySettings: () => mocks.query,
   useSavePluginVersionSummarySettings: () => ({ isPending: false, mutateAsync: vi.fn() }),
   useAiProviderStatuses: () => ({ providers: [] }),
-}))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard', () => ({ ProviderModelCard: () => null }))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  usePluginVersionSummarySettings: () => mocks.query,
+  useSavePluginVersionSummarySettings: () => ({ isPending: false, mutateAsync: vi.fn() }),
+  useAiProviderStatuses: () => ({ providers: [] }),
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard", () => ({ ProviderModelCard: () => null }))
 
 import { PluginVersionSummarySection } from '@/features/ai/components/plugin-version-summary/PluginVersionSummarySection'
 

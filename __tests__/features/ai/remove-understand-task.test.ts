@@ -8,8 +8,9 @@ const mocks = vi.hoisted(() => ({
   consumption: vi.fn(),
 }))
 
-vi.mock('@/lib/db/models/Ai', () => ({ AiFeatureSetting: { deleteOne: mocks.settings }, AiUsageLog: { deleteMany: mocks.usage } }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption', () => ({ AiConsumption: { deleteMany: mocks.consumption } }))
+vi.mock("@/lib/db/models/Ai", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ AiFeatureSetting: { deleteOne: mocks.settings }, AiUsageLog: { deleteMany: mocks.usage } }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ AiFeatureSetting: { deleteOne: mocks.settings }, AiUsageLog: { deleteMany: mocks.usage } }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({ AiConsumption: { deleteMany: mocks.consumption } }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn() } }))
 
 import { removeUnderstandTaskFeature } from '@/lib/db/migrations/remove-understand-task-feature'

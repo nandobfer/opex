@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
@@ -35,12 +37,12 @@ vi.mock('next/navigation', () => ({
 }))
 vi.mock('@/lib/api', () => ({ api: { get: vi.fn(async () => ({ data: { data: [] } })) }, apiErrorMessage: (_e: unknown, fallback: string) => fallback, apiErrorCode: () => null, unwrapApi: (v: unknown) => v }))
 vi.mock('@/features/plugins/client/PluginSourceContext', () => ({ usePluginSource: () => holder.source }))
-vi.mock('@nandobfer/integracoes/react', () => ({
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationConsole", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   SEARCH_HIGHLIGHT_LIMIT: 1000,
   IntegrationConsole: React.forwardRef(function Console() {
     return <div data-testid="console" />
   }),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/features/plugins/hooks/usePluginDebugLogs', () => ({ usePluginDebugLogs: () => ({ mode: 'manual', loading: false, error: null, refresh: vi.fn() }) }))
 vi.mock('@/features/plugins/hooks/usePlugins', () => ({
   usePluginsRealtime: () => undefined,

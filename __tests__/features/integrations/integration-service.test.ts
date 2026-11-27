@@ -13,19 +13,19 @@ const mocks = vi.hoisted(() => ({
   engramindSync: vi.fn(async (...args: unknown[]) => void args),
 }))
 
-vi.mock("@/lib/integrations/server", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({
   loadStoredIntegration: mocks.loadStoredIntegration,
   loadStoredIntegrations: vi.fn(),
   invalidateStoredIntegrations: mocks.invalidateStoredIntegrations,
   INTEGRATION_CACHE_TTL_MS: 30_000,
-}))
-vi.mock("@/lib/db", () => ({
+}))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock('@/lib/db', () => ({
   dbConnect: vi.fn(),
   recordAudit: mocks.recordAudit,
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR' },
   createAuditContext: (userId: string) => ({ userId }),
 }))
-vi.mock('@nandobfer/integracoes/mongoose', () => {
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => {
   function Integration(this: Record<string, unknown>, data: Record<string, unknown>) {
     Object.assign(this, data)
     this.set = vi.fn()
@@ -33,18 +33,18 @@ vi.mock('@nandobfer/integracoes/mongoose', () => {
   }
   ;(Integration as unknown as { updateOne: typeof mocks.updateOne }).updateOne = mocks.updateOne
   return { Integration }
-})
-vi.mock('@nandobfer/integracoes/mongoose', () => ({
+})(importOriginal)) as object), Object.getOwnPropertyDescriptors((await (() => ({
   IntegrationStatus: { findOne: () => ({ lean: mocks.statusFindOne }), find: () => ({ lean: async () => [] }) },
-}))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationLog: {} }))
-vi.mock("@/lib/integrations/scheduler", () => ({ rescheduleJobs: mocks.rescheduleJobs }))
-vi.mock("@/features/local-docker/server/cleanup", () => ({ onBuilderMachineEnabled: mocks.enableHook }))
-vi.mock("@/features/engramind/server/ai-source", () => ({ syncEngramindProviderKey: mocks.engramindSync }))
-vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
+}))(importOriginal)) as object), Object.getOwnPropertyDescriptors((await (() => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))(importOriginal)) as object), Object.getOwnPropertyDescriptors((await (() => ({ IntegrationLog: {} }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 
-import { encryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
+
+
+vi.mock("@nandobfer/integracoes/modules/server/scheduler", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({ rescheduleJobs: mocks.rescheduleJobs }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock('@/features/local-docker/server/cleanup', () => ({ onBuilderMachineEnabled: mocks.enableHook }))
+vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.engramindSync }))
+vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
+
+import { encryptSecret, isEncryptedSecret } from '@/lib/crypto/secretBox'
 import type { CronJobConfig } from "@nandobfer/integracoes"
 import {
   getIntegrationDetail,
@@ -52,7 +52,7 @@ import {
   jobsToReschedule,
   listIntegrations,
   updateIntegration,
-} from "@/lib/integrations/server"
+} from "@nandobfer/integracoes/modules/server/service"
 
 const saved = { ...process.env }
 const actor = 'local'

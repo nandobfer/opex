@@ -14,25 +14,25 @@ const mocks = vi.hoisted(() => ({
   loggerError: vi.fn(),
 }))
 
-vi.mock('@nandobfer/integracoes/mongoose', () => ({
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   CronJobState: {
     aggregate: mocks.jobAggregate,
     deleteMany: mocks.jobDeleteMany,
     updateOne: mocks.jobUpdateOne,
     createIndexes: mocks.jobCreateIndexes,
   },
-}))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({
+}))(importOriginal)) as Record<string, unknown>), ...((await (() => ({
   IntegrationStatus: {
     aggregate: mocks.statusAggregate,
     deleteMany: mocks.statusDeleteMany,
     createIndexes: mocks.statusCreateIndexes,
   },
-}))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationLog: { createIndexes: mocks.logCreateIndexes } }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({
+}))(importOriginal)) as Record<string, unknown>), ...((await (() => ({ IntegrationLog: { createIndexes: mocks.logCreateIndexes } }))(importOriginal)) as Record<string, unknown>), ...((await (() => ({
   Integration: { findOne: () => ({ lean: mocks.configFindOne }), createIndexes: mocks.configCreateIndexes },
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
+
+
+
 vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), error: mocks.loggerError, info: vi.fn() } }))
 
 import { repairIntegrationIndexes } from '@/lib/db/migrations/repair-integration-indexes'

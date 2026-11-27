@@ -1,3 +1,4 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
@@ -15,14 +16,14 @@ const mocks = vi.hoisted(() => {
 })
 
 vi.mock('@/lib/db', () => ({ recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR' } }))
-vi.mock('@/lib/integrations/scheduler', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/scheduler", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   runJobNow: mocks.runJobNow,
   CronJobRunError: mocks.CronJobRunError,
-}))
-vi.mock('@/lib/integrations/server', () => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/server/service", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { POST } from '@/app/api/integrations/[id]/jobs/[jobId]/run/route'
+const { POST } = legacyRoute("integrations", "[id]/jobs/[jobId]/run")
 
 const call = (id = 'crons', jobId = 'cancel') =>
   POST(new NextRequest(`http://x/api/integrations/${id}/jobs/${jobId}/run`, { method: 'POST' }), {

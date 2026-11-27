@@ -1,9 +1,11 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from "react"
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationDetailDto } from "@nandobfer/integracoes"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes/modules/core/dto"
 
 const mocks = vi.hoisted(() => ({
     useIntegration: vi.fn(),
@@ -14,21 +16,21 @@ const mocks = vi.hoisted(() => ({
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
-vi.mock("@nandobfer/integracoes/react", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationTestStream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useIntegrationTestStream: () => ({ state: "idle", start: vi.fn(async () => {}), cancel: vi.fn() }),
-}))
-vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrationStatusLive: vi.fn() }))
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegrationStatusLive: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
 vi.mock("sonner", () => ({ toast: mocks.toast }))
-vi.mock("@nandobfer/integracoes/react", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useIntegration: mocks.useIntegration,
     useUpdateIntegration: () => ({ mutateAsync: mocks.mutateAsync, isPending: false }),
     integrationErrorMessage: (_e: unknown, fallback: string) => fallback,
-}))
-vi.mock("@nandobfer/integracoes/react", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationDebugLogs", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useIntegrationDebugLogs: () => ({ mode: mocks.debugMode, loading: false, error: null, refresh: mocks.refresh }),
-}))
-vi.mock("@nandobfer/integracoes/react", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/explorer/IntegrationExplorer", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     IntegrationExplorer: ({ swaggerUrl, onBack }: { swaggerUrl: string; onBack: () => void }) => (
         <div data-testid="explorer">
             {swaggerUrl}
@@ -37,13 +39,13 @@ vi.mock("@nandobfer/integracoes/react", () => ({
             </button>
         </div>
     ),
-}))
-vi.mock("@nandobfer/integracoes/react", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationConsole", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     SEARCH_HIGHLIGHT_LIMIT: 1000,
     IntegrationConsole: React.forwardRef(function Console() {
         return <div data-testid="console" />
     }),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("framer-motion", () => {
     const MOTION_PROPS = new Set(["initial", "animate", "exit", "variants", "transition", "whileTap", "layout"])
     const passthrough = (tag: string) =>
@@ -62,9 +64,9 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { IntegrationDetailPage } from "@nandobfer/integracoes/react"
-import { generateApiToken } from "@nandobfer/integracoes/react"
-import { DEBUG_DIALOG_MEDIA_QUERY } from "@nandobfer/integracoes/react"
+import { IntegrationDetailPage } from "@nandobfer/integracoes/modules/react/central/IntegrationDetailPage"
+import { generateApiToken } from "@nandobfer/integracoes/modules/react/central/TokenField"
+import { DEBUG_DIALOG_MEDIA_QUERY } from "@nandobfer/integracoes/modules/react/central/detail/debug-toggle-context"
 
 const detail = (overrides: Partial<IntegrationDetailDto> = {}): IntegrationDetailDto => ({
     id: "pusher",

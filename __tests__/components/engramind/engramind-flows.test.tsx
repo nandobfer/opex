@@ -74,7 +74,7 @@ vi.mock('@/features/engramind/hooks/useEngramindEnv', () => ({
   }),
   useApplyLog: () => ({ status: mocks.applyStatus }),
 }))
-vi.mock('@nandobfer/integracoes/react', async () => {
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationConsole", async () => {
   const ReactModule = await import('react')
   return { IntegrationConsole: ReactModule.forwardRef<HTMLDivElement, { ariaLabel?: string }>(function Console(props, ref) { return <div ref={ref} aria-label={props.ariaLabel} /> }) }
 })

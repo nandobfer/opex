@@ -39,7 +39,7 @@ vi.mock('@/features/routine-agents/components/chat/RoutineChatColumn', () => ({
   RoutineChatColumn: () => <aside data-testid="routine-chat" />,
 }))
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock())
 vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), useSearchParams: () => new URLSearchParams(), usePathname: () => '/' }))
 vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
   useRoutineAgent: () => ({ data: mocks.loaded, isLoading: false }),
@@ -56,11 +56,16 @@ vi.mock('@/features/routine-agents/hooks/useRoutineRuns', () => ({
   useRoutineEntries: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
   useAddRoutineEntry: () => ({ mutate: mocks.addEntry, isPending: false }),
 }))
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   useAiProviderStatuses: () => ({ providers: mocks.providers }),
   useAiModels: () => ({ data: [], isLoading: false, isError: false }),
   useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  useAiProviderStatuses: () => ({ providers: mocks.providers }),
+  useAiModels: () => ({ data: [], isLoading: false, isError: false }),
+  useAiAgents: () => ({ data: [], isLoading: false, isError: false }),
+}))(importOriginal)) as Record<string, unknown>) }))
 vi.mock('@/features/opex-agent/hooks/useOpexSettings', () => ({ useOpexSettings: () => ({ data: { tools: [] }, isLoading: false, isError: false }) }))
 vi.mock('@/features/opex-agent/hooks/useOpexMcpServers', () => ({ useOpexMcpServers: () => ({ data: [], isLoading: false, isError: false }), useOpexMcpRealtime: () => {} }))
 

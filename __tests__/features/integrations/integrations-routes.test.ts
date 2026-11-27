@@ -1,3 +1,4 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
@@ -15,9 +16,9 @@ const mocks = vi.hoisted(() => ({
   apiTokenScopeCatalog: vi.fn(),
 }))
 
-vi.mock("@/lib/integrations/server", async () => {
-  const actual = await vi.importActual<typeof import("@/features/integrations/services/integration-service")>(
-    '@/lib/integrations/server',
+vi.mock("@nandobfer/integracoes/modules/server/service", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async () => {
+  const actual = await vi.importActual<typeof import('@/features/integrations/services/integration-service')>(
+    '@nandobfer/integracoes/modules/server/service',
   )
   return {
     IntegrationUpdateError: actual.IntegrationUpdateError,
@@ -26,28 +27,28 @@ vi.mock("@/lib/integrations/server", async () => {
     updateIntegration: mocks.updateIntegration,
     listIntegrationLogs: mocks.listIntegrationLogs,
   }
-})
-vi.mock("@/lib/integrations/server", () => ({ runIntegrationTest: mocks.runIntegrationTest }))
-vi.mock("@/features/integrations/api-tokens/service", () => ({
+})(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/server/test-runner", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ runIntegrationTest: mocks.runIntegrationTest }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/features/integrations/api-tokens/service', () => ({
   listApiTokens: mocks.listApiTokens,
   createApiToken: mocks.createApiToken,
   revokeApiToken: mocks.revokeApiToken,
   updateApiTokenScopes: mocks.updateApiTokenScopes,
   requireApiToken: mocks.requireApiToken,
 }))
-vi.mock("@/features/integrations/api-tokens/scope-catalog", () => ({ apiTokenScopeCatalog: mocks.apiTokenScopeCatalog }))
-vi.mock("@/lib/logger", () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock('@/features/integrations/api-tokens/scope-catalog', () => ({ apiTokenScopeCatalog: mocks.apiTokenScopeCatalog }))
+vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { GET as listGET } from "@/app/api/integrations/route"
-import { GET as detailGET, PATCH } from "@/app/api/integrations/[id]/route"
-import { POST as testPOST } from "@/app/api/integrations/[id]/test/route"
-import { GET as logsGET } from "@/app/api/integrations/[id]/logs/route"
-import { GET as tokensGET, POST as tokensPOST } from "@/app/api/integrations/internal_api/tokens/route"
-import { DELETE as tokenDELETE, PATCH as tokenPATCH } from "@/app/api/integrations/internal_api/tokens/[tokenId]/route"
-import { GET as scopesGET } from "@/app/api/integrations/internal_api/scopes/route"
-import { GET as whoamiGET } from "@/app/api/v1/whoami/route"
-import { IntegrationUpdateError } from "@/lib/integrations/server"
-import { DomainError } from "@/lib/api/route"
+const { GET: listGET } = legacyRoute("integrations", "")
+const { GET: detailGET, PATCH } = legacyRoute("integrations", "[id]")
+const { POST: testPOST } = legacyRoute("integrations", "[id]/test")
+const { GET: logsGET } = legacyRoute("integrations", "[id]/logs")
+const { GET: tokensGET, POST: tokensPOST } = legacyRoute("integrations", "internal_api/tokens")
+const { DELETE: tokenDELETE, PATCH: tokenPATCH } = legacyRoute("integrations", "internal_api/tokens/[tokenId]")
+const { GET: scopesGET } = legacyRoute("integrations", "internal_api/scopes")
+import { GET as whoamiGET } from '@/app/api/v1/whoami/route'
+import { IntegrationUpdateError } from "@nandobfer/integracoes/modules/server/service"
+import { DomainError } from '@/lib/api/route'
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 

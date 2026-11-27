@@ -2,9 +2,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { randomBytes } from 'crypto'
 
 const mocks = vi.hoisted(() => ({ load: vi.fn() }))
-vi.mock("@/lib/integrations/server", () => ({ loadStoredIntegration: mocks.load }))
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ loadStoredIntegration: mocks.load }))()) as Record<string, unknown>) }))
 
-import { encryptSecret } from "@/lib/crypto/secretBox"
+import { encryptSecret } from '@/lib/crypto/secretBox'
 import { getAiProviderKeyById } from "@nandobfer/integracoes/modules/integrations/ia/ai/api-keys"
 import { opencodeGoMonthlyAllowances } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go-models"
 

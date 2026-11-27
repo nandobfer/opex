@@ -1,13 +1,14 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn() }))
 
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ listAiSkills: mocks.list }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/catalog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ listAiSkills: mocks.list }))(importOriginal)) as Record<string, unknown>), }))
 
 import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
 import { toOpencodeSkill } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills"
-import { GET } from "@/app/api/ai/skills/route"
+const { GET } = legacyRoute("ai", "skills")
 
 const call = (query = '') => GET(new NextRequest(`http://localhost/api/ai/skills${query}`), { params: Promise.resolve({}) })
 

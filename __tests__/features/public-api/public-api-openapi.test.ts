@@ -1,20 +1,20 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { describe, expect, it, vi } from 'vitest'
-import { parseOpenApiSpec } from "@/lib/integrations/server"
-import { findSpecUrlCandidates } from "@/lib/integrations/server"
-import { buildPublicApiSpec, insufficientScopeResponse, PUBLIC_TOKEN_ROUTES, SECURITY_SCHEMES, tokenOperationSecurity } from "@/features/public-api/openapi/spec"
-import { publicRouteScope } from "@/features/public-api/routes"
-import { whoAmIResponseSchema } from "@/features/public-api/schemas"
-import { renderPublicApiDocsHtml } from "@/features/public-api/openapi/docs-page"
-import { GET as getSpec } from "@/app/api/openapi.json/route"
+import { parseOpenApiSpec } from "@nandobfer/integracoes/modules/server/openapi/parser"
+import { findSpecUrlCandidates } from "@nandobfer/integracoes/modules/server/openapi/spec-source"
+import { buildPublicApiSpec, insufficientScopeResponse, PUBLIC_TOKEN_ROUTES, SECURITY_SCHEMES, tokenOperationSecurity } from '@/features/public-api/openapi/spec'
+import { publicRouteScope } from '@/features/public-api/routes'
+import { whoAmIResponseSchema } from '@/features/public-api/schemas'
+import { renderPublicApiDocsHtml } from '@/features/public-api/openapi/docs-page'
+import { GET as getSpec } from '@/app/api/openapi.json/route'
 
 // O catálogo do MCP do Agente Maddox é coberto em maddox-mcp-spec.test.ts; aqui, a rota sem ele.
-vi.mock("@/features/maddox-agent/server/mcp-catalog", () => ({ maddoxMcpDocsCatalog: async () => { throw new Error('fora deste teste') } }))
-import { GET as getDocs } from "@/app/api/docs/route"
+vi.mock('@/features/maddox-agent/server/mcp-catalog', () => ({ maddoxMcpDocsCatalog: async () => { throw new Error('fora deste teste') } }))
+import { GET as getDocs } from '@/app/api/docs/route'
 import { getIntegrationDef } from "@/features/integrations/registry/definitions"
-import { PUBLIC_API_SPEC_PATH } from "@/lib/public-api/paths"
-import packageJson from "../../../package.json"
+import { PUBLIC_API_SPEC_PATH } from '@/lib/public-api/paths'
+import packageJson from '../../../package.json'
 
 /**
  * Documentação OpenAPI da API interna: especificação válida para o explorador, cobertura de

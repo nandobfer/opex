@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -7,14 +9,20 @@ import { aiApiKeysMock, apiKeyDto } from "../../helpers/ai-api-keys"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn(), refetch: vi.fn() }))
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Pessoal", true), apiKeyDto("key_bbbbbbbbbbbbbbbbbb", "Empresa")]))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useProviderUsage", () => ({ useProviderUsage: mocks.usage }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Pessoal", true), apiKeyDto("key_bbbbbbbbbbbbbbbbbb", "Empresa")]))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useProviderUsage", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useProviderUsage: mocks.usage }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("@/components/ui/preset-date-range-filter", async (importOriginal) => ({
     ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
     // Período fixo que NUNCA coincide com o padrão "Último mês" (hoje−1 mês … hoje): se coincidisse,
     // useUrlFilters omitiria o parâmetro igual ao padrão e o teste dependeria do dia em que roda.
     PresetDateRangeFilter: ({ onChange }: { onChange: (range: { startDate: string; endDate: string }) => void }) => <button type="button" onClick={() => onChange({ startDate: "2026-10-05", endDate: "2026-10-06" })}>Selecionar período personalizado</button>,
 }))
+vi.mock("@nandobfer/integracoes/modules/react/ui/preset-date-range-filter", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async (importOriginal) => ({
+    ...await importOriginal<typeof import("@/components/ui/preset-date-range-filter")>(),
+    // Período fixo que NUNCA coincide com o padrão "Último mês" (hoje−1 mês … hoje): se coincidisse,
+    // useUrlFilters omitiria o parâmetro igual ao padrão e o teste dependeria do dia em que roda.
+    PresetDateRangeFilter: ({ onChange }: { onChange: (range: { startDate: string; endDate: string }) => void }) => <button type="button" onClick={() => onChange({ startDate: "2026-10-05", endDate: "2026-10-06" })}>Selecionar período personalizado</button>,
+}))(importOriginal)) as Record<string, unknown>), }))
 
 import { ProviderUsageCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ProviderUsageCard"
 import { DATE_PRESET } from "@/components/ui/preset-date-range-filter"

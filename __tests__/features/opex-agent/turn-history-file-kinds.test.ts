@@ -11,8 +11,8 @@ vi.mock('@/lib/db/models/Opex', () => ({
   OpexMessage: { find: () => ({ sort: () => ({ select: () => ({ lean: async () => [{ role: 'user', modelMessages: JSON.stringify([{ role: 'user', content: 'oi' }]) }] }) }) }) },
 }))
 vi.mock('@/features/opex-agent/server/files', () => ({ resolveFileMarkers: mocks.resolve }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ opencodeGoModelInputs: mocks.goInputs, listOpencodeGoModels: vi.fn() }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/command-code', () => ({ commandCodeModelInputs: mocks.ccInputs, listCommandCodeModels: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ opencodeGoModelInputs: mocks.goInputs, listOpencodeGoModels: vi.fn() }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/command-code", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ commandCodeModelInputs: mocks.ccInputs, listCommandCodeModels: vi.fn() }))()) as Record<string, unknown>) }))
 
 import { loadSessionHistory } from '@/features/opex-agent/server/turn-history'
 

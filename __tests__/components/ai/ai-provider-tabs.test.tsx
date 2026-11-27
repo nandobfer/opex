@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { readFileSync } from 'node:fs'
@@ -36,7 +38,6 @@ describe('AiProviderTabs', () => {
 
   it('as telas de IA, do Agente Opex, do Agente Mentor e do Engramind usam o componente, sem OptionTabs próprio', () => {
     const files = [
-      'src/features/ai/components/shared/ProviderModelCard.tsx',
       'src/features/opex-agent/components/settings/OpexModelCard.tsx',
       'src/features/adversarial-agent/components/mentor/MentorModelFields.tsx',
       'src/features/engramind/components/shared/OpexAiModelPicker.tsx',
@@ -84,8 +85,6 @@ describe('TemperatureInput', () => {
     }
     // O Resumo de tarefas usa o bloco compartilhado (instruções + amostragem), que é quem monta o campo.
     expect(read('src/features/ai/components/task-summary/SummaryPromptCard.tsx')).toMatch(/<PromptSamplingFieldsBlock/)
-    const shared = read('src/features/ai/components/shared/PromptSamplingFields.tsx')
-    expect(shared).toMatch(/<TemperatureInput/)
-    expect(shared).not.toMatch(/step="0\.1"/)
+    // O bloco compartilhado (PromptSamplingFields) e o ProviderModelCard são da central de integrações (`@nandobfer/integracoes/ia/react`).
   })
 })

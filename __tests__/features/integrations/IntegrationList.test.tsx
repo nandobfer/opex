@@ -1,27 +1,29 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationListItemDto } from "@nandobfer/integracoes"
+import type { IntegrationListItemDto } from "@nandobfer/integracoes/modules/core/dto"
 
 const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn(), testDialog: vi.fn(), debugDialog: vi.fn() }))
 
-vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrationStatusLive: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegrationStatusLive: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
-vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrations: mocks.useIntegrations }))
-vi.mock("@nandobfer/integracoes/react", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegrations: mocks.useIntegrations }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationTestDialog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     IntegrationTestDialog: (props: { integrationId: string | null }) => {
         mocks.testDialog(props.integrationId)
         return null
     },
-}))
-vi.mock("@nandobfer/integracoes/react", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationDebugDialog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     IntegrationDebugDialog: (props: { integrationId: string | null }) => {
         mocks.debugDialog(props.integrationId)
         return null
     },
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("framer-motion", () => {
     const MOTION_PROPS = new Set(["initial", "animate", "exit", "variants", "transition", "whileTap", "layout"])
     const passthrough = (tag: string) =>
@@ -35,7 +37,7 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { IntegrationList } from "@nandobfer/integracoes/react"
+import { IntegrationList } from "@nandobfer/integracoes/modules/react/central/IntegrationList"
 
 const item = (overrides: Partial<IntegrationListItemDto>): IntegrationListItemDto => ({
     id: "pusher",

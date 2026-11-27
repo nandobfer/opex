@@ -6,21 +6,25 @@ const mocks = vi.hoisted(() => ({
   checkBucket: vi.fn(),
 }))
 
-vi.mock("@/lib/integrations/runtime", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   getIntegrationConfig: mocks.getIntegrationConfig,
   getInternalBaseUrl: vi.fn(async () => 'http://127.0.0.1:3100'),
-}))
-vi.mock("@/lib/email/mailer", () => ({ verifyConnection: mocks.verifyConnection }))
-vi.mock("@/lib/storage/s3", () => ({ checkBucket: mocks.checkBucket }))
-vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ ApiToken: { countDocuments: vi.fn() } }))
-vi.mock("@/lib/db/models/Orcamento", () => ({ OrcamentoClient: { countDocuments: vi.fn() } }))
-vi.mock("@/lib/pusher/server", () => ({ getRawPusherServer: vi.fn() }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/server/testers', () => ({ testAiHub: vi.fn(), testAnthropic: vi.fn(), testDeepseek: vi.fn(), testGemini: vi.fn(), testJev: vi.fn(), testOpenai: vi.fn(), testOpencode: vi.fn(), testOpencodeGo: vi.fn(), testCommandCode: vi.fn() }))
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/lib/email/mailer', () => ({ verifyConnection: mocks.verifyConnection }))
+vi.mock("@nandobfer/integracoes/modules/integrations/smtp/mailer", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ verifyConnection: mocks.verifyConnection }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/lib/storage/s3', () => ({ checkBucket: mocks.checkBucket }))
+vi.mock("@nandobfer/integracoes/modules/integrations/storage-s3/client", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ checkBucket: mocks.checkBucket }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ CronJobState: { find: () => ({ lean: async () => [] }) } }))(importOriginal)) as Record<string, unknown>), ...((await (() => ({ ApiToken: { countDocuments: vi.fn() } }))(importOriginal)) as Record<string, unknown>), }))
+
+vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: { countDocuments: vi.fn() } }))
+vi.mock('@/lib/pusher/server', () => ({ getRawPusherServer: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/integrations/pusher/server", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getRawPusherServer: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/server/testers", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ testAiHub: vi.fn(), testAnthropic: vi.fn(), testDeepseek: vi.fn(), testGemini: vi.fn(), testJev: vi.fn(), testOpenai: vi.fn(), testOpencode: vi.fn(), testOpencodeGo: vi.fn(), testCommandCode: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
 
 import type { IntegrationId } from "@/features/integrations/registry/definitions"
-import { INTEGRATION_TESTERS } from "@/lib/integrations/server"
+import { opexTesters } from '../../helpers/opex-testers'
+const INTEGRATION_TESTERS = await opexTesters()
 
 function run(id: IntegrationId, config: Record<string, unknown>) {
   mocks.getIntegrationConfig.mockResolvedValue(config)

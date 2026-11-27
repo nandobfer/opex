@@ -4,15 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ updateOne: vi.fn(async () => undefined) }))
 
-vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
-vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))
-vi.mock("@/lib/integrations/runtime", () => ({ getIntegrationConfig: vi.fn(async () => ({})) }))
-vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), success: vi.fn(), step: vi.fn() }) }))
-vi.mock("@/lib/pusher/server", () => ({ isPusherServerConfigured: async () => false, getRawPusherServer: vi.fn() }))
-vi.mock("@/lib/integrations/server", () => ({ INTEGRATION_TESTERS: {} }))
+vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegrationConfig: vi.fn(async () => ({})) }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), success: vi.fn(), step: vi.fn() }) }))()) as Record<string, unknown>) }))
+vi.mock('@/lib/pusher/server', () => ({ isPusherServerConfigured: async () => false, getRawPusherServer: vi.fn() }))
+vi.mock('@/features/integrations/testers/testers', () => ({ INTEGRATION_TESTERS: {} }))
 
-import { runIntegrationTest } from "@/lib/integrations/server"
+import { runIntegrationTest } from "@nandobfer/integracoes/modules/server/test-runner"
 
 const savedStatuses = () =>
   (mocks.updateOne.mock.calls as unknown as [unknown, { $set: { status?: string } }][]).map(([, update]) => update.$set.status).filter(Boolean)

@@ -13,7 +13,7 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }))
 vi.mock('@/features/engramind/hooks/useEngramind', async (original) => ({ ...(await original<object>()), useEngramindRealtime: vi.fn() }))
-vi.mock('@nandobfer/integracoes/react', () => ({ DetailHeader: () => <div data-testid="header" /> }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/DetailHeader", () => ({ DetailHeader: () => <div data-testid="header" /> }))
 for (const [path, name] of [
   ['AboutTab', 'AboutTab'],
   ['ConnectionTab', 'ConnectionTab'],

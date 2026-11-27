@@ -15,11 +15,11 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/Ai', () => ({ AiUsageLog: { create: mocks.usage } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ AiUsageLog: { create: mocks.usage } }))()) as Record<string, unknown>) }))
 vi.mock('@/lib/db/models/DevTask', () => ({ DevTask: { find: mocks.find, updateOne: mocks.updateOne } }))
-vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: mocks.stream }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/jev', () => ({ askJevSystemOne: mocks.jev }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ streamAi: mocks.stream }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/jev", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ askJevSystemOne: mocks.jev }))()) as Record<string, unknown>) }))
 vi.mock('@/features/ai/server/settings', () => ({ loadTaskTagsSettings: mocks.loadSettings, availabilityOfTaskTags: mocks.availability }))
 vi.mock('@/features/tasks/server/service', () => ({ concludedColumnKeys: mocks.concluded, getTask: mocks.getTask, publishTasksUpdated: mocks.publish }))
 

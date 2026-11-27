@@ -6,22 +6,21 @@ const mocks = vi.hoisted(() => ({
   debug: { info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() },
 }))
 
-vi.mock("@/lib/integrations/runtime", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   getIntegration: mocks.getIntegration,
   getInternalBaseUrl: async () => 'http://127.0.0.1:3868',
   getIntegrationConfig: async () => ({}),
-}))
-vi.mock("@/lib/integrations/server", () => ({ integrationDebug: () => mocks.debug }))
-vi.mock("@/lib/db", () => ({ recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR' } }))
-vi.mock("@/lib/integrations/server", () => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ integrationDebug: () => mocks.debug }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/lib/db', () => ({ recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR' } }))
+vi.mock("@nandobfer/integracoes/modules/server/service", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ INTEGRATION_AUDIT_ENTITY: 'Integracao' }))(importOriginal)) as Record<string, unknown>), }))
 
-import { clearSpecCache, findSpecUrlCandidates, loadOpenApiSpec } from "@/lib/integrations/server"
+import { clearSpecCache, findSpecUrlCandidates, loadOpenApiSpec } from "@nandobfer/integracoes/modules/server/openapi/spec-source"
 import {
   ExplorerError,
   executeExplorerOperation,
   getExplorerSpec,
-} from "@/lib/integrations/server"
-import { EXPLORER_ADAPTER_IDS } from "@/lib/integrations/server"
+} from "@nandobfer/integracoes/modules/server/openapi/explorer-service"
 
 const actor = 'local'
 const INTERNAL = 'http://127.0.0.1:3868'
@@ -106,8 +105,10 @@ describe('localização da especificação', () => {
 })
 
 describe('explorador — adaptadores e execução', () => {
-  it('adaptadores implementados: API interna e Engramind', () => {
-    expect(EXPLORER_ADAPTER_IDS).toEqual(['internal_api', 'engramind'])
+  it('adaptadores implementados: API interna e Engramind', async () => {
+    // O explorador de cada integração é declarado no adaptador de servidor (`explorer`).
+    const { OPEX_SERVER_ADAPTERS } = await import('@/features/integrations/registry/server')
+    expect(OPEX_SERVER_ADAPTERS.filter((adapter) => adapter.explorer).map((adapter) => adapter.id)).toEqual(['internal_api', 'engramind'])
   })
 
   it('Engramind: a base é a URL do campo, e o servidor injeta o Bearer do token admin (sem ele, nada é injetado)', async () => {

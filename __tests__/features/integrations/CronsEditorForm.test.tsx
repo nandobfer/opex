@@ -1,24 +1,27 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
-import { draftFrom } from "@nandobfer/integracoes/react"
+import { draftFrom } from "@nandobfer/integracoes/modules/react/central/detail/draft"
 import { getIntegrationDef } from "@/features/integrations/registry/definitions"
-import type { IntegrationDetailDto } from "@nandobfer/integracoes"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes/modules/core/dto"
 
 vi.mock('@/hooks/useInstanceInfo', () => ({ useInstanceInfo: () => ({ data: undefined }) }))
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
-vi.mock("@nandobfer/integracoes/react", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/CronJobsCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     CronJobsCard: ({ hiddenJobIds }: { hiddenJobIds?: ReadonlySet<string> }) => <div data-testid="cron-jobs" data-hidden={[...(hiddenJobIds ?? [])].join(",")} />,
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 const builderMachine = vi.hoisted(() => ({ active: false }))
-vi.mock("@nandobfer/integracoes/react", () => ({ useIntegration: () => ({ data: { publicValues: { active: builderMachine.active } } }) }))
-vi.mock("@nandobfer/integracoes/react", () => ({ ApiDocsCard: () => <div data-testid="api-docs" /> }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegration: () => ({ data: { publicValues: { active: builderMachine.active } } }), useIntegrationDetails: (ids: string[]) => ids.map(() => ({ data: { publicValues: { active: builderMachine.active } } })) }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/ApiDocsCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ ApiDocsCard: () => <div data-testid="api-docs" /> }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("@/features/opex-agent/components/jobs/OpexJobsTab", () => ({ OpexJobsTab: () => <div data-testid="opex-jobs" /> }))
 
-import { CronsEditorForm } from "@nandobfer/integracoes/react"
+import { opexEditor } from '../../helpers/opex-editors'
+const CronsEditorForm = await opexEditor('crons')
 
 const def = getIntegrationDef("crons")!
 const data: IntegrationDetailDto = {

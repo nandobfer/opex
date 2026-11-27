@@ -27,7 +27,7 @@ vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({
   useSetLocalDockerOverride: () => ({ mutate: mocks.override }),
   useLocalDockerRealtime: () => {},
 }))
-vi.mock('@nandobfer/integracoes/react', () => ({ GeneralCard: () => <div>Geral</div> }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/GeneralCard", () => ({ GeneralCard: () => <div>Geral</div> }))
 
 import { TunnelStatusCard } from '@/features/local-docker/components/tunnel/TunnelStatusCard'
 import { SetupChecklist, checklistSummary, setupChecklist } from '@/features/local-docker/components/tunnel/SetupChecklist'

@@ -49,7 +49,7 @@ vi.mock("@/features/secretary-agent/server/inbound", async (original) => {
     return { ...actual, recordDecision: mocks.decide }
 })
 vi.mock("@/features/secretary-agent/server/settings", () => ({ loadSecretarySettings: async () => ({ settings: mocks.settings }) }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", () => ({ AiUsageLog: { aggregate: async () => [] } }))
 vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@/features/secretary-agent/server/media", () => ({ readTurnMedia: mocks.readMedia }))

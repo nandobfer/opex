@@ -18,12 +18,16 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock())
 vi.mock('sonner', () => ({ toast: { error: vi.fn(), success: vi.fn() } }))
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   AI_QUERY_KEY: 'ai',
   useAiModels: () => ({ data: [{ id: 'anthropic/claude', name: 'Claude', variants: ['high'], group: 'anthropic', contextWindow: null, free: false }], isLoading: false, isError: false, error: null }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  AI_QUERY_KEY: 'ai',
+  useAiModels: () => ({ data: [{ id: 'anthropic/claude', name: 'Claude', variants: ['high'], group: 'anthropic', contextWindow: null, free: false }], isLoading: false, isError: false, error: null }),
+}))(importOriginal)) as Record<string, unknown>) }))
 vi.mock('@/features/ai/hooks/useMemories', () => ({ useMemoriesRealtime: () => {} }))
 vi.mock('@/features/ai/components/memories/MemoryUniverseSection', () => ({ MemoryUniverseSection: ({ consumer }: { consumer: string }) => <div data-testid={`memory-universe-${consumer}`} /> }))
 vi.mock('@/features/ai/components/memories/SelfMemorySwitch', () => ({ SelfMemorySwitch: ({ consumer }: { consumer: string }) => <div data-testid={`self-memory-${consumer}`} /> }))

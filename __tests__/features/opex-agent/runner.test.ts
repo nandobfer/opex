@@ -41,16 +41,16 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   prepareModel: async (request: unknown) => {
     mocks.prepareModel(request)
     return { model: { id: 'modelo' }, apiKeyId: 'key_x', takeStepCost: () => mocks.stepCosts.shift() ?? null, dispose: async () => {} }
   },
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
-}))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ opencodeGoModelInputs: async () => ['text', 'image/png'] }))
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/consumption", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ recordAiConsumption: mocks.recordAiConsumption }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ opencodeGoModelInputs: async () => ['text', 'image/png'] }))()) as Record<string, unknown>) }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: async () => {}, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: vi.fn(async () => {}) }))
 vi.mock('@/lib/storage/s3', () => ({

@@ -8,9 +8,9 @@ import { randomBytes } from 'crypto'
  */
 
 const mocks = vi.hoisted(() => ({ stored: null as Record<string, unknown> | null }))
-vi.mock("@/lib/integrations/server", () => ({ loadStoredIntegration: async () => mocks.stored, invalidateStoredIntegrations: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ loadStoredIntegration: async () => mocks.stored, invalidateStoredIntegrations: vi.fn() }))()) as Record<string, unknown>) }))
 
-import { encryptSecret } from "@/lib/crypto/secretBox"
+import { encryptSecret } from '@/lib/crypto/secretBox'
 import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
 import { createKeyFailoverFetch, fetchWithKeyFailover, getAiProviderKeyPool, requireAiProviderKeyOrder, resetAiKeyRotation, type AiProviderKey } from "@nandobfer/integracoes/modules/integrations/ia/ai/api-keys"
 

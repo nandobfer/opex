@@ -52,13 +52,13 @@ function matches(doc: Doc | undefined, filter: Record<string, unknown>): boolean
   return true
 }
 
-vi.mock("@/lib/db", () => ({
+vi.mock('@/lib/db', () => ({
   dbConnect: vi.fn(),
   recordAudit: mocks.audit,
   AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' },
   createAuditContext: (userId: string) => ({ userId }),
 }))
-vi.mock('@nandobfer/integracoes/mongoose', () => {
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => {
   function Integration(this: Record<string, unknown>, data: Doc) {
     Object.assign(this, data)
     this.set = vi.fn()
@@ -77,20 +77,20 @@ vi.mock('@nandobfer/integracoes/mongoose', () => {
     },
   })
   return { Integration }
-})
-vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
-vi.mock("@/lib/after-response", () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
-vi.mock("@/lib/integrations/server", () => ({ invalidateStoredIntegrations: mocks.invalidate, loadStoredIntegration: vi.fn() }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ clearAiCatalogCache: mocks.clearCatalog }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/connection', () => ({ resetAiConnectionProbes: mocks.resetProbes }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go', () => ({ clearOpencodeGoCatalogCache: mocks.clearGoCatalog }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/command-code', () => ({ clearCommandCodeCatalogCache: mocks.clearCcCatalog }))
-vi.mock("@/lib/integrations/server", () => ({ runIntegrationTest: mocks.test }))
-vi.mock("@/features/engramind/server/ai-source", () => ({ syncEngramindProviderKey: mocks.sync }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/key-notices', () => ({ keyBillingNotices: async (_provider: string, items: { id: string }[]) => new Map(items.map((item) => [item.id, ['aviso do plano']])) }))
+})(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
+vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void task() }))
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ invalidateStoredIntegrations: mocks.invalidate, loadStoredIntegration: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/catalog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ clearAiCatalogCache: mocks.clearCatalog }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/connection", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ resetAiConnectionProbes: mocks.resetProbes }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ clearOpencodeGoCatalogCache: mocks.clearGoCatalog }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/command-code", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ clearCommandCodeCatalogCache: mocks.clearCcCatalog }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/server/test-runner", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ runIntegrationTest: mocks.test }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/features/engramind/server/ai-source', () => ({ syncEngramindProviderKey: mocks.sync }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/key-notices", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ keyBillingNotices: async (_provider: string, items: { id: string }[]) => new Map(items.map((item) => [item.id, ['aviso do plano']])) }))(importOriginal)) as Record<string, unknown>), }))
 
-import { DomainError } from "@/lib/api/route"
-import { decryptSecret, type EncryptedSecret } from "@/lib/crypto/secretBox"
+import { DomainError } from '@/lib/api/route'
+import { decryptSecret, type EncryptedSecret } from '@/lib/crypto/secretBox'
 import { createAiApiKey, keyRingProvider, listAiApiKeys, makePrimaryAiApiKey, removeAiApiKey, setAiApiKeySelected, updateAiApiKey, updateAiKeyBilling } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys"
 
 const saved = process.env.INTEGRATIONS_ENCRYPTION_KEY

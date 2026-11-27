@@ -26,12 +26,16 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock([], mocks.setFavorite))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock([], mocks.setFavorite))
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn(), warning: vi.fn() } }))
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   useAiProviderStatuses: () => ({ providers: mocks.providers, isLoading: false }),
   useAiModels: (provider: string | null) => ({ data: provider ? [{ id: `${provider}-m1`, name: `${provider}-m1`, variants: [], group: null, contextWindow: null, free: false }] : undefined, isLoading: false, isError: false, error: null }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  useAiProviderStatuses: () => ({ providers: mocks.providers, isLoading: false }),
+  useAiModels: (provider: string | null) => ({ data: provider ? [{ id: `${provider}-m1`, name: `${provider}-m1`, variants: [], group: null, contextWindow: null, free: false }] : undefined, isLoading: false, isError: false, error: null }),
+}))(importOriginal)) as Record<string, unknown>) }))
 vi.mock('@/features/engramind/hooks/useOpexAiSource', () => ({
   useOpexAiSource: () => ({ data: mocks.data, isLoading: false, error: null, refetch: vi.fn() }),
   useApplyOpexAiSource: () => ({

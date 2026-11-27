@@ -7,7 +7,7 @@ const holder = vi.hoisted(() => ({ jobs: null as unknown as FakeCollection }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
 vi.mock('@/lib/instance', () => ({ INSTANCE_ID: 'inst-1' }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({
   get CronJobState() {
     return {
       ...holder.jobs,
@@ -22,7 +22,7 @@ vi.mock('@nandobfer/integracoes/mongoose', () => ({
       },
     }
   },
-}))
+}))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 
 import { PLUGIN_CRON_TIMEOUT_MS, runPluginCrons } from '@/features/plugins/server/crons'
 import { cronKey, pluginRegistries } from '@/features/plugins/server/kernel/registries'

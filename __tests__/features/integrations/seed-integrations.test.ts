@@ -3,11 +3,11 @@ import { randomBytes } from 'crypto'
 
 const mocks = vi.hoisted(() => ({ updateOne: vi.fn() }))
 
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ Integration: { collection: { updateOne: mocks.updateOne } } }))
-vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ Integration: { collection: { updateOne: mocks.updateOne } } }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { seedIntegrationsFromEnv } from "@/lib/db/migrations/seed-integrations-from-env"
-import { decryptSecret } from "@/lib/crypto/secretBox"
+import { seedIntegrationsFromEnv } from '@/lib/db/migrations/seed-integrations-from-env'
+import { decryptSecret } from '@/lib/crypto/secretBox'
 import { INTEGRATIONS } from "@/features/integrations/registry/definitions"
 
 const saved = { ...process.env }

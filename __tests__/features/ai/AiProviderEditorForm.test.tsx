@@ -1,31 +1,34 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 import React from "react"
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../../helpers/framer-motion"
 import { aiApiKeysMock, apiKeyDto } from "../../helpers/ai-api-keys"
-import { draftFrom } from "@nandobfer/integracoes/react"
+import { draftFrom } from "@nandobfer/integracoes/modules/react/central/detail/draft"
 import { getIntegrationDef, type IntegrationId } from "@/features/integrations/registry/definitions"
-import type { IntegrationDetailDto } from "@nandobfer/integracoes"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes/modules/core/dto"
 
 vi.mock("framer-motion", () => framerMotionMock())
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/api-keys/ApiKeysCard", () => ({ ApiKeysCard: ({ provider }: { provider: string }) => <div data-testid={`api-keys-${provider}`} /> }))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiModelsCard", () => ({ AiModelsCard: () => <div data-testid="models" /> }))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/JevUsageCard", () => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/OpencodeUsageCard", () => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ProviderUsageCard", () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/api-keys/ApiKeysCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ ApiKeysCard: ({ provider }: { provider: string }) => <div data-testid={`api-keys-${provider}`} /> }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiModelsCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ AiModelsCard: () => <div data-testid="models" /> }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/JevUsageCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ JevUsageCard: () => <div data-testid="jev-usage" /> }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/OpencodeUsageCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ OpencodeUsageCard: () => <div data-testid="opencode-usage" /> }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ProviderUsageCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     ProviderUsageCard: ({ provider, showCost, keyFilter, hideFilters }: { provider: string; showCost?: boolean; keyFilter?: string; hideFilters?: boolean }) => (
         <div data-testid={`provider-usage-${provider}`} data-show-cost={String(showCost)} data-key-filter={keyFilter ?? ""} data-hide-filters={String(Boolean(hideFilters))} />
     ),
-}))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/components/go/OpencodeGoSubscriptionCard", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/components/go/OpencodeGoSubscriptionCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     OpencodeGoSubscriptionCard: ({ query }: { query: { apiKey?: string } | null }) => <div data-testid="go-subscription" data-api-key={query?.apiKey ?? "all"} />,
-}))
-vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys", () => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Principal", true)]))
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => aiApiKeysMock([apiKeyDto("key_aaaaaaaaaaaaaaaaaa", "Principal", true)]))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("@/features/opencode-accounts/components/OpencodeAccountsCard", () => ({ OpencodeAccountsCard: () => <div data-testid="opencode-accounts" /> }))
 
-import { AiProviderEditorForm } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProviderEditorForm"
+import { opexEditor } from '../../helpers/opex-editors'
+const AiProviderEditorForm = await opexEditor('ai_opencode')
 
 const detail = (id: IntegrationId): IntegrationDetailDto => ({
     id,

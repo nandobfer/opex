@@ -13,15 +13,22 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useTaskRefinementSettings: () => mocks.query,
     useSaveTaskRefinementSettings: () => ({ isPending: false, mutateAsync: vi.fn() }),
     useAiProviderStatuses: () => ({ providers: [] }),
     useAiSkills: () => mocks.skills,
     useRefreshAiSkills: () => vi.fn(),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+    useTaskRefinementSettings: () => mocks.query,
+    useSaveTaskRefinementSettings: () => ({ isPending: false, mutateAsync: vi.fn() }),
+    useAiProviderStatuses: () => ({ providers: [] }),
+    useAiSkills: () => mocks.skills,
+    useRefreshAiSkills: () => vi.fn(),
+}))(importOriginal)) as Record<string, unknown>) }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ isLoading: false, data: [] }) }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard', () => ({ ProviderModelCard: () => null }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard", () => ({ ProviderModelCard: () => null }))
 
 import { TaskRefinementTab } from '@/features/ai/components/task-refinement/TaskRefinementTab'
 

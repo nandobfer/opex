@@ -1,12 +1,13 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), refresh: vi.fn() }))
 
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/server/go-usage', () => ({ getOpencodeGoUsage: mocks.get, refreshOpencodeGoUsage: mocks.refresh }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/server/go-usage", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getOpencodeGoUsage: mocks.get, refreshOpencodeGoUsage: mocks.refresh }))()) as Record<string, unknown>) }))
 
-import { GET } from '@/app/api/opencode/quota/go/route'
-import { POST } from '@/app/api/opencode/quota/go/refresh/route'
+const { GET } = legacyRoute("opencode", "quota/go")
+const { POST } = legacyRoute("opencode", "quota/go/refresh")
 
 const params = { params: Promise.resolve({}) }
 const dto = { state: 'unconfigured', message: 'x', checkedAt: '2026-11-16T12:00:00.000Z', keyName: null, scope: null, cycle: null, meters: [], monthPercent: null, limitReached: false, forecast: null, realCostUsd: null, realCostPartial: false, chart: null, chartMessage: null }

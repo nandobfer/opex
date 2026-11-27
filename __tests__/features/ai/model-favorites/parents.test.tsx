@@ -4,7 +4,7 @@ import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useForm } from 'react-hook-form'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from "../../../helpers/framer-motion"
+import { framerMotionMock } from '../../../helpers/framer-motion'
 
 /**
  * Os pais dos pickers de modelo repassam o PROVEDOR certo (escopo do favorito): sem ele a estrela some
@@ -16,10 +16,10 @@ import { framerMotionMock } from "../../../helpers/framer-motion"
 const fav = vi.hoisted(() => ({ favorites: [] as { provider: string; model: string }[], setFavorite: vi.fn() }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", () => ({
   useAiModelFavorites: () => ({ favorites: fav.favorites, setFavorite: fav.setFavorite, isFavorite: () => false }),
 }))
-vi.mock("@/features/ai/hooks/useAi", () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   useAiModels: (provider: string | null) => ({
     data: provider ? ['a', 'b'].map((suffix) => ({ id: `${provider}-${suffix}`, name: `${provider} ${suffix}`, variants: [], group: null, contextWindow: null, free: false })) : undefined,
     isLoading: false,
@@ -27,14 +27,23 @@ vi.mock("@/features/ai/hooks/useAi", () => ({
     error: null,
   }),
   useAiAgents: () => ({ data: [], isLoading: false, isError: false, error: null }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  useAiModels: (provider: string | null) => ({
+    data: provider ? ['a', 'b'].map((suffix) => ({ id: `${provider}-${suffix}`, name: `${provider} ${suffix}`, variants: [], group: null, contextWindow: null, free: false })) : undefined,
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+  useAiAgents: () => ({ data: [], isLoading: false, isError: false, error: null }),
+}))(importOriginal)) as Record<string, unknown>) }))
 
-import { DirectModelFields } from "@/features/ai/components/agent-settings/DirectModelFields"
+import { DirectModelFields } from '@/features/ai/components/agent-settings/DirectModelFields'
 import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
-import { MentorModelFields } from "@/features/adversarial-agent/components/mentor/MentorModelFields"
-import { MaddoxModelCard } from "@/features/maddox-agent/components/settings/MaddoxModelCard"
-import { OpexModelCard } from "@/features/opex-agent/components/settings/OpexModelCard"
-import { OpexAiModelPicker } from "@/features/engramind/components/shared/OpexAiModelPicker"
+import { MentorModelFields } from '@/features/adversarial-agent/components/mentor/MentorModelFields'
+import { MaddoxModelCard } from '@/features/maddox-agent/components/settings/MaddoxModelCard'
+import { OpexModelCard } from '@/features/opex-agent/components/settings/OpexModelCard'
+import { OpexAiModelPicker } from '@/features/engramind/components/shared/OpexAiModelPicker'
 
 afterEach(() => cleanup())
 beforeEach(() => {

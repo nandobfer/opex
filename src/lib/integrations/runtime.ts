@@ -1,12 +1,11 @@
 import { after } from "next/server"
-import { createIntegrationsServer, type ResolvedIntegration as LibResolvedIntegration } from "@nandobfer/integracoes/server"
+import { createIntegrationsServer, type IntegrationsLogger, type ResolvedIntegration as LibResolvedIntegration } from "@nandobfer/integracoes/server"
 import { configureIaServer } from "@nandobfer/integracoes/ia/server"
-import { recordAudit } from "@/lib/audit/record"
 import { secretBox } from "@/lib/crypto/secretBox"
-import { dbConnect } from "@/lib/db"
-import { INSTANCE_ID, isPreviewInstance } from "@/lib/instance"
+import { dbConnect, recordAudit } from "@/lib/db"
+import * as instance from "@/lib/instance"
 import { getLocalUser } from "@/lib/local-user"
-import { logger } from "@/lib/logger"
+import * as appLogger from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { pusherRealtime } from "@nandobfer/integracoes/pusher/server"
 import type { AcaoAuditoria } from "@/lib/db/models/AuditLog"
@@ -21,28 +20,57 @@ import type { IntegrationConfigMap } from "@/features/integrations/registry/conf
  * (agendador desligado com `OPEX_PREVIEW`).
  */
 
+/** Lê um valor do app sem derrubar a central quando ele falta (módulo parcial nos testes). */
+function readOptional<T>(read: () => T): T | undefined {
+    try {
+        return read()
+    } catch {
+        return undefined
+    }
+}
+
+/**
+ * Logger Pino do app para a central, lido a cada chamada (o módulo `@/lib/logger` pode ser trocado
+ * nos testes; um logger ausente não derruba a operação).
+ */
+function centralLogger(): IntegrationsLogger {
+    const call = (level: keyof IntegrationsLogger) => (obj: unknown, msg?: string) => {
+        try {
+            const target = appLogger.logger as unknown as IntegrationsLogger
+            ;(target[level] ?? target.info).call(target, obj, msg)
+        } catch {
+            // sem logger (teste com `@/lib/logger` parcial): segue sem registrar
+        }
+    }
+    return { info: call("info"), warn: call("warn"), error: call("error"), debug: call("debug") }
+}
+
+/**
+ * Testes (Vitest): sem configuração salva nem provedores customizados — cada integração resolve pelo
+ * ambiente e pelos padrões (`OPEX_INTEGRATIONS_STORE=memory`, definido no setup), sem tocar no Mongo.
+ */
+const MEMORY_STORE = process.env.OPEX_INTEGRATIONS_STORE === "memory"
+
 export const integrations = createIntegrationsServer<IntegrationConfigMap>({
     registry: integrationsRegistry,
-    adapters: OPEX_SERVER_ADAPTERS,
+    adapters: MEMORY_STORE ? OPEX_SERVER_ADAPTERS.map((adapter) => (adapter.dynamicChildren ? { ...adapter, dynamicChildren: async () => [] } : adapter)) : OPEX_SERVER_ADAPTERS,
     connect: async () => {
         await dbConnect()
     },
     secretBox,
     audit: (entry) => recordAudit({ ...entry, acao: entry.acao as AcaoAuditoria }),
-    logger,
+    logger: centralLogger(),
     realtime: { ...pusherRealtime, publishAppEvent },
     // O acesso é barrado antes pelo middleware (sessão do dono); toda ação é do usuário local.
     authorize: async () => ({ id: getLocalUser().id }),
     basePath: process.env.NEXT_PUBLIC_BASE_PATH,
     port: process.env.PORT,
-    isSchedulerDisabled: isPreviewInstance,
+    isSchedulerDisabled: () => readOptional(() => instance.isPreviewInstance()) === true,
     schedulerTickHooks: OPEX_SCHEDULER_TICK_HOOKS,
     afterResponse: (task) => after(task),
     systemActorId: getLocalUser().id,
-    // Testes (Vitest): sem configuração salva, cada integração resolve pelo ambiente e pelos padrões
-    // (`OPEX_INTEGRATIONS_STORE=memory`, definido no setup), sem conectar ao Mongo.
-    ...(process.env.OPEX_INTEGRATIONS_STORE === "memory" ? { loadConfigs: async () => new Map() } : {}),
-    instanceId: INSTANCE_ID,
+    ...(MEMORY_STORE ? { loadConfigs: async () => new Map() } : {}),
+    instanceId: readOptional(() => instance.INSTANCE_ID),
 })
 
 configureIaServer({

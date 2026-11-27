@@ -4,7 +4,7 @@ import React from "react"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Plug } from "lucide-react"
-import type { IntegrationListItemDto } from "@nandobfer/integracoes"
+import type { IntegrationListItemDto } from "@nandobfer/integracoes/modules/core/dto"
 import type { NavItemDef } from "@/features/layout/types"
 import { framerMotionMock } from "../../helpers/framer-motion"
 
@@ -21,15 +21,15 @@ vi.mock("next/link", () => ({
         )
     }),
 }))
-vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrations: mocks.useIntegrations }))
-vi.mock("@nandobfer/integracoes/react", () => ({ useIntegrationStatusLive: mocks.statusLive }))
-vi.mock("@nandobfer/integracoes/react", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: mocks.statusLive }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationTestDialog", () => ({
     IntegrationTestDialog: (props: { integrationId: string | null }) => {
         mocks.testDialog(props.integrationId)
         return null
     },
 }))
-vi.mock("@nandobfer/integracoes/react", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationDebugDialog", () => ({
     IntegrationDebugDialog: (props: { integrationId: string | null }) => {
         mocks.debugDialog(props.integrationId)
         return null

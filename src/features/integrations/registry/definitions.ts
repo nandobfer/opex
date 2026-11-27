@@ -266,10 +266,10 @@ export function getIntegrationDef(id: string): IntegrationDefinition | undefined
 export const integrationPath = (id: string): string => integrationsRegistry.path(id)
 
 /** Rotinas que aceitam `retentionDays` (limpezas de sessões). */
-export const jobSupportsRetentionDays = (jobId: string): boolean => SESSION_CLEANUP_JOB_IDS.includes(jobId) || integrationsRegistry.cronJobCapabilities(jobId).retentionDays === true
+export const jobSupportsRetentionDays = (jobId: string): boolean => SESSION_CLEANUP_JOB_IDS.includes(jobId) || Boolean(integrationsRegistry.cronJobCapabilities(jobId).retentionDays)
 
 /** Rotinas que deixam escolher o escopo (`scope`). */
-export const jobSupportsScope = (jobId: string): boolean => integrationsRegistry.cronJobCapabilities(jobId).scope === true
+export const jobSupportsScope = (jobId: string): boolean => Boolean(integrationsRegistry.cronJobCapabilities(jobId).scope)
 
 /** Integrações configuráveis (fora as "Em desenvolvimento"), na ordem da lista. */
 export const INTEGRATIONS: readonly IntegrationDefinition[] = OPEX_INTEGRATIONS.filter((def) => def.status !== "in-development")
@@ -282,3 +282,7 @@ export const hasCustomIntegrationPath = (id: string): boolean => Boolean(getInte
 
 /** Integrações com um campo de chaveiro (`keyRing`): os provedores de IA por API key. */
 export const KEY_RING_INTEGRATION_IDS: readonly IntegrationId[] = INTEGRATIONS.filter((def) => def.secretFields.some((field) => field.keyRing)).map((def) => def.id as IntegrationId)
+
+export function getInDevelopmentIntegration(id: string): IntegrationDefinition | undefined {
+    return IN_DEVELOPMENT_INTEGRATIONS.find((item) => item.id === id)
+}

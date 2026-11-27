@@ -22,9 +22,10 @@ const AGENTIC_SETTINGS = {
 
 vi.mock('framer-motion', () => framerMotionMock())
 vi.mock('@/lib/api', () => ({ apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))
 /** Busca simplificada: um botão por modelo (o popover da busca não interessa aqui). */
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker", () => ({
   ModelSearchPicker: ({ trigger, models, onPick }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void }) => (
     <div>
       {trigger}

@@ -1,10 +1,14 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { Bot, Gauge, KeyRound, Puzzle, ServerCog, Sparkles, SquareSlash } from "lucide-react"
+import { AlarmClock, Bot, Eye, Gauge, KeyRound, Puzzle, ServerCog, Sparkles, SquareSlash } from "lucide-react"
 import { defineIntegrationClient, IntegrationsProvider, type IntegrationClientAdapter, type IntegrationEditorFormProps, type IntegrationsRealtimeClient } from "@nandobfer/integracoes/react"
 import { aiClientAdapters, type AiHubTab, type AiProviderExtraTab } from "@nandobfer/integracoes/ia/react"
+import { cronsClient } from "@nandobfer/integracoes/crons/react"
 import { internalApiClient } from "@nandobfer/integracoes/internal-api/react"
+import { PreviewSchedulerNotice } from "@/components/feedback/PreviewSchedulerNotice"
+import { OpexJobsTab } from "@/features/opex-agent/components/jobs/OpexJobsTab"
+import { OpexWatchesTab } from "@/features/opex-agent/components/watches/OpexWatchesTab"
 import { api } from "@/lib/api"
 import { withBasePath } from "@/lib/base-path"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
@@ -90,6 +94,13 @@ const editor = (id: string, Component: (props: IntegrationEditorFormProps) => Re
 
 export const OPEX_CLIENT_ADAPTERS: readonly IntegrationClientAdapter[] = [
     internalApiClient({ cards: ApiTokensCard }),
+    // Crons: Jobs (prompts agendados do Agente Opex) e Observações (eventos que acordam o agente, OPE-194).
+    cronsClient({
+        tabs: [
+            { id: "jobs", label: "Jobs", icon: AlarmClock, component: OpexJobsTab },
+            { id: "observacoes", label: "Observações", icon: Eye, component: OpexWatchesTab },
+        ],
+    }),
     editor("github", (props) => <GithubEditorForm {...props} onExplore={props.onExplore ?? noop} />),
     ...aiClientAdapters({
         tabs: AI_HUB_TABS,
@@ -119,10 +130,13 @@ const realtime: IntegrationsRealtimeClient = {
     },
 }
 
+/** Aviso da prévia (agendador desligado com `OPEX_PREVIEW`) no topo das rotinas. */
+const OPEX_SLOTS = { cronsNotice: <PreviewSchedulerNotice /> }
+
 /** Provedor da central de integrações (montado no layout: páginas, sidebar e diálogos usam o mesmo registro). */
 export function OpexIntegrationsProvider({ children }: { children: ReactNode }) {
     return (
-        <IntegrationsProvider registry={integrationsRegistry} clients={OPEX_CLIENT_ADAPTERS} api={api} apiBasePath={withBasePath("/api")} realtime={realtime} appChannel={appChannel()}>
+        <IntegrationsProvider registry={integrationsRegistry} clients={OPEX_CLIENT_ADAPTERS} api={api} apiBasePath={withBasePath("/api")} realtime={realtime} appChannel={appChannel()} slots={OPEX_SLOTS}>
             {children}
         </IntegrationsProvider>
     )

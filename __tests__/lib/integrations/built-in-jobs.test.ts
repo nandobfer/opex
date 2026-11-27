@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { AGENT_USAGE_DAILY_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, OPENCODE_GO_USAGE_JOB_ID, COMMAND_CODE_USAGE_JOB_ID, FX_PTAX_JOB_ID, AI_SUBSCRIPTION_DAYS_JOB_ID, HOST_METRICS_JOB_ID, ENGRAMIND_PENDING_WRITES_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID } from "@/features/integrations/registry/jobs"
 import { HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@nandobfer/integracoes"
-import { withBuiltInJobs } from "@/lib/integrations/server"
+import { withBuiltInJobs } from "@nandobfer/integracoes/crons/server"
 
 describe('rotinas internas nos Crons salvos', () => {
   it('sem lista salva, usa as rotinas padrão', () => {
-    expect(withBuiltInJobs(undefined)).toBe(DEFAULT_CRON_JOBS)
+    expect(withBuiltInJobs(undefined)).toEqual(DEFAULT_CRON_JOBS)
   })
 
   it('rotina interna que falta entra em quem já salvou os Crons; as salvas não mudam', () => {

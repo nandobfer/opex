@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { memoryModel, type Doc } from "../../helpers/memory-model"
+import { memoryModel, type Doc } from '../../helpers/memory-model'
 
 /**
  * Observação de eventos do Agente Opex (OPE-194): assinatura no escopo, disparo atômico (um evento =
@@ -36,17 +36,17 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   prepareModel: async () => ({ model: { id: 'modelo' }, takeStepCost: () => null, dispose: async () => {} }),
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
-}))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: async () => {} }))
-vi.mock("@/lib/db", () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', ABORTAR: 'ABORTAR', EXECUTAR: 'EXECUTAR' } }))
-vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
-vi.mock("@/lib/instance", () => ({ isPreviewInstance: () => mocks.preview, INSTANCE_ID: 'teste' }))
-vi.mock("@/lib/storage/s3", () => ({ getFileObject: vi.fn(), getUploadUrl: vi.fn(), headFile: vi.fn(), copyFile: vi.fn(), deleteFile: vi.fn(), storageErrorInfo: () => ({ kind: 'unavailable', httpStatus: null, code: null }) }))
-vi.mock("@/features/auth/server/context", () => ({ clientActorFor: mocks.clientActorFor }))
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/consumption", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ recordAiConsumption: async () => {} }))()) as Record<string, unknown>) }))
+vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', ABORTAR: 'ABORTAR', EXECUTAR: 'EXECUTAR' } }))
+vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
+vi.mock('@/lib/instance', () => ({ isPreviewInstance: () => mocks.preview, INSTANCE_ID: 'teste' }))
+vi.mock('@/lib/storage/s3', () => ({ getFileObject: vi.fn(), getUploadUrl: vi.fn(), headFile: vi.fn(), copyFile: vi.fn(), deleteFile: vi.fn(), storageErrorInfo: () => ({ kind: 'unavailable', httpStatus: null, code: null }) }))
+vi.mock('@/features/auth/server/context', () => ({ clientActorFor: mocks.clientActorFor }))
 
 function opexModel() {
   const model = memoryModel()
@@ -66,7 +66,7 @@ function opexModel() {
   })
 }
 const store = vi.hoisted(() => ({ sessions: null as unknown, messages: null as unknown, jobs: null as unknown, watches: null as unknown, facts: null as unknown, tasks: null as unknown, projects: null as unknown, workbenches: null as unknown, runs: null as unknown, envs: null as unknown }))
-vi.mock("@/lib/db/models/Opex", () => {
+vi.mock('@/lib/db/models/Opex', () => {
   store.sessions = opexModel()
   store.messages = opexModel()
   store.jobs = opexModel()
@@ -74,47 +74,47 @@ vi.mock("@/lib/db/models/Opex", () => {
   store.facts = opexModel()
   return { OpexSession: store.sessions, OpexMessage: store.messages, OpexPendingAction: opexModel(), OpexFile: opexModel(), OpexJob: store.jobs, OpexWatch: store.watches, OpexWatchFact: store.facts, OpexMcpServer: opexModel() }
 })
-vi.mock("@/lib/db/models/Orcamento", () => ({ OrcamentoClient: memoryModel() }))
-vi.mock("@/lib/db/models/User", () => ({ User: memoryModel() }))
-vi.mock("@/lib/db/models/DevTask", () => {
+vi.mock('@/lib/db/models/Orcamento', () => ({ OrcamentoClient: memoryModel() }))
+vi.mock('@/lib/db/models/User', () => ({ User: memoryModel() }))
+vi.mock('@/lib/db/models/DevTask', () => {
   store.tasks = memoryModel()
   return { DevTask: store.tasks }
 })
-vi.mock("@/lib/db/models/Project", () => {
+vi.mock('@/lib/db/models/Project', () => {
   store.projects = memoryModel()
   return { Project: store.projects }
 })
-vi.mock("@/lib/db/models/Agentic", () => {
+vi.mock('@/lib/db/models/Agentic', () => {
   store.workbenches = memoryModel()
   return { AgenticWorkbench: store.workbenches }
 })
-vi.mock("@/lib/db/models/RoutineAgent", () => {
+vi.mock('@/lib/db/models/RoutineAgent', () => {
   const agents = memoryModel()
   agents.docs.push({ _id: 'a'.repeat(24), name: 'Vagas' })
   store.runs = memoryModel()
   return { RoutineAgent: agents, RoutineRun: store.runs }
 })
-vi.mock("@/features/environments/server/models", () => {
+vi.mock('@/features/environments/server/models', () => {
   store.envs = memoryModel()
   return { Environment: store.envs }
 })
-vi.mock("@/features/environments/server/service", () => ({
+vi.mock('@/features/environments/server/service', () => ({
   resolveEnvironmentRef: async (ref: string) => (store.envs as ReturnType<typeof memoryModel>).docs.find((doc) => doc.slug === ref) ?? null,
 }))
-vi.mock("@/features/tasks/server/columns", () => ({
+vi.mock('@/features/tasks/server/columns', () => ({
   getBoard: async () => ({ columns: [{ key: 'doing', name: 'Em andamento' }, { key: 'review', name: 'Revisão' }, { key: 'done', name: 'Concluído' }] }),
 }))
-vi.mock("@/features/opex-agent/server/tools/helpers", () => ({
+vi.mock('@/features/opex-agent/server/tools/helpers', () => ({
   resolveTask: async (ref: string) => {
     const task = (store.tasks as ReturnType<typeof memoryModel>).docs.find((doc) => doc.code === ref || String(doc._id) === ref)
     if (!task) throw new Error(`Tarefa "${ref}" não encontrada.`)
     return { id: String(task._id), task: null }
   },
 }))
-vi.mock("@/features/orcamentos/server/portal", () => ({ listClientTasks: async () => ({ tasks: mocks.clientTasks }) }))
-vi.mock("@/features/ai/server/agent-memory-context", async () => (await import("../../helpers/memory-context")).memoryContextModule())
-vi.mock("@/features/ai/server/self-memory/settings", async () => (await import("../../helpers/memory-context")).selfMemorySettingsModule())
-vi.mock("@/features/opex-agent/server/settings", () => ({
+vi.mock('@/features/orcamentos/server/portal', () => ({ listClientTasks: async () => ({ tasks: mocks.clientTasks }) }))
+vi.mock('@/features/ai/server/agent-memory-context', async () => (await import('../../helpers/memory-context')).memoryContextModule())
+vi.mock('@/features/ai/server/self-memory/settings', async () => (await import('../../helpers/memory-context')).selfMemorySettingsModule())
+vi.mock('@/features/opex-agent/server/settings', () => ({
   loadOpexSettings: async () => ({
     settings: { enabled: true, main: { provider: 'anthropic', model: 'claude-x', variant: null, temperature: null, maxOutputTokens: null }, title: { provider: null, model: null, variant: null }, instructions: 'Seja útil', titleInstructions: 'T', disabledTools: [], confirmationOverrides: {}, files: { maxPerMessage: 5, maxSizeMb: 10 } },
     isDefault: false,
@@ -122,31 +122,31 @@ vi.mock("@/features/opex-agent/server/settings", () => ({
   }),
   opexAvailability: async () => (mocks.available ? { available: true, reason: null } : { available: false, reason: 'Agente desativado' }),
 }))
-vi.mock("@/features/opex-agent/server/titler", () => ({ refreshSessionTitle: async () => {} }))
-vi.mock("@/features/opex-agent/server/confirmations", () => ({ requestConfirmation: vi.fn(), refreshConfirmations: async (parts: unknown[]) => parts }))
-vi.mock("@/features/opex-agent/server/tools/context", () => ({ nowContext: () => ({ iso: '2026-11-25T12:00:00.000Z', local: 'quarta', timeZone: 'America/Sao_Paulo' }) }))
-vi.mock("@/features/opex-agent/server/tools/registry", () => ({ enabledOpexTools: () => [], findOpexTool: () => undefined, needsConfirmation: () => false }))
-vi.mock("@/features/opex-agent/server/client-tools/registry", () => ({ enabledClientOpexServerTools: () => [], findOpexClientServerTool: () => undefined }))
-vi.mock("@/features/opex-agent/server/skills/turn", () => ({ ownerSkillsForTurn: async () => ({ catalog: [], tools: [] }) }))
+vi.mock('@/features/opex-agent/server/titler', () => ({ refreshSessionTitle: async () => {} }))
+vi.mock('@/features/opex-agent/server/confirmations', () => ({ requestConfirmation: vi.fn(), refreshConfirmations: async (parts: unknown[]) => parts }))
+vi.mock('@/features/opex-agent/server/tools/context', () => ({ nowContext: () => ({ iso: '2026-11-25T12:00:00.000Z', local: 'quarta', timeZone: 'America/Sao_Paulo' }) }))
+vi.mock('@/features/opex-agent/server/tools/registry', () => ({ enabledOpexTools: () => [], findOpexTool: () => undefined, needsConfirmation: () => false }))
+vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ enabledClientOpexServerTools: () => [], findOpexClientServerTool: () => undefined }))
+vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: async () => ({ catalog: [], tools: [] }) }))
 // Tick do agendador real (`runSchedulerTick`): só os outros ganchos do tick ficam de fora.
-vi.mock("@/lib/integrations/runtime", () => ({ getIntegrationConfig: async () => ({ schedulerEnabled: true, jobs: [], cronSecret: '' }), getInternalBaseUrl: async () => 'http://localhost' }))
-vi.mock("@/features/local-docker/server/health", () => ({ runLocalDockerHealth: async () => {} }))
-vi.mock("@/features/environments/server/forwards", () => ({ runEnvironmentsTick: async () => {} }))
-vi.mock("@/features/routine-agents/server/tick", () => ({ runDueRoutineAgents: async () => {} }))
-vi.mock("@/features/plugins/server/service", () => ({ reconcilePluginServers: async () => {} }))
-vi.mock("@/features/plugins/server/crons", () => ({ runPluginCrons: async () => {} }))
-vi.mock("@/features/opex-agent/server/client-config", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegrationConfig: async () => ({ schedulerEnabled: true, jobs: [], cronSecret: '' }), getInternalBaseUrl: async () => 'http://localhost' }))()) as Record<string, unknown>) }))
+vi.mock('@/features/local-docker/server/health', () => ({ runLocalDockerHealth: async () => {} }))
+vi.mock('@/features/environments/server/forwards', () => ({ runEnvironmentsTick: async () => {} }))
+vi.mock('@/features/routine-agents/server/tick', () => ({ runDueRoutineAgents: async () => {} }))
+vi.mock('@/features/plugins/server/service', () => ({ reconcilePluginServers: async () => {} }))
+vi.mock('@/features/plugins/server/crons', () => ({ runPluginCrons: async () => {} }))
+vi.mock('@/features/opex-agent/server/client-config', () => ({
   assertClientOpexEnabled: mocks.assertClientEnabled,
   assertClientToolAllowed: vi.fn(),
   enabledClientToolNamesFor: mocks.enabledNames,
 }))
 
-import { cancelOpexWatch, createOpexWatch, listOpexWatches, notifyWatchEvent, runDueOpexWatches } from "@/features/opex-agent/server/watches"
-import { watchDeployFinished, watchJobSettled, watchRoutineRunSettled, watchTargetDeleted, watchTaskMoved, watchWorkbenchChanged } from "@/features/opex-agent/server/watch-events"
-import { sendMessage } from "@/features/opex-agent/server/runner"
-import { runSchedulerTick } from "@/lib/integrations/scheduler"
-import type { OpexServerScope } from "@/features/opex-agent/server/scope"
-import type { OpexWatchInput } from "@/features/opex-agent/watches"
+import { cancelOpexWatch, createOpexWatch, listOpexWatches, notifyWatchEvent, runDueOpexWatches } from '@/features/opex-agent/server/watches'
+import { watchDeployFinished, watchJobSettled, watchRoutineRunSettled, watchTargetDeleted, watchTaskMoved, watchWorkbenchChanged } from '@/features/opex-agent/server/watch-events'
+import { sendMessage } from '@/features/opex-agent/server/runner'
+import { runSchedulerTick } from "@nandobfer/integracoes/modules/server/scheduler"
+import type { OpexServerScope } from '@/features/opex-agent/server/scope'
+import type { OpexWatchInput } from '@/features/opex-agent/watches'
 // Modelos importados sob demanda pelo serviço: carregados aqui para a fábrica do mock popular o `store`.
 import '@/lib/db/models/DevTask'
 import '@/lib/db/models/Project'

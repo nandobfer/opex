@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import * as go from "@/features/opencode-quota/go-logic"
+import * as go from '@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/go-logic'
 import { buildCycleChart, cycleAxisTicks, cycleForecast, cycleYMax, cycleYTicks, formatUsageDate, usageStatusLine } from "@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/cycle-logic"
 
 /**

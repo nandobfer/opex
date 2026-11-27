@@ -6,20 +6,24 @@ const mocks = vi.hoisted(() => ({
   configured: vi.fn(async () => true),
 }))
 
-vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
-vi.mock('@nandobfer/integracoes/mongoose', () => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))
-vi.mock("@/lib/integrations/server", () => ({
+vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => undefined) }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({
   integrationDebug: () => new Proxy({}, { get: () => vi.fn() }),
-}))
-vi.mock("@/lib/pusher/server", () => ({
+}))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock('@/lib/pusher/server', () => ({
   isPusherServerConfigured: mocks.configured,
   getRawPusherServer: vi.fn(async () => ({ trigger: mocks.trigger })),
 }))
-vi.mock("@/lib/integrations/server", () => ({ INTEGRATION_TESTERS: {} }))
-vi.mock("@/lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/pusher/connection", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({
+  isPusherServerConfigured: mocks.configured,
+  getRawPusherServer: vi.fn(async () => ({ trigger: mocks.trigger })),
+}))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock('@/features/integrations/testers/testers', () => ({ INTEGRATION_TESTERS: {} }))
+vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { runIntegrationTest } from "@/lib/integrations/server"
-import { RUNNING_STALE_MS, toHealth } from "@/lib/integrations/server"
+import { runIntegrationTest } from "@nandobfer/integracoes/modules/server/test-runner"
+import { RUNNING_STALE_MS, toHealth } from "@nandobfer/integracoes/modules/server/service"
 
 beforeEach(() => {
   vi.clearAllMocks()

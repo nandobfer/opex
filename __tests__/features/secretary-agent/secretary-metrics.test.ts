@@ -3,7 +3,7 @@ import type { MetricsContext } from "@/features/agent-metrics/server/context"
 
 const mocks = vi.hoisted(() => ({ text: vi.fn(async () => [] as { cost: number }[]), jev: vi.fn(async () => [] as { cost: number }[]), decisions: vi.fn(async () => [] as { decision: string; reason: string }[]) }))
 vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.text } }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: mocks.jev } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", () => ({ AiUsageLog: { aggregate: mocks.jev } }))
 vi.mock("@/features/secretary-agent/server/models", () => ({
     secretaryDb: vi.fn(),
     SecretaryDecisionRecord: { find: () => ({ select: () => ({ lean: mocks.decisions }) }) },

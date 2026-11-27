@@ -5,7 +5,7 @@ const mocks = vi.hoisted(() => ({ jev: vi.fn(), inference: vi.fn(), consumption:
 vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/jev", () => ({ askJevSystemOne: mocks.jev }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.consumption } }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: mocks.usage } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", () => ({ AiUsageLog: { aggregate: mocks.usage } }))
 
 import { decideSubject } from "@/features/secretary-agent/server/decide-subject"
 import { spentTodayUsd } from "@/features/secretary-agent/server/budget"

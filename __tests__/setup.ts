@@ -10,6 +10,15 @@ process.env.MONGODB_URI ??= 'mongodb://localhost:27017/opex-test'
 // padrões dos campos, e nada tenta conectar ao Mongo (ver `src/lib/integrations/runtime.ts`).
 process.env.OPEX_INTEGRATIONS_STORE ??= 'memory'
 
+// O runtime da central é criado pelo `src/lib/integrations/runtime.ts` (no app, o `instrumentation.ts`
+// o importa no boot). Num teste que alcança o servidor da biblioteca, ele é ligado antes de cada caso —
+// por import dinâmico, depois dos `vi.mock` do arquivo, que então valem para as dependências injetadas.
+beforeEach(async () => {
+  const marks = globalThis as Record<symbol, unknown>
+  if (!marks[Symbol.for('@nandobfer/integracoes/server-loaded')] || marks[Symbol.for('@nandobfer/integracoes/server-runtime')]) return
+  await import('@/lib/integrations/runtime').catch(() => undefined)
+})
+
 
 // Agente Adversário: o fluxo da mesa consulta a configuração (banco) ao fim de toda implementação e ao
 // montar a mesa. Nos testes ele fica de fora por padrão; os testes do adversário redefinem este mock.

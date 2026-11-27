@@ -3,16 +3,15 @@ import { randomBytes } from 'crypto'
 
 const mocks = vi.hoisted(() => ({ loadStoredIntegration: vi.fn() }))
 
-vi.mock("@/lib/integrations/server", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   loadStoredIntegration: mocks.loadStoredIntegration,
   loadStoredIntegrations: vi.fn(),
   invalidateStoredIntegrations: vi.fn(),
   INTEGRATION_CACHE_TTL_MS: 30_000,
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 
-import { encryptSecret } from "@/lib/crypto/secretBox"
-import { getIntegration, getIntegrationConfig } from "@/lib/integrations/runtime"
-import { getInternalBaseUrl } from "@/lib/integrations/server"
+import { encryptSecret } from '@/lib/crypto/secretBox'
+import { getIntegration, getIntegrationConfig, getInternalBaseUrl } from "@nandobfer/integracoes/modules/server/config"
 import { DEFAULT_CRON_JOBS } from "@/features/integrations/registry/jobs"
 
 const saved = { ...process.env }

@@ -14,9 +14,10 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const models = { data: [{ id: 'anthropic/claude', name: 'Claude', variants: [], group: 'Anthropic' }, { id: 'openai/gpt', name: 'GPT', variants: [], group: 'OpenAI' }, { id: 'deepseek/flash', name: 'Flash', variants: [], group: 'DeepSeek' }], isLoading: false, isError: false, error: null }
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => models }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => models }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => models }))(importOriginal)) as Record<string, unknown>) }))
 // Seletor do modelo principal simplificado: um botão por modelo.
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields", () => ({
   ModelPickerField: ({ id, onPick }: { id: string; onPick: (model: { id: string }) => void }) => (
     <div>
       {models.data.map((model) => (
@@ -28,7 +29,7 @@ vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/M
   ),
   VariantSelectField: () => null,
 }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker", () => ({
   ModelSearchPicker: ({ trigger }: { trigger: React.ReactElement }) => <div>{trigger}</div>,
 }))
 

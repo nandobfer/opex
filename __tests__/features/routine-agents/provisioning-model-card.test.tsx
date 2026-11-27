@@ -22,8 +22,9 @@ vi.mock('@/features/routine-agents/hooks/useRoutineAgents', () => ({
   useRoutineAgentSettings: () => ({ data: mocks.saved, isLoading: false }),
   useSaveRoutineAgentSettings: () => ({ mutateAsync: mocks.mutateAsync, isPending: false }),
 }))
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiProviderStatuses: () => ({ providers: [] }) }))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiProviderStatuses: () => ({ providers: [] }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiProviderStatuses: () => ({ providers: [] }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard", () => ({
   ProviderModelCard: ({ form, onProviderChange }: { form: UseFormReturn<{ provider: string | null; model: string }>; onProviderChange: (provider: string) => void }) => {
     const model = useWatch({ control: form.control, name: 'model' })
     const error = form.formState.errors.model?.message

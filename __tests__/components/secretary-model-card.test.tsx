@@ -8,11 +8,16 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import { framerMotionMock } from "../helpers/framer-motion"
 
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("@/features/ai/hooks/useAi", () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useAiProviderStatuses: (includeAll?: boolean) => ({ providers: includeAll ? [...providers, { id: "jev", name: "JEV", configured: true, connected: true }, { id: "opencode", name: "OpenCode", configured: true, connected: true }] : providers }),
     useAiModels: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
     useAiAgents: () => ({ data: [], isError: false }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+    useAiProviderStatuses: (includeAll?: boolean) => ({ providers: includeAll ? [...providers, { id: "jev", name: "JEV", configured: true, connected: true }, { id: "opencode", name: "OpenCode", configured: true, connected: true }] : providers }),
+    useAiModels: () => ({ data: [], isPending: false, isError: false, refetch: vi.fn() }),
+    useAiAgents: () => ({ data: [], isError: false }),
+}))(importOriginal)) as Record<string, unknown>) }))
 vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields", () => ({
     ModelPickerField: ({ placeholder }: { placeholder: string }) => <p data-testid="model-picker">{placeholder}</p>,
     VariantSelectField: () => null,

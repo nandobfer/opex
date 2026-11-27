@@ -1,10 +1,12 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from "../../helpers/framer-motion"
-import { modelFavoritesMock } from "../../helpers/model-favorites"
+import { framerMotionMock } from '../../helpers/framer-motion'
+import { modelFavoritesMock } from '../../helpers/model-favorites'
 
 /**
  * Aba "Agente Mentor" montada inteira, com a configuração salva (decisor e redator com provedor,
@@ -18,8 +20,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
-vi.mock("@/features/ai/hooks/useAi", () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => modelFavoritesMock())(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   AI_QUERY_KEY: 'ai',
   useAiFeatureRealtime: vi.fn(),
   // Como o hook real: o JEV (decisão estruturada) só entra com `includeAll`.
@@ -37,9 +39,28 @@ vi.mock("@/features/ai/hooks/useAi", () => ({
     isError: false,
     error: null,
   }),
-}))
-vi.mock("@/features/agentic/hooks/useAgentic", () => ({ useCentrals: () => ({ data: [], isLoading: false }) }))
-vi.mock("@/features/adversarial-agent/hooks/useMentorReorg", () => ({
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  AI_QUERY_KEY: 'ai',
+  useAiFeatureRealtime: vi.fn(),
+  // Como o hook real: o JEV (decisão estruturada) só entra com `includeAll`.
+  useAiProviderStatuses: (includeAll = false) => ({
+    providers: (includeAll ? ['gemini', 'anthropic', 'jev'] : ['gemini', 'anthropic']).map((id) => ({ id, name: id === 'jev' ? 'JEV' : id, configured: true, connected: true })),
+  }),
+  useAiModels: (provider: string | null) => ({
+    data:
+      provider === 'gemini'
+        ? [{ id: 'flash', name: 'Gemini Flash', variants: ['low', 'high'], group: null, contextWindow: null, free: false }]
+        : provider === 'anthropic'
+          ? [{ id: 'claude', name: 'Claude Sonnet', variants: ['medium', 'high'], group: null, contextWindow: null, free: false }]
+          : [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [], isLoading: false }) }))
+vi.mock('@/features/adversarial-agent/hooks/useMentorReorg', () => ({
   useMentorReorgs: () => ({ data: { items: [], centrals: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
   useMentorReorg: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
   useMentorReorgDecision: () => ({ mutate: vi.fn(), isPending: false }),
@@ -47,7 +68,7 @@ vi.mock("@/features/adversarial-agent/hooks/useMentorReorg", () => ({
   useMentorReorgPreview: () => ({ data: undefined, isLoading: false, isError: false, refetch: vi.fn() }),
   useStartMentorReorg: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }))
-vi.mock("@/features/adversarial-agent/hooks/useMentor", () => ({
+vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
   useMentorSettings: () => mocks.settingsQuery,
   useSaveMentorSettings: () => ({ mutateAsync: mocks.mutateAsync, isPending: false }),
   useMentorRuns: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn() }),
@@ -57,28 +78,29 @@ vi.mock("@/features/adversarial-agent/hooks/useMentor", () => ({
 
 // Demais abas e peças da página: fora do escopo deste teste.
 const { stub } = vi.hoisted(() => ({ stub: (name: string) => ({ [name]: () => null }) }))
-vi.mock('@nandobfer/integracoes/react', () => stub('DetailHeader'))
-vi.mock('@nandobfer/integracoes/react', () => stub('DetailActions'))
-vi.mock('@nandobfer/integracoes/react', () => stub('GeneralCard'))
-vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProvidersTab', () => stub('AiProvidersTab'))
-vi.mock("@/features/ai/components/task-summary/TaskSummaryTab", () => stub('TaskSummaryTab'))
-vi.mock("@/features/ai/components/task-tags/TaskTagsTab", () => stub('TaskTagsTab'))
-vi.mock("@/features/ai/components/budget-preview/BudgetPreviewTab", () => stub('BudgetPreviewTab'))
-vi.mock("@/features/ai/components/estimate-hours/EstimateHoursTab", () => stub('EstimateHoursTab'))
-vi.mock("@/features/ai/components/task-refinement/TaskRefinementTab", () => stub('TaskRefinementTab'))
-vi.mock("@/features/agentic/components/settings/AgenticTab", () => stub('AgenticTab'))
-vi.mock("@/features/pr-review/components/PrReviewTab", () => stub('PrReviewTab'))
-vi.mock("@/features/maddox-agent/components/settings/MaddoxAgentTab", () => ({ MaddoxAgentTab: () => null }))
-vi.mock("@/features/opex-agent/components/settings/OpexAgentTab", () => ({ OpexAgentTab: () => null, OPEX_AI_TAB_DEF: { id: 'agente-opex', label: 'Agente Opex', icon: () => null } }))
-vi.mock("@/features/adversarial-agent/components/settings/AdversarialAgentTab", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/DetailHeader", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('DetailHeader'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/DetailActions", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('DetailActions'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/GeneralCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('GeneralCard'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProvidersTab", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('AiProvidersTab'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock('@/features/ai/components/task-summary/TaskSummaryTab', () => stub('TaskSummaryTab'))
+vi.mock('@/features/ai/components/task-tags/TaskTagsTab', () => stub('TaskTagsTab'))
+vi.mock('@/features/ai/components/budget-preview/BudgetPreviewTab', () => stub('BudgetPreviewTab'))
+vi.mock('@/features/ai/components/estimate-hours/EstimateHoursTab', () => stub('EstimateHoursTab'))
+vi.mock('@/features/ai/components/task-refinement/TaskRefinementTab', () => stub('TaskRefinementTab'))
+vi.mock('@/features/agentic/components/settings/AgenticTab', () => stub('AgenticTab'))
+vi.mock('@/features/pr-review/components/PrReviewTab', () => stub('PrReviewTab'))
+vi.mock('@/features/maddox-agent/components/settings/MaddoxAgentTab', () => ({ MaddoxAgentTab: () => null }))
+vi.mock('@/features/opex-agent/components/settings/OpexAgentTab', () => ({ OpexAgentTab: () => null, OPEX_AI_TAB_DEF: { id: 'agente-opex', label: 'Agente Opex', icon: () => null } }))
+vi.mock('@/features/adversarial-agent/components/settings/AdversarialAgentTab', () => ({
   AdversarialAgentTab: () => null,
   ADVERSARIAL_AI_TAB_DEF: { id: 'agente-adversario', label: 'Agente Adversário', icon: () => null },
 }))
 
-import { AiEditorForm } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiEditorForm"
-import { MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
-import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from "@/features/adversarial-agent/mentor/schemas"
-import type { MentorSettingsDto } from "@/features/adversarial-agent/mentor/types"
+import { opexEditor } from '../../helpers/opex-editors'
+const AiEditorForm = await opexEditor('ai')
+import { MentorAgentTab } from '@/features/adversarial-agent/components/mentor/MentorAgentTab'
+import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
+import type { MentorSettingsDto } from '@/features/adversarial-agent/mentor/types'
 
 const SAVED: MentorSettings = {
   ...structuredClone(DEFAULT_MENTOR_SETTINGS),
