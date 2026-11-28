@@ -234,7 +234,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
   branch da mesa e SHA imutável. Dispara `workflow_dispatch` na branch padrão; nenhum push/PR
-  dispara publicação de prévia. Workflow: suíte completa → build → artefato com checksum/manifest.
+  dispara publicação de prévia. Workflow: suíte completa (4 shards) em paralelo com o build → artefato
+  com checksum/manifest, baixado só quando o run inteiro termina com `success` (`modules/deployment.md`).
 - A porta permanece reservada no banco, dentro da faixa efetiva da central (`resolveCentralPorts`, também
   gravada em `min`/`max` do estado da tentativa). O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
