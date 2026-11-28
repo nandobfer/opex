@@ -33,8 +33,8 @@ dono. Valores que antes viviam no `.env` são persistidos no MongoDB.
     (`OPEX_CLIENT_ADAPTERS`) e o `OpexIntegrationsProvider` (montado no `app/layout.tsx`);
   - `config-map.ts`: `IntegrationConfigMap` (valores resolvidos tipados por id).
 - **Comuns da biblioteca**: Pusher, API interna, Crons, GitHub, Inteligência Artificial (hub, 8 provedores,
-  provedores customizados, PTAX e models.dev), SMTP e Storage S3. **Do Opex** (`src/features/integrations/adapters/`):
-  Clientes (`orcamentos`), Builder Machine, Engramind, Evolution API, Gotenberg e Google Drive (em
+  provedores customizados, PTAX e models.dev), SMTP, Storage S3 e Gotenberg (PDF) (OPE-217, lib `v0.5.0`). **Do Opex**
+  (`src/features/integrations/adapters/`): Clientes (`orcamentos`), Builder Machine, Engramind, Evolution API e Google Drive (em
   desenvolvimento); e as **extensões** das comuns: rotas do GitHub (vínculos, mapeamento, sincronização),
   tokens e escopos da API interna, todas as rotinas do Opex nos Crons (abas **Jobs** e **Observações** do
   Agente Opex) e as abas de agentes e do OpenCode na IA.
@@ -153,8 +153,8 @@ dono. Valores que antes viviam no `.env` são persistidos no MongoDB.
   no Opex. A origem vem da definição (`source`: as da biblioteca saem com `library`; as criadas com
   `defineIntegration` no Opex valem `app`) e chega na lista como `IntegrationListItemDto.source`. Estender uma
   definição da biblioteca (`extendDefinition`, ex.: o GitHub com `commentOnCreate`) mantém "Biblioteca". No
-  Opex são "Próprio": Clientes (`orcamentos`), Builder Machine, Engramind, Evolution API, Gotenberg e Google
-  Drive.
+  Opex são "Próprio": Clientes (`orcamentos`), Builder Machine, Engramind, Evolution API e Google Drive (a
+  Gotenberg é "Biblioteca" desde a OPE-217).
 - Ações por card (fora do link): **Testar conexão** e **Debug** (sempre disponível: o debug é sempre ativo).
 - Cards "Em desenvolvimento" (Google Drive) no fim, sem ações.
 - Peças compartilhadas com o submenu da sidebar: `useTopLevelIntegrations` (lista sem as filhas, na
@@ -565,13 +565,16 @@ agentes rotineiros (`modules/ai.md`, "Plano de cobrança" e "Custo de tabela"):
 - `ai_deepseek` ganhou o campo público **"Feriados fora de pico"** (`offPeakHolidays`, textarea), lido pela tabela do
   DeepSeek.
 
-### Gotenberg (PDF) (OPE-210)
+### Gotenberg (PDF) (OPE-210, adaptador da biblioteca desde a OPE-217)
 
-Integração `gotenberg` (interno, sem `env`, sem segredos): conversão de HTML em PDF e PNG dos documentos dos agentes
+Integração `gotenberg` (interno, sem `env`, sem segredos; `gotenbergIntegration`/`gotenbergServer` de
+`@nandobfer/integracoes/gotenberg[/server]`, com o Opex injetando só a descrição e os textos do campo URL): conversão de HTML em PDF e PNG dos documentos dos agentes
 pelo Gotenberg compartilhado no host (rede `gotenberg-network`). Campos: `url` (URL interna, `http://gotenberg:3000`),
 `timeoutSeconds` (30 s), `urlTtlMinutes` (validade padrão das URLs dos documentos, 15 min) e `urlTtlMaxMinutes`
-(validade máxima, 60 min; abaixo da padrão vale a menor). Tester: `GET /health` com o Chromium `up`. Debug sem o
-conteúdo do HTML. Detalhes em `modules/agent-documents.md`.
+(validade máxima, 60 min; abaixo da padrão vale a menor, `gotenbergUrlTtlMinutes`). Tester: `GET /health` (Gotenberg e
+Chromium `up`) e conversão de um HTML mínimo em PDF dentro do `timeoutSeconds` (confere o `%PDF`); URL ausente,
+rede inalcançável, tempo esgotado, Chromium indisponível e conversão recusada voltam como falha com mensagem em pt-BR.
+O id e as chaves são os de antes: a configuração salva continua valendo, sem migração. Debug sem o conteúdo do HTML. Detalhes em `modules/agent-documents.md`.
 
 ### Planejado (em desenvolvimento)
 

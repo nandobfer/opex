@@ -1,6 +1,6 @@
 import type { NextRequest } from "next/server"
 import { buildIntegrationUpdateSchema } from "@nandobfer/integracoes"
-import { defineIntegrationServer, describeFetchError, fail, okResponse, parseBody, route, stepSignal, type IntegrationTester } from "@nandobfer/integracoes/server"
+import { defineIntegrationServer, okResponse, parseBody, route } from "@nandobfer/integracoes/server"
 import { requireAdminSession } from "@/features/auth/server/context"
 import { integrationsRegistry } from "../registry/definitions"
 
@@ -38,21 +38,3 @@ export const evolutionAdapter = defineIntegrationServer({
         }),
     ],
 })
-
-/** Gotenberg (OPE-210): `GET /health` com o Chromium no ar. */
-export const testGotenberg: IntegrationTester = async ({ emit, signal }) => {
-    const { gotenbergHealth } = await import("@/lib/pdf/gotenberg")
-    emit("step", "Consultando GET /health do Gotenberg")
-    let health
-    try {
-        health = await gotenbergHealth(stepSignal(signal))
-    } catch (error) {
-        fail(`Não foi possível falar com o Gotenberg: ${describeFetchError(error)}`)
-    }
-    if (health.status !== "up") fail(`O Gotenberg respondeu "${health.status}" no /health`)
-    if (health.chromium !== "up") fail(`O Chromium do Gotenberg está "${health.chromium ?? "indisponível"}": a conversão de HTML não funciona`)
-    emit("success", "Gotenberg e Chromium no ar")
-    return "Gotenberg no ar (Chromium disponível)"
-}
-
-export const gotenbergAdapter = defineIntegrationServer({ id: "gotenberg", tester: testGotenberg })

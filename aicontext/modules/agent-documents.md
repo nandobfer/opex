@@ -9,7 +9,7 @@ real: o catálogo só é acessado pelas ferramentas e pelas funções do motor.
 
 | Camada | Arquivo | O que faz |
 |---|---|---|
-| Infra (`src/lib/pdf/`) | `gotenberg.ts` | Cliente do Gotenberg: `convertHtmlToPdf`, `screenshotHtml`, `gotenbergHealth` (multipart com `fetch`/`FormData` nativos) |
+| Infra (`src/lib/pdf/`) | `gotenberg.ts` | Mapeamento das opções de página para os campos do Chromium (`pdfFormFields`, `screenshotFormFields`) e `convertHtmlToPdf`/`screenshotHtml`, que chamam o cliente da integração da biblioteca (`convertHtml`/`screenshotHtml` de `@nandobfer/integracoes/gotenberg/server`, OPE-217: multipart com `fetch`/`FormData` nativos, erros `GOTENBERG_*`) |
 | | `pages.ts` (puro) | Tamanhos A4/Carta, orientação, mm↔pol↔px, `countPdfPages` |
 | | `fit.ts` (puro) | `fitToPages`: ajuste da escala a N páginas |
 | | `html-guard.ts` (puro) | Recusa HTML que busca recurso externo ou roda JavaScript |
@@ -38,7 +38,10 @@ Outras features podem usar o motor direto: `renderHtmlPdf` para só gerar o PDF,
   - `urlTtlMinutes` — validade padrão das URLs dos documentos (15 min; 1–1440);
   - `urlTtlMaxMinutes` — validade máxima que o agente pode pedir (60 min; 1–10080). Se ficar abaixo da padrão,
     vale a menor das duas (não há validação cruzada na tela).
-  - Tester: `GET /health`, exige `status: up` e Chromium `up`. Debug (`streamsDebugOverPusher`): rota, tamanho do
+  - adaptador da biblioteca `@nandobfer/integracoes` (OPE-217); a validade é calculada por `gotenbergUrlTtlMinutes`
+    da biblioteca, com o teto do SigV4 (`URL_TTL_SIGV4_MAX_MINUTES`) do Opex;
+  - Tester: `GET /health` (exige `status: up` e Chromium `up`) e conversão de um HTML mínimo em PDF dentro do tempo
+    limite. Debug (`streamsDebugOverPusher`): rota, tamanho do
     HTML, escala, status, bytes e duração — nunca o conteúdo.
 - PDF: `POST /forms/chromium/convert/html` com `index.html`, `paperWidth`/`paperHeight` (A4 8,27×11,69 pol.; Carta
   8,5×11), `marginTop/Right/Bottom/Left` (pol.), `printBackground`, `preferCssPageSize` e `scale`.
