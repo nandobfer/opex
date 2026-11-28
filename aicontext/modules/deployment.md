@@ -40,7 +40,13 @@ na `main` sem repeti-la, com dois jobs encadeados.
 - A tag é o SHA completo do commit (`opex:<sha>`), o que torna cada imagem imutável e permite
   rollback por tag.
 - A imagem é salva com `docker save | gzip -9` e acompanhada do arquivo `opex-image.tar.gz.sha256`.
-- O `next build` roda com **Turbopack**, o padrão do Next 16. A versão do `next` é fixada
+- **O build de produção usa Webpack** (`"build": "next build --webpack"` no `package.json`, o mesmo
+  script do `Dockerfile`, do `Build image` e da prévia). Com o Turbopack, a compilação no runner
+  (4 vCPU / 16 GB) crescia muito mais rápido que o código — 64 s (06/11/2026) → 85 s (21/11) → 2,6 min →
+  4,5 min (28/11) com ~40% a mais de código — e o pico de memória já tinha estourado a RAM (OPE-207); no
+  Zaturno a medição foi Webpack 334 s / ~6,8 GB contra Turbopack 783 s / ~25 GB. O `next dev` segue com
+  Turbopack. Para voltar, basta tirar o `--webpack` do script.
+- Histórico (Turbopack): a versão do `next` é fixada
   exatamente no `package.json` (hoje `16.4.5`): o `16.1.4` derrubava o build com o panic interno
   do Turbopack `Dependency tracking is disabled so invalidation is not allowed`
   ([vercel/next.js#85496](https://github.com/vercel/next.js/issues/85496)) na geração das rotas —
@@ -48,6 +54,11 @@ na `main` sem repeti-la, com dois jobs encadeados.
   numa versão fixada, o caminho de contenção é `next build --webpack` (o defeito é exclusivo do
   Turbopack; a flag existe no Next 16) e, para achar o gatilho, `next build --debug-build-paths`
   com um recorte de rotas.
+- **Prévia por GitHub Action (`.github/workflows/preview.yml`):** os testes (`vitest`, 4 shards,
+  `fail-fast`) e o build da imagem (`preview`, "Build e artefato") são jobs **paralelos**. O artefato
+  `preview-<tentativa>` sai do job de build, mas o `scripts/preview-github.ts` só o baixa quando o run
+  inteiro termina com `success`: um shard vermelho reprova a prévia como antes. Em série, a suíte
+  (~7 min) somava ao build e a prévia passava de 16 min.
 - **Compilador de plugins (OPE-172):** logo depois do `next build`, o `Dockerfile` copia para o
   standalone o binário nativo do Rolldown (`node_modules/.pnpm/rolldown@*/node_modules/@rolldown/binding-*`)
   e o pacote `tailwindcss` inteiro, e roda `node scripts/plugin-runtime-check.mjs .next/standalone`.
