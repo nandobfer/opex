@@ -99,6 +99,13 @@ describe('métricas com custo', () => {
     expect(metrics.days.find((day) => day.day === '2026-11-03')!.cost.listUsd).toBeNull()
     expect(metrics.breakdown.plans.map((item) => item.label)).toEqual(['DeepSeek · Sem chave identificada · Pago por uso', 'DeepSeek · Créditos · Créditos'])
     expect(metrics.breakdown.models).toEqual([expect.objectContaining({ key: 'deepseek/deepseek-flash', listUsd: 4 })])
+    // OPE-213: médias de tokens da lista — tokens ÷ execuções (todas) e tokens ÷ dias corridos.
+    expect(metrics.kpis).toMatchObject({ tokens: 450, tokensPerRun: 150, tokensPerDay: 113 })
+  })
+
+  it('OPE-213: sem execuções no período, as médias de tokens são null ("—"), nunca 0', () => {
+    const metrics = aggregateRoutineMetrics([], { from: new Date('2026-11-04T03:00:00Z'), to: new Date('2026-11-05T02:59:59Z') }, null)
+    expect(metrics.kpis).toMatchObject({ tokens: 0, tokensPerRun: null, tokensPerDay: null })
   })
 
   it('execução do motor Opex com tokens mas sem passos gravados: custo desconhecido (Parcial), nunca zero', () => {

@@ -91,7 +91,7 @@ vi.mock('@/features/agentic/server/build-logs', () => ({
 }))
 vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
-vi.mock('@/features/agentic/server/remote-preview', () => ({ reserveRemotePreview: mocks.reserveRemote, invalidateRemotePreview: mocks.invalidateRemote, assertRemotePreview: mocks.assertRemote }))
+vi.mock('@/features/agentic/server/remote-preview', () => ({ reserveRemotePreview: mocks.reserveRemote, invalidateRemotePreview: mocks.invalidateRemote, assertRemotePreview: mocks.assertRemote, remotePreviewTimeoutMinutes: (minutes: number) => Math.max(25, minutes) }))
 vi.mock('@/features/agentic/server/log', () => ({ centralLogger: () => ({ info: vi.fn(), step: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/features/agentic/server/ports', () => ({ releasePreviewPort: vi.fn(async () => undefined), allocatePreviewPort: mocks.allocatePort, waitForPreview: mocks.waitPreview }))
 vi.mock('@/features/agentic/server/build-queue', () => ({ pumpBuildQueue: mocks.pumpBuild, buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()) }))

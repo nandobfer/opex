@@ -229,8 +229,7 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 - Quem roda o script é o **app** (ver "Build rodado pelo app"): um turno curto do agente Build
   commita tudo na branch da mesa (e cria/reutiliza o dump, quando ligado na aba Ambiente) e o Opex
   executa `npx tsx scripts/preview-github.ts <estado> <tentativa>` no worktree, desacoplado no host
-  (tempo limite = `buildTimeoutMinutes`, nunca menos de 25 min: o mesmo piso vale para a espera do turno e para o
-  prazo gravado no estado da reserva, `src/features/agentic/remote-build-timeout.ts`), com a saída na aba **Build (N)**.
+  (tempo limite = `buildTimeoutMinutes`, nunca menos de 25 min), com a saída na aba **Build (N)**.
   O workflow e o runner devem estar instalados no projeto com a skill global
   `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,

@@ -19,15 +19,24 @@ export interface KpiCardProps {
     footer?: ReactNode
     /** Conteúdo no lugar do número (ex.: data do Último uso). */
     children?: ReactNode
+    /** Cor (variável CSS do tema) que identifica o tipo do valor: ponto no rótulo e o número colorido. */
+    accentColor?: string
 }
 
 /** Cartão de indicador: rótulo, valor animado (`AnimatedNumber`), dica e rodapé opcional. */
-export function KpiCard({ label, hint, value, formatter, footer, children }: KpiCardProps) {
+export function KpiCard({ label, hint, value, formatter, footer, children, accentColor }: KpiCardProps) {
     return (
         <Card className={KPI_CARD_HEIGHT}>
             <CardContent className="flex h-full flex-col gap-1 p-4">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-muted-foreground">{label}</p>
-                {children ?? <p className="font-mono text-xl font-bold text-foreground">{value === null ? <span className="text-muted-foreground">{EMPTY_METRIC}</span> : <AnimatedNumber value={value} formatter={formatter} />}</p>}
+                <p className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-muted-foreground">
+                    {accentColor && <span className="h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accentColor }} data-accent={accentColor} aria-hidden />}
+                    {label}
+                </p>
+                {children ?? (
+                    <p className="font-mono text-xl font-bold text-foreground" style={accentColor && value !== null ? { color: accentColor } : undefined}>
+                        {value === null ? <span className="text-muted-foreground">{EMPTY_METRIC}</span> : <AnimatedNumber value={value} formatter={formatter} />}
+                    </p>
+                )}
                 <p className="text-[11px] text-muted-foreground">{hint}</p>
                 {footer && <p className="text-[10px] text-muted-foreground/80">{footer}</p>}
             </CardContent>
