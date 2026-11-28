@@ -16,7 +16,7 @@ import { detectTechnologies, flattenDetected } from "../tech-detect"
 import type { DirectoryCheckDto, ProjectBootstrapDto, ProjectBootstrapPrefillDto, ProjectBootstrapSummaryDto, RepoCheckDto } from "../types"
 import { getTechCatalog } from "./catalog"
 import { publishProjectBootstrap } from "./events"
-import { checkRepoName, initialLinkColumns } from "./github"
+import { assertBootstrapColumns, checkRepoName, initialLinkColumns } from "./github"
 import { checkHostDirectory } from "./host"
 import { ProjectBootstrap, type IProjectBootstrap } from "./models"
 import { abortBootstrap, loadBootstrapDoc, resumeIfStale, startActivation } from "./runner"
@@ -144,6 +144,8 @@ export async function startProjectBootstrap(input: ProjectBootstrapStartValues, 
     const blockers = await projectBootstrapBlockers()
     if (blockers.length) throw new DomainError(409, blockers[0]!.message, "BOOTSTRAP_UNAVAILABLE", { blockers })
     const repo = repoFullName(input.owner, input.name)
+    // Antes do provisionamento: uma coluna inexistente só apareceria na amarração, depois do turno inteiro do agente.
+    await assertBootstrapColumns(input.entryColumnKey, input.closedColumnKey)
     const check = await checkRepoName(input.owner, input.name, { visibility: input.visibility })
     if (check.blocked) throw new DomainError(409, check.message, "BOOTSTRAP_REPO_BLOCKED")
     const directory = await checkHostDirectory(input.directory, repo)

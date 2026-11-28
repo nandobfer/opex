@@ -29,6 +29,8 @@ auditado e publicado em `project-bootstrap-updated`) enquanto o bootstrap está 
 - na etapa 2 com o turno vivo, o aviso entra no turno como mensagem ao agente (`buildEnvironmentChangePrompt`); parada e
   com o resumo já entregue, a conferência roda de novo no modo novo; sem resumo, a próxima tentativa já sai no modo novo;
 - na etapa 4 parada (com falha), desligar conclui sem deploy; um ambiente já criado não é apagado e aparece no resumo;
+- religar depois de um resumo sem porta faz a etapa 2 falhar pedindo ao agente o bloco com `port` e `healthPath` (a
+  conferência e a etapa 4 nunca seguem com ambiente ligado e sem porta);
 - ligar de novo só na etapa 2; concluído, cancelado ou deploy em andamento devolvem 409 `BOOTSTRAP_ENVIRONMENT_LOCKED`
   (ou de bootstrap fechado).
 
@@ -49,7 +51,8 @@ auditado e publicado em `project-bootstrap-updated`) enquanto o bootstrap está 
      (`GET /api/project-bootstraps/check-directory`): inexistente/vazio segue, clone do mesmo repositório é reaproveitado,
      outro conteúdo ou outro remoto bloqueia;
    - colunas de entrada e de conclusão do vínculo (padrão: as do último vínculo criado; sem vínculo, a primeira coluna do
-     quadro e nenhuma de conclusão), pelo `BoardColumnPicker` (o mesmo do diálogo de vínculo do GitHub);
+     quadro e nenhuma de conclusão), pelo `BoardColumnPicker` (o mesmo do diálogo de vínculo do GitHub); o envio confere
+     que as duas existem no quadro (400 `COLUMN_NOT_FOUND`, antes de criar o bootstrap);
    - bloqueiam o envio, com o caminho para resolver: Agente de Bootstrap desativado ou sem modelo, OpenCode desconectado,
      token do GitHub ausente (`GET /api/project-bootstraps/prefill`);
    - card **Ambiente e deploy** com a chave "Criar ambiente e container Docker" (ligada por padrão). O servidor confere tudo de novo no
@@ -84,7 +87,7 @@ auditado e publicado em `project-bootstrap-updated`) enquanto o bootstrap está 
 4. **Ambiente e deploy** (`DeployPanel`, com o `DeployLog`): `createEnvironment` com origem Central
    (`bootstrapEnvironmentInput`: nome e slug do repositório, ref da branch, build e execução no servidor, `ports: [porta]`,
    `healthUrl` = `http://localhost:<porta><healthPath>` ou `/` sem servidor, sem limites, variáveis do `.env` lido no host
-   por `readText`) e `startDeploy`; o Opex acompanha o registro do deploy. Deploy com falha: soma uma tentativa e **volta à
+   por `readText`; mais de 100 variáveis faz a etapa falhar com o motivo, sem cortar) e `startDeploy`; o Opex acompanha o registro do deploy. Deploy com falha: soma uma tentativa e **volta à
    etapa 2** na mesma conversa com o erro e o fim do log (sem limite de voltas; o stepper mostra "Tentativa N"); na volta,
    o ambiente existente é atualizado (o `.env` ou a porta podem ter mudado; o `.env` substitui as variáveis inteiras, então
    um valor esvaziado no arquivo fica vazio, sem manter o da tentativa anterior). Slug ou projeto do compose já usados por outro

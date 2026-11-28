@@ -10,7 +10,7 @@ import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { abortWorkbenchRun, clearWorkbenchActive, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
 import { skillPermissionRules } from "@/features/opencode-resources/skill-permissions"
 import { BOOTSTRAP_DEPLOY_POLL_MS, BOOTSTRAP_HEARTBEAT_MS, DEFAULT_PROJECT_BOOTSTRAP_ENVIRONMENT_SKILLS, PROJECT_BOOTSTRAP_AUDIT_ENTITY, PROJECT_BOOTSTRAP_CONSUMPTION_ORIGIN, PROJECT_BOOTSTRAP_INSTRUCTIONS_KEY, PROJECT_BOOTSTRAP_STAGE_LABEL } from "../constants"
-import { bootstrapCentralConfig, bootstrapEnvironmentInput, freeEnvironmentSlug, withEnvironmentSlug } from "../environment-input"
+import { BOOTSTRAP_ENV_VARS_LIMIT, bootstrapCentralConfig, bootstrapEnvironmentInput, envVariableCount, freeEnvironmentSlug, withEnvironmentSlug } from "../environment-input"
 import { describeMissing } from "../host-checks"
 import { isBootstrapStale } from "../liveness"
 import { buildBootstrapInstructions, buildDeployFailedPrompt } from "../prompts"
@@ -355,15 +355,22 @@ async function afterTurn(activation: Activation, result: BootstrapResult): Promi
     publishWorkbenchEvent(activation.id, { type: "notice", level: "info", message: "Conferindo as entregas no host…" })
     let missing
     try {
-        // Depois de um deploy com falha, o container do ambiente deste bootstrap pode seguir na porta: conta como próprio.
-        if (doc.withEnvironment === false || !fixed.port) {
+        const port = fixed.port
+        if (doc.withEnvironment !== false && !port) {
+            // Ambiente religado depois de um resumo sem porta: o agente precisa mandar o bloco com `port` e `healthPath`.
+            const labels = ["o bloco `bootstrap-result` com `port` e `healthPath` (o ambiente está ligado)"]
+            await fail(activation, "O ambiente está ligado, mas o resumo do agente não tem a porta: use Tentar novamente para pedir ao agente que complete.", { missing: labels })
+            return null
+        }
+        if (doc.withEnvironment === false || !port) {
             // Sem ambiente: só o git (remoto, push, árvore limpa) e o `.env` ignorado, se existir.
             missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, repo: doc.repo, withEnvironment: false })
         } else {
+            // Depois de um deploy com falha, o container do ambiente deste bootstrap pode seguir na porta: conta como próprio.
             const { Environment } = await import("@/features/environments/server/models")
             const environment = doc.created?.environmentId ? await Environment.findById(doc.created.environmentId).select({ slug: 1, source: 1 }).lean() : null
             const composeProject = environment ? (environment.source?.projectName ?? environment.slug) : null
-            missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port: fixed.port, project: doc.name, repo: doc.repo, composeProject })
+            missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port, project: doc.name, repo: doc.repo, composeProject })
         }
     } catch (error) {
         await fail(activation, `${errorText(error)}: use Tentar novamente.`)
@@ -463,6 +470,10 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
         await fail(activation, "A central do bootstrap não foi encontrada: use Tentar novamente na amarração.")
         return null
     }
+    if (!doc.result.port) {
+        await fail(activation, "O resumo do agente não tem a porta do ambiente: desligue o ambiente ou volte ao agente para completar o bloco `bootstrap-result`.")
+        return null
+    }
     const [{ createEnvironment, updateEnvironment, getDeploy }, { Environment }, { startDeploy }] = await Promise.all([
         import("@/features/environments/server/service"),
         import("@/features/environments/server/models"),
@@ -474,6 +485,11 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
         const envText = await readBootstrapEnv(doc.directory)
         if (envText === null) {
             await fail(activation, "O .env do projeto não foi encontrado no host: use Tentar novamente.")
+            return null
+        }
+        const variables = envVariableCount(envText)
+        if (variables > BOOTSTRAP_ENV_VARS_LIMIT) {
+            await fail(activation, `O .env do projeto tem ${variables} variáveis e o ambiente aceita até ${BOOTSTRAP_ENV_VARS_LIMIT}: reduza as variáveis (ou mova o excesso para o ambiente depois) e use Tentar novamente.`)
             return null
         }
         const input = bootstrapEnvironmentInput({ repoName: doc.name, centralId, result: doc.result }, envText)

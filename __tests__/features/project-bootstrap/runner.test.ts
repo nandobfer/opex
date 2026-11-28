@@ -44,6 +44,9 @@ const mocks = vi.hoisted(() => ({
     existingCentral: null as { _id: string } | null,
     updateCentralFails: false,
     centralConfig: null as unknown,
+    blockers: [] as { message: string; href: string; action: string }[],
+    columnsMissing: false,
+    envText: null as string | null,
     createGate: null as { arrive: () => Promise<void> } | null,
     savedEnv: { name: 'app', slug: 'app', source: { projectName: 'app' }, limits: null, composeOverrides: null } as Record<string, unknown>,
 }))
@@ -66,7 +69,7 @@ vi.mock('@/features/project-bootstrap/server/models', () => ({
         return mocks.store
     },
 }))
-vi.mock('@/features/project-bootstrap/server/settings', () => ({ loadProjectBootstrapSettings: async () => ({ settings: mocks.settings }), projectBootstrapBlockers: async () => [] }))
+vi.mock('@/features/project-bootstrap/server/settings', () => ({ loadProjectBootstrapSettings: async () => ({ settings: mocks.settings }), projectBootstrapBlockers: async () => mocks.blockers }))
 vi.mock('@/features/project-bootstrap/server/host', () => ({
     ensureHostDirectory: vi.fn(async () => {
         mocks.calls.push('mkdir')
@@ -75,12 +78,15 @@ vi.mock('@/features/project-bootstrap/server/host', () => ({
         mocks.calls.push('verify')
         return mocks.missing
     }),
-    readBootstrapEnv: vi.fn(async () => `MONGODB_URI=mongodb://app:${SECRET}@mongo/app\n`),
+    readBootstrapEnv: vi.fn(async () => mocks.envText ?? `MONGODB_URI=mongodb://app:${SECRET}@mongo/app\n`),
     checkHostDirectory: vi.fn(async () => ({ path: '/home/u/code/app', kind: 'free', reason: null, message: 'A pasta não existe: será criada.' })),
 }))
 vi.mock('@/features/project-bootstrap/server/github', () => ({
     checkRepoName: vi.fn(async () => ({ repo: 'org/app', state: 'free', blocked: false, message: 'Nome livre', defaultBranch: null, private: null, bootstrapId: null })),
     initialLinkColumns: vi.fn(async () => ({ entryColumnKey: 'todo', closedColumnKey: null })),
+    assertBootstrapColumns: vi.fn(async () => {
+        if (mocks.columnsMissing) throw Object.assign(new Error('A coluna de entrada escolhida não existe mais no quadro'), { status: 400, code: 'COLUMN_NOT_FOUND' })
+    }),
 }))
 vi.mock('@/features/project-bootstrap/server/catalog', () => ({ getTechCatalog: vi.fn(async () => ({ groups: [], technologies: [] })) }))
 vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => mocks.client }))
@@ -253,6 +259,9 @@ beforeEach(() => {
     mocks.deployStatus = 'success'
     mocks.deployQueue = []
     mocks.createGate = null
+    mocks.blockers = []
+    mocks.columnsMissing = false
+    mocks.envText = null
     mocks.envs = []
     mocks.existingCentral = null
     mocks.updateCentralFails = false
@@ -633,5 +642,49 @@ describe('ambiente e deploy opcionais (v5)', () => {
         mocks.active.clear()
         expect(dto.withEnvironment).toBe(false)
         expect(docs().find((row) => row.repo === 'org/app')).toMatchObject({ withEnvironment: false })
+    })
+})
+
+describe('achados da revisão (v5, rodada 1)', () => {
+    const input = { owner: 'org', name: 'app', visibility: 'private' as const, context: 'API', directory: '/home/u/code/app', entryColumnKey: 'todo', closedColumnKey: null, withEnvironment: true }
+
+    it('religar o ambiente depois de um resumo sem porta falha pedindo o bloco completo e não cria ambiente', async () => {
+        const id = seed({ status: 'failed', withEnvironment: false, result: { port: null, healthPath: null, hasServer: true, usesMongo: false, branch: 'main' } })
+        await setProjectBootstrapEnvironment(id, true, 'local')
+        await settle()
+        expect(mocks.calls).not.toContain('verify')
+        expect(mocks.calls).not.toContain('link')
+        expect(mocks.calls).not.toContain('environment')
+        expect(current(id)).toMatchObject({ status: 'failed', step: 'provision', withEnvironment: true, missing: [expect.stringContaining('`port`')] })
+    })
+
+    it('a etapa 4 não cria ambiente com um resumo sem porta', async () => {
+        const id = seed({ step: 'deploy', status: 'failed', phase: 'deploy', result: { port: null, healthPath: null, hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: null } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('porta') })
+    })
+
+    it('.env com mais de 100 variáveis falha a etapa 4 com o motivo, sem cortar nem criar o ambiente', async () => {
+        mocks.envText = Array.from({ length: 101 }, (_, index) => `VAR_${index}=x`).join('\n')
+        const id = seed({ step: 'deploy', status: 'failed', phase: 'deploy', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('101 variáveis') })
+    })
+
+    it('o envio recusa (409) quando há bloqueio, sem criar o registro', async () => {
+        mocks.blockers = [{ message: 'O token do GitHub não está configurado.', href: '/integracoes/github', action: 'Configurar o GitHub' }]
+        await expect(startProjectBootstrap(input, 'local')).rejects.toMatchObject({ status: 409, code: 'BOOTSTRAP_UNAVAILABLE' })
+        expect(docs()).toHaveLength(0)
+    })
+
+    it('o envio recusa (400) coluna que não existe no quadro, antes de criar o registro', async () => {
+        mocks.columnsMissing = true
+        await expect(startProjectBootstrap(input, 'local')).rejects.toMatchObject({ status: 400, code: 'COLUMN_NOT_FOUND' })
+        expect(docs()).toHaveLength(0)
+        expect(mocks.turns).toHaveLength(0)
     })
 })

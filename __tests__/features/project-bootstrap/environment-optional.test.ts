@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
-import { bootstrapCentralConfig } from '@/features/project-bootstrap/environment-input'
+import { BOOTSTRAP_ENV_VARS_LIMIT, bootstrapCentralConfig, bootstrapEnvironmentInput, envVariableCount } from '@/features/project-bootstrap/environment-input'
 import { missingDeliverables, requiredDeliverables, verificationCommand } from '@/features/project-bootstrap/host-checks'
 import { buildBootstrapInstructions, buildEnvironmentChangePrompt, type BootstrapPromptInput } from '@/features/project-bootstrap/prompts'
 import { parseBootstrapResult } from '@/features/project-bootstrap/result'
@@ -140,6 +140,16 @@ describe('chave do ambiente na página', () => {
     expect(environmentToggleState({ step: 'deploy', status: 'failed', withEnvironment: true }).disabled).toBe(false)
     expect(environmentToggleState({ step: 'done', status: 'done', withEnvironment: false }).visible).toBe(false)
     expect(environmentToggleState({ step: 'provision', status: 'cancelled', withEnvironment: true }).visible).toBe(false)
+  })
+})
+
+describe('variáveis do .env', () => {
+  it('conta sem repetir chave e nunca corta na importação', () => {
+    expect(envVariableCount('A=1\nB=2\nA=3\n# comentário\n')).toBe(2)
+    const text = Array.from({ length: BOOTSTRAP_ENV_VARS_LIMIT + 1 }, (_, index) => `V${index}=x`).join('\n')
+    expect(envVariableCount(text)).toBe(101)
+    const input = bootstrapEnvironmentInput({ repoName: 'app', centralId: 'c'.repeat(24), result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' } }, text)
+    expect(input.env).toHaveLength(101)
   })
 })
 

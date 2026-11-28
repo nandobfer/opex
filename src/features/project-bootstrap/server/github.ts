@@ -1,3 +1,4 @@
+import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { Project } from "@/lib/db/models/Project"
 import { TaskBoardColumn, TaskBoardLayout } from "@/lib/db/models/TaskBoard"
@@ -115,6 +116,15 @@ export async function checkRepoName(owner: string, name: string, options: { igno
         if (blocked) return check(repo, "forbidden", blocked)
     }
     return check(repo, "free", "Nome livre: o repositório será criado.")
+}
+
+/** As colunas do vínculo precisam existir no quadro (400 `COLUMN_NOT_FOUND`, como no `createLink`). */
+export async function assertBootstrapColumns(entryColumnKey: string, closedColumnKey: string | null): Promise<void> {
+    await dbConnect()
+    const wanted = [entryColumnKey, ...(closedColumnKey ? [closedColumnKey] : [])]
+    const found = new Set((await TaskBoardColumn.find({ key: { $in: wanted } }).select({ key: 1 }).lean()).map((column) => column.key))
+    if (!found.has(entryColumnKey)) throw new DomainError(400, "A coluna de entrada escolhida não existe mais no quadro: escolha outra.", "COLUMN_NOT_FOUND")
+    if (closedColumnKey && !found.has(closedColumnKey)) throw new DomainError(400, "A coluna de conclusão escolhida não existe mais no quadro: escolha outra.", "COLUMN_NOT_FOUND")
 }
 
 /** Colunas do último vínculo criado; sem vínculo, a primeira coluna do quadro e nenhuma de conclusão. */

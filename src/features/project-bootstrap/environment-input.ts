@@ -14,6 +14,14 @@ export const bootstrapHealthPath = (result: Pick<BootstrapResult, "hasServer" | 
 
 export const bootstrapHealthUrl = (result: Pick<BootstrapResult, "hasServer" | "healthPath" | "port">) => `http://localhost:${result.port}${bootstrapHealthPath(result)}`
 
+/** Limite de variáveis do ambiente (o schema dos ambientes aceita até 100): acima disso a etapa 4 falha, sem cortar. */
+export const BOOTSTRAP_ENV_VARS_LIMIT = 100
+
+/** Variáveis do `.env`, sem repetir chave (a última ocorrência vale, como no próprio arquivo). */
+const envEntries = (envText: string) => [...new Map(parseEnvText(envText).entries.map((entry) => [entry.key, entry])).values()]
+
+export const envVariableCount = (envText: string) => envEntries(envText).length
+
 export interface BootstrapEnvironmentSource {
     repoName: string
     centralId: string
@@ -23,14 +31,14 @@ export interface BootstrapEnvironmentSource {
 /** Ambiente da central nova: build e execução no servidor, sem limites, com as variáveis do `.env`. */
 export function bootstrapEnvironmentInput(source: BootstrapEnvironmentSource, envText: string): EnvironmentInput {
     const slug = slugFromRepoName(source.repoName)
-    // A última ocorrência de uma chave vale, como no próprio `.env`.
-    const entries = [...new Map(parseEnvText(envText).entries.map((entry) => [entry.key, entry])).values()]
+    const entries = envEntries(envText)
     const name = source.repoName.slice(0, 80)
     return {
         name: name.length >= 2 ? name : `${name}-app`,
         slug,
         source: { kind: "central", centralId: source.centralId, ref: source.result.branch, composeFile: "docker-compose.yml", services: [], projectName: slug.replace(/-+$/, "") },
-        env: entries.slice(0, 100).map((entry) => ({ key: entry.key, value: entry.value })),
+        // Nunca corta em silêncio: o motor recusa antes (`envVariableCount` > `BOOTSTRAP_ENV_VARS_LIMIT`).
+        env: entries.map((entry) => ({ key: entry.key, value: entry.value })),
         ports: source.result.port ? [source.result.port] : [],
         healthUrl: bootstrapHealthUrl(source.result),
         buildOn: "server",
