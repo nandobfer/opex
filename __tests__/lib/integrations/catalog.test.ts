@@ -24,7 +24,7 @@ import {
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
-    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api', 'fx_ptax', 'models_dev']
+    const ids = ['pusher', 'internal_api', 'crons', 'github', 'ai', 'ai_opencode', 'ai_gemini', 'ai_anthropic', 'ai_openai', 'ai_deepseek', 'ai_opencode_go', 'ai_command_code', 'ai_jev', 'orcamentos', 'smtp', 'storage_s3', 'builder_machine', 'engramind', 'evolution-api', 'fx_ptax', 'models_dev', 'gotenberg']
     expect([...INTEGRATION_IDS]).toEqual(ids)
     expect(INTEGRATIONS.map((def) => def.id)).toEqual(ids)
     expect(isIntegrationId('pusher')).toBe(true)

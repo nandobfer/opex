@@ -1,6 +1,7 @@
 "use client"
 
 import { useState } from "react"
+import { useRouter } from "next/navigation"
 import { AnimatePresence, motion } from "framer-motion"
 import { Monitor, Plus, Server, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
@@ -10,6 +11,7 @@ import { CadastroTableSkeleton } from "@/components/list/CadastroTableSkeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
+import { deployPath } from "../constants"
 import { useEnvironments, useEnvironmentsRealtime } from "../hooks/useEnvironments"
 import type { Machine } from "../schemas"
 import type { EnvironmentDto, UnmanagedProjectDto } from "../types"
@@ -19,7 +21,6 @@ import { ComposeDialog } from "./ComposeDialog"
 import { BuilderCard } from "./builder/BuilderCard"
 import { DeleteEnvironmentDialog } from "./DeleteEnvironmentDialog"
 import { DeployHistoryDialog } from "./DeployHistoryDialog"
-import { DeployDrawer } from "./DeployDrawer"
 import { EnvironmentFormDialog, NO_HOSTS } from "./EnvironmentFormDialog"
 import { EnvironmentRow, type RowIntent } from "./EnvironmentRow"
 import { MoveDialog } from "./MoveDialog"
@@ -36,12 +37,14 @@ type Dialog = { kind: "form"; env: EnvironmentDto | null } | { kind: "delete" | 
 function EnvironmentsContent() {
     useEnvironmentsRealtime()
     const query = useEnvironments()
+    const router = useRouter()
     const [dialog, setDialog] = useState<Dialog>(null)
-    const [deploy, setDeploy] = useState<{ id: string; title: string } | null>(null)
+    // Deploy (ou mudança de máquina) iniciado: abre a página do log, como a gaveta abria antes (OPE-208).
+    const openDeploy = (id: string) => router.push(deployPath(id))
     const data = query.data
     const groups = groupByMachine(data?.items ?? [])
     const onIntent = (env: EnvironmentDto, intent: RowIntent) => {
-        if (intent.kind === "deploy-started") setDeploy({ id: intent.deployId, title: env.name })
+        if (intent.kind === "deploy-started") openDeploy(intent.deployId)
         else setDialog(intent.kind === "edit" ? { kind: "form", env } : { kind: intent.kind, env })
     }
 
@@ -74,7 +77,7 @@ function EnvironmentsContent() {
                                 <AnimatePresence initial={false}>
                                     {groups[machine].map((env) => (
                                         <motion.li key={env.id} layout="position" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.2 }}>
-                                            <EnvironmentRow env={env} pcAvailable={data.pcAvailable} onIntent={(intent) => onIntent(env, intent)} onOpenDeploy={(id) => setDeploy({ id, title: env.name })} />
+                                            <EnvironmentRow env={env} pcAvailable={data.pcAvailable} onIntent={(intent) => onIntent(env, intent)} />
                                         </motion.li>
                                     ))}
                                 </AnimatePresence>
@@ -86,19 +89,11 @@ function EnvironmentsContent() {
             )}
             <EnvironmentFormDialog open={dialog?.kind === "form"} env={dialog?.kind === "form" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} hosts={data?.hosts ?? NO_HOSTS} onClose={() => setDialog(null)} />
             <DeleteEnvironmentDialog env={dialog?.kind === "delete" ? dialog.env : null} onClose={() => setDialog(null)} />
-            <MoveDialog env={dialog?.kind === "move" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} onStarted={(id, title) => setDeploy({ id, title })} />
-            <DeployHistoryDialog
-                env={dialog?.kind === "history" ? dialog.env : null}
-                onClose={() => setDialog(null)}
-                onOpenDeploy={(id) => {
-                    if (dialog?.kind === "history") setDeploy({ id, title: dialog.env.name })
-                    setDialog(null)
-                }}
-            />
+            <MoveDialog env={dialog?.kind === "move" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} onStarted={openDeploy} />
+            <DeployHistoryDialog env={dialog?.kind === "history" ? dialog.env : null} onClose={() => setDialog(null)} />
             <ComposeDialog env={dialog?.kind === "compose" ? (data?.items.find((item) => item.id === dialog.env.id) ?? dialog.env) : null} onClose={() => setDialog(null)} />
             <AdoptDialog project={dialog?.kind === "adopt" ? dialog.project : null} onClose={() => setDialog(null)} />
             <SettingsDialog open={dialog?.kind === "settings"} onClose={() => setDialog(null)} />
-            <DeployDrawer deployId={deploy?.id ?? null} title={deploy?.title ?? ""} onClose={() => setDeploy(null)} />
         </div>
     )
 }

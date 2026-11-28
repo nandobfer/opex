@@ -62,6 +62,15 @@ na `main` sem repeti-la, com dois jobs encadeados.
   MCPs do Agente Opex falhava com "Cannot find module 'undici'"; agora o build da imagem falha com
   "Dependência de execução ausente na imagem: …". `pnpm dev` e os testes não mostram o problema (usam o
   `node_modules` completo).
+- **Type check do build da imagem (OPE-207):** o `next build` roda com `OPEX_SEPARATE_TYPE_CHECK=1` e
+  `next.config.ts` desliga o type check interno; logo depois, em processo próprio, o `Dockerfile` roda
+  `pnpm exec tsc --noEmit`. Dentro do `next build`, o tsc somava a memória ainda ocupada pelo Turbopack e
+  estourava a RAM do runner (`cannot allocate memory`, exit 102) logo após "Running TypeScript" — primeiro
+  em execuções simultâneas e depois de forma determinística no `Build image` da `main` e no `Preview`,
+  bloqueando o deploy de produção desde o build de 19:04 de 27/11/2026. Em processo separado o pico é só o
+  do tsc (~3,6 GB, medido com `tsc --diagnostics`); o escopo é o mesmo, inclusive os tipos de rota que o
+  build grava em `.next/types`. Fora do build da imagem (PR, `pnpm dev`) o `next build` continua checando
+  os tipos normalmente.
 - Versões recém-publicadas do `next` entram em `minimumReleaseAgeExclude` no
   `pnpm-workspace.yaml`: a política de idade mínima de release do pnpm bloquearia a atualização.
 
@@ -109,6 +118,7 @@ existir no servidor. O script de deploy confere cada uma antes de tocar em qualq
 | `minio-network` | Armazenamento de anexos do Agente Opex |
 | `mcp` | MCPs em container — hoje o **Playwright MCP**, em `http://playwright:8931/mcp`, para os agentes do motor `opex` (que rodam no container) |
 | `evolution-network` | Evolution API (OPE-192): o Opex chama `http://evolution-api:8080` e a Evolution entrega o webhook em `http://opex-<PORT>:<PORT>/api/evolution/webhook` (alias `opex-${PORT}` do serviço `app` nessa rede, um por porta, porque `app` é genérico na rede compartilhada) |
+| `gotenberg-network` | Gotenberg (OPE-210): HTML → PDF/PNG dos documentos dos agentes em `http://gotenberg:3000`. O compose do Gotenberg fica fora deste repositório (`/home/burgos/opex-envs/gotenberg`, gerenciado por Opex › Ambientes). Se a Variable `DEPLOY_REQUIRED_NETWORKS` estiver definida no Environment do GitHub, ela precisa ganhar `gotenberg-network` à mão |
 
 Criar uma vez no servidor: `docker network create mcp`. Só o serviço `app` entra na rede `mcp`
 (nem `app-dev` nem o portal precisam dela); o `docker-compose.deploy.yml` não mexe em redes, então o

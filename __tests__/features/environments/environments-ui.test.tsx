@@ -24,7 +24,7 @@ vi.mock('@/features/integrations/components/IntegrationConsole', () => ({ Integr
 import { EnvironmentRow } from '@/features/environments/components/EnvironmentRow'
 import { MoveDialog } from '@/features/environments/components/MoveDialog'
 import { UnmanagedList } from '@/features/environments/components/UnmanagedList'
-import { DeployDrawer } from '@/features/environments/components/DeployDrawer'
+import { DeployLog } from '@/features/environments/components/DeployLog'
 import { DeployHistoryDialog } from '@/features/environments/components/DeployHistoryDialog'
 import { formatDuration, formValuesOf, groupByMachine, healthOf, machineOptions, moveWarning, slugify, versionLabel } from '@/features/environments/view'
 
@@ -81,7 +81,7 @@ describe('regras de tela', () => {
 describe('linha do ambiente', () => {
   it('mostra estado, CPU/RAM e dispara levantar/derrubar; apagar pede confirmação fora', () => {
     const onIntent = vi.fn()
-    render(<EnvironmentRow env={env()} pcAvailable onIntent={onIntent} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env()} pcAvailable onIntent={onIntent} />)
     expect(screen.getByText('No ar')).toBeTruthy()
     expect(screen.getByText(/CPU 1.5% · RAM 120MiB/)).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: 'Derrubar' }))
@@ -96,15 +96,15 @@ describe('linha do ambiente', () => {
   it('limites aplicados na linha; salvos diferentes dos aplicados pedem Deploy (OPE-193)', () => {
     const applied = { memoryGb: 4, swapGb: null, cpus: 2 }
     const services = [{ ...env().services[0]!, limits: applied }]
-    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', ...applied } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', ...applied } })} pcAvailable onIntent={vi.fn()} />)
     expect(screen.getByText(/limites: RAM 4 GiB · swap padrão · 2 CPUs/)).toBeTruthy()
     expect(screen.queryByText(/faça Deploy/)).toBeNull()
     cleanup()
-    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} />)
     expect(screen.getByText('Limites salvos diferem dos aplicados: faça Deploy')).toBeTruthy()
     cleanup()
     // Nunca implantado: não há o que comparar.
-    render(<EnvironmentRow env={env({ services, deployedOn: null, limitsConfigured: true, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ services, deployedOn: null, limitsConfigured: true, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} />)
     expect(screen.queryByText(/faça Deploy/)).toBeNull()
   })
 
@@ -123,7 +123,7 @@ describe('linha do ambiente', () => {
   })
 
   it('ambiente no PC com o túnel fechado: ações bloqueadas', () => {
-    render(<EnvironmentRow env={env({ runOn: 'pc', deployedOn: { buildOn: 'pc', runOn: 'pc' } })} pcAvailable={false} onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ runOn: 'pc', deployedOn: { buildOn: 'pc', runOn: 'pc' } })} pcAvailable={false} onIntent={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Levantar' }).hasAttribute('disabled')).toBe(true)
     expect(screen.getByRole('button', { name: /Redeploy/ }).hasAttribute('disabled')).toBe(true)
   })
@@ -159,20 +159,21 @@ describe('versão e histórico de deploys', () => {
 
   it('a linha mostra a versão e o Histórico fica disponível mesmo durante o deploy', () => {
     const onIntent = vi.fn()
-    render(<EnvironmentRow env={env({ lastDeploy: deploy({ status: 'running', finishedAt: null, durationMs: null }) })} pcAvailable onIntent={onIntent} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ lastDeploy: deploy({ status: 'running', finishedAt: null, durationMs: null }) })} pcAvailable onIntent={onIntent} />)
     expect(screen.getByText('v1.44.0')).toBeTruthy()
     expect(screen.getByText('Implantando')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Levantar' }).hasAttribute('disabled')).toBe(true)
+    // "Último deploy …" leva à página do log (OPE-208: antes abria a gaveta).
+    expect(screen.getByRole('link', { name: /Último deploy em andamento/ }).getAttribute('href')).toBe('/ambientes/deploys/d1')
     const history = screen.getByRole('button', { name: 'Histórico' })
     expect(history.hasAttribute('disabled')).toBe(false)
     fireEvent.click(history)
     expect(onIntent).toHaveBeenCalledWith({ kind: 'history' })
   })
 
-  it('histórico: data, duração, build → execução, resultado, ref@commit, versão, marcas e erro; a linha abre o log', () => {
+  it('histórico: data, duração, build → execução, resultado, ref@commit, versão, marcas e erro; a linha é o link para a página do log', () => {
     mocks.deploys.data = [deploy(), deploy({ id: 'd2', kind: 'move', status: 'failed', durationMs: 45_000, ref: 'feature', commit: null, error: 'Sobe no servidor falhou (código 1)', skipBuild: false, resumed: false, version: null })]
-    const onOpenDeploy = vi.fn()
-    render(<DeployHistoryDialog env={env()} onClose={vi.fn()} onOpenDeploy={onOpenDeploy} />)
+    render(<DeployHistoryDialog env={env()} onClose={vi.fn()} />)
     expect(screen.getAllByText(/28\/10\/2026/, { selector: 'span' })).toHaveLength(2)
     expect(screen.getByText('· 3 min 12 s')).toBeTruthy()
     expect(screen.getByText('· 45 s')).toBeTruthy()
@@ -183,13 +184,12 @@ describe('versão e histórico de deploys', () => {
     expect(screen.getByText('Recuperado após reinício')).toBeTruthy()
     expect(screen.getByText('Mover')).toBeTruthy()
     expect(screen.getByText('Sobe no servidor falhou (código 1)')).toBeTruthy()
-    fireEvent.click(screen.getByText('Mover'))
-    expect(onOpenDeploy).toHaveBeenCalledWith('d2')
+    expect(screen.getByText('Mover').closest('a')!.getAttribute('href')).toBe('/ambientes/deploys/d2')
   })
 
   it('histórico vazio', () => {
     mocks.deploys.data = []
-    render(<DeployHistoryDialog env={env()} onClose={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<DeployHistoryDialog env={env()} onClose={vi.fn()} />)
     expect(screen.getByText('Nenhum deploy ainda')).toBeTruthy()
   })
 })
@@ -203,7 +203,7 @@ describe('log do deploy ao vivo', () => {
       onEvent({ type: 'log', text: 'Deploy de Loja\n' })
       onEvent({ type: 'status', status: 'success', error: null })
     })
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     expect(await screen.findByText('Reconectando ao servidor…')).toBeTruthy()
     expect(screen.queryByText(/Falhou/)).toBeNull()
     await act(async () => {
@@ -224,7 +224,7 @@ describe('log do deploy ao vivo', () => {
       })
       .mockRejectedValueOnce(new TypeError('network error'))
       .mockImplementationOnce(async (_path: string, onEvent: (event: DeployEvent) => void) => onEvent({ type: 'status', status: 'success', error: null }))
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(4 * 60_000)
     })
@@ -244,7 +244,7 @@ describe('log do deploy ao vivo', () => {
   it('sem conseguir reconectar por mais de 3 min desde a queda: desiste com a mensagem', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     mocks.readNdjson.mockRejectedValue(new TypeError('network error'))
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(190_000)
     })
@@ -257,7 +257,7 @@ describe('log do deploy ao vivo', () => {
     mocks.readNdjson.mockImplementationOnce(async (_path: string, onEvent: (event: DeployEvent) => void) => onEvent({ type: 'log', text: 'parcial\n' })).mockImplementationOnce(async (_path: string, onEvent: (event: DeployEvent) => void) => {
       onEvent({ type: 'status', status: 'failed', error: 'Sobe no servidor falhou (código 1)' })
     })
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     expect(await screen.findByText('Reconectando ao servidor…')).toBeTruthy()
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_000)
@@ -288,7 +288,7 @@ describe('barra de progresso do deploy (OPE-202)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(Date.parse(START) + 72_000))
     liveStream([meta(200_000), { type: 'log', text: 'Build\n' }])
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300)
     })
@@ -305,7 +305,7 @@ describe('barra de progresso do deploy (OPE-202)', () => {
     const serverNow = new Date(Date.parse(START) + 72_000)
     vi.setSystemTime(new Date(serverNow.getTime() + offset))
     liveStream([meta(200_000, serverNow.toISOString())])
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300)
     })
@@ -317,7 +317,7 @@ describe('barra de progresso do deploy (OPE-202)', () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.setSystemTime(new Date(Date.parse(START) + 72_000))
     liveStream([meta(null)])
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(300)
     })
@@ -328,14 +328,14 @@ describe('barra de progresso do deploy (OPE-202)', () => {
   it('ao concluir ou falhar a barra sai de cena e o status final continua', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const ok = liveStream([meta(200_000)])
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     expect(await screen.findByRole('progressbar')).toBeTruthy()
     await act(async () => ok.push({ type: 'status', status: 'success', error: null }))
     expect(screen.getByText('Concluído')).toBeTruthy()
     expect(progressbar()).toBeNull()
     cleanup()
     const bad = liveStream([meta(200_000)])
-    render(<DeployDrawer deployId="d2" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d2" />)
     expect(await screen.findByRole('progressbar')).toBeTruthy()
     await act(async () => bad.push({ type: 'status', status: 'failed', error: 'up -d falhou' }))
     expect(screen.getByText('Falhou: up -d falhou')).toBeTruthy()
@@ -347,7 +347,7 @@ describe('barra de progresso do deploy (OPE-202)', () => {
       onEvent({ type: 'log', text: 'tudo\n' })
       onEvent({ type: 'status', status: 'success', error: null })
     })
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     expect(await screen.findByText('Concluído')).toBeTruthy()
     expect(progressbar()).toBeNull()
   })
@@ -360,7 +360,7 @@ describe('barra de progresso do deploy (OPE-202)', () => {
       throw new TypeError('network error')
     })
     liveStream([meta(null)])
-    render(<DeployDrawer deployId="d1" title="Loja" onClose={vi.fn()} />)
+    render(<DeployLog deployId="d1" />)
     await act(async () => {
       await vi.advanceTimersByTimeAsync(3_100)
     })

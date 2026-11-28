@@ -1,10 +1,12 @@
 "use client"
 
 import { useState } from "react"
+import Link from "next/link"
 import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { ArrowRightLeft, FileCode, FileText, History, Pencil, Play, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
+import { deployPath } from "../constants"
 import { useEnvironmentAction } from "../hooks/useEnvironments"
 import { composeNotDeployed } from "../managed-compose"
 import type { EnvironmentDto } from "../types"
@@ -18,8 +20,8 @@ import { LogsDialog } from "./LogsDialog"
 
 export type RowIntent = { kind: "edit" | "delete" | "move" | "history" | "compose" } | { kind: "deploy-started"; deployId: string }
 
-/** Linha de um ambiente: estado, portas, CPU/RAM, ref/commit, último deploy e as ações. */
-export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { env: EnvironmentDto; pcAvailable: boolean; onIntent: (intent: RowIntent) => void; onOpenDeploy: (deployId: string) => void }) {
+/** Linha de um ambiente: estado, portas, CPU/RAM, ref/commit, último deploy (link para o log) e as ações. */
+export function EnvironmentRow({ env, pcAvailable, onIntent }: { env: EnvironmentDto; pcAvailable: boolean; onIntent: (intent: RowIntent) => void }) {
     const action = useEnvironmentAction(env.id)
     const [logs, setLogs] = useState<string | null>(null)
     const health = healthOf(env)
@@ -77,11 +79,11 @@ export function EnvironmentRow({ env, pcAvailable, onIntent, onOpenDeploy }: { e
                     {overrides ? ` · serviços: ${overrides}` : ""}
                 </p>
                 {env.lastDeploy && (
-                    <button type="button" className="text-left text-xs text-muted-foreground underline-offset-2 hover:underline" onClick={() => onOpenDeploy(env.lastDeploy!.id)}>
+                    <Link href={deployPath(env.lastDeploy.id)} className="block w-fit rounded-sm text-left text-xs text-muted-foreground underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
                         Último deploy {env.lastDeploy.status === "success" ? "ok" : env.lastDeploy.status === "failed" ? "com falha" : "em andamento"} {formatDistanceToNow(new Date(env.lastDeploy.startedAt), { addSuffix: true, locale: ptBR })}
                         {env.lastDeploy.ref ? ` · ${env.lastDeploy.ref}` : ""}
                         {env.lastDeploy.commit ? ` @ ${env.lastDeploy.commit.slice(0, 8)}` : ""}
-                    </button>
+                    </Link>
                 )}
             </div>
             <div className="flex flex-wrap items-center gap-1">

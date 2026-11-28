@@ -185,13 +185,23 @@ describe('credencial do agente', () => {
 })
 
 describe('instruções da execução (D13)', () => {
-  it('listam os canais graváveis e mandam consultar o catálogo e usar chave fixa', async () => {
+  it('listam os canais graváveis e mandam consultar pelo índice e usar chave fixa', async () => {
     const { routineInstructions } = await import('@/features/routine-agents/run-prompt')
     const text = routineInstructions({ name: 'Agente Indexador', objective: 'Catalogar', instructions: '', engine: 'opex', confirmIrreversible: false, maxLiveWaitMinutes: null, memoryBlock: '', memoryChannels: ALLOWED, toolPrefix: '', warnings: [] })
     expect(text).toContain('experiencia/desenvolvimento')
     expect(text).toContain('formato "titulos"')
     expect(text).toContain('`chave`')
     expect(text).toContain('update_memory')
+    expect(text).toContain('`indice`')
+  })
+
+  it('a descrição de list_my_memories trata a consulta por chave como uso normal e a listagem como exceção (OPE-209)', () => {
+    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador #1', runId: 'run_1', target: AGENT, allowed: ALLOWED, ns: { app: 'opex', prefixed: false } }).find((tool) => tool.name === 'list_my_memories') as OpexTool
+    expect(list.description).toContain('Uso normal: por `chave`')
+    expect(list.description).toContain('Comece pela chave `indice`')
+    expect(list.description).toContain('é exceção')
+    expect(list.description).toContain('acrescente ao `indice` o que encontrar')
+    expect(list.description).not.toMatch(/consultar um catálogo inteiro/)
   })
 })
 

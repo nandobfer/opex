@@ -64,7 +64,7 @@ export async function handleRoutineRunMcpRequest(runId: string, req: Request): P
                 return mcpTextResult(TURN_ALREADY_CLOSED)
             }
             try {
-                const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: "local", signal: activation.controller.signal, secrets: activation.secrets })
+                const output = await tool.execute(tool.input.parse(args), { sessionId: "", actorId: "local", signal: activation.controller.signal, secrets: activation.secrets, routine: { agentId: activation.agentId, runId } })
                 const pending = (output as { status?: unknown } | null)?.status === "confirmation_required"
                 step(pending ? `${tool.label} (aguardando confirmação)` : tool.label, input || null)
                 return mcpTextResult(compactToolOutput(output))

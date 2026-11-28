@@ -36,6 +36,8 @@ services:
       evolution-network:
         aliases:
           - opex-${PORT:?defina PORT no .env}
+      # Gotenberg (OPE-210): HTML → PDF/PNG dos documentos dos agentes em http://gotenberg:3000.
+      gotenberg-network: {}
     deploy:
       resources:
         limits:
@@ -118,4 +120,6 @@ networks:
   mcp:
     external: true
   evolution-network:
+    external: true
+  gotenberg-network:
     external: true

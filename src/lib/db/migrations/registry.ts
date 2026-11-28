@@ -20,6 +20,8 @@ import { startAgentMetricsTracking } from "./agent-metrics-tracking-start"
 import { ensureRoutineAgentIndexes } from "./ensure-routine-agent-indexes"
 import { migrateAiProviderApiKeys } from "./migrate-ai-provider-api-keys"
 import { ensurePluginIndexes } from "./ensure-plugin-indexes"
+import { ensureAgentFileIndexes } from "./ensure-agent-file-indexes"
+import { candidatadorCurriculoTools } from "./candidatador-curriculo-tools"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -44,4 +46,7 @@ registerMigrations(
     { name: "ensure-plugin-indexes", run: () => ensurePluginIndexes() },
     // OPE-194: observações de evento do Agente Opex (`opex_watches`), os fatos das transições (`opex_watch_facts`) e a referência `watch.ids` nas mensagens.
     { name: "ensure-opex-watch-indexes", run: () => ensureOpexIndexes() },
+    // OPE-210: catálogo dos arquivos dos agentes (`agent_files`) e o Candidatador no fluxo novo de currículo.
+    { name: "ensure-agent-file-indexes", run: () => ensureAgentFileIndexes() },
+    { name: "candidatador-curriculo-tools", run: () => candidatadorCurriculoTools() },
 )

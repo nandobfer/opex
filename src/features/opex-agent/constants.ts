@@ -22,6 +22,7 @@ export const OPEX_TOOL_GROUPS = [
     "context",
     "docs",
     "files",
+    "documents",
     "memories",
     "tasks",
     "previews",
@@ -64,6 +65,11 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     context: { label: "Contexto", description: "Visão geral do app e data/hora atual" },
     docs: { label: "Documentação do app", description: "Listar, ler e buscar a documentação do app (aicontext/) para explicar como usar, regras e funcionalidades" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat e anexá-los a tarefas e prévias" },
+    documents: {
+        label: "Documentos",
+        description:
+            "Gerar PDF a partir de HTML (ajuste a N páginas e prévia PNG), guardar e ler arquivos no espaço dos agentes no bucket com URLs temporárias, e preparar e buscar os currículos no modelo aprovado",
+    },
     memories: { label: "Memórias do agente", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) do Agente Opex (globais, do dono e do cliente), do Agente Adversário e do agente desenvolvedor (globais e por central)" },
     tasks: { label: "Tarefas", description: "Listar, ler, criar, editar, mover, comentar, arquivar e as features de IA das tarefas" },
     previews: { label: "Prévias", description: "Nova prévia com IA, correções, estimativa e aprovação (cria a tarefa)" },
