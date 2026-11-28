@@ -277,3 +277,60 @@ describe('SearchPicker: seleção múltipla e árvore (OPE-172)', () => {
     expect(screen.queryByRole('listbox')).toBeNull()
   })
 })
+
+describe('SearchPicker — createOption (OPE-215)', () => {
+  function renderCreatable(onCreate = vi.fn(), visible?: (term: string) => boolean) {
+    render(
+      <SearchPicker<Fruit>
+        trigger={<button type="button">Escolher fruta</button>}
+        items={FRUITS}
+        getKey={(fruit) => fruit.id}
+        renderItem={(fruit) => <span>{fruit.nome}</span>}
+        onPick={vi.fn()}
+        searchKeys={['nome']}
+        searchLabel="Buscar fruta"
+        listLabel="Frutas"
+        emptyText="Nenhuma fruta"
+        emptySearchText="Nenhuma fruta encontrada"
+        createOption={{ label: (term) => `Criar «${term}»`, onCreate, visible }}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher fruta' }))
+  }
+
+  it('sem termo não aparece; com termo aparece no fim e cria pelo clique', () => {
+    const onCreate = vi.fn()
+    renderCreatable(onCreate)
+    expect(screen.queryByText(/Criar «/)).toBeNull()
+    fireEvent.change(screen.getByLabelText('Buscar fruta'), { target: { value: 'Uva' } })
+    expect(screen.queryByText('Nenhuma fruta encontrada')).toBeNull()
+    const options = screen.getAllByRole('option')
+    expect(options.at(-1)!.textContent).toBe('Criar «Uva»')
+    fireEvent.click(options.at(-1)!)
+    expect(onCreate).toHaveBeenCalledWith('Uva')
+    expect(screen.queryByRole('listbox')).toBeNull()
+  })
+
+  it('é acessível pelo teclado: Enter sem resultado cria; ↓ chega à opção de criar depois dos itens', () => {
+    const onCreate = vi.fn()
+    renderCreatable(onCreate)
+    const input = screen.getByLabelText('Buscar fruta')
+    fireEvent.change(input, { target: { value: 'zzz' } })
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onCreate).toHaveBeenLastCalledWith('zzz')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Escolher fruta' }))
+    fireEvent.change(screen.getByLabelText('Buscar fruta'), { target: { value: 'ban' } })
+    const options = screen.getAllByRole('option')
+    for (let index = 0; index < options.length; index++) fireEvent.keyDown(screen.getByLabelText('Buscar fruta'), { key: 'ArrowDown' })
+    expect(options.at(-1)!.getAttribute('aria-selected')).toBe('true')
+    fireEvent.keyDown(screen.getByLabelText('Buscar fruta'), { key: 'Enter' })
+    expect(onCreate).toHaveBeenLastCalledWith('ban')
+  })
+
+  it('respeita `visible` (ex.: nome já existente)', () => {
+    renderCreatable(vi.fn(), (term) => term !== 'Caju')
+    fireEvent.change(screen.getByLabelText('Buscar fruta'), { target: { value: 'Caju' } })
+    expect(screen.queryByText('Criar «Caju»')).toBeNull()
+  })
+})

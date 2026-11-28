@@ -9,6 +9,8 @@ import { defineTool } from "./define"
  */
 
 const id = z.string().trim().regex(/^[a-f0-9]{24}$/i, "Id inválido")
+// Entrada simples para o modelo (como as cores favoritas); a validação completa é a do schema da tela.
+const groupInput = z.object({ name: z.string().trim().min(1).max(40).describe("Nome do grupo (ex.: Banco de dados)"), color: z.string().trim().min(1).max(7).describe("Cor em hexadecimal #RRGGBB (ex.: #22C55E)") })
 const catalog = () => import("@/features/project-bootstrap/server/catalog")
 const settings = () => import("@/features/project-bootstrap/server/settings")
 const service = () => import("@/features/project-bootstrap/server/service")
@@ -29,9 +31,9 @@ export const projectBootstrapTools = [
         label: "Criar grupo de tecnologias",
         risk: "write",
         description: "Cria um grupo do catálogo de tecnologias do bootstrap com nome e cor (#RRGGBB).",
-        input: techGroupInputSchema,
+        input: groupInput,
         summarize: (input) => `Criar o grupo de tecnologias ${input.name}`,
-        execute: async (input, context) => (await catalog()).createTechGroup(input, context.actorId),
+        execute: async (input, context) => (await catalog()).createTechGroup(techGroupInputSchema.parse(input), context.actorId),
     }),
     defineTool({
         name: "update_bootstrap_tech_group",
@@ -39,9 +41,9 @@ export const projectBootstrapTools = [
         label: "Editar grupo de tecnologias",
         risk: "write",
         description: "Renomeia ou troca a cor (#RRGGBB) de um grupo do catálogo.",
-        input: techGroupInputSchema.extend({ id }),
+        input: groupInput.extend({ id }),
         summarize: (input) => `Editar o grupo de tecnologias ${input.name}`,
-        execute: async ({ id: groupId, ...input }, context) => (await catalog()).updateTechGroup(groupId, input, context.actorId),
+        execute: async ({ id: groupId, ...input }, context) => (await catalog()).updateTechGroup(groupId, techGroupInputSchema.parse(input), context.actorId),
     }),
     defineTool({
         name: "delete_bootstrap_tech_group",

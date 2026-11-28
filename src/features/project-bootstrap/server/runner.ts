@@ -469,13 +469,14 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
         await fail(activation, `Não foi possível criar o ambiente ou iniciar o deploy: ${errorText(error)}`)
         return null
     }
-    const entry = { deployId, attempt: doc.attempt, status: "running", error: null, at: new Date() }
-    if (!(await setOwned(activation, { "created.deployId": deployId }, { $pull: { deploys: { deployId } } }))) return null
-    await ProjectBootstrap.updateOne(activation.own, { $push: { deploys: entry } })
-    await publishProjectBootstrap(activation.id)
+    // Histórico das tentativas: a lista inteira é regravada (a retomada acompanha o mesmo deploy sem duplicar).
+    const withEntry = (list: IProjectBootstrap["deploys"], entry: IProjectBootstrap["deploys"][number]) => [...(list ?? []).filter((item) => item.deployId !== entry.deployId), entry]
+    const started = { deployId, attempt: doc.attempt, status: "running", error: null, at: new Date() }
+    if (!(await setOwned(activation, { "created.deployId": deployId, deploys: withEntry(doc.deploys, started) }))) return null
     const outcome = await waitDeploy(activation, deployId)
     if (!outcome) return null
-    await ProjectBootstrap.updateOne({ ...activation.own, "deploys.deployId": deployId }, { $set: { "deploys.$.status": outcome.status === "success" ? "success" : "failed", "deploys.$.error": outcome.error } })
+    const finished = { ...started, status: outcome.status === "success" ? "success" : "failed", error: outcome.error }
+    await ProjectBootstrap.updateOne(activation.own, { $set: { deploys: withEntry((await loadBootstrapDoc(activation.id)).deploys, finished) } })
     if (outcome.status === "success") {
         await setOwned(activation, { status: "done", step: "done", phase: null, error: null, finishedAt: new Date() })
         await recordAudit({ userId: actorId(), entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: activation.id, acao: AcaoAuditoria.ATUALIZAR, depois: { repositorio: doc.repo, concluido: true, ambiente: environmentId, deploy: deployId } })

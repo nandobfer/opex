@@ -25,6 +25,7 @@ import { defaultSessionDirectory } from "@/features/agentic/logic"
 import type { CentralDto } from "@/features/agentic/types"
 import type { GithubRepoOption } from "@/features/github/types"
 import type { ProjectRef } from "@/features/tasks/types"
+import { projectBootstrapNewPath } from "@/features/project-bootstrap/constants"
 
 const APP_ID = "a".repeat(24)
 const SITE_ID = "b".repeat(24)
@@ -103,9 +104,10 @@ describe("CreateCentralDialog — seletor de repositório", () => {
         expect(screen.getByText("acme/app")).toBeTruthy()
         expect(screen.queryByText("acme/site")).toBeNull()
 
+        // Sem resultado, a lista oferece criar o repositório (OPE-215) no lugar do texto de vazio.
         fireEvent.change(searchInput(), { target: { value: "zzzzzz" } })
-        expect(screen.getByText("Nenhum repositório encontrado")).toBeTruthy()
-        expect(shownRepos()).toBe(0)
+        expect(screen.getByText(/Criar repositório/)).toBeTruthy()
+        expect(shownRepos()).toBe(1)
     })
 
     it("sem metadados do GitHub, mantém o `owner/repo` do projeto com fallback e selecionável", () => {
@@ -188,5 +190,32 @@ describe("CreateCentralDialog — seletor de repositório", () => {
 
         expect(trigger().textContent).toContain("Escolha o repositório")
         expect((screen.getByLabelText("Diretório das sessões") as HTMLInputElement).value).toBe("")
+    })
+})
+
+describe("CreateCentralDialog — repositório novo (OPE-215)", () => {
+    it("um nome que não está na lista leva ao bootstrap do ambiente novo", () => {
+        const onOpenChange = vi.fn()
+        render(<CreateCentralDialog open onOpenChange={onOpenChange} existing={[]} />)
+        openPicker()
+        fireEvent.change(searchInput(), { target: { value: "acme/novo-app" } })
+        fireEvent.click(screen.getByText(/Criar repositório/))
+
+        expect(trigger().textContent).toContain("acme/novo-app")
+        expect(screen.queryByLabelText("Diretório das sessões")).toBeNull()
+        expect(screen.queryByRole("button", { name: "Criar central" })).toBeNull()
+        fireEvent.click(screen.getByRole("button", { name: "Continuar no bootstrap" }))
+        expect(mocks.push).toHaveBeenCalledWith(projectBootstrapNewPath("acme/novo-app"))
+        expect(onOpenChange).toHaveBeenCalledWith(false)
+        expect(mocks.create).not.toHaveBeenCalled()
+    })
+
+    it("o repositório já vinculado não oferece criar e segue o fluxo de hoje", () => {
+        renderDialog()
+        openPicker()
+        fireEvent.change(searchInput(), { target: { value: "acme/app" } })
+        expect(screen.queryByText(/Criar repositório/)).toBeNull()
+        fireEvent.click(screen.getByText("acme/app"))
+        expect(createButton()).toBeTruthy()
     })
 })

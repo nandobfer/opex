@@ -204,7 +204,8 @@ describe('página Inteligência Artificial (AiEditorForm)', () => {
     expect(screen.getByRole('tab', { name: /^Mentor/ })).toBeTruthy()
     const names = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())
     expect(names.indexOf('Mentor')).toBe(names.indexOf('Revisor') + 1)
-    expect(names.at(-1)).toBe('Rotineiros')
+    // Depois dos Rotineiros, só a aba do Agente de Bootstrap (OPE-215, fora do catálogo de agentes).
+    expect(names.slice(-2)).toEqual(['Rotineiros', 'Bootstrap'])
     expectSavedValuesShown()
   })
 
