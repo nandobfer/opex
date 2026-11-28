@@ -13,14 +13,15 @@ export const ENV_CARD_LIST_CLASS = "space-y-3"
 
 /** Colunas dos containers no `md` (Serviço · Situação · Portas · Recursos); abaixo, cada um vira um bloco empilhado. */
 export const CONTAINER_GRID = {
-    // Recursos com as barras (CPU, RAM, swap e disco; OPE-211): coluna fixa de 14rem para caber o detalhe.
-    owner: "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2fr)_14rem] md:items-center md:gap-4",
+    // Recursos com as 4 barras compactas lado a lado (CPU, RAM, swap e disco; OPE-211/OPE-218): coluna fixa de 16rem,
+    // cerca de 58 px por barra para caber "Disco 100%".
+    owner: "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2fr)_16rem] md:items-center md:gap-4",
     portal: "md:grid md:grid-cols-[minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,2fr)] md:items-center md:gap-4",
 } as const
 
 export const CONTAINER_ROW_CLASS = "flex flex-col gap-1.5 rounded-lg px-2 py-2 transition-colors hover:bg-muted/40 md:py-1.5"
-/** Barras de uso da coluna Recursos (empilhadas) e da faixa "Uso do ambiente" (grade). */
-export const CONTAINER_USAGE_CLASS = "min-w-0 flex-1 space-y-1.5"
+/** Barras de uso da coluna Recursos (compactas, numa linha a partir de `sm`; 2×2 abaixo, OPE-218) e da faixa "Uso do ambiente" (grade). */
+export const CONTAINER_USAGE_CLASS = "grid min-w-0 flex-1 grid-cols-2 gap-x-2 gap-y-1.5 sm:grid-cols-4"
 export const ENV_USAGE_SUMMARY_CLASS = "mb-3 rounded-lg border bg-muted/20 px-3 py-2.5"
 export const ENV_USAGE_GRID_CLASS = "grid grid-cols-1 gap-x-4 gap-y-2 sm:grid-cols-2 md:grid-cols-4"
 
