@@ -1,6 +1,6 @@
 /** @vitest-environment happy-dom */
 
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import type { EnvironmentDto, EnvironmentsListDto } from '@/features/environments/types'
@@ -61,6 +61,8 @@ beforeEach(() => {
     checkedAt: new Date().toISOString(),
   }
 })
+// O primeiro import do EnvironmentsPage é frio (happy-dom e dependências): num runner carregado estoura o timeout do teste.
+beforeAll(() => import('@/features/environments/components/EnvironmentsPage'))
 afterEach(cleanup)
 
 async function renderPage() {
