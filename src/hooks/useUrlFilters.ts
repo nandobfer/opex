@@ -72,7 +72,9 @@ export const urlFilterCodecs = {
 export function navigateInPage(href: string): boolean {
     const target = new URL(href, window.location.href)
     if (target.origin !== window.location.origin || target.pathname !== window.location.pathname) return false
-    window.history.pushState(window.history.state, "", `${target.pathname}${target.search}${target.hash}`)
+    // Estado `null` (nunca o `history.state` do Next, que tem `__NA`): só assim o `pushState` do Next copia o estado
+    // interno e sincroniza o `useSearchParams`.
+    window.history.pushState(null, "", `${target.pathname}${target.search}${target.hash}`)
     window.dispatchEvent(new Event(URL_FILTERS_CHANGE_EVENT))
     return true
 }

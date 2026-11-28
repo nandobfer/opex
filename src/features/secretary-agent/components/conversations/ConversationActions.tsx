@@ -10,7 +10,7 @@ import { navigateInPage } from "@/hooks/useUrlFilters"
 import { cn } from "@/lib/utils"
 import { useConversationAction } from "../../hooks/useSecretaryChat"
 import type { SecretaryConversationDto } from "../../types"
-import { useMemoriesHref } from "./memories-link"
+import { useMemoriesHref, useMemoriesInPage } from "./memories-link"
 
 type Row = Pick<SecretaryConversationDto, "chatId" | "name" | "state">
 
@@ -21,6 +21,7 @@ type Row = Pick<SecretaryConversationDto, "chatId" | "name" | "state">
 export function useConversationActions(row: Row, minutes: number) {
     const action = useConversationAction(row.chatId)
     const memoriesHrefOf = useMemoriesHref()
+    const memoriesInPage = useMemoriesInPage()
     const [confirming, setConfirming] = useState(false)
     const paused = row.state === "paused"
     const excluded = row.state === "excluded"
@@ -39,12 +40,15 @@ export function useConversationActions(row: Row, minutes: number) {
             onConfirm={() => action.mutate({ action: "exclude" }, { onSettled: () => setConfirming(false) })}
         />
     )
-    return { paused, excluded, pending: action.isPending, togglePause, toggleExclude, memoriesHref, confirm }
+    return { paused, excluded, pending: action.isPending, togglePause, toggleExclude, memoriesHref, memoriesInPage, confirm }
 }
 
 type Actions = ReturnType<typeof useConversationActions>
 
-/** Clique simples em "Abrir memórias" na mesma página troca a aba na hora; com tecla modificadora, abre como link. */
+/**
+ * Clique simples em "Abrir memórias" na página do agente troca a aba na hora; com tecla modificadora, abre como link.
+ * Em Integrações › IA (sem `inPage`) o link navega normalmente.
+ */
 function openInPage(event: MouseEvent<HTMLAnchorElement>, href: string) {
     if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
     if (navigateInPage(href)) event.preventDefault()
@@ -67,7 +71,7 @@ export function ConversationActionsMenu({ actions, label, className }: { actions
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                    <Link href={actions.memoriesHref} onClick={(event) => openInPage(event, actions.memoriesHref)}>
+                    <Link href={actions.memoriesHref} onClick={actions.memoriesInPage ? (event) => openInPage(event, actions.memoriesHref) : undefined}>
                         <Brain className="h-4 w-4" aria-hidden /> Abrir memórias
                     </Link>
                 </DropdownMenuItem>

@@ -78,7 +78,7 @@ describe("Abrir memórias depende da tela (OPE-207)", () => {
         const client = new QueryClient()
         render(
             <QueryClientProvider client={client}>
-                <SecretaryMemoriesLinkProvider href={href}>
+                <SecretaryMemoriesLinkProvider href={href} inPage>
                     <ConversationsInbox minutes={30} contacts={[]} />
                 </SecretaryMemoriesLinkProvider>
             </QueryClientProvider>,
@@ -101,6 +101,22 @@ describe("Abrir memórias depende da tela (OPE-207)", () => {
         expect(params.get("aba")).toBe(SECRETARY_PAGE_TABS.memorias)
         expect(params.get(CONVERSATION_PARAM)).toBe("5531999999999")
         pushState.mockRestore()
+    })
+
+    it("em Integrações › IA (mesma rota, seção por outro mecanismo) o link navega normalmente, sem interceptar", async () => {
+        const client = new QueryClient()
+        render(
+            <QueryClientProvider client={client}>
+                <ConversationsInbox minutes={30} contacts={[]} />
+            </QueryClientProvider>,
+        )
+        const pushState = vi.spyOn(window.history, "pushState")
+        fireEvent.pointerDown(screen.getByRole("button", { name: "Ações da conversa com Ana" }), { button: 0, ctrlKey: false, pointerType: "mouse" })
+        const item = await screen.findByRole("menuitem", { name: "Abrir memórias" })
+        expect(item.getAttribute("href")).toBe(secretarySectionPath("memorias", { [CONVERSATION_PARAM]: "5531999999999" }))
+        // `true`: o clique não foi cancelado (o Link do Next navega) e nada foi empilhado à mão.
+        expect(fireEvent.click(item)).toBe(true)
+        expect(pushState).not.toHaveBeenCalled()
     })
 
     it("com o provider da página do agente: aba Memórias da própria página", () => {

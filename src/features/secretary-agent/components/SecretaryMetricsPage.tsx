@@ -15,7 +15,7 @@ const pageMemoriesHref: MemoriesHref = (chatId) => secretaryPagePath(SECRETARY_P
 /** `/agente-secretario`: Conversas (padrão, OPE-207), Visão geral, Histórico e Memórias. */
 export function SecretaryMetricsPage() {
     return (
-        <SecretaryMemoriesLinkProvider href={pageMemoriesHref}>
+        <SecretaryMemoriesLinkProvider href={pageMemoriesHref} inPage>
             <AgentPage agent="secretario" leadingTabs={LEADING_TABS} defaultTab={SECRETARY_PAGE_TABS.conversas} tabs={TABS} />
         </SecretaryMemoriesLinkProvider>
     )

@@ -31,6 +31,20 @@ describe('navigateInPage (OPE-207)', () => {
     expect(screen.getByTestId('aba').textContent).toBe('memorias')
   })
 
+  it('com o history.state do Next (__NA) não repassa o estado: o pushState do Next sincroniza o useSearchParams', () => {
+    window.history.replaceState({ __NA: true, __PRIVATE_NEXTJS_INTERNALS_TREE: {} }, '', '/agente-secretario')
+    const original = window.history.pushState.bind(window.history)
+    const nextSync = vi.fn()
+    // Como o app router do Next: estado com `__NA` vai direto ao original, sem sincronizar.
+    vi.spyOn(window.history, 'pushState').mockImplementation((data: unknown, unused: string, url?: string | URL | null) => {
+      if ((data as { __NA?: boolean } | null)?.__NA) return original(data, unused, url)
+      nextSync(String(url))
+      return original({ ...(data as object | null), __NA: true }, unused, url)
+    })
+    navigateInPage('/agente-secretario?aba=memorias&conversa=5531999999999')
+    expect(nextSync).toHaveBeenCalledWith('/agente-secretario?aba=memorias&conversa=5531999999999')
+  })
+
   it('outro caminho: devolve false e não toca no histórico (a navegação do Next segue)', () => {
     const pushState = vi.spyOn(window.history, 'pushState')
     expect(navigateInPage('/integracoes/ia?aba=agente-secretario&secao=memorias')).toBe(false)
