@@ -1,4 +1,4 @@
-import { getOpencodeClient, runOpencodeShell, type OpencodeShellResult } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeShellResult } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { loadCentral, repoForProject, saveCentralTest } from "./centrals"
 import { centralLogger } from "./log"
 import { shellQuote } from "../preview-backup"

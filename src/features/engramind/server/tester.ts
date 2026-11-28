@@ -1,5 +1,5 @@
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { fail, warnResult, type IntegrationTester } from "@/features/integrations/testers/types"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { fail, warnResult, type IntegrationTester } from "@/lib/integrations/server"
 import { BOOTSTRAP_APP_SLUG, ENGRAMIND_INTEGRATION_ID } from "../constants"
 import type { EngramindApp, EngramindJob, EngramindStatus, WhoAmI } from "../types"
 import { engramindCall, engramindReady, type EngramindTarget } from "./client"

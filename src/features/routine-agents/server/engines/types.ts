@@ -1,5 +1,5 @@
-import type { AiBilling } from "@/lib/ai/provider-cost"
-import type { ListCost, TokenDetails } from "@/lib/ai/pricing/types"
+import type { AiBilling } from "@nandobfer/integracoes/modules/integrations/ia/ai/provider-cost"
+import type { ListCost, TokenDetails } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/types"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { Activation } from "../hub"
 import type { RoutineAgentDoc, RoutineRunDoc } from "../shared"

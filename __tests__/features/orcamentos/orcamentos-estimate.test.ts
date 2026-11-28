@@ -15,12 +15,12 @@ const mocks = vi.hoisted(() => ({
 type Err = Error & { status: number; code?: string }
 
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn() }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { create: mocks.usage } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ AiUsageLog: { create: mocks.usage } }))()) as Record<string, unknown>) }))
 vi.mock("@/lib/db/models/Project", () => ({ Project: { findById: () => ({ lean: async () => null }) } }))
 vi.mock("@/lib/api/route", () => ({ DomainError: class DomainError extends Error implements Err { status: number; code?: string; constructor(status: number, message: string, code?: string) { super(message); this.status = status; this.code = code } } }))
-vi.mock("@/lib/integrations/debug", () => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
-vi.mock("@/lib/ai/stream", () => ({ streamAi: mocks.stream, describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)) }))
-vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne: mocks.jev }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ integrationDebug: () => ({ step: vi.fn(), info: vi.fn(), success: vi.fn(), error: vi.fn(), warn: vi.fn(), request: vi.fn(), response: vi.fn() }) }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ streamAi: mocks.stream, describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)) }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/jev", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ askJevSystemOne: mocks.jev }))()) as Record<string, unknown>) }))
 vi.mock("@/features/ai/server/task-tags", () => ({ generateTagsForInput: mocks.tags }))
 vi.mock("@/features/ai/server/settings", () => ({ loadEstimateHoursSettings: mocks.loadEstimate, availabilityOfEstimateHours: mocks.availability }))
 vi.mock("@/features/orcamentos/server/similar", () => ({ findSimilarTasks: mocks.similar }))

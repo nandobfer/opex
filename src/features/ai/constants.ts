@@ -1,6 +1,6 @@
 /** Constantes das features de IA (módulo puro). */
 
-import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 /**
  * Abas da página "Inteligência Artificial": Provedores (padrão, omitida da URL) e uma aba por agente,

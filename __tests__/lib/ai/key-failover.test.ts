@@ -8,11 +8,11 @@ import { randomBytes } from 'crypto'
  */
 
 const mocks = vi.hoisted(() => ({ stored: null as Record<string, unknown> | null }))
-vi.mock('@/lib/integrations/store', () => ({ loadStoredIntegration: async () => mocks.stored, invalidateStoredIntegrations: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ loadStoredIntegration: async () => mocks.stored, invalidateStoredIntegrations: vi.fn() }))()) as Record<string, unknown>) }))
 
 import { encryptSecret } from '@/lib/crypto/secretBox'
-import { AiProviderError } from '@/lib/ai/errors'
-import { createKeyFailoverFetch, fetchWithKeyFailover, getAiProviderKeyPool, requireAiProviderKeyOrder, resetAiKeyRotation, type AiProviderKey } from '@/lib/ai/api-keys'
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { createKeyFailoverFetch, fetchWithKeyFailover, getAiProviderKeyPool, requireAiProviderKeyOrder, resetAiKeyRotation, type AiProviderKey } from "@nandobfer/integracoes/modules/integrations/ia/ai/api-keys"
 
 const saved = process.env.INTEGRATIONS_ENCRYPTION_KEY
 const keyA: AiProviderKey = { id: 'key_a', name: 'Pessoal', apiKey: 'sk-a' }
@@ -161,7 +161,7 @@ describe('geração real da AI SDK com várias chaves', () => {
     const completion = { id: 'c1', object: 'chat.completion', created: 1, model: 'deepseek-chat', choices: [{ index: 0, message: { role: 'assistant', content: 'ok' }, finish_reason: 'stop' }], usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 } }
     const { fetchMock, seen } = recorder((auth) => (auth.includes('sk-a') ? status(401) : new Response(JSON.stringify(completion), { headers: { 'Content-Type': 'application/json' } })))
     vi.stubGlobal('fetch', fetchMock)
-    const { createDeepseekProvider } = await import('@/lib/ai/deepseek')
+    const { createDeepseekProvider } = await import('@nandobfer/integracoes/modules/integrations/ia/ai/deepseek')
     const { generateText } = await import('ai')
     const { provider, currentKeyId } = await createDeepseekProvider()
     const result = await generateText({ model: provider('deepseek-chat'), prompt: 'oi' })

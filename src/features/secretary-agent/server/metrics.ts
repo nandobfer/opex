@@ -1,7 +1,7 @@
 import { kpi, type MetricsContext } from "@/features/agent-metrics/server/context"
 import type { AgentMetricsPart } from "@/features/agent-metrics/types"
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
-import { AiUsageLog } from "@/lib/db/models/Ai"
+import { AiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
 import { SECRETARY_BUDGET_ORIGINS, SECRETARY_ANALYSIS_CONSUMPTION_ORIGIN, SECRETARY_DECISION_CONSUMPTION_ORIGIN, OWNER_TAKEOVER_REASON, PAUSED_MESSAGE_REASON } from "../constants"
 import { SecretaryDecisionRecord, secretaryDb } from "./models"
 

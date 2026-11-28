@@ -1,6 +1,6 @@
 import { z } from "zod"
 import { csvList, isoDate, pageQuery } from "@/lib/list/query"
-import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
+import { addFallbackIssues, fallbackListSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 import {
     PR_REVIEW_CONCURRENCY_MAX,
     PR_REVIEW_PAGE_LIMIT,

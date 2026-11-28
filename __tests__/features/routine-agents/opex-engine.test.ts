@@ -42,7 +42,7 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@/lib/ai/stream', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({
   prepareModel: async (request: unknown) => {
     holder.prepared.push(request)
     return { model: {}, providerOptions: {}, reasoning: null, apiKeyId: holder.apiKeyId, takeStepCost: () => holder.stepCosts.shift() ?? null, dispose: async () => undefined }
@@ -50,7 +50,7 @@ vi.mock('@/lib/ai/stream', () => ({
   describeAiError: (error: unknown) => String(error),
   samplingOptions: () => ({}),
 }))
-vi.mock('@/lib/ai/pricing/server', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server', () => ({
   createStepPricer: async (request: { signal?: AbortSignal }) => {
     holder.pricerRequests.push(request)
     return {

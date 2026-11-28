@@ -9,15 +9,15 @@ const mocks = vi.hoisted(() => ({
   runShell: vi.fn(),
 }))
 
-vi.mock('@/lib/ai/opencode-client', () => ({ runOpencodeShell: mocks.runShell }))
-vi.mock('@/lib/db/models/Agentic', async () => {
-  const { memoryModel } = await import('../../helpers/memory-model')
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ runOpencodeShell: mocks.runShell }))
+vi.mock("@/lib/db/models/Agentic", async () => {
+  const { memoryModel } = await import("../../helpers/memory-model")
   return { AgenticWorkbench: memoryModel(), AgenticCentral: memoryModel(), AgenticEvent: memoryModel() }
 })
 
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
-import { AgenticWorkbench, type IPreviewBackup } from '@/lib/db/models/Agentic'
-import { defaultCentralConfig } from '@/features/agentic/schemas'
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { AgenticWorkbench, type IPreviewBackup } from "@/lib/db/models/Agentic"
+import { defaultCentralConfig } from "@/features/agentic/schemas"
 import {
   PREVIEW_BACKUP_FILE,
   backupExistsCommand,
@@ -26,8 +26,8 @@ import {
   previewBackupFile,
   previewBackupRoot,
   shellQuote,
-} from '@/features/agentic/preview-backup'
-import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from '@/features/agentic/server/preview-backup'
+} from "@/features/agentic/preview-backup"
+import { assertPreviewBackup, assertPreviewBackupRemoved, reservePreviewBackup } from "@/features/agentic/server/preview-backup"
 
 const model = AgenticWorkbench as unknown as {
   docs: Record<string, unknown>[]

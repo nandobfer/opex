@@ -4,8 +4,8 @@ import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { UsageBar } from "@/components/metrics/UsageBar"
 import { USAGE_LEVEL_CLASSES } from "@/components/metrics/usage-level"
-import { formatResetIn } from "../logic"
-import type { QuotaLevel, QuotaWindowDto } from "../types"
+import { formatResetIn } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/logic"
+import type { QuotaLevel, QuotaWindowDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 
 /** Cores por faixa de uso (tokens do tema; as mesmas da `UsageBar`). */
 export const QUOTA_LEVEL_CLASSES: Readonly<Record<QuotaLevel, { bar: string; text: string }>> = USAGE_LEVEL_CLASSES

@@ -1,3 +1,4 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
@@ -18,7 +19,7 @@ vi.mock("@/features/orcamentos/server/clients", () => ({
     deleteClient: mocks.deleteClient,
 }))
 
-import { DELETE, GET, PATCH } from "@/app/api/integrations/orcamentos/clients/[id]/route"
+const { DELETE, GET, PATCH } = legacyRoute("integrations", "orcamentos/clients/[id]")
 import { DomainError } from "@/lib/api/route"
 import { createSessionToken } from "@/features/auth/session"
 

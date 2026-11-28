@@ -37,7 +37,7 @@ vi.mock('@/features/engramind/server/shared', () => ({ AcaoAuditoria: { EXECUTAR
 vi.mock('@/features/engramind/server/connection', () => ({ requireUsableConnection: async () => ({}) }))
 vi.mock('@/features/engramind/server/memory-network', () => ({ ensureAgentMemoryNetwork: vi.fn(async () => ({ step: { status: 'skipped' } })) }))
 vi.mock('@/features/engramind/server/channel-migration/stored-slugs', () => ({ rewriteStoredSlugs: vi.fn(async () => ({ rotineiros: 0 })) }))
-vi.mock('@/features/integrations/services/integration-service', () => ({ updateIntegration: vi.fn(async () => undefined) }))
+vi.mock('@/lib/integrations/server', () => ({ updateIntegration: vi.fn(async () => undefined) }))
 vi.mock('@/features/engramind/server/instance', () => ({
   resetInstanceCache: () => undefined,
   channelNamespace: async () => ({ app: 'opex', prefixed: h.prefixed }),

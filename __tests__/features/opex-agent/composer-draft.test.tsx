@@ -41,7 +41,7 @@ vi.mock('@/features/opex-agent/hooks/useOpexSettings', () => ({
 }))
 vi.mock('@/features/maddox-agent/hooks/useMaddoxSettings', () => ({ useMaddoxSettings: () => ({ data: { settings: { color: 'sky' } } }) }))
 vi.mock('@/features/maddox-agent/hooks/useMaddoxModels', () => ({ useMaddoxModels: () => ({ data: [], isLoading: false }) }))
-vi.mock('@/features/ai/components/model-picker/ModelOverridePicker', () => ({ ModelOverridePicker: () => null }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelOverridePicker', () => ({ ModelOverridePicker: () => null }))
 // Sessão aberta: só o campo de mensagem real, com o rascunho da aba (o resto do chat não importa aqui).
 vi.mock('@/features/opex-agent/components/chat/OpexChat', async () => {
   const { OpexComposer } = await import('@/features/opex-agent/components/chat/OpexComposer')

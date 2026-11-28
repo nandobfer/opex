@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ cron: vi.fn(), plugins: vi.fn(), engramind: vi.fn() }))
 
-vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({ startCronScheduler: mocks.cron }))
+vi.mock('@/lib/integrations/scheduler', () => ({ startCronScheduler: mocks.cron }))
 vi.mock('@/features/plugins/server/boot', () => ({ startPluginKernel: mocks.plugins }))
 vi.mock('@/features/engramind/server/memory-network', () => ({ scheduleEngramindStartupCheck: mocks.engramind }))
 

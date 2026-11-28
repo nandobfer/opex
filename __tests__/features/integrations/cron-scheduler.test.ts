@@ -10,16 +10,16 @@ const mocks = vi.hoisted(() => ({
   agentCleanup: vi.fn(async () => ({ archived: 1, deleted: 0, failed: 0 })),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   getIntegrationConfig: mocks.getIntegrationConfig,
   getInternalBaseUrl: async () => 'http://127.0.0.1:3868',
   getIntegration: async () => ({ debugMode: false, values: {} }),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 vi.mock('@/features/plugins/server/service', () => ({ reconcilePluginServers: async () => [] }))
-vi.mock('@/lib/db/models/CronJobState', () => ({
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   CronJobState: { updateOne: mocks.updateOne, findOneAndUpdate: mocks.findOneAndUpdate },
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/features/ai/server/task-tags', () => ({ runTaskTagsConcludedBackfill: mocks.concludedTags }))
 vi.mock('@/features/opex-agent/server/jobs', () => ({ runDueOpexJobs: mocks.runDueOpexJobs }))
@@ -35,8 +35,9 @@ import {
   runJobNow,
   runSchedulerTick,
   tickReference,
-} from '@/features/integrations/scheduler/cron-scheduler'
-import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
+} from "@nandobfer/integracoes/modules/server/scheduler"
+import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { type CronJobConfig } from "@nandobfer/integracoes"
 
 const httpJob: CronJobConfig = {
   id: 'cancel',
@@ -157,7 +158,8 @@ describe('runSchedulerTick (issue #604)', () => {
     const recalc = mocks.updateOne.mock.calls.find(([filter]) => filter.scheduleSignature)!
     expect(recalc[0]).toEqual({ jobId: 'cancel', scheduleSignature: { $ne: 'daily:17:30' } })
     expect(recalc[1].$set.nextRunAt.toISOString()).toBe('2026-09-22T20:30:00.000Z')
-    expect(recalc[2]).toBeUndefined()
+    // A persistência Mongoose da biblioteca passa as opções explícitas: o recálculo nunca cria o documento.
+    expect(recalc[2]?.upsert ?? false).toBe(false)
   })
 
   it('regressão: o upsert só cria o estado ($setOnInsert, filtro só por jobId) — nunca um documento por tick', async () => {

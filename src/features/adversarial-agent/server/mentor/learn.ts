@@ -95,7 +95,7 @@ async function decide(settings: MentorSettings, state: Record<string, unknown>, 
     const { provider, model, variant } = settings.decider
     if (!provider || !model) throw new Error("O decisor do Agente Mentor não tem provedor e modelo configurados")
     if (provider === "jev") {
-        const { askJevSystemOne } = await import("@/lib/ai/jev")
+        const { askJevSystemOne } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/jev")
         const response = await askJevSystemOne({ model, state, questions: buildJevMentorQuestions(), signal: AbortSignal.timeout(settings.timeoutSeconds * 1000), tracking: { feature: MENTOR_DECISION_CONSUMPTION_ORIGIN, subject } })
         const answer = response.answers?.lesson
         if (!answer || answer.type !== "noul") throw new Error("O JEV não respondeu a pergunta do Agente Mentor")
@@ -115,7 +115,7 @@ async function route(settings: MentorSettings, state: Record<string, unknown>, l
     if (!provider || !model) throw new Error("O Triador do Agente Mentor não tem provedor e modelo configurados")
     const routerState = buildRouterState(state, lists)
     if (provider === "jev") {
-        const { askJevSystemOne } = await import("@/lib/ai/jev")
+        const { askJevSystemOne } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/jev")
         const response = await askJevSystemOne({ model, state: routerState, questions: buildJevRouterQuestions(targets, instructions), signal: AbortSignal.timeout(settings.timeoutSeconds * 1000), tracking: { feature: MENTOR_ROUTER_CONSUMPTION_ORIGIN, subject } })
         const answer = response.answers?.target
         if (!answer || answer.type !== "choice") throw new Error("O JEV não respondeu a pergunta do Triador do Agente Mentor")

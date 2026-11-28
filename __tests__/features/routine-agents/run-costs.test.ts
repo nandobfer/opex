@@ -11,7 +11,7 @@ type Row = { _id: Types.ObjectId; subject: string; provider: string; model: stri
 
 const mocks = vi.hoisted(() => ({ rows: [] as unknown[], writes: [] as unknown[], pricerCalls: 0 }))
 
-vi.mock('@/lib/db/models/AiConsumption', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption', () => ({
   AiConsumption: {
     find: () => ({ select: () => ({ lean: async () => (mocks.rows as Row[]).map((item) => ({ ...item })) }) }),
     bulkWrite: async (ops: { updateOne: { filter: { _id: Types.ObjectId }; update: { $set: { listCost: unknown } } } }[]) => {
@@ -24,7 +24,7 @@ vi.mock('@/lib/db/models/AiConsumption', () => ({
     },
   },
 }))
-vi.mock('@/lib/ai/pricing/server', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server', () => ({
   createStepPricer: async ({ model }: { model: string }) => {
     mocks.pricerCalls++
     return {
@@ -33,7 +33,7 @@ vi.mock('@/lib/ai/pricing/server', () => ({
     }
   },
 }))
-vi.mock('@/features/ai-billing/server/billing-context', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/billing-context', () => ({
   buildBillingLookup: async () => ({
     key: (id: string) => (id === 'key_cred' ? { keyId: id, name: 'Créditos', provider: 'deepseek', billing: { mode: 'credits', faceValueUsd: 100, paidAmount: 50, paidCurrency: 'USD', startsAt: null, expiresAt: null, exhaustedAt: null } } : null),
     fx: () => 5,

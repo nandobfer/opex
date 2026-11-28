@@ -1,20 +1,15 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from "react"
 import { readFileSync } from "node:fs"
 import { fireEvent, render, screen } from "@testing-library/react"
 import { describe, expect, it, vi } from "vitest"
-import { CronJobExtraFields, retentionHelp } from "@/features/integrations/components/CronJobExtraFields"
-import {
-    DEFAULT_CRON_JOBS,
-    HEALTH_CHECK_JOB_ID,
-    MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID,
-    OPENCODE_SESSIONS_CLEANUP_JOB_ID,
-    OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID,
-    SESSION_CLEANUP_JOB_IDS,
-    TASK_TAGS_CONCLUDED_JOB_ID,
-    type CronJobConfig,
-} from "@/lib/integrations/catalog"
+import { CronJobExtraFields } from "@nandobfer/integracoes/modules/react/central/CronJobExtraFields"
+import { retentionHelp } from "@/features/integrations/registry/jobs"
+import { DEFAULT_CRON_JOBS, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, SESSION_CLEANUP_JOB_IDS, TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@nandobfer/integracoes"
 
 /** Campos próprios das rotinas internas no card da aba Rotinas: "Dias sem interação" das limpezas de sessões (OPE-106). */
 
@@ -75,8 +70,9 @@ describe("CronJobExtraFields", () => {
     })
 
     it("não usa select nem checkbox nativos (controles do design system)", () => {
-        const source = readFileSync("src/features/integrations/components/CronJobExtraFields.tsx", "utf8")
-        expect(source).not.toMatch(/<select\b/)
-        expect(source).not.toMatch(/type="checkbox"/)
+        // Componente da central de integrações (`@nandobfer/integracoes`, compilado sem bundle).
+        const source = readFileSync("node_modules/@nandobfer/integracoes/dist/react/central/CronJobExtraFields.js", "utf8")
+        expect(source).not.toMatch(/_jsxs?\("select"/)
+        expect(source).not.toMatch(/type: "checkbox"/)
     })
 })

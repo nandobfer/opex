@@ -1,17 +1,23 @@
 /** Constantes do "Agente Opex" (módulo puro: tela e servidor). */
 
+import { isCustomAiProviderId, type AiCustomProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+
 /** Configuração salva em `ai_feature_settings` (`feature: "opex-agent"`). */
 export const OPEX_FEATURE = "opex-agent"
 
 /** Aba de `/integracoes/ia` com a configuração do agente. */
 export const OPEX_AI_TAB = "agente-opex" as const
 
-/** Provedores do agente: só os que aceitam ferramentas definidas pelo app (o OpenCode de sessão não aceita; o OpenCode Go e o Command Code são só inferência por API e aceitam). */
+/**
+ * Provedores do agente: só os que aceitam ferramentas definidas pelo app (o OpenCode de sessão não
+ * aceita; o OpenCode Go e o Command Code são só inferência por API e aceitam), mais os provedores
+ * customizados OpenAI compatible (`custom-<slug>`, Chat Completions com ferramentas).
+ */
 export const OPEX_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code"] as const
-export type OpexProviderId = (typeof OPEX_PROVIDER_IDS)[number]
+export type OpexProviderId = (typeof OPEX_PROVIDER_IDS)[number] | AiCustomProviderId
 
 export function isOpexProviderId(value: string): value is OpexProviderId {
-    return (OPEX_PROVIDER_IDS as readonly string[]).includes(value)
+    return (OPEX_PROVIDER_IDS as readonly string[]).includes(value) || isCustomAiProviderId(value)
 }
 
 /**

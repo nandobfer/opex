@@ -1,7 +1,7 @@
 import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
 import type { TaskRefinementSettings } from "@/features/ai/schemas"
 import { resolveRefinementSkill, type RefinementSkillLookup } from "@/features/ai/refinement-skill"
-import type { AiSkillDto } from "@/lib/ai/providers"
+import type { AiSkillDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { TaskDetailDto } from "@/features/tasks/types"
 import { REFINEMENT_PROTOCOL, REFINEMENT_SPEC_HEADING } from "./constants"
 

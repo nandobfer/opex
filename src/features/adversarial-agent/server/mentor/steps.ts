@@ -1,6 +1,6 @@
 import { memoryChannelOf } from "@/features/ai/agents"
 import { listAgentMemories } from "@/features/ai/server/agent-memory-service"
-import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { loggerFor } from "@/lib/logger"
 import type { MentorTarget } from "../../mentor/constants"
 import type { WriterMemory } from "../../mentor/operations"
@@ -52,7 +52,7 @@ export async function generate(
     request: { provider: AiProviderId; model: string; variant: string | null; instructions: string; prompt: string; timeoutSeconds: number; origin: string; subject: string; signal?: AbortSignal },
     usage: StepUsage,
 ): Promise<string> {
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     let text = ""
     for await (const event of streamAi({
         provider: request.provider,

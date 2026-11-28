@@ -2,8 +2,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ values: { url: 'http://gotenberg:3000/', timeoutSeconds: 30, urlTtlMinutes: 15, urlTtlMaxMinutes: 60 } as Record<string, unknown> }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegration: async () => ({ values: mocks.values }) }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegration: async () => ({ values: mocks.values }) }))
+vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
 import { convertHtmlToPdf, gotenbergHealth, pdfFormFields, screenshotHtml } from '@/lib/pdf/gotenberg'
 import { previewHtml } from '@/lib/pdf/preview'

@@ -15,13 +15,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { DEFAULT_ESTIMATE_HOURS_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_ESTIMATE_HOURS_SETTINGS, estimateHoursSettingsSchema, type EstimateHoursSettings } from "../../schemas"
-import { useAiProviderStatuses, useEstimateHoursSettings, useSaveEstimateHoursSettings } from "../../hooks/useAi"
-import { ProviderModelCard } from "../shared/ProviderModelCard"
+import { useEstimateHoursSettings, useSaveEstimateHoursSettings } from "../../hooks/useAi"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
 import { useFeatureSection, type FeatureSectionProps } from "../shared/feature-section"
-import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
+import { TemperatureInput } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/TemperatureInput"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }
 

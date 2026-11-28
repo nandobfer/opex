@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ values: {} as Record<string, unknown>, version: 'v1' }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   integrationDebug: () => ({ step: vi.fn(), error: vi.fn(), request: vi.fn(), success: vi.fn(), response: vi.fn() }),
-}))
+}))()) as Record<string, unknown>) }))
 
 import { getFileUrl, getUploadUrl } from '@/lib/storage/s3'
 

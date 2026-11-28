@@ -6,8 +6,8 @@ import { FileWarning, Gauge, PlugZap, TriangleAlert } from "lucide-react"
 import { PanelMessage } from "@/components/metrics/PanelMessage"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
-import { integrationPath } from "@/lib/integrations/catalog"
-import type { OpencodeQuotaDto } from "../types"
+import { integrationPath } from "@/features/integrations/registry/definitions"
+import type { OpencodeQuotaDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 import { QuotaProviderGroup } from "./QuotaProviderGroup"
 
 interface QuotaPanelBodyProps {

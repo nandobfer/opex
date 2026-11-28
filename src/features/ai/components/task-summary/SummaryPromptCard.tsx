@@ -6,7 +6,7 @@ import { Field } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { DEFAULT_TASK_SUMMARY_INSTRUCTIONS, TASK_SUMMARY_MAX_LENGTH_DEFAULT, TASK_SUMMARY_MAX_LENGTH_MAX, TASK_SUMMARY_MAX_LENGTH_MIN } from "../../constants"
 import type { TaskSummarySettings } from "../../schemas"
-import { PromptSamplingFieldsBlock, type PromptSamplingFields } from "../shared/PromptSamplingFields"
+import { PromptSamplingFieldsBlock, type PromptSamplingFields } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/PromptSamplingFields"
 
 /** Instruções (prompt de sistema), tamanho do resumo e, no Gemini, temperatura e máximo de tokens. */
 export function SummaryPromptCard({ form }: { form: UseFormReturn<TaskSummarySettings> }) {

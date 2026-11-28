@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from "react"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
@@ -19,15 +21,16 @@ vi.mock("framer-motion", () => {
     }
 })
 vi.mock("sonner", () => ({ toast: { success: mocks.toastSuccess, error: mocks.toastError } }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useRunCronJob: () => ({ mutateAsync: mocks.mutateAsync }),
     integrationErrorMessage: (_e: unknown, fallback: string) => fallback,
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 
-import { CronJobsEditor, runNowBlockReason } from "@/features/integrations/components/CronJobsEditor"
-import { CONTROL, ScheduleEditor } from "@/features/integrations/components/ScheduleEditor"
-import { FIELD_GRID } from "@/features/integrations/components/IntegrationDetailPage"
-import { TASK_TAGS_CONCLUDED_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { CronJobsEditor, runNowBlockReason } from "@nandobfer/integracoes/modules/react/central/CronJobsEditor"
+import { CONTROL, ScheduleEditor } from "@nandobfer/integracoes/modules/react/central/ScheduleEditor"
+import { FIELD_GRID } from "@nandobfer/integracoes/modules/react/central/IntegrationDetailPage"
+import { TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { type CronJobConfig } from "@nandobfer/integracoes"
 
 const job: CronJobConfig = {
     id: "cancel",

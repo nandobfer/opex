@@ -12,7 +12,7 @@ const mocks = vi.hoisted(() => ({
   status: { version: '0.8.0', backup: { status: 'ok', detail: null }, embedding: { state: 'ready' } } as Record<string, unknown>,
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => mocks.config }))
 vi.mock('@/features/engramind/server/client', () => ({
   engramindReady: async () => mocks.ready,
   engramindCall: async (_method: string, request: { path: string }) => {

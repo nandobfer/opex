@@ -1,4 +1,4 @@
-import { getOpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { probeAttachSession } from "@/lib/ai/opencode-run"
 import type { ReconnectOutcome } from "../reconnect"
 

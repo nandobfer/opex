@@ -5,7 +5,7 @@ uma tarefa tem uma **mesa de trabalho**; cada **projeto** (repositório vinculad
 **central** que aponta o repositório na máquina do OpenCode. OpenCode, Docker das prévias e o Opex
 rodam na mesma máquina.
 
-Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
+Código: `src/features/agentic/` (domínio), `@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client` (cliente oficial
 `@opencode/client`), `src/lib/ai/opencode-events.ts` (eventos normalizados, puro) e
 `src/lib/ai/opencode-run.ts` (runner genérico de um turno — compartilhado com o refinamento de
 tarefas, ver `modules/refinement.md`). O texto do turno (`result.text` e os pedaços do `onText`) separa
@@ -239,8 +239,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 - A porta permanece reservada no banco, dentro da faixa efetiva da central (`resolveCentralPorts`, também
   gravada em `min`/`max` do estado da tentativa). O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
-  e confirmação de publicação. A URL do run aparece no log da aba Build (atalho "Abrir a execução no
-  GitHub"); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
+  e confirmação de publicação. A URL do run aparece no log da aba Build e o selo **GitHub Action** do
+  resumo do build vira o link do run (nova aba) quando o log traz a URL (OPE-214); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
 - O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup (só
   quando ligado na central) e worktree, revalida porta e importa a imagem. Publica com override
   Compose por tentativa, `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta
@@ -316,6 +316,32 @@ descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** 
   (`previewService`), e o turno de correção não cita a lista.
 - **GitHub Action:** um turno curto do agente **commita** tudo (e faz o dump, se ligado); o app roda
   `scripts/preview-github.ts` da tentativa reservada (`remotePreviewCommands`).
+- **Saída do GitHub Actions na aba (OPE-214):** o script só espera o run em silêncio, então o
+  **servidor** acompanha o run pela **integração GitHub** (Integrações › GitHub; o token precisa de leitura
+  em Actions) e escreve no mesmo log do build (`createRunFollower`/`followGithubRun` em
+  `server/github-run-follow.ts`, formatação pura em `github-run-log.ts`):
+  - liga quando a saída do script traz a URL do run (`Prévia GitHub: …/actions/runs/<id>`) **do repositório
+    da central** (URL de outro repositório é ignorada); só no método GitHub Action — servidor e PC não mudam;
+  - consulta o run e os jobs a cada 5 s (com ETag) e escreve "aguardando um runner", o cabeçalho de cada job,
+    o início de cada etapa e, assim que ela termina, o **log da etapa** (`/actions/jobs/{id}/steps/{n}/logs`: o
+    log do job inteiro só existe com o job concluído, e o `preview.yml` tem um job só) seguido da linha de fim
+    (duração, falha, pulada) — sem o carimbo de hora e com `##[group]`/`##[error]`/`##[warning]` em cores; nada é
+    escrito duas vezes e a ordem do job é mantida (uma etapa cujo log ainda não saiu segura as seguintes). Se o
+    log por etapa não vier (6 consultas), uma linha cinza avisa, as etapas seguintes do job saem sem log e, quando
+    nenhuma etapa trouxe log, o log do job inteiro entra quando o job termina;
+  - só encerra depois de ver os jobs: run concluído com a lista de jobs ainda vazia (atraso da API) continua
+    consultando por até 6 consultas e, se nada aparecer, encerra com a linha "o GitHub não listou nenhum job";
+  - no fim: "GitHub Actions concluído" ou o bloco **"GitHub Actions falhou"** com o job e a etapa que falharam,
+    as linhas `##[error]` e o final do log do job (`failureExcerpt`). Esse trecho também vai à frente do final
+    da saída no prompt de correção (`buildFixPrompt`);
+  - **ordem do log:** a saída do script depois da URL (download, publicação) fica retida até o acompanhamento
+    acabar, e o `exit` só é escrito depois dele (teto de 60 s após o fim do script, com aviso). Fica
+    comando → push/URL → GitHub Actions → publicação → exit; na retomada a seção recomeça e o
+    acompanhamento também;
+  - **melhor esforço:** token sem acesso, 404, limite de uso ou falhas de rede seguidas viram uma linha amarela no
+    próprio log ("Não foi possível acompanhar o GitHub Actions…") e o build segue pelo código de saída do
+    script. O link do run continua no selo **GitHub Action** do resumo do build (acima da busca); sem URL no
+    log, o selo é só texto. Não há mais a linha "Abrir a execução no GitHub" entre a busca e o terminal.
 - **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
   (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
   numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é
@@ -1211,9 +1237,9 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   arrastar** (dnd-kit) — a ordem é a ordem de tentativa. Item repetido ou igual ao modelo principal é
   apontado no campo e recusado pelo schema (`agentConfigSchema.fallbacks`, `superRefine`).
 - **Peças compartilhadas (OPE-181)**: a lista, o limite e a validação ficam no módulo puro
-  `src/features/ai/model-fallbacks.ts` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
+  `@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
   `addFallbackIssues`, `normalizeFallbacks`; `agentic/schemas.ts` reexporta `MAX_MODEL_FALLBACKS`,
-  `modelChoiceSchema` e `ModelChoice`) e o campo em `src/features/ai/components/model-picker/FallbackModelsField.tsx`.
+  `modelChoiceSchema` e `ModelChoice`) e o campo em `@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField`.
   As mesmas peças servem ao Agente Adversário, ao Arquiteto (OpenCode), ao Revisor de PR, ao Refinador,
   aos agentes rotineiros (motor OpenCode) e ao Maddox; o `ProviderModelCard` mostra a lista com a prop
   `fallbacksName` (só com o OpenCode). Ao salvar, o `assertCatalog` também confere cada fallback no

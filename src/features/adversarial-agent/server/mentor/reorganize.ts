@@ -136,7 +136,7 @@ async function routeMemory(input: ReviewInput): Promise<{ destination: ReorgList
     let confidence: number | null
     let reason: string | null
     if (provider === "jev") {
-        const { askJevSystemOne } = await import("@/lib/ai/jev")
+        const { askJevSystemOne } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/jev")
         const signal = AbortSignal.any([input.signal, AbortSignal.timeout(settings.timeoutSeconds * 1000)])
         const response = await askJevSystemOne({ model, state, questions: buildJevReorgRouterQuestions(options, instructions), signal, tracking })
         const answer = response.answers?.target

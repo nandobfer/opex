@@ -1,8 +1,8 @@
 "use client"
 
 import type { UseFormReturn } from "react-hook-form"
-import type { AiProviderId, AiProviderStatusDto } from "@/lib/ai/providers"
-import { ProviderModelCard } from "@/features/ai/components/shared/ProviderModelCard"
+import type { AiProviderId, AiProviderStatusDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
 import type { SecretarySettings } from "../schemas"
 
 /** Onde fica cada modelo do Secretário no formulário. */

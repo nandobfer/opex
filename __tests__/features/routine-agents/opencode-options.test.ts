@@ -12,8 +12,8 @@ const holder = vi.hoisted(() => ({
   skills: [] as { name: string; description: string | null; enabled: boolean; builtin: boolean }[],
 }))
 
-vi.mock('@/lib/ai/opencode', () => ({ getOpencodeConnection: async () => ({ directory: '/home/burgos' }) }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode', () => ({ getOpencodeConnection: async () => ({ directory: '/home/burgos' }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => {
     if (holder.down) throw new Error('ECONNREFUSED')
     return { mcp: { list: async () => ({ data: [{ name: 'playwright', status: { status: 'connected' } }, { name: 'rotina_abc', status: { status: 'connected' } }] }) } }

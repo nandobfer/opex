@@ -7,8 +7,8 @@ import { messageOf, routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
 import { previewBaseUrl } from "@/lib/instance"
-import { matchOpencodeSkill } from "@/lib/ai/opencode-skills"
-import { listOpencodeSkillsAt } from "@/lib/ai/opencode-skill-list"
+import { matchOpencodeSkill } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills"
+import { listOpencodeSkillsAt } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list"
 
 /**
  * Motor **OpenCode no host** (OPE-130): a sessão abre na pasta do agente no host (persistente entre
@@ -103,7 +103,7 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
     let sessionId = run.opencodeSessionId ?? null
     let text = ""
     let directory: string | null = null
-    const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
+    const { getOpencodeClient } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client")
     let client: Awaited<ReturnType<typeof getOpencodeClient>>
     try {
         client = await getOpencodeClient()

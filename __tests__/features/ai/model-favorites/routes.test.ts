@@ -1,11 +1,12 @@
+import { legacyRoute } from '../../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), add: vi.fn(), remove: vi.fn() }))
 
-vi.mock('@/features/ai/model-favorites/server/service', () => ({ listModelFavorites: mocks.list, addModelFavorite: mocks.add, removeModelFavorite: mocks.remove }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/model-favorites/server/service", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ listModelFavorites: mocks.list, addModelFavorite: mocks.add, removeModelFavorite: mocks.remove }))(importOriginal)) as Record<string, unknown>), }))
 
-import { DELETE, GET, POST } from '@/app/api/ai/model-favorites/route'
+const { DELETE, GET, POST } = legacyRoute("ai", "model-favorites")
 
 const ctx = { params: Promise.resolve({}) }
 const req = (method: string, body?: unknown) => new NextRequest('http://localhost/api/ai/model-favorites', body === undefined ? { method } : { method, body: JSON.stringify(body) })

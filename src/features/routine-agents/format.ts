@@ -1,6 +1,6 @@
 import { format, formatDistanceToNowStrict } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { formatMoneyPair } from "@/features/ai-billing/money"
+import { formatMoneyPair } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 
 /** Formatação das telas dos agentes rotineiros (OPE-130, módulo PURO). */
 

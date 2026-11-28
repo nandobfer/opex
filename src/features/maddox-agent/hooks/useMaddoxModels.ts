@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query"
 import { unwrapApi } from "@/lib/api"
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { ApiResponse } from "@/lib/types/api"
 import { useOpexScope } from "@/features/opex-agent/components/OpexScopeProvider"
 

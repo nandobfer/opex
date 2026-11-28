@@ -1,6 +1,7 @@
 import { Counter } from "@/lib/db/models/Counter"
-import { Integration } from "@/lib/db/models/Integration"
-import { OPENCODE_QUOTA_JOB_ID, type CronJobConfig } from "@/lib/integrations/catalog"
+import { Integration } from "@nandobfer/integracoes/mongoose"
+import { OPENCODE_QUOTA_JOB_ID } from "@/features/integrations/registry/jobs"
+import { type CronJobConfig } from "@nandobfer/integracoes"
 import { logger } from "@/lib/logger"
 
 /**

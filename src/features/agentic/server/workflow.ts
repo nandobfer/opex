@@ -6,7 +6,7 @@ import { AgenticWorkbench, type IAgenticWorkbench, type IPendingTurn, type IWork
 import { TaskRefinement } from "@/lib/db/models/Refinement"
 import { REFINEMENT_IN_PROGRESS_REASON, refinementFilesOwner } from "@/features/refinement/constants"
 import { refinementConcluded } from "@/features/refinement/logic"
-import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
 import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
 import { getTask, moveTask } from "@/features/tasks/server/service"
@@ -53,6 +53,7 @@ import { logger } from "@/lib/logger"
 import { runAfterResponse } from "@/lib/after-response"
 import { newJobId } from "@/features/local-docker/server/detached"
 import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
+import { createRunFollower } from "./github-run-follow"
 import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
 import { runPreviewBuild } from "./preview-build"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
@@ -1096,14 +1097,24 @@ async function buildTurn(
         resumeJob = null
         log.step(`${WORKBENCH_STAGE_LABELS.building}: ${remote ? "script da prévia remota" : "docker compose"}`, { workbenchId: id, jobId })
         const timeoutMinutes = remote ? remotePreviewTimeoutMinutes(config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
-        const run = await runPreviewBuild({
-            run: commands.run,
-            jobId,
-            timeoutMs: timeoutMinutes * 60_000,
-            signal: controller.signal,
-            onOutput: (chunk) => appendBuildOutput(id, chunk),
-            heartbeat: hooks.heartbeat,
-        })
+        // GitHub Action (OPE-214): a saída do workflow vem da API (o script só espera o run em silêncio).
+        const follower = remote ? createRunFollower({ repo: loaded.repo?.repo ?? null, signal: controller.signal, write: (text) => appendBuildOutput(id, text) }) : null
+        let run: Awaited<ReturnType<typeof runPreviewBuild>>
+        try {
+            run = await runPreviewBuild({
+                run: commands.run,
+                jobId,
+                timeoutMs: timeoutMinutes * 60_000,
+                signal: controller.signal,
+                onOutput: (chunk) => (follower ? follower.output(chunk) : appendBuildOutput(id, chunk)),
+                heartbeat: hooks.heartbeat,
+            })
+        } catch (error) {
+            // Sem o script, o acompanhamento do run não pode seguir escrevendo no log (o próximo build seria outro).
+            follower?.abort()
+            throw error
+        }
+        const remoteFailure = follower ? await follower.finish() : null
         appendBuildOutput(id, buildExitLine(run.exitCode))
         await AgenticWorkbench.updateOne({ _id: doc._id }, { $unset: { "previewBuild.job": 1 } })
         if (controller.signal.aborted) {
@@ -1126,7 +1137,7 @@ async function buildTurn(
         log.warn(`${WORKBENCH_STAGE_LABELS.building}: build falhou`, { workbenchId: id, exitCode: run.exitCode, round })
         notice("warn", `O build da prévia falhou (exit ${run.exitCode}). O agente vai corrigir o código e o build roda de novo (correção ${round}).`)
         appendBuildOutput(id, buildFixSeparator(round))
-        step = { kind: "fix", text: buildFixPrompt(config, ctx, port, { exitCode: run.exitCode, tail: run.tail, round, command: commands.command }, { docker, method }), attach: false }
+        step = { kind: "fix", text: buildFixPrompt(config, ctx, port, { exitCode: run.exitCode, tail: remoteFailure ? `${remoteFailure}\n\n--- saída do script da prévia ---\n${run.tail}` : run.tail, round, command: commands.command }, { docker, method }), attach: false }
     }
 }
 

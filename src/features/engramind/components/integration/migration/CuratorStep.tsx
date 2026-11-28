@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Loader2, Sparkles } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useAiModels, useAiProviderStatuses } from "@/features/ai/hooks/useAi"
+import { useAiModels, useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { CURATOR_PROVIDERS, curatorRunSchema, type CuratorProvider } from "../../../schemas/migration"
 import { useMigrationCurator } from "../../../hooks/useMemoryMigration"
 import type { MemoryMigrationDto } from "../../../types"

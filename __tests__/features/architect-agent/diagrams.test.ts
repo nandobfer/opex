@@ -21,7 +21,7 @@ vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: vi.fn(async () => moc
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: mocks.info, warn: mocks.warn, error: vi.fn() }) }))
 vi.mock('@/lib/after-response', () => ({ runAfterResponse: (_label: string, task: () => Promise<unknown>) => void mocks.tasks.push(task()) }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({}) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({}) }))
 vi.mock('@/features/architect-agent/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { ArchitectDiagram: memoryModel(), architectDb: vi.fn(async () => undefined) }

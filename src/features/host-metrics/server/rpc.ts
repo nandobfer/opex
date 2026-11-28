@@ -1,5 +1,5 @@
-import { getOpencodeClient } from "@/lib/ai/opencode-client"
-import { getOpencodeConnection } from "@/lib/ai/opencode"
+import { getOpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { getOpencodeConnection } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode"
 import { HTOP_PLUGIN_ID, HTOP_PLUGIN_LIST_TIMEOUT_MS, HTOP_RPC_ID, HTOP_RPC_METHOD, HTOP_RPC_TIMEOUT_MS } from "../constants"
 
 /**

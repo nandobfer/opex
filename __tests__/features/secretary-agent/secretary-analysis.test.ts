@@ -47,7 +47,7 @@ vi.mock("mongoose", async (importOriginal) => {
     return { ...actual, models, default: { ...actual.default, models } }
 })
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(), AcaoAuditoria: { EXECUTAR: "EXECUTAR" }, recordAudit: mocks.audit }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ cost: 0.01 }] } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ cost: 0.01 }] } }))
 vi.mock("@/lib/detached", async (importOriginal) => {
     const actual = (await importOriginal()) as typeof import("@/lib/detached")
     return { runDetached: (label: string, job: () => Promise<void>) => (mocks.realDetached ? actual.runDetached(label, job) : void mocks.jobs.push(job)) }

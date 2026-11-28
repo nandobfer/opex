@@ -1,6 +1,6 @@
-import { getOpencodeClient } from "@/lib/ai/opencode-client"
-import { getOpencodeConnection } from "@/lib/ai/opencode"
-import { OPENCODE_QUOTA_RPC_TIMEOUT_MS, QUOTA_RPC_ID, QUOTA_RPC_METHOD, type QuotaRefreshReason } from "../constants"
+import { getOpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { getOpencodeConnection } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode"
+import { OPENCODE_QUOTA_RPC_TIMEOUT_MS, QUOTA_RPC_ID, QUOTA_RPC_METHOD, type QuotaRefreshReason } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/constants"
 
 /**
  * Chamada ao RPC `slkiser.opencode-quota` (método `refresh`) do plugin, no `opencode serve`: o mesmo

@@ -1,5 +1,5 @@
 import { BrainCircuit } from "lucide-react"
-import type { IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
+import type { IntegrationTabDef } from "@nandobfer/integracoes/react"
 import { AGENT_CATALOG } from "@/features/agent-metrics/catalog"
 import type { AiTab } from "./constants"
 

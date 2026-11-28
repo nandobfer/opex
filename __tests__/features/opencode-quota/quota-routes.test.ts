@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server'
 const mocks = vi.hoisted(() => ({ get: vi.fn(), refresh: vi.fn(), config: vi.fn() }))
 
 vi.mock('@/features/opencode-quota/server/service', () => ({ getOpencodeQuota: mocks.get, refreshOpencodeQuota: mocks.refresh }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.config }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: mocks.config }))
 
 import { GET } from '@/app/api/opencode/quota/route'
 import { POST } from '@/app/api/opencode/quota/refresh/route'

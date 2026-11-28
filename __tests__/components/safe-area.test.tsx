@@ -16,7 +16,7 @@ vi.mock("next/link", () => ({
 }))
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
 vi.mock("@/features/agentic/hooks/useAgentic", () => ({ useTestCentral: () => ({ mutateAsync: vi.fn() }) }))
-vi.mock("@/features/integrations/components/IntegrationDebugConsole", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationDebugConsole: ({ onMaximizedChange }: { onMaximizedChange: (value: boolean) => void }) => (
         <button type="button" onClick={() => onMaximizedChange(true)}>
             Maximizar

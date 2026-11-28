@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { InfoTooltip } from "@/components/ui/info-tooltip"
-import { cardMotion } from "@/features/integrations/components/detail/draft"
+import { cardMotion } from "@nandobfer/integracoes/react"
 import { cn } from "@/lib/utils"
 
 interface SectionProps {

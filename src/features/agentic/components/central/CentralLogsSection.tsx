@@ -5,7 +5,7 @@ import { Bug } from "lucide-react"
 import { Card, CardContent } from "@/components/ui/card"
 import { cn } from "@/lib/utils"
 import { SAFE_AREA_INSET_4 } from "@/components/ui/safe-area"
-import { IntegrationDebugConsole } from "@/features/integrations/components/IntegrationDebugConsole"
+import { IntegrationDebugConsole } from "@nandobfer/integracoes/react"
 import { centralLogScope } from "../../constants"
 import { useTestCentral } from "../../hooks/useAgentic"
 

@@ -4,7 +4,7 @@ import React from "react"
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Plug } from "lucide-react"
-import type { IntegrationListItemDto } from "@/features/integrations/types"
+import type { IntegrationListItemDto } from "@nandobfer/integracoes/modules/core/dto"
 import type { NavItemDef } from "@/features/layout/types"
 import { framerMotionMock } from "../../helpers/framer-motion"
 
@@ -21,15 +21,15 @@ vi.mock("next/link", () => ({
         )
     }),
 }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: mocks.statusLive }))
-vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: mocks.statusLive }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationTestDialog", () => ({
     IntegrationTestDialog: (props: { integrationId: string | null }) => {
         mocks.testDialog(props.integrationId)
         return null
     },
 }))
-vi.mock("@/features/integrations/components/IntegrationDebugDialog", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationDebugDialog", () => ({
     IntegrationDebugDialog: (props: { integrationId: string | null }) => {
         mocks.debugDialog(props.integrationId)
         return null
@@ -44,15 +44,14 @@ const integration = (overrides: Partial<IntegrationListItemDto>): IntegrationLis
     id: "pusher",
     name: "Pusher",
     description: "Eventos em tempo real",
-    environment: "interno",
-    debugMode: false,
+    source: "library",
     health: { status: "ok" },
     configured: true,
     ...overrides,
 })
 
 const LIST = [
-    integration({ id: "github", name: "GitHub", health: { status: "error" }, debugMode: true }),
+    integration({ id: "github", name: "GitHub", health: { status: "error" } }),
     integration({ id: "ai", name: "Inteligência Artificial", health: { status: "warn" } }),
     integration({ id: "gemini", name: "Gemini", parent: "ai" }),
     integration({ id: "pusher", name: "Pusher", health: { status: "unknown" } }),
@@ -125,10 +124,10 @@ describe("IntegrationsSidebarItem — submenu de Integrações na sidebar (OPE-1
         expect(mocks.testDialog).toHaveBeenLastCalledWith("github")
     })
 
-    it("Debug abre o diálogo de debug; fica desabilitado sem o modo debug", () => {
+    it("Debug abre o diálogo de debug e está sempre disponível (debug sempre ativo)", () => {
         renderItem()
         openPanel()
-        expect(within(rows()[1]!).getByRole("button", { name: "Debug" }).hasAttribute("disabled")).toBe(true)
+        for (const row of rows()) expect(within(row).getByRole("button", { name: "Debug" }).hasAttribute("disabled")).toBe(false)
         fireEvent.click(within(rows()[0]!).getByRole("button", { name: "Debug" }))
         expect(panel()).toBeNull()
         expect(mocks.debugDialog).toHaveBeenLastCalledWith("github")

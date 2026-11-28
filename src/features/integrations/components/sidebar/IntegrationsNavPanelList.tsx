@@ -6,7 +6,7 @@ import { AlertTriangle, Plug, RotateCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { cn } from "@/lib/utils"
-import { integrationPath, type IntegrationId } from "@/lib/integrations/catalog"
+import { integrationPath } from "@/features/integrations/registry/definitions"
 import { isActiveHref } from "@/features/layout/navigation"
 import {
     SIDEBAR_FOCUS_RING,
@@ -14,9 +14,9 @@ import {
     SIDEBAR_PANEL_LINK_ACTIVE,
     SIDEBAR_PANEL_LINK_IDLE,
 } from "@/features/layout/components/sidebar/sidebar-styles"
-import { useTopLevelIntegrations } from "../../hooks/useTopLevelIntegrations"
-import { IntegrationStatusDot } from "../IntegrationBadges"
-import { IntegrationRowActions } from "../IntegrationRowActions"
+import { useTopLevelIntegrations } from "@nandobfer/integracoes/react"
+import { IntegrationStatusDot } from "@nandobfer/integracoes/react"
+import { IntegrationRowActions } from "@nandobfer/integracoes/react"
 import {
     INTEGRATIONS_NAV_ACTION,
     INTEGRATIONS_NAV_DOT,
@@ -28,8 +28,8 @@ import {
 interface IntegrationsNavPanelListProps {
     /** Navegou por um link do submenu (fecha o painel e, no celular, a gaveta). */
     onNavigate: () => void
-    onTest: (id: IntegrationId) => void
-    onDebug: (id: IntegrationId) => void
+    onTest: (id: string) => void
+    onDebug: (id: string) => void
 }
 
 function IntegrationsNavSkeleton() {
@@ -104,7 +104,7 @@ export function IntegrationsNavPanelList({ onNavigate, onTest, onDebug }: Integr
                             <IntegrationStatusDot health={integration.health} />
                             <span className="min-w-0 flex-1 truncate">{integration.name}</span>
                         </Link>
-                        <IntegrationRowActions integration={integration} onTest={() => onTest(integration.id)} onDebug={() => onDebug(integration.id)} size="sm" />
+                        <IntegrationRowActions onTest={() => onTest(integration.id)} onDebug={() => onDebug(integration.id)} size="sm" />
                     </li>
                 )
             })}

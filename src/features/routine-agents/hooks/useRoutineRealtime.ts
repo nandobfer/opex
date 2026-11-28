@@ -11,9 +11,9 @@ import { ROUTINE_RUN_STATUS_LABELS } from "../status"
 import type { RoutineAgentUpdatedPayload, RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
 import { routineChatQueryPrefix } from "../chat"
 import { routineKeys } from "./keys"
-import { AI_CONSUMPTION_UPDATED_EVENT } from "@/lib/ai/consumption-events"
-import { AI_PROVIDER_KEYS_UPDATED_EVENT } from "@/features/ai/api-keys"
-import { AI_BILLING_UPDATED_EVENT } from "@/features/ai-billing/schemas"
+import { AI_CONSUMPTION_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption-events"
+import { AI_PROVIDER_KEYS_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/api-keys"
+import { AI_BILLING_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/schemas"
 import { ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
 
 /** Intervalo mínimo entre releituras de custo disparadas por consumo novo (passos chegam em rajada). */

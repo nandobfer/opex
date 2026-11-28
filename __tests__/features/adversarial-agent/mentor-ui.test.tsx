@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -9,7 +11,8 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 const mocks = vi.hoisted(() => ({ mutate: vi.fn(), retry: vi.fn(), runs: [] as unknown[], detail: null as unknown }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false }) }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
   useMentorRuns: () => ({ data: mocks.runs, isLoading: false, isError: false, refetch: vi.fn() }),
   useMentorRealtime: vi.fn(),

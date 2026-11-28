@@ -8,12 +8,12 @@ import { Cable, Container, KeyRound, Network, Settings2 } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import type { IntegrationDef } from "@/lib/integrations/catalog"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
-import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
-import type { Draft } from "@/features/integrations/components/detail/draft"
-import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
-import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
+import type { IntegrationDef } from "@nandobfer/integracoes"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
+import { DetailHeader } from "@nandobfer/integracoes/react"
+import type { Draft } from "@nandobfer/integracoes/react"
+import { IntegrationTabs, type IntegrationTabDef } from "@nandobfer/integracoes/react"
+import { useIntegrationTab } from "@nandobfer/integracoes/react"
 import { BUILDER_MACHINE_TABS, type BuilderMachineTab } from "../constants"
 import { DEFAULT_LOCAL_DOCKER_SETTINGS, localDockerSettingsSchema, type LocalDockerSettings } from "../schemas"
 import { useLocalDockerRealtime, useLocalDockerSettings, useSaveLocalDockerSettings } from "../hooks/useLocalDocker"
@@ -38,7 +38,7 @@ interface BuilderMachineEditorFormProps {
     data: IntegrationDetailDto
     draft: Draft
     setDraft: Dispatch<SetStateAction<Draft>>
-    /** Rascunho da integração (ambiente e modo debug) com alterações. */
+    /** Rascunho da integração ("Integração ativa") com alterações. */
     dirty: boolean
     pending: boolean
     onSave: () => Promise<boolean>
@@ -48,7 +48,7 @@ interface BuilderMachineEditorFormProps {
 /**
  * Página da integração Builder Machine (`local-docker`) em abas: Geral, Túnel do Docker do PC,
  * Conexão com o PC, Preparo do PC e Docker do PC. A configuração do PC é um formulário só (Conexão +
- * Docker); Salvar grava também o Geral da integração (ambiente, modo debug e "Integração ativa").
+ * Docker); Salvar grava também o Geral da integração ("Integração ativa").
  * Desativada (como salva), a página mostra só o Geral e a ativação, com as demais abas bloqueadas.
  */
 export function BuilderMachineEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: BuilderMachineEditorFormProps) {

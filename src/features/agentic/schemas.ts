@@ -3,9 +3,9 @@ import { colorValueSchema } from "@/lib/colors"
 import { AGENT_ROLES, FORK_DONE_POLICIES, FORK_INTEGRATION_TARGETS, FORK_MODES, LIVE_CHAT_POLICIES, MANUAL_STAGES, PREVIEW_PORT_MAX, PREVIEW_PORT_MIN, WORKBENCH_MODEL_ROLES, type AgentRole, type WorkbenchModelRole } from "./constants"
 import { AGENTIC_FILES_PER_MESSAGE } from "./files"
 
-import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
+import { addFallbackIssues, fallbackListSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 
-export { MAX_MODEL_FALLBACKS, modelChoiceSchema, type ModelChoice } from "@/features/ai/model-fallbacks"
+export { MAX_MODEL_FALLBACKS, modelChoiceSchema, type ModelChoice } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 
 /**
  * Agente, modelo (`provedor/modelo`) e variante do OpenCode para uma etapa, com os **modelos de

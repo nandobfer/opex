@@ -3,7 +3,7 @@
 import { useState } from "react"
 import { Info, ListOrdered, Loader2, Play, Wand2 } from "lucide-react"
 import { ReasonButton } from "@/components/ui/reason-button"
-import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
+import type { ModelVariantValue } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelVariantFields"
 import { useTaskDetail } from "@/features/tasks/hooks/useTasks"
 import { useRefinementRealtime, useTaskRefinement } from "@/features/refinement/hooks/useRefinement"
 import { useAdversarialSettings } from "@/features/adversarial-agent/hooks/useAdversarial"

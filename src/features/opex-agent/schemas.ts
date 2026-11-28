@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { aiProviderIdIn } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
 import { reserveChatFileSchema, type ReserveChatFileInput } from "@/lib/chat-files/kind"
 import {
     DEFAULT_OPEX_INSTRUCTIONS,
@@ -17,7 +18,7 @@ import {
 import { isAbsoluteHostPath } from "./host-terminal"
 
 const providerFields = {
-    provider: z.enum(OPEX_PROVIDER_IDS).nullable(),
+    provider: aiProviderIdIn(OPEX_PROVIDER_IDS).nullable(),
     model: z.string().trim().max(200).nullable(),
     variant: z.string().trim().max(50).nullable(),
 }

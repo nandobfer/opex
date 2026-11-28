@@ -1,7 +1,8 @@
-import { Integration } from "@/lib/db/models/Integration"
+import { Integration } from "@nandobfer/integracoes/mongoose"
 import { isEncryptedSecret } from "@/lib/crypto/secretBox"
-import { KEY_RING_INTEGRATION_IDS, newApiKeyId } from "@/lib/integrations/key-ring"
-import { invalidateStoredIntegrations } from "@/lib/integrations/store"
+import { newApiKeyId } from "@nandobfer/integracoes/modules/server/key-ring"
+import { KEY_RING_INTEGRATION_IDS } from "@/features/integrations/registry/definitions"
+import { invalidateStoredIntegrations } from "@/lib/integrations/server"
 import { logger } from "@/lib/logger"
 
 /**

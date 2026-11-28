@@ -1,6 +1,6 @@
 import { z } from "zod"
-import { AI_PROVIDER_IDS, AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
-import { addFallbackIssues, fallbackListSchema } from "./model-fallbacks"
+import { aiProviderIdSchema, aiTextProviderIdSchema } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
+import { addFallbackIssues, fallbackListSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 import { DEFAULT_TASK_TAXONOMY, MAX_TASK_TAGS, MAX_TAXONOMY_TAGS, TASK_TAG_ID_MAX, TASK_TAG_LABEL_MAX } from "@/features/tasks/tags"
 import {
     DEFAULT_TASK_SUMMARY_INSTRUCTIONS,
@@ -19,7 +19,7 @@ import {
 export const taskSummarySettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+        provider: aiTextProviderIdSchema.nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
@@ -56,7 +56,7 @@ export const DEFAULT_TASK_SUMMARY_SETTINGS: TaskSummarySettings = {
 export const budgetPreviewSettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+        provider: aiTextProviderIdSchema.nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
@@ -87,7 +87,7 @@ export const DEFAULT_BUDGET_PREVIEW_SETTINGS: BudgetPreviewSettings = {
 export const estimateHoursSettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_PROVIDER_IDS).nullable(),
+        provider: aiProviderIdSchema.nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
@@ -129,7 +129,7 @@ export const taskTagDefSchema = z.object({
 export const taskTagsSettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_PROVIDER_IDS).nullable(),
+        provider: aiProviderIdSchema.nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),
@@ -216,7 +216,7 @@ export const DEFAULT_TASK_REFINEMENT_SETTINGS: TaskRefinementSettings = {
 export const pluginVersionSummarySettingsSchema = z
     .object({
         enabled: z.boolean(),
-        provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+        provider: aiTextProviderIdSchema.nullable(),
         model: z.string().trim().max(200).nullable(),
         agent: z.string().trim().max(100).nullable(),
         variant: z.string().trim().max(50).nullable(),

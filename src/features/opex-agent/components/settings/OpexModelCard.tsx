@@ -6,13 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Field } from "@/components/ui/field"
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
 import { Input } from "@/components/ui/input"
-import { getAiProvider, type AiProviderStatusDto } from "@/lib/ai/providers"
-import { useAiModels } from "@/features/ai/hooks/useAi"
-import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
-import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
+import { getAiProvider, type AiProviderStatusDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import { AiProviderTabs } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProviderTabs"
+import { ModelPickerField, VariantSelectField } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields"
 import { isOpexProviderId, OPEX_PROVIDER_IDS, type OpexProviderId } from "../../constants"
 import type { OpexAgentSettings } from "../../schemas"
-import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
+import { TemperatureInput } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/TemperatureInput"
 
 const SAME_AS_MAIN = "__same__"
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))

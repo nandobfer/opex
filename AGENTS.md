@@ -249,6 +249,9 @@ sem pedido explícito.
   rotinas `fx-ptax-daily` ou `ai-subscription-days` (ou o preenchimento sob demanda) gravam PTAX ou uso diário das
   assinaturas; as telas dos rotineiros também releem os custos em `ai-provider-keys-updated` (plano da chave) e
   `ai-consumption-updated` com `origin: routine-agent` (ver `aicontext/modules/routine-agents.md`, "Custos").
+- Provedores de IA customizados (OpenAI compatible, OPE-212): `ai-custom-providers-updated`
+  (`{ slug, action: "created" | "updated" | "deleted" }`) em `private-app` ao criar, editar ou excluir um provedor
+  customizado (ver `aicontext/modules/ai.md`, "Provedor customizado").
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
   ao criar, renomear, substituir o segredo, pôr ou tirar de uso, tornar principal (OPE-179), alterar o plano de
   cobrança (OPE-203) ou remover uma chave (ver `aicontext/modules/ai.md`, "Chaves de API").
@@ -278,7 +281,7 @@ sem pedido explícito.
 - Logs estruturados com **Pino** (`logger`/`loggerFor`); nunca `console.log` em código de produção.
 - Use os serviços centrais (banco, auditoria, logger, realtime, integrações, axios) em vez de
   instanciar clientes novos em cada feature.
-- Serviço externo novo = entrada no catálogo de integrações (`src/lib/integrations/catalog.ts`)
+- Serviço externo novo = adaptador no registro de integrações (`src/features/integrations/registry/`, biblioteca `@nandobfer/integracoes`)
   com campos públicos/privados, tester e debug, seguindo `aicontext/modules/integrations.md`.
 - **Ferramentas do Agente Opex** (`src/features/opex-agent/server/tools/`) chamam a **função de
   serviço real** do app (nunca HTTP). Ferramenta de exclusão, arquivamento, gravação de integração ou
@@ -381,7 +384,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Logging: Pino
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
   (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/deepseek` e `@ai-sdk/openai-compatible`
-  (OpenCode Go e Command Code), sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
+  (OpenCode Go e Command Code), sempre por `streamAi` (`@nandobfer/integracoes/modules/integrations/ia/ai/stream`); provedores configurados em
   Integrações › Inteligência Artificial (`aicontext/modules/ai.md`); cliente MCP do Agente Opex com
   `@ai-sdk/mcp` (importada sob demanda; `aicontext/modules/opex-agent.md`, "MCPs")
 - Testes: Vitest 5 + React Testing Library, DOM com happy-dom (jsdom só como exceção); CI com
@@ -398,6 +401,11 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   versões com `diff`
 - PDF/PNG dos documentos dos agentes: Gotenberg (serviço compartilhado no host, integração `gotenberg`, chamado com
   `fetch` nativo; `aicontext/modules/agent-documents.md`)
+- Central de Integrações: biblioteca `@nandobfer/integracoes` (repositório público `nandobfer/integracoes`,
+  instalada por `github:nandobfer/integracoes#vX.Y.Z`, `dist/` versionado; OPE-212): lista, página, campos,
+  segredos, teste, debug, explorador, agendador e rotas da central, mais Pusher, SMTP, Storage S3, GitHub, Crons,
+  API interna e a camada de IA; o Opex registra os adaptadores em `src/features/integrations/registry/`
+  (`aicontext/modules/integrations.md`)
 - Integrações: terminal de logs com `@xterm/xterm` (+ `@xterm/addon-fit`, `@xterm/addon-search`),
   Swagger UI via `swagger-ui-dist` (CDN)
 

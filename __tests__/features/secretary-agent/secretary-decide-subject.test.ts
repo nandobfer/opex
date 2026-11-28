@@ -2,10 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_SECRETARY_SETTINGS, type SecretarySettings } from "@/features/secretary-agent/schemas"
 
 const mocks = vi.hoisted(() => ({ jev: vi.fn(), inference: vi.fn(), consumption: vi.fn(), usage: vi.fn() }))
-vi.mock("@/lib/ai/jev", () => ({ askJevSystemOne: mocks.jev }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/jev", () => ({ askJevSystemOne: mocks.jev }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.consumption } }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: mocks.usage } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.consumption } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", () => ({ AiUsageLog: { aggregate: mocks.usage } }))
 
 import { decideSubject } from "@/features/secretary-agent/server/decide-subject"
 import { spentTodayUsd } from "@/features/secretary-agent/server/budget"

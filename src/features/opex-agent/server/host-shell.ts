@@ -1,5 +1,5 @@
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import { AiProviderError } from "@/lib/ai/errors"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
 import { OPEX_HOST_OUTPUT_MAX } from "../constants"
 
 /**

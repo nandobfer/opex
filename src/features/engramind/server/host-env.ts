@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
 import { createHostRunner, type HostRunner } from "@/features/local-docker/server/shell"
 import { newJobId } from "@/features/local-docker/server/detached"
 import { ENGRAMIND_INTEGRATION_ID, ENV_PROJECT_KEYS } from "../constants"

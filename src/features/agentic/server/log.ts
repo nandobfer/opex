@@ -1,4 +1,4 @@
-import { integrationDebug } from "@/lib/integrations/debug"
+import { integrationDebug } from "@/lib/integrations/server"
 import { loggerFor } from "@/lib/logger"
 import { centralLogScope } from "../constants"
 
@@ -7,7 +7,7 @@ import { centralLogScope } from "../constants"
  * sempre gravados, com `data.scope` da central) e para o Pino.
  */
 
-const dbg = integrationDebug("ai", { always: true })
+const dbg = integrationDebug("ai")
 const pino = loggerFor({ module: "agentic" })
 
 type Data = Record<string, unknown>

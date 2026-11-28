@@ -4,7 +4,7 @@ const mocks = vi.hoisted(() => ({ getClient: vi.fn() }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: mocks.getClient }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: mocks.getClient }))
 vi.mock('@opencode/client', () => ({ isSessionNotFoundError: (value: unknown) => (value as { notFound?: boolean } | null)?.notFound === true }))
 vi.mock('@/lib/db/models/Agentic', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')

@@ -2,10 +2,10 @@
 
 import type { ComponentProps, ReactNode } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { AiProviderTabs } from "@/features/ai/components/AiProviderTabs"
-import { ModelPickerField } from "@/features/ai/components/ModelFields"
-import type { useAiModels } from "@/features/ai/hooks/useAi"
-import type { AiProviderStatusDto } from "@/lib/ai/providers"
+import { AiProviderTabs } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProviderTabs"
+import { ModelPickerField } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields"
+import type { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import type { AiProviderStatusDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { InfoField } from "./InfoField"
 
 type ModelsQuery = ReturnType<typeof useAiModels>

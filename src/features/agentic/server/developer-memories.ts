@@ -1,4 +1,4 @@
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { memoriesSection, memoryCacheNotice } from "@/features/ai/memories-prompt"
 import mongoose from "mongoose"
 import { buildMemoryFocus } from "@/features/ai/memory-focus"

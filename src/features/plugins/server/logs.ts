@@ -1,6 +1,6 @@
 import { hostname } from "os"
-import { chunkForPusher } from "@/lib/integrations/debug"
-import { maskSensitive, type IntegrationLogLevel, type IntegrationLogLine } from "@/lib/integrations/log-format"
+import { chunkForPusher } from "@/lib/integrations/server"
+import { maskSensitive, type IntegrationLogLevel, type IntegrationLogLine } from "@nandobfer/integracoes"
 import { pluginDebugChannel } from "@/lib/pusher/channel-names"
 import { loggerFor } from "@/lib/logger"
 import { PLUGIN_DEBUG_EVENT, type PluginChannel } from "../constants"

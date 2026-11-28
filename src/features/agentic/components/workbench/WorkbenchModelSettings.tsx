@@ -1,6 +1,6 @@
 "use client"
 
-import { useAiModels } from "@/features/ai/hooks/useAi"
+import { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { STAGE_MODEL_ROLE, WORKBENCH_MODEL_ROLE_LABELS } from "../../constants"
 import { useSetWorkbenchModel } from "../../hooks/useAgentic"
 import type { WorkbenchDto } from "../../types"
