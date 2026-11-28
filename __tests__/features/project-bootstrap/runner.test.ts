@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
     existingCentral: null as { _id: string } | null,
     updateCentralFails: false,
     centralConfig: null as unknown,
+    savedEnv: { name: 'app', slug: 'app', source: { projectName: 'app' }, limits: null, composeOverrides: null } as Record<string, unknown>,
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR' } }))
@@ -127,7 +128,7 @@ vi.mock('@/features/environments/server/service', () => ({
     getDeploy: vi.fn(async () => ({ log: 'compilando\nERRO: porta ocupada' })),
 }))
 vi.mock('@/features/environments/server/models', () => ({
-    Environment: { find: () => ({ select: () => ({ lean: async () => mocks.envs }) }), findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => ({ name: 'app', slug: 'app', limits: null, composeOverrides: null }), select: () => ({ lean: async () => ({ lastDeployId: null }) }) }) },
+    Environment: { find: () => ({ select: () => ({ lean: async () => mocks.envs }) }), findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => mocks.savedEnv, select: () => ({ lean: async () => ({ lastDeployId: null }) }) }) },
     EnvironmentDeploy: { findById: () => ({ select: () => ({ lean: async () => ({ status: mocks.deployOutcome, error: mocks.deployOutcome === 'failed' ? 'Build falhou' : null }) }) }) },
 }))
 vi.mock('@/features/environments/server/deploy', () => {
@@ -240,6 +241,7 @@ beforeEach(() => {
     mocks.existingCentral = null
     mocks.updateCentralFails = false
     mocks.centralConfig = null
+    mocks.savedEnv = { name: 'app', slug: 'app', source: { projectName: 'app' }, limits: null, composeOverrides: null }
     mocks.hostSkills = [{ id: 'bootstrap-docker', name: 'bootstrap-docker' }]
     mocks.skillListFails = false
     mocks.probe = { outcome: 'attached', follow: true, message: null }
@@ -434,6 +436,20 @@ describe('achados da revisão (rodada 1)', () => {
         await retryProjectBootstrap(id, 'local')
         await settle()
         expect(vi.mocked(createEnvironment).mock.calls[0]![0]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
+        expect(current(id).status).toBe('done')
+    })
+
+    it('ambiente criado com slug sufixado: a volta depois do deploy com falha mantém o slug e o projeto do compose', async () => {
+        const { createEnvironment, updateEnvironment } = await import('@/features/environments/server/service')
+        mocks.envs = [{ slug: 'app', source: { projectName: 'app' } }, { slug: 'app-2', source: { projectName: 'app-2' } }]
+        mocks.savedEnv = { name: 'app', slug: 'app-3', source: { projectName: 'app-3' }, limits: null, composeOverrides: null }
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(vi.mocked(createEnvironment).mock.calls[0]![0]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
+        const update = vi.mocked(updateEnvironment).mock.calls[0] as unknown as [string, { slug: string; source: { projectName: string } }]
+        expect(update[1]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
         expect(current(id).status).toBe('done')
     })
 

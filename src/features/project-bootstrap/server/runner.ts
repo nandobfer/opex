@@ -465,7 +465,8 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
         } else {
             // Nova volta depois de um deploy com falha: o agente pode ter mudado o `.env` ou a porta.
             const saved = await Environment.findById(environmentId).lean()
-            if (saved) await updateEnvironment(environmentId, { ...input, name: saved.name, slug: saved.slug, limits: saved.limits ?? null, composeOverrides: saved.composeOverrides ?? null }, actorId())
+            // Mantém a identidade gravada (slug e projeto do compose, inclusive o sufixo `-N` da criação).
+            if (saved) await updateEnvironment(environmentId, { ...input, name: saved.name, slug: saved.slug, source: { ...input.source, projectName: saved.source?.projectName ?? saved.slug }, limits: saved.limits ?? null, composeOverrides: saved.composeOverrides ?? null } as typeof input, actorId())
         }
         if (!(await setPhase(activation, "deploy", "deploy"))) return null
         try {

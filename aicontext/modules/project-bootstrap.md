@@ -60,7 +60,7 @@ você, destructive = falhou, success = concluída). A etapa atual abre por padr�
    por `readText`) e `startDeploy`; o Opex acompanha o registro do deploy. Deploy com falha: soma uma tentativa e **volta à
    etapa 2** na mesma conversa com o erro e o fim do log (sem limite de voltas; o stepper mostra "Tentativa N"); na volta,
    o ambiente existente é atualizado (o `.env` ou a porta podem ter mudado). Slug ou projeto do compose já usados por outro
-   ambiente: o ambiente nasce com o primeiro `<slug>-N` livre (`freeEnvironmentSlug`), com aviso na conversa.
+   ambiente: o ambiente nasce com o primeiro `<slug>-N` livre (`freeEnvironmentSlug`), com aviso na conversa; as voltas seguintes mantêm o slug e o projeto do compose gravados.
 5. **Concluído** (`DonePanel`): links do repositório, da central e do ambiente e a porta.
 
 **Cancelar** (com confirmação) para o agente, dispensa as perguntas e marca **Cancelado**; nada do que foi criado é
