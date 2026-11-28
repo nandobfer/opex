@@ -198,6 +198,28 @@ describe('createRunFollower', () => {
     expect(out).toBe(after)
   })
 
+  it('onRun (OPE-221): recebe o run do repositório da central uma vez; URLs do log das etapas não contam', async () => {
+    scenario([{ run: { status: 'completed', conclusion: 'success' }, jobs: [{ id: 5, name: 'preview', status: 'completed', conclusion: 'success', steps: [step(1, 'Testes', 'completed', 'success')] }] }])
+    gh.text.mockResolvedValue('details_url: https://github.com/org/app/actions/runs/9\n')
+    const onRun = vi.fn()
+    const follower = createRunFollower({ repo: 'org/app', signal: new AbortController().signal, write, onRun, pollMs: 0 })
+    follower.output('Prévia GitHub: https://github.com/org/app/actions/runs/42\n')
+    follower.output('https://github.com/org/app/actions/runs/9\n')
+    await follower.finish()
+    expect(strip(out)).toContain('actions/runs/9')
+    expect(onRun.mock.calls).toEqual([[{ repo: 'org/app', runId: 42 }]])
+  })
+
+  it('onRun não é chamado para outro repositório nem sem repositório na central', async () => {
+    const onRun = vi.fn()
+    for (const repo of ['org/app', null]) {
+      const follower = createRunFollower({ repo, signal: new AbortController().signal, write, onRun, pollMs: 0 })
+      follower.output(`Prévia GitHub: https://github.com/${repo ? 'outro/repo' : 'org/app'}/actions/runs/1\n`)
+      await follower.finish()
+    }
+    expect(onRun).not.toHaveBeenCalled()
+  })
+
   it('URL de outro repositório não liga o acompanhamento', async () => {
     const follower = createRunFollower({ repo: 'org/app', signal: new AbortController().signal, write, pollMs: 0 })
     follower.output('Prévia GitHub: https://github.com/outro/repo/actions/runs/1\nfim\n')

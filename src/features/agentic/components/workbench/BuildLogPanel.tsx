@@ -6,7 +6,7 @@ import { ChevronDown, ChevronUp, Hammer, Search, WifiOff, XCircle } from "lucide
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { IntegrationConsole, type ConsoleSearchResults, type IntegrationConsoleHandle } from "@nandobfer/integracoes/react"
-import { lastGithubRunUrl, type WorkbenchBuildDto } from "../../build-log"
+import type { WorkbenchBuildDto } from "../../build-log"
 import { useBuildLogStream, type BuildLogSink } from "../../hooks/useBuilds"
 
 /** Linhas guardadas no terminal (o log inteiro de um build costuma caber). */
@@ -15,27 +15,25 @@ const SCROLLBACK = 50_000
 /** Log de um build no terminal (xterm), com busca. Ao vivo enquanto o build roda. */
 export function BuildLogPanel({ workbenchId, build, onRunUrl }: { workbenchId: string; build: WorkbenchBuildDto; onRunUrl?: (url: string | null) => void }) {
     const consoleRef = useRef<IntegrationConsoleHandle>(null)
-    // GitHub Action: o script imprime a URL da execução; a última vira o link do selo "GitHub Action" do resumo.
-    const onRunUrlRef = useRef(onRunUrl)
-    useEffect(() => {
-        onRunUrlRef.current = onRunUrl
-    }, [onRunUrl])
     const sink = useMemo<BuildLogSink>(
         () => ({
             reset: (text) => {
                 consoleRef.current?.clear()
                 consoleRef.current?.write(text)
-                onRunUrlRef.current?.(lastGithubRunUrl(text))
             },
-            write: (text) => {
-                consoleRef.current?.write(text)
-                const found = lastGithubRunUrl(text)
-                if (found) onRunUrlRef.current?.(found)
-            },
+            write: (text) => consoleRef.current?.write(text),
         }),
         [],
     )
     const { view, connected, error, retry } = useBuildLogStream(workbenchId, build.id, sink)
+    // GitHub Action: o link do run vem do servidor pelo stream (URLs no texto do log, como as da saída dos testes, não contam).
+    const onRunUrlRef = useRef(onRunUrl)
+    useEffect(() => {
+        onRunUrlRef.current = onRunUrl
+    }, [onRunUrl])
+    useEffect(() => {
+        if (view.loaded) onRunUrlRef.current?.(view.runUrl)
+    }, [view.loaded, view.runUrl])
     const [term, setTerm] = useState("")
     const [results, setResults] = useState<ConsoleSearchResults>({ index: -1, count: 0 })
     const running = (view.status ?? build.status) === "running"

@@ -436,6 +436,8 @@ export interface IAgenticBuild {
     logChars: number
     droppedChars: number
     message: string | null
+    /** Run do GitHub Actions da execução atual (reconhecido pelo servidor no repositório da central). */
+    githubRun: { repo: string; runId: number } | null
 }
 
 const AgenticBuildSchema = new Schema<IAgenticBuild>(
@@ -454,6 +456,7 @@ const AgenticBuildSchema = new Schema<IAgenticBuild>(
         logChars: { type: Number, default: 0 },
         droppedChars: { type: Number, default: 0 },
         message: { type: String, default: null },
+        githubRun: { type: new Schema({ repo: { type: String, required: true }, runId: { type: Number, required: true } }, { _id: false }), default: null },
     },
     { collection: "agentic_builds", versionKey: false, minimize: false },
 )

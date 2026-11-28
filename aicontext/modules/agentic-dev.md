@@ -340,8 +340,18 @@ descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** 
     acompanhamento também;
   - **melhor esforço:** token sem acesso, 404, limite de uso ou falhas de rede seguidas viram uma linha amarela no
     próprio log ("Não foi possível acompanhar o GitHub Actions…") e o build segue pelo código de saída do
-    script. O link do run continua no selo **GitHub Action** do resumo do build (acima da busca); sem URL no
-    log, o selo é só texto. Não há mais a linha "Abrir a execução no GitHub" entre a busca e o terminal.
+    script. Não há mais a linha "Abrir a execução no GitHub" entre a busca e o terminal;
+  - **link do run (OPE-221):** o selo **GitHub Action** do resumo do build (acima da busca) é o link, em nova aba,
+    para `https://github.com/<dono>/<repo>/actions/runs/<id>` do run que o **servidor** reconheceu na saída do
+    script (o mesmo do acompanhamento: só o repositório da central). O run fica gravado no build
+    (`agentic_builds.githubRun`, `setBuildRun` em `server/build-logs.ts`) e chega ao navegador pelo `runUrl` da lista
+    e pelo stream do log (`runUrl` no `snapshot` e a linha `{ type: "run", url }`); a URL é montada por
+    `githubRunUrl` (`github-run-log.ts`, sempre `https://`, repo `dono/repo` e id inteiro positivo). O navegador
+    **não** procura URLs no texto do log: as que aparecem no log das etapas (ex.: fixtures `github.com/org/app/…`
+    impressas pela suíte de testes do workflow) não viram link. Uma nova execução do script no mesmo build
+    (correção) limpa o link até o novo run ser reconhecido; a retomada depois de reiniciar o app mantém o run
+    gravado. Sem run (build anterior à OPE-221, central sem repositório ou URL de outro repositório), o selo é só
+    texto. O build Local não tem selo nem link.
 - **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
   (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
   numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é

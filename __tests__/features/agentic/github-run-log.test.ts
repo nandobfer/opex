@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { diffSteps, emptyStepsSeen, failureExcerpt, formatJobLog, githubStepEnd, parseGithubRunUrl, type GithubJob, type StepsSeen } from '@/features/agentic/github-run-log'
+import { diffSteps, emptyStepsSeen, failureExcerpt, formatJobLog, githubRunUrl, githubStepEnd, parseGithubRunUrl, type GithubJob, type StepsSeen } from '@/features/agentic/github-run-log'
 
 /**
  * Saída do GitHub Actions no log do build (OPE-214): o servidor transforma o run (etapas e logs dos
@@ -16,6 +16,23 @@ describe('parseGithubRunUrl', () => {
   it('vale a última URL do trecho; sem URL de run devolve null', () => {
     expect(parseGithubRunUrl('https://github.com/a/b/actions/runs/1 e https://github.com/a/b/actions/runs/2')).toEqual({ repo: 'a/b', runId: 2 })
     expect(parseGithubRunUrl('https://github.com/nandobfer/opex/pull/new/feat/x')).toBeNull()
+  })
+})
+
+describe('githubRunUrl (OPE-221)', () => {
+  it('monta a página do run sempre com https', () => {
+    expect(githubRunUrl({ repo: 'nandobfer/opex', runId: 46092133916 })).toBe('https://github.com/nandobfer/opex/actions/runs/46092133916')
+  })
+
+  it('repositório ou id inválido (ou ausente) não vira link', () => {
+    expect(githubRunUrl(null)).toBeNull()
+    expect(githubRunUrl(undefined)).toBeNull()
+    expect(githubRunUrl({ repo: 'opex', runId: 1 })).toBeNull()
+    expect(githubRunUrl({ repo: 'a/b/c', runId: 1 })).toBeNull()
+    expect(githubRunUrl({ repo: 'a b/c', runId: 1 })).toBeNull()
+    expect(githubRunUrl({ repo: 'a/b', runId: 0 })).toBeNull()
+    expect(githubRunUrl({ repo: 'a/b', runId: -3 })).toBeNull()
+    expect(githubRunUrl({ repo: 'a/b', runId: 1.5 })).toBeNull()
   })
 })
 
