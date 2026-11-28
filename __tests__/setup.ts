@@ -5,15 +5,20 @@
 // já exportado pelo ambiente (CI/dev).
 process.env.MONGODB_URI ??= 'mongodb://localhost:27017/opex-test'
 
-// A configuração das integrações vem do banco com fallback para o `.env`. Nos
-// testes, o store fica vazio por padrão — todos os consumidores leem `process.env` como antes
-// e nada tenta conectar ao Mongo. Testes do próprio store/resolvedor redefinem este mock.
-vi.mock('@/lib/integrations/store', () => ({
-  INTEGRATION_CACHE_TTL_MS: 30_000,
-  loadStoredIntegrations: vi.fn(async () => new Map()),
-  loadStoredIntegration: vi.fn(async () => null),
-  invalidateStoredIntegrations: vi.fn(),
-}))
+// A configuração das integrações (`@nandobfer/integracoes`) vem do banco com fallback para o `.env`.
+// Nos testes, a central não tem configuração salva — todos os consumidores leem `process.env` e os
+// padrões dos campos, e nada tenta conectar ao Mongo (ver `src/lib/integrations/runtime.ts`).
+process.env.OPEX_INTEGRATIONS_STORE ??= 'memory'
+
+// O runtime da central é criado pelo `src/lib/integrations/runtime.ts` (no app, o `instrumentation.ts`
+// o importa no boot). Num teste que alcança o servidor da biblioteca, ele é ligado antes de cada caso —
+// por import dinâmico, depois dos `vi.mock` do arquivo, que então valem para as dependências injetadas.
+beforeEach(async () => {
+  const marks = globalThis as Record<symbol, unknown>
+  if (!marks[Symbol.for('@nandobfer/integracoes/server-loaded')] || marks[Symbol.for('@nandobfer/integracoes/server-runtime')]) return
+  await import('@/lib/integrations/runtime').catch(() => undefined)
+})
+
 
 // Agente Adversário: o fluxo da mesa consulta a configuração (banco) ao fim de toda implementação e ao
 // montar a mesa. Nos testes ele fica de fora por padrão; os testes do adversário redefinem este mock.

@@ -4,7 +4,9 @@ import { Schema, model, models, type Model } from "mongoose"
  * Inteligência Artificial:
  * - `ai_feature_settings`: configuração de cada feature que usa IA (provedor, modelo, prompt…),
  *   validada pelo schema Zod da feature;
- * - `ai_usage_logs`: uma linha por geração (tokens, custo, duração, resultado), retida 90 dias.
+ *
+ * O `ai_usage_logs` (uma linha por geração) é da central de integrações (`@nandobfer/integracoes`,
+ * subpath `/ia`): `AiUsageLog` vem de `@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog`.
  */
 
 export interface IAiFeatureSetting {
@@ -24,59 +26,9 @@ const AiFeatureSettingSchema = new Schema<IAiFeatureSetting>(
     { collection: "ai_feature_settings", versionKey: false, minimize: false },
 )
 
-export interface IAiUsageLog {
-    feature: string
-    provider: string
-    model: string
-    /** Referência do que foi processado (ex.: id da tarefa). */
-    subject: string | null
-    ok: boolean
-    error: string | null
-    inputTokens: number | null
-    outputTokens: number | null
-    totalTokens: number | null
-    costUsd: number | null
-    usageSource: "api" | "historical-allocation" | null
-    inputPricePerMillionUsd: number | null
-    reconciliationBatch: string | null
-    reconciledAt: Date | null
-    durationMs: number
-    /** Chave de API usada (OPE-155). Ausente/`null` = registro histórico, sem chave identificada. */
-    apiKeyId?: string | null
-    createdAt: Date
-}
-
-const AiUsageLogSchema = new Schema<IAiUsageLog>(
-    {
-        feature: { type: String, required: true, index: true },
-        provider: { type: String, required: true },
-        model: { type: String, required: true },
-        subject: { type: String, default: null },
-        ok: { type: Boolean, required: true },
-        error: { type: String, default: null },
-        inputTokens: { type: Number, default: null },
-        outputTokens: { type: Number, default: null },
-        totalTokens: { type: Number, default: null },
-        costUsd: { type: Number, default: null },
-        usageSource: { type: String, enum: ["api", "historical-allocation", null], default: null },
-        inputPricePerMillionUsd: { type: Number, default: null },
-        reconciliationBatch: { type: String, default: null },
-        reconciledAt: { type: Date, default: null },
-        durationMs: { type: Number, required: true },
-        apiKeyId: { type: String, default: null },
-        createdAt: { type: Date, default: () => new Date(), expires: 60 * 60 * 24 * 90 },
-    },
-    { collection: "ai_usage_logs", versionKey: false },
-)
-
-AiUsageLogSchema.index({ provider: 1, createdAt: -1 })
-AiUsageLogSchema.index({ provider: 1, apiKeyId: 1, createdAt: -1 })
-
 if (process.env.NODE_ENV === "development") {
     delete models.AiFeatureSetting
-    delete models.AiUsageLog
 }
 
 export const AiFeatureSetting: Model<IAiFeatureSetting> =
     (models.AiFeatureSetting as Model<IAiFeatureSetting>) || model<IAiFeatureSetting>("AiFeatureSetting", AiFeatureSettingSchema)
-export const AiUsageLog: Model<IAiUsageLog> = (models.AiUsageLog as Model<IAiUsageLog>) || model<IAiUsageLog>("AiUsageLog", AiUsageLogSchema)

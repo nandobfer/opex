@@ -52,6 +52,14 @@ export function MemoriesNotices({ meta, universe }: { meta: MemoriesMetaDto | un
                         </p>
                     </motion.div>
                 )}
+                {meta?.maintenance && (
+                    <motion.div key="maintenance" {...reveal} className="overflow-hidden">
+                        <p className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/10 px-3 py-2 text-xs text-foreground" data-testid="memories-maintenance">
+                            <ArrowRightLeft className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+                            <span className="flex-1">Migrando canais de memória: os agentes usam o contexto em cache e as gravações voltam no fim da migração.</span>
+                        </p>
+                    </motion.div>
+                )}
                 {unavailable && (
                     <motion.div key="unavailable" {...reveal} className="overflow-hidden">
                         <p className="flex items-center gap-2 rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-xs text-foreground" data-testid="memories-unavailable" title={meta?.availability.reason ?? undefined}>

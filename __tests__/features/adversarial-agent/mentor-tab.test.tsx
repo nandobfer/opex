@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -18,8 +20,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => modelFavoritesMock())(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   AI_QUERY_KEY: 'ai',
   useAiFeatureRealtime: vi.fn(),
   // Como o hook real: o JEV (decisão estruturada) só entra com `includeAll`.
@@ -37,7 +39,26 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
     isError: false,
     error: null,
   }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  AI_QUERY_KEY: 'ai',
+  useAiFeatureRealtime: vi.fn(),
+  // Como o hook real: o JEV (decisão estruturada) só entra com `includeAll`.
+  useAiProviderStatuses: (includeAll = false) => ({
+    providers: (includeAll ? ['gemini', 'anthropic', 'jev'] : ['gemini', 'anthropic']).map((id) => ({ id, name: id === 'jev' ? 'JEV' : id, configured: true, connected: true })),
+  }),
+  useAiModels: (provider: string | null) => ({
+    data:
+      provider === 'gemini'
+        ? [{ id: 'flash', name: 'Gemini Flash', variants: ['low', 'high'], group: null, contextWindow: null, free: false }]
+        : provider === 'anthropic'
+          ? [{ id: 'claude', name: 'Claude Sonnet', variants: ['medium', 'high'], group: null, contextWindow: null, free: false }]
+          : [],
+    isLoading: false,
+    isError: false,
+    error: null,
+  }),
+}))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [], isLoading: false }) }))
 vi.mock('@/features/adversarial-agent/hooks/useMentorReorg', () => ({
   useMentorReorgs: () => ({ data: { items: [], centrals: [] }, isLoading: false, isError: false, refetch: vi.fn() }),
@@ -57,10 +78,10 @@ vi.mock('@/features/adversarial-agent/hooks/useMentor', () => ({
 
 // Demais abas e peças da página: fora do escopo deste teste.
 const { stub } = vi.hoisted(() => ({ stub: (name: string) => ({ [name]: () => null }) }))
-vi.mock('@/features/integrations/components/detail/DetailHeader', () => stub('DetailHeader'))
-vi.mock('@/features/integrations/components/detail/DetailActions', () => stub('DetailActions'))
-vi.mock('@/features/integrations/components/detail/GeneralCard', () => stub('GeneralCard'))
-vi.mock('@/features/ai/components/AiProvidersTab', () => stub('AiProvidersTab'))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/DetailHeader", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('DetailHeader'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/DetailActions", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('DetailActions'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/GeneralCard", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('GeneralCard'))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/AiProvidersTab", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => stub('AiProvidersTab'))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/features/ai/components/task-summary/TaskSummaryTab', () => stub('TaskSummaryTab'))
 vi.mock('@/features/ai/components/task-tags/TaskTagsTab', () => stub('TaskTagsTab'))
 vi.mock('@/features/ai/components/budget-preview/BudgetPreviewTab', () => stub('BudgetPreviewTab'))
@@ -75,7 +96,8 @@ vi.mock('@/features/adversarial-agent/components/settings/AdversarialAgentTab', 
   ADVERSARIAL_AI_TAB_DEF: { id: 'agente-adversario', label: 'Agente Adversário', icon: () => null },
 }))
 
-import { AiEditorForm } from '@/features/ai/components/AiEditorForm'
+import { opexEditor } from '../../helpers/opex-editors'
+const AiEditorForm = await opexEditor('ai')
 import { MentorAgentTab } from '@/features/adversarial-agent/components/mentor/MentorAgentTab'
 import { DEFAULT_MENTOR_SETTINGS, type MentorSettings } from '@/features/adversarial-agent/mentor/schemas'
 import type { MentorSettingsDto } from '@/features/adversarial-agent/mentor/types'
@@ -182,7 +204,8 @@ describe('página Inteligência Artificial (AiEditorForm)', () => {
     expect(screen.getByRole('tab', { name: /^Mentor/ })).toBeTruthy()
     const names = screen.getAllByRole('tab').map((tab) => tab.textContent?.trim())
     expect(names.indexOf('Mentor')).toBe(names.indexOf('Revisor') + 1)
-    expect(names.at(-1)).toBe('Rotineiros')
+    // Depois dos Rotineiros, só a aba do Agente de Bootstrap (OPE-215, fora do catálogo de agentes).
+    expect(names.slice(-2)).toEqual(['Rotineiros', 'Bootstrap'])
     expectSavedValuesShown()
   })
 

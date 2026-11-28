@@ -1,8 +1,8 @@
 import { dbConnect } from "@/lib/db"
-import { CronJobState } from "@/lib/db/models/CronJobState"
+import { CronJobState } from "@nandobfer/integracoes/mongoose"
 import { Project } from "@/lib/db/models/Project"
-import { GITHUB_ISSUE_SYNC_JOB_ID } from "@/lib/integrations/catalog"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { GITHUB_ISSUE_SYNC_JOB_ID } from "@/features/integrations/registry/jobs"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import type { GithubSyncStatusDto } from "../types"
 
 const iso = (value: unknown) => (value ? new Date(value as string).toISOString() : null)

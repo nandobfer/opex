@@ -13,9 +13,10 @@ import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { REFINEMENT_INCLUDE_LABELS } from "../../constants"
 import { DEFAULT_TASK_REFINEMENT_SETTINGS, taskRefinementSettingsSchema, type TaskRefinementSettings } from "../../schemas"
-import { useAiProviderStatuses, useSaveTaskRefinementSettings, useTaskRefinementSettings } from "../../hooks/useAi"
+import { useSaveTaskRefinementSettings, useTaskRefinementSettings } from "../../hooks/useAi"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { useCentrals } from "@/features/agentic/hooks/useAgentic"
-import { ProviderModelCard } from "../shared/ProviderModelCard"
+import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
 import { RefinementInstructionsCard } from "./RefinementInstructionsCard"
 
 const noticeMotion = { initial: { opacity: 0, height: 0 }, animate: { opacity: 1, height: "auto" }, exit: { opacity: 0, height: 0 }, transition: { duration: 0.2 } }

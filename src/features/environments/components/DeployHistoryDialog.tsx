@@ -1,5 +1,6 @@
 "use client"
 
+import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
 import { format, formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
@@ -11,6 +12,7 @@ import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { cn } from "@/lib/utils"
+import { deployPath } from "../constants"
 import { useEnvironmentDeploys } from "../hooks/useEnvironments"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto } from "../types"
 import { DEPLOY_KIND_LABELS, formatDuration, placementLabel } from "../view"
@@ -21,13 +23,13 @@ const STATUS = {
     running: { label: "Em andamento", icon: Loader2, className: "text-muted-foreground" },
 } as const
 
-/** Uma linha do histórico: quando, quanto durou, onde (build → execução), resultado, ref/commit e versão. */
-export function DeployHistoryRow({ deploy, onOpen }: { deploy: EnvironmentDeploySummaryDto; onOpen: (id: string) => void }) {
+/** Uma linha do histórico (link para a página do log): quando, quanto durou, onde (build → execução), resultado, ref/commit e versão. */
+export function DeployHistoryRow({ deploy }: { deploy: EnvironmentDeploySummaryDto }) {
     const status = STATUS[deploy.status]
     const Icon = status.icon
     const started = new Date(deploy.startedAt)
     return (
-        <button type="button" className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left hover:bg-muted/50" onClick={() => onOpen(deploy.id)}>
+        <Link href={deployPath(deploy.id)} className="flex w-full flex-col gap-1 rounded-md px-2 py-2 text-left hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
             <div className="flex flex-wrap items-center gap-2 text-sm">
                 <Badge variant="outline" className={cn("gap-1", status.className)}>
                     <Icon className={cn("h-3 w-3", deploy.status === "running" && "animate-spin")} aria-hidden />
@@ -57,11 +59,11 @@ export function DeployHistoryRow({ deploy, onOpen }: { deploy: EnvironmentDeploy
                     {deploy.error}
                 </p>
             )}
-        </button>
+        </Link>
     )
 }
 
-function HistoryList({ env, onOpenDeploy }: { env: EnvironmentDto; onOpenDeploy: (id: string) => void }) {
+function HistoryList({ env }: { env: EnvironmentDto }) {
     const query = useEnvironmentDeploys(env.id)
     if (query.isLoading)
         return (
@@ -78,7 +80,7 @@ function HistoryList({ env, onOpenDeploy }: { env: EnvironmentDto; onOpenDeploy:
             <AnimatePresence initial={false}>
                 {query.data.map((deploy) => (
                     <motion.li key={deploy.id} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }} transition={{ duration: 0.18 }}>
-                        <DeployHistoryRow deploy={deploy} onOpen={onOpenDeploy} />
+                        <DeployHistoryRow deploy={deploy} />
                     </motion.li>
                 ))}
             </AnimatePresence>
@@ -86,8 +88,8 @@ function HistoryList({ env, onOpenDeploy }: { env: EnvironmentDto; onOpenDeploy:
     )
 }
 
-/** Histórico de deploys de um ambiente (os 30 últimos, guardados por 90 dias); a linha abre o log. */
-export function DeployHistoryDialog({ env, onClose, onOpenDeploy }: { env: EnvironmentDto | null; onClose: () => void; onOpenDeploy: (id: string) => void }) {
+/** Histórico de deploys de um ambiente (os 30 últimos, guardados por 90 dias); a linha leva à página do log. */
+export function DeployHistoryDialog({ env, onClose }: { env: EnvironmentDto | null; onClose: () => void }) {
     return (
         <Dialog open={env !== null} onOpenChange={(open) => !open && onClose()}>
             <DialogContent className="max-w-3xl">
@@ -95,7 +97,7 @@ export function DeployHistoryDialog({ env, onClose, onOpenDeploy }: { env: Envir
                     <DialogTitle>Histórico de deploys{env ? ` de ${env.name}` : ""}</DialogTitle>
                     <DialogDescription>Os 30 últimos deploys (guardados por 90 dias). Clique num deploy para ver o log.</DialogDescription>
                 </DialogHeader>
-                {env && <HistoryList env={env} onOpenDeploy={onOpenDeploy} />}
+                {env && <HistoryList env={env} />}
             </DialogContent>
         </Dialog>
     )

@@ -1,6 +1,6 @@
-import { listAiModels } from "@/lib/ai/catalog"
-import type { AiModelDto } from "@/lib/ai/providers"
-import { AiProviderError } from "@/lib/ai/errors"
+import { listAiModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/catalog"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
 import { DomainError } from "@/lib/api/route"
 
 /** Catálogo de modelos do OpenCode para o seletor do chat do Maddox (sem dados de conta ou custo). */

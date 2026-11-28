@@ -1,18 +1,19 @@
 import { dbConnect } from "@/lib/db"
-import { AiUsageLog } from "@/lib/db/models/Ai"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
-import type { CronJobScope } from "@/lib/integrations/catalog"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { AiProviderError } from "@/lib/ai/errors"
-import { askJevSystemOne } from "@/lib/ai/jev"
-import { isAiTextProviderId } from "@/lib/ai/providers"
-import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
+import type { CronJobScope } from "@nandobfer/integracoes"
+import { integrationDebug } from "@/lib/integrations/server"
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { askJevSystemOne } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
+import { isAiTextProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { streamAi, type AiStreamEvent } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { concludedColumnKeys, getTask, publishTasksUpdated } from "@/features/tasks/server/service"
 import type { TaskTagDef } from "@/features/tasks/tags"
 import { buildJevTagQuestions, buildTaskTagsInstructions, buildTaskTagsPrompt, needsTags, parseTaskTags, selectJevTags, taskTagsSourceHash, type TaskTagsInput, type TaskTagsSource } from "../task-tags"
 import type { TaskTagsSettings } from "../schemas"
+import { TASK_TAGS_CONSUMPTION_ORIGIN } from "../constants"
 import { availabilityOfTaskTags, loadTaskTagsSettings } from "./settings"
 
 const log = loggerFor({ module: "ai", feature: "task-tags" })
@@ -86,7 +87,7 @@ async function resolveTags(prepared: PreparedTaskTags): Promise<{ tags: string[]
             instructions: buildTaskTagsInstructions(settings, taxonomy, settings.maxTags),
             prompt: buildTaskTagsPrompt(input),
             title: `Tags da tarefa ${prepared.taskCode}`,
-            consumption: { origin: "task-tags", subject: prepared.taskId || null },
+            consumption: { origin: TASK_TAGS_CONSUMPTION_ORIGIN, subject: prepared.taskId || null },
         })) {
             if (event.type === "delta") text += event.text
             if (event.type === "done" || event.type === "error") last = event

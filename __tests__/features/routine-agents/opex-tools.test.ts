@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /** Ferramentas do Agente Opex para os agentes rotineiros (OPE-130): catálogo, risco e serviços reais. */
 
@@ -146,8 +147,11 @@ describe('ferramentas dos agentes rotineiros', () => {
       lastRunAt: null,
       createdAt: new Date(),
       updatedAt: new Date(),
-    })
+    }, { app: 'opex', prefixed: false })
     expect(JSON.stringify(dto)).not.toMatch(/SEGREDO|eng\.tok|tokenId/)
     expect(dto).toMatchObject({ engramindAgent: 'opex/rotineiro-vagas', channel: 'agentes/rotineiros/vagas' })
+    // OPE-206: em outra instância o agente e o canal próprio já vêm no app dela.
+    const other = toAgentDto({ ...(dto as never), _id: ID as never, slug: 'vagas', opex: { provider: 'anthropic', model: 'claude', variant: null, enabledTools: [], enabledMcpServers: [] }, opencode: { model: '', variant: null, agent: null, enabledMcps: [] }, provisioning: { status: 'ok', error: null, at: null, steps: { agent: true, token: true, channels: true, extras: true, workdir: true }, channels: [], extras: [], warnings: [] }, triggers: [], limits: EMPTY_ROUTINE_LIMITS } as never, { app: 'alfredopex', prefixed: true })
+    expect(other).toMatchObject({ engramindAgent: 'alfredopex/rotineiro-vagas', channel: 'alfredopex/agentes/rotineiros/vagas' })
   })
 })

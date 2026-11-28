@@ -27,6 +27,8 @@ const holder = vi.hoisted(() => ({
   ownCount: 1,
   active: {} as Record<string, boolean>,
   interrupted: [] as string[],
+  // Roteiro do turno (OPE-216): substitui o texto padrão "Pronto" (espera em segundo plano e execução nova).
+  script: null as null | ((hooks: { onText: (delta: string) => void; onSegment?: () => void; publish?: (event: unknown) => void }) => void),
 }))
 
 vi.mock('@/lib/db/models/RoutineAgent', () => ({
@@ -37,7 +39,7 @@ vi.mock('@/lib/db/models/RoutineAgent', () => ({
 }))
 vi.mock('@/features/routine-agents/server/workdir', () => ({ ensureRoutineWorkdir: async (slug: string) => `/home/burgos/opex-rotineiros/${slug}` }))
 vi.mock('@/features/ai/server/self-memory/mcp', () => ({ opexPublicBaseUrl: async () => holder.base }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => {
     if (holder.clientError) throw holder.clientError
     return {
@@ -78,14 +80,15 @@ vi.mock('@/lib/ai/opencode-client', () => ({
   },
 }))
 // A espera entre leituras da lista de skills não usa timer real nos testes.
-vi.mock('@/lib/ai/opencode-skill-list', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/ai/opencode-skill-list')>()
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list')>()
   return { ...actual, listOpencodeSkillsAt: (client: Parameters<typeof actual.listOpencodeSkillsAt>[0], directory: string, options: Parameters<typeof actual.listOpencodeSkillsAt>[2] = {}) => actual.listOpencodeSkillsAt(client, directory, { ...options, wait: async () => undefined }) }
 })
 vi.mock('@/lib/ai/opencode-run', () => ({
-  runAgentTurn: async (_client: unknown, args: unknown, hooks: { onStep: (usage: unknown) => void; onText: (delta: string) => void }) => {
+  runAgentTurn: async (_client: unknown, args: unknown, hooks: { onStep: (usage: unknown) => void; onText: (delta: string) => void; onSegment?: () => void; publish?: (event: unknown) => void }) => {
     holder.calls.turns.push(args)
-    hooks.onText('Pronto')
+    if (holder.script) holder.script(hooks)
+    else hooks.onText('Pronto')
     hooks.onStep({ tokens: { input: 10, output: 5, reasoning: 1 }, costUsd: 0.01, stepId: 's1' })
     return holder.turnQueue.shift() ?? holder.turnOutcome
   },
@@ -133,6 +136,7 @@ beforeEach(() => {
   holder.ownCount = 1
   holder.active = {}
   holder.interrupted = []
+  holder.script = null
   delete process.env.OPEX_PREVIEW
   delete process.env.OPEX_PREVIEW_URL
 })
@@ -178,6 +182,24 @@ describe('routineSkillPermissions (OPE-153)', () => {
 })
 
 describe('runOpencodeEngine', () => {
+  it('OPE-216: a espera pelos subagentes vira um passo de aviso e o relato é o da execução final', async () => {
+    const steps: unknown[] = []
+    const { input } = engineInput()
+    ;(input as unknown as { onStep: (step: unknown) => void }).onStep = (step) => void steps.push(step)
+    holder.script = (hooks) => {
+      hooks.onText('Disparei os subagentes; aguardo os resultados.')
+      hooks.publish?.({ type: 'background', subagents: 2, shells: 0, other: 0 })
+      hooks.publish?.({ type: 'background', subagents: 1, shells: 0, other: 0 })
+      hooks.publish?.({ type: 'background', subagents: 0, shells: 0, other: 0 })
+      hooks.onSegment?.()
+      hooks.onText('Relatório final')
+    }
+    const result = await runOpencodeEngine(input)
+    expect(result.text).toBe('Relatório final')
+    const notices = steps.filter((step) => (step as { label?: string }).label === 'Aguardando trabalho em segundo plano')
+    expect(notices).toEqual([{ kind: 'notice', label: 'Aguardando trabalho em segundo plano', detail: 'Aguardando 2 subagentes em segundo plano…' }])
+  })
+
   it('serviço OpenCode indisponível vira Erro sem abrir sessão', async () => {
     holder.clientError = new Error('ECONNREFUSED')
     const result = await runOpencodeEngine(engineInput().input)

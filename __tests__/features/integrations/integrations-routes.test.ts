@@ -1,3 +1,4 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
@@ -15,9 +16,9 @@ const mocks = vi.hoisted(() => ({
   apiTokenScopeCatalog: vi.fn(),
 }))
 
-vi.mock('@/features/integrations/services/integration-service', async () => {
+vi.mock("@nandobfer/integracoes/modules/server/service", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async () => {
   const actual = await vi.importActual<typeof import('@/features/integrations/services/integration-service')>(
-    '@/features/integrations/services/integration-service',
+    '@nandobfer/integracoes/modules/server/service',
   )
   return {
     IntegrationUpdateError: actual.IntegrationUpdateError,
@@ -26,8 +27,8 @@ vi.mock('@/features/integrations/services/integration-service', async () => {
     updateIntegration: mocks.updateIntegration,
     listIntegrationLogs: mocks.listIntegrationLogs,
   }
-})
-vi.mock('@/features/integrations/services/integration-test-runner', () => ({ runIntegrationTest: mocks.runIntegrationTest }))
+})(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/server/test-runner", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ runIntegrationTest: mocks.runIntegrationTest }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/features/integrations/api-tokens/service', () => ({
   listApiTokens: mocks.listApiTokens,
   createApiToken: mocks.createApiToken,
@@ -38,15 +39,15 @@ vi.mock('@/features/integrations/api-tokens/service', () => ({
 vi.mock('@/features/integrations/api-tokens/scope-catalog', () => ({ apiTokenScopeCatalog: mocks.apiTokenScopeCatalog }))
 vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { GET as listGET } from '@/app/api/integrations/route'
-import { GET as detailGET, PATCH } from '@/app/api/integrations/[id]/route'
-import { POST as testPOST } from '@/app/api/integrations/[id]/test/route'
-import { GET as logsGET } from '@/app/api/integrations/[id]/logs/route'
-import { GET as tokensGET, POST as tokensPOST } from '@/app/api/integrations/internal_api/tokens/route'
-import { DELETE as tokenDELETE, PATCH as tokenPATCH } from '@/app/api/integrations/internal_api/tokens/[tokenId]/route'
-import { GET as scopesGET } from '@/app/api/integrations/internal_api/scopes/route'
+const { GET: listGET } = legacyRoute("integrations", "")
+const { GET: detailGET, PATCH } = legacyRoute("integrations", "[id]")
+const { POST: testPOST } = legacyRoute("integrations", "[id]/test")
+const { GET: logsGET } = legacyRoute("integrations", "[id]/logs")
+const { GET: tokensGET, POST: tokensPOST } = legacyRoute("integrations", "internal_api/tokens")
+const { DELETE: tokenDELETE, PATCH: tokenPATCH } = legacyRoute("integrations", "internal_api/tokens/[tokenId]")
+const { GET: scopesGET } = legacyRoute("integrations", "internal_api/scopes")
 import { GET as whoamiGET } from '@/app/api/v1/whoami/route'
-import { IntegrationUpdateError } from '@/features/integrations/services/integration-service'
+import { IntegrationUpdateError } from "@nandobfer/integracoes/modules/server/service"
 import { DomainError } from '@/lib/api/route'
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
@@ -63,6 +64,14 @@ describe('GET /api/integrations', () => {
     expect(res.status).toBe(200)
     expect(body.data.map((i: { id: string }) => i.id)).toEqual(['pusher', 'crons'])
     expect(mocks.listIntegrations).toHaveBeenCalledWith()
+  })
+
+  it('na raiz o Next chama o catch-all opcional sem `path` e a lista vem em JSON', async () => {
+    mocks.listIntegrations.mockResolvedValue([{ id: 'pusher' }])
+    const { GET } = await import('@/app/api/integrations/[[...path]]/route')
+    const res = await GET(new NextRequest('http://localhost/api/integrations'), { params: Promise.resolve({}) })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: [{ id: 'pusher' }] })
   })
 
   it('falha inesperada vira 500 em pt-BR', async () => {
@@ -99,12 +108,18 @@ describe('GET/PATCH /api/integrations/[id]', () => {
   it('PATCH salva com o usuário local e devolve o detalhe', async () => {
     mocks.updateIntegration.mockResolvedValue({ id: 'pusher' })
     const res = await PATCH(
-      new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ publicValues: { appId: '123' }, debugMode: true }) }),
+      new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ publicValues: { appId: '123' } }) }),
       params('pusher'),
     )
     expect(res.status).toBe(200)
     expect((await res.json()).message).toBe('Integração salva')
-    expect(mocks.updateIntegration).toHaveBeenCalledWith('pusher', { publicValues: { appId: '123' }, debugMode: true }, 'local')
+    expect(mocks.updateIntegration).toHaveBeenCalledWith('pusher', { publicValues: { appId: '123' } }, 'local')
+  })
+
+  it('PATCH recusa ambiente e modo debug (400, sem gravar)', async () => {
+    const res = await PATCH(new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ debugMode: true }) }), params('pusher'))
+    expect(res.status).toBe(400)
+    expect(mocks.updateIntegration).not.toHaveBeenCalled()
   })
 
   it('PATCH aceita a documentação Swagger e recusa URL que não é http(s)', async () => {

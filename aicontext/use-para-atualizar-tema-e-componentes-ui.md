@@ -112,7 +112,7 @@ fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hoo
     `depth` e `path` nas opções (ex.: filtro Slot de `/plugins`).
 - **Debug de logs** (terminal, coluna e modal): `DebugLogConsole` + `useDebugTerminal`,
   `useDebugLogStream` (fonte: `fetch`, canal e evento), `DebugLogsPanel`, `DebugLogsDialog` e
-  `DebugToggleIconButton`, em `src/features/integrations/components` e `hooks`. As integrações
+  `DebugToggleIconButton`, da central de integrações (`@nandobfer/integracoes/react`). As integrações
   (`IntegrationDebugConsole`, `LogsPanel`, `IntegrationDebugDialog`, `DebugToggleButton`) e os plugins
   (`PluginDebugConsole`, `PluginDebugDialog`) são adaptadores sobre eles: debug novo reaproveita esses
   componentes, sem copiar o markup.
@@ -159,6 +159,15 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
 - Ações do formulário ficam num **rodapé em linha**, nunca em barra flutuante/`sticky`:
   `flex flex-wrap justify-end gap-2 border-t pt-6` com todos os botões à direita
   (`FormFooter` de `src/components/ui/form-footer.tsx`, `DetailActions`, `TabFooter`).
+- Páginas Novo/Editar usam o kit de `src/components/form-page/` (OPE-211): `FormPageHeader` (voltar,
+  título, descrição, status e ações à direita; o `ServiceForm` do Financeiro e o ambiente usam),
+  `FormSection` (card com âncora `scroll-mt-6`, título, descrição e ações), `FormSectionNav` (índice das
+  seções: seção visível por `IntersectionObserver`, ponto nas alteradas, alerta nas com erro; preso à
+  lateral só no `lg`, faixa no topo abaixo dele; `scrollToSection` rola e foca o campo inválido) e
+  `useUnsavedChangesGuard(dirty)` ("Descartar alterações?" no Cancelar/voltar, nos links internos do app
+  , no botão voltar do navegador — `popstate` com uma entrada sentinela de mesma URL no histórico, consumida
+  antes de qualquer saída confirmada para o editor não ficar duplicado — e no `beforeunload`). Formulário longo: seções em cards com
+  o índice, ações no cabeçalho e no `FormFooter`.
 - Escolha múltipla em lista longa usa `MultiAutocomplete` (`src/components/ui/multi-autocomplete.tsx`):
   busca tolerante (fuse.js), teclado (↑/↓/Enter/Esc, Backspace remove o último), grupos com
   "Selecionar todas" opcional e os escolhidos como chips abaixo do campo. Valores livres usam
@@ -166,6 +175,26 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
 - Assistentes em etapas usam o `WizardStepper` de `src/components/wizard/`: etapas
   `{ id, label, icon }`, `maxReachable`, `pending` (campos pendentes por etapa, calculados com o
   schema Zod) e trilha animada. Troca de etapa com `AnimatePresence mode="wait"` (`tabSwap`).
+  Com `statuses` (progresso ao vivo, hoje só o bootstrap de projeto), cada etapa mostra o próprio estado (inclusive
+  `skipped`, tracejado e "não se aplica") e a trilha fica verde até a última etapa concluída ou pulada
+  (`resolvedTrackIndex` em `track.ts`) e roxa até a atual; sem `statuses`, uma barra roxa só.
+
+## Qual padrão usar para cada tipo de conteúdo
+
+Decisão do dono na OPE-208: gavetas laterais desperdiçam espaço e saíram do app. Um mesmo tipo de conteúdo abre
+sempre no mesmo padrão; nenhuma tela inventa o seu.
+
+| Conteúdo | Padrão | Exemplos |
+|---|---|---|
+| Acompanhar um processo longo ou ao vivo (log, passos, execução) | **Página própria**, com link, seta de voltar no cabeçalho (`AgentPageHeader` com `backHref`) e o Voltar do navegador | `/ambientes/deploys/[id]`, `/agentes-rotineiros/[id]/execucoes/[runId]` |
+| Ação ou gestão rápida de um item sem perder o contexto da tela | **Dialog** centralizado (`Dialog`; fecha com Esc e clique fora, foco preso e devolvido ao gatilho) | Histórico de deploys, execução do Mentor; painel do canal do Engramind quando a lib 0.15.0 for publicada (pendente: ainda é gaveta, ver `modules/engramind.md`) |
+| Lista curta de ações ou filtros **no celular** | **Folha de baixo** (`Sheet`, só `< lg`) | "Mais ações" da mesa, Filtros e Quota da central, filtros da rede no celular |
+| Navegação no celular | **Gaveta lateral** (só o menu do `AppShell`) | menu principal abaixo de 1024 px |
+
+- O `Sheet` só tem o lado de baixo: não crie gaveta lateral ou de cima (nem com `fixed inset-y-0` à mão).
+- Página com conteúdo ao vivo continua recebendo o tempo real (Pusher ou NDJSON) e, ao reabrir, mostra tudo o que já
+  aconteceu; sair dela não interrompe o processo no servidor.
+- Um link antigo para o conteúdo (ex.: `?execucao=` da gaveta removida) é redirecionado para a página nova.
 
 ## Menu lateral (`AppSidebar`)
 
@@ -246,7 +275,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 
 Onde animar:
 
-- entrada/saída de elementos, diálogos, drawers, popovers (`AnimatePresence`);
+- entrada/saída de elementos, diálogos, folhas, popovers (`AnimatePresence`);
 - troca de abas e etapas de assistentes (`mode="wait"`);
 - listas que ganham, perdem ou reordenam itens (tarefas, filas);
 - feedback de sucesso/erro/carregamento de ações;
@@ -377,12 +406,25 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   e nome acessível), para o seletor e o campo (`h-8`) caberem na mesma linha do item. Os rótulos usam
   `whitespace-nowrap` (nunca quebram dentro do botão); num cabeçalho, mantenha o grupo com `shrink-0`
   para ele passar inteiro à linha seguinte em vez de espremer as opções.
+- Listas de **nome e valor** (variáveis, environment, labels) usam `KeyValueRows` (`src/components/ui/key-value-rows.tsx`,
+  controlado, com entrada/saída animadas e `KEY_VALUE_ROW` para o skeleton). Linhas de lista sem id próprio que animam
+  entrada e saída usam `useRowIds(length)` do mesmo arquivo (chaves estáveis; `removeAt` antes de tirar a linha).
+- **Linhas de consumo** (CPU, RAM, swap, disco e afins) usam `UsageBars` (`src/components/metrics/UsageBars.tsx`,
+  OPE-211) sobre a `UsageBar`: lista de `{ key, label, percent, detail, ariaLabel }` ou `{ key, label, emptyText }` (linha
+  só com texto, ex.: "Sem swap", "lendo…"). Usada pelo painel "Servidor e quota" (`HostMetricsRows`) e pelos cards de
+  Ambientes; não monte as barras à mão. Com `compact` (OPE-218; também na `UsageBar`) cada barra vira uma célula curta
+  para ficar lado a lado numa grade: rótulo e % numa linha, a trilha (ou o texto sem valor) numa faixa de altura fixa e
+  o detalhe no `title`. As classes ficam em `src/components/metrics/usage-bar-layout.ts`, reaproveitadas pelos skeletons
+  (coluna Recursos dos containers em Ambientes).
+- **Copiar um valor** (link, token, comando) usa `CopyButton` (`src/components/ui/copy-button.tsx`, OPE-211): botão de
+  ícone com `label` (rótulo acessível e `title`), `navigator.clipboard`, toast `successMessage` e o ícone de copiado
+  animado que volta em 1,5 s (`resetMs={null}` mantém). O `SecretReveal` usa o mesmo botão; não escreva outro copiar.
 - **Provedor e modelo de IA** usam sempre os componentes de `src/features/ai/components`: `AiProviderTabs`
   (só os conectados; desconectado desabilitado com "X: não conectado"; `allowed`, `extraOptions` como
   "Local"/"Desligado" e `emptyText`) + `ModelPickerField` (+ `VariantSelectField`). Usados em
   `/integracoes/ia`, Agente Opex, Agente Mentor e na "IA do Opex" do Engramind — nunca um `OptionTabs`
   de provedores próprio. Escolha múltipla de modelos (ex.: reservas) usa `MultiAutocomplete`. A
-  **temperatura** usa `TemperatureInput` (`src/features/ai/components/TemperatureInput.tsx`: 0 a 2, passo
+  **temperatura** usa `TemperatureInput` (`@nandobfer/integracoes/modules/integrations/ia/features/ai/components/TemperatureInput`: 0 a 2, passo
   0,1, "Padrão do modelo", vazio = `null`) em todas as telas de IA, nos agentes e no Engramind.
 - Escolha de **um** item numa lista grande ou rica (ex.: tarefa) usa
   `SearchPicker` (`ui/search-picker.tsx`) em vez de `Select`: popover com busca (local fuse.js por
@@ -466,6 +508,39 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   check `text-primary` por 2 s (`CODE_COPIED_MS`, troca com Framer Motion) e um `aria-live` anuncia
   "Copiado"; se nenhum caminho funcionar, toast de erro e o bloco segue intacto. O clique não propaga
   (cards clicáveis). Código inline não ganha botão.
+- **Copiar a seleção como Markdown** (OPE-220; `ui/markdown-copy.ts`, núcleo em `src/lib/markdown/copy.ts`):
+  selecionar e copiar (Ctrl+C, menu de contexto, "Copiar" do toque) qualquer trecho de um `Markdown` — todo
+  o app: chats, relato do rotineiro, tarefas, planos, portal, plugins — põe em `text/plain` o **Markdown-fonte
+  do trecho** e em `text/html` o HTML do trecho (colar formatado em editores ricos), ambos sem os controles
+  (citar/comentar a linha, badge, copiar o bloco, ação da seleção) e sem os atributos `data-md-*`. O plugin
+  `rehypeSourceOffsets` (`src/lib/markdown/rehype-source-offsets.ts`, antes do `rehypeLogicalLines`) grava em
+  cada elemento os offsets no fonte (`data-md-start`/`-end`), os do conteúdo sem marcadores
+  (`data-md-content-start`/`-end`) e a tag original (`data-md-tag`); o `pre` tem o conteúdo entre as cercas. A
+  raiz leva `data-md-root` e o fonte fica num `WeakMap` (`registerMarkdownSource`); um único listener `copy` no
+  documento vive enquanto houver um `Markdown` montado. Cada ponta da seleção é alinhada ao fonte dentro do
+  elemento anotado mais interno (caractere igual anda nos dois, espaço casa com espaço, o resto do fonte —
+  marcação, `\`, `> `, indentação — é pulado; uma referência de caractere (`&copy;`, `&#169;`, `&#xA9;`,
+  `&amp;`, `&NotEqualTilde;`) casa inteira com toda a sequência que ela virou na tela — nomeadas decodificadas
+  pela tabela HTML5 do navegador; nome inexistente fica literal). Regras (decisões do dono no plano):
+  - **inline** (negrito, itálico, tachado, link, código inline) só leva a marcação quando está inteiro na
+    seleção; em parte, vai o texto puro do pedaço. Com inline aninhado decide o mais interno: só `ênfase` de
+    `**texto com *ênfase* final**` copia `*ênfase*`;
+  - **bloco** (título, item, citação) ganha o marcador quando a seleção cobre o conteúdo dele desde o começo até
+    o fim ou além: só "Tít" do começo de um título copia "Tít"; o título inteiro, "## Título";
+  - **bloco de código**: seleção toda dentro de um bloco copia o código puro (como o botão); cortando o bloco, o
+    lado cortado ganha a cerca (a de abertura com a linguagem), só com as linhas selecionadas;
+  - **tabela** cortada entre células vira linhas inteiras, com o cabeçalho e a linha delimitadora quando a
+    seleção começa depois deles; dentro de uma célula, sem pipes;
+  - **indentação**: o prefixo de contêiner (espaços de lista, `> ` de citação) que a primeira linha perdeu no
+    corte sai também das seguintes; imagem/mídia entra inteira (`![alt](url)`), inclusive selecionada sozinha
+    (sem texto na seleção);
+  - **seleção mista** (Markdown e interface, ex.: várias mensagens com nome e horário): as partes renderizadas
+    em Markdown e o texto da tela entre elas como hoje (`Range.toString()`, sem as quebras que a cópia nativa
+    poria entre blocos), juntos por linha em branco.
+  Fora do `Markdown`, com o foco num `input`/`textarea`/`contenteditable`/editor, com o evento já tratado
+  (`defaultPrevented`) ou quando o alinhamento falha (texto renderizado sem par no fonte), a cópia segue a
+  nativa. O registrador do Vim (`vim-setup.ts`, `copiedSelection`) recebe o mesmo Markdown
+  (`selectionClipboard`).
 - **Citar a linha no campo do agente** (`src/components/agent-reply/`): `ReplyTargetProvider` dá às
   saídas de IA da subárvore a ação "Citar no campo de resposta", que insere `> linha` + linha em
   branco no cursor (`insertQuote`, `src/lib/markdown/quote.ts`), sem apagar o texto, e foca o campo.
@@ -554,6 +629,9 @@ Listas filtráveis usam um hook `useUrlFilters` no padrão do Smart Desk: a quer
 - Parâmetros alheios ao schema, `history.state` e hash são preservados.
 - Cada tela declara schema e defaults tipados no dono do estado, não no componente visual.
 - Paginação, modais e buscas internas de popovers não fazem parte do contrato.
+- Link que só muda a query da **mesma** página (ex.: trocar de aba levando um parâmetro) usa `navigateInPage(href)` no
+  `onClick` do `<Link>` (só no clique simples, sem tecla modificadora): `pushState` + o evento do `useUrlFilters`,
+  troca imediata sem a ida ao servidor do `router.push`; caminho diferente devolve `false` e segue a navegação normal.
 
 ### Filtro de período (janela de datas)
 

@@ -15,7 +15,7 @@ export const envLog = loggerFor({ feature: ENVIRONMENTS_FEATURE })
 /** Comandos no host do OpenCode (o debug sai na integração Builder Machine, dona da conexão com o PC). */
 export const runEnvHost: HostRunner = runOnHost
 
-export type EnvironmentChange = "created" | "updated" | "deleted" | "deploy" | "status" | "settings" | "builder" | "compose"
+export type EnvironmentChange = "created" | "updated" | "deleted" | "deploy" | "status" | "settings" | "builder" | "compose" | "usage"
 
 /**
  * `{ id, change }` no `private-app` (payload mínimo) e, para ambiente de central, nos canais dos clientes

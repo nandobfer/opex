@@ -1,6 +1,8 @@
 /** @vitest-environment happy-dom */
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
+// OPE-206: a instância do dono nos nomes antigos (o hook leva o espaço de nomes à tela).
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 import { cleanup, render, screen } from '@testing-library/react'
 
 /**
@@ -35,8 +37,10 @@ import { DeveloperMemoriesSection } from '@/features/agentic/components/Develope
 import { MemoriesSection as AdversarialMemoriesSection } from '@/features/adversarial-agent/components/settings/MemoriesSection'
 import { MemoriesSection as ArchitectMemoriesSection } from '@/features/architect-agent/components/settings/MemoriesSection'
 import type { MemoriesMetaDto } from '@/features/ai/types'
+import { LEGACY_NAMESPACE as L } from '@/features/engramind/channel-namespace'
 
 const CENTRAL = '6ac98c6c0abde1d643c85903'
+const ALF = { app: 'alfredopex', prefixed: true }
 
 afterEach(() => {
   cleanup()
@@ -45,27 +49,32 @@ afterEach(() => {
 
 describe('memoryUniverseOf (puro)', () => {
   it('cada agente no Engramind com o canal inicial da lista global dele, sem filtro', () => {
-    expect(memoryUniverseOf('opex')).toMatchObject({ agent: 'opex/opex', defaultCreateChannel: 'agentes/opex/global', channels: null })
-    expect(memoryUniverseOf('maddox')).toMatchObject({ agent: 'opex/maddox', defaultCreateChannel: 'agentes/maddox/global', channels: null })
-    expect(memoryUniverseOf('adversario')).toMatchObject({ agent: 'opex/adversario', defaultCreateChannel: 'agentes/adversario', channels: null })
-    expect(memoryUniverseOf('arquiteto')).toMatchObject({ agent: 'opex/arquiteto', defaultCreateChannel: 'agentes/arquiteto', channels: null })
-    expect(memoryUniverseOf('desenvolvedor')).toMatchObject({ agent: 'opex/desenvolvedor', defaultCreateChannel: 'agentes/desenvolvedor/global', channels: null })
+    expect(memoryUniverseOf('opex', {}, L)).toMatchObject({ agent: 'opex/opex', defaultCreateChannel: 'agentes/opex/global', channels: null })
+    expect(memoryUniverseOf('maddox', {}, L)).toMatchObject({ agent: 'opex/maddox', defaultCreateChannel: 'agentes/maddox/global', channels: null })
+    expect(memoryUniverseOf('adversario', {}, L)).toMatchObject({ agent: 'opex/adversario', defaultCreateChannel: 'agentes/adversario', channels: null })
+    expect(memoryUniverseOf('arquiteto', {}, L)).toMatchObject({ agent: 'opex/arquiteto', defaultCreateChannel: 'agentes/arquiteto', channels: null })
+    expect(memoryUniverseOf('desenvolvedor', {}, L)).toMatchObject({ agent: 'opex/desenvolvedor', defaultCreateChannel: 'agentes/desenvolvedor/global', channels: null })
+  })
+
+  it('OPE-206: em outra instância, o agente e os canais são os do app dela', () => {
+    expect(memoryUniverseOf('maddox', {}, ALF)).toMatchObject({ agent: 'alfredopex/maddox', defaultCreateChannel: 'alfredopex/agentes/maddox/global' })
+    expect(memoryUniverseOf('desenvolvedor', { centralId: CENTRAL }, ALF).channels).toEqual(['alfredopex', 'alfredopex/agentes/desenvolvedor/global', `alfredopex/agentes/desenvolvedor/central/${CENTRAL}`])
   })
 
   it('na central, só o que vale nela e a Nova memória começa no canal da central', () => {
-    const def = memoryUniverseOf('desenvolvedor', { centralId: CENTRAL })
+    const def = memoryUniverseOf('desenvolvedor', { centralId: CENTRAL }, L)
     expect(def.defaultCreateChannel).toBe(`agentes/desenvolvedor/central/${CENTRAL}`)
     expect(def.channels).toEqual(['opex', 'agentes/desenvolvedor/global', `agentes/desenvolvedor/central/${CENTRAL}`])
   })
 
   it('central inválida: volta ao universo completo do agente', () => {
-    expect(memoryUniverseOf('desenvolvedor', { centralId: 'nao-e-id' }).channels).toBeNull()
+    expect(memoryUniverseOf('desenvolvedor', { centralId: 'nao-e-id' }, L).channels).toBeNull()
   })
 })
 
 describe('clientChannelLabels (puro)', () => {
   it('rotula os canais de cliente do Opex e do Maddox pelo nome do cliente', () => {
-    const labels = clientChannelLabels([{ id: 'c1', name: 'Sipal' }, { id: 'c2', name: '  ' }])
+    const labels = clientChannelLabels([{ id: 'c1', name: 'Sipal' }, { id: 'c2', name: '  ' }], L)
     expect(labels.get('agentes/opex/clientes/c1')).toMatchObject({ title: 'Sipal' })
     expect(labels.get('agentes/maddox/clientes/c1')?.hint).toContain('Agente Maddox')
     expect(labels.has('agentes/opex/clientes/c2')).toBe(false)

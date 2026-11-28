@@ -22,7 +22,7 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated
  * meio dela espera a fila antes de ler o agente.
  */
 
-const BASE_CHANNEL = () => new DomainError(400, "Os canais base (opex, o global dos rotineiros e o canal próprio) não podem ser removidos", "ROUTINE_CHANNEL_BASE")
+const BASE_CHANNEL = () => new DomainError(400, "Os canais base (a raiz do app, o global dos rotineiros e o canal próprio) não podem ser removidos", "ROUTINE_CHANNEL_BASE")
 const INVALID_CHANNEL = () => new DomainError(400, "Este canal não pode ser assinado por um agente rotineiro", "ROUTINE_CHANNEL_INVALID")
 const BUSY = () => new DomainError(409, "O provisionamento deste agente está em andamento: aguarde terminar para alterar os canais", "ROUTINE_AGENT_PROVISIONING")
 const engramindFailed = (error: unknown, what: string) => new DomainError(502, `Não foi possível ${what} no Engramind: ${messageOf(error)}. Nada foi alterado.`, "ROUTINE_CHANNEL_ENGRAMIND_FAILED")
@@ -38,8 +38,9 @@ interface Context {
 
 async function load(id: string, channel: string): Promise<Context> {
     const doc = await loadAgentDoc(id)
-    if (baseRoutineChannels(doc.slug).includes(channel)) throw BASE_CHANNEL()
-    if (!isEligibleExtraChannel(channel)) throw INVALID_CHANNEL()
+    const ns = await (await import("@/features/engramind/server/instance")).channelNamespaceOrLegacy()
+    if (baseRoutineChannels(doc.slug, ns).includes(channel)) throw BASE_CHANNEL()
+    if (!isEligibleExtraChannel(channel, ns)) throw INVALID_CHANNEL()
     if (isProvisioningLive(doc)) throw BUSY()
     return { doc, extras: doc.provisioning?.extras ?? [], blocked: doc.provisioning?.blocked ?? [] }
 }
@@ -62,8 +63,8 @@ async function block(id: string, channel: string, actorId: string): Promise<Rout
     let subscription: "removed" | "absent" = "absent"
     if (registered(doc)) {
         try {
-            const { app } = await routineEngramindTargets(actorId)
-            subscription = await removeRoutineSubscription(doc.slug, channel, app)
+            const { app, ns } = await routineEngramindTargets(actorId)
+            subscription = await removeRoutineSubscription(ns.app, doc.slug, channel, app)
         } catch (error) {
             routineLog.warn({ agentId: id, channel, err: messageOf(error) }, "[routine-agents] cancelar a assinatura do canal falhou")
             throw engramindFailed(error, "cancelar a assinatura")
@@ -95,8 +96,8 @@ async function unblock(id: string, channel: string, options: { resubscribe?: boo
         if (!registered(doc)) throw new DomainError(409, 'O agente ainda não foi cadastrado no Engramind: use "Tentar de novo" antes de assinar canais', "ROUTINE_AGENT_NOT_PROVISIONED")
         if (extras.length >= MAX_EXTRA_CHANNELS) throw new DomainError(409, `O agente já tem ${MAX_EXTRA_CHANNELS} canais extras: remova um antes de assinar outro`, "ROUTINE_CHANNEL_LIMIT")
         try {
-            const { app } = await routineEngramindTargets(actorId)
-            await ensureRoutineSubscriptions(doc.slug, [channel], app)
+            const { app, ns } = await routineEngramindTargets(actorId)
+            await ensureRoutineSubscriptions(ns.app, doc.slug, [channel], app)
         } catch (error) {
             routineLog.warn({ agentId: id, channel, err: messageOf(error) }, "[routine-agents] assinar o canal de novo falhou")
             throw engramindFailed(error, "assinar o canal")

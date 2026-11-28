@@ -1,6 +1,6 @@
 import { timingSafeEqual } from "node:crypto"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import { getOpencodeConnection } from "@/lib/ai/opencode"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { getOpencodeConnection } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode"
 import { DomainError } from "@/lib/api/route"
 import { deriveSubkey } from "@/lib/crypto/secretBox"
 import { loggerFor } from "@/lib/logger"

@@ -3,7 +3,7 @@ import { listOfChannel } from "@/features/ai/agents"
 import { AI_MEMORIES_UPDATED_EVENT } from "@/features/ai/constants"
 import { integrationChannel } from "@/lib/pusher/channel-names"
 import { publishToChannels } from "@/lib/pusher/channels"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import { ENGRAMIND_INTEGRATION_ID, WEBHOOK_TOLERANCE_SECONDS } from "../constants"
 import type { WebhookEvent } from "@engramind/client"
 import { EngramindWebhookEvent, engramindDb } from "./models"
@@ -105,7 +105,8 @@ export async function processWebhookEvent(event: WebhookEvent): Promise<boolean>
  */
 export async function publishMemoryList(event: Pick<WebhookEvent, "type" | "channel">): Promise<boolean> {
     if (!event.type.startsWith("memory.")) return false
-    const list = listOfChannel(event.channel)
+    const { channelNamespaceOrLegacy } = await import("./instance")
+    const list = listOfChannel(event.channel, await channelNamespaceOrLegacy())
     if (!list) {
         engramindLog.debug({ type: event.type, channel: event.channel }, "[engramind] memória num canal fora das listas dos agentes: ignorada pelos cards")
         return false

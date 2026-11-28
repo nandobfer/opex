@@ -1,6 +1,8 @@
 // @vitest-environment happy-dom
 import { cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, expect, it, vi } from "vitest"
+// OPE-206: a instância do dono nos nomes antigos.
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 import { framerMotionMock } from "../helpers/framer-motion"
 
 const mocks = vi.hoisted(() => ({ query: vi.fn(), refetch: vi.fn() }))

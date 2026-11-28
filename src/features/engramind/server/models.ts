@@ -62,6 +62,12 @@ export interface IEngramindState {
     universeLayout?: { config: Record<string, unknown>; updatedAt: Date } | null
     /** Cache das similares (OPE-164): quando a rede pediu pela primeira vez e quando o último preenchimento terminou. */
     relatedMemories?: { requestedAt: Date; completedAt: Date | null } | null
+    /** App da instância resolvido pelo `whoami` da chave (OPE-206): reserva com o Engramind fora do ar. */
+    instance?: { app: string; tokenId: string | null; resolvedAt: Date } | null
+    /** Nomes dos canais (OPE-206): `legacy` = sem o app na frente (dono antes da migração B); `prefixed` = `<app>/agentes/...`. */
+    channelNaming?: "legacy" | "prefixed" | null
+    /** Migração B em andamento (OPE-206): liga o portão de manutenção das memórias. */
+    channelMigration?: { active: boolean; migrationId: string; startedAt: Date } | null
 }
 
 /**
@@ -134,6 +140,9 @@ const stateSchema = new Schema<IEngramindState>(
         appToken: { type: Schema.Types.Mixed, default: null },
         universeLayout: { type: Schema.Types.Mixed, default: null },
         relatedMemories: { type: Schema.Types.Mixed, default: null },
+        instance: { type: Schema.Types.Mixed, default: null },
+        channelNaming: { type: String, default: null },
+        channelMigration: { type: Schema.Types.Mixed, default: null },
     },
     { collection: "engramind_state", versionKey: false },
 )

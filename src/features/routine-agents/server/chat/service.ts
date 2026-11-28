@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { getAiProvider } from "@/lib/ai/providers"
+import { getAiProvider } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { decideAction } from "@/features/opex-agent/server/confirmations"
 import { interruptSession, sendMessage } from "@/features/opex-agent/server/runner"
 import { createSession, deleteSession, getSessionDetail, listSessions, updateSession } from "@/features/opex-agent/server/sessions"

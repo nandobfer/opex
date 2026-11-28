@@ -6,7 +6,7 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR' } }))
 vi.mock('@/lib/db/models/PrReview', async () => ({ PrReview: (await import('../../helpers/memory-model')).memoryModel() }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { create: async () => ({ id: 'session-review' }), interrupt: mocks.interrupt, instructions: { entry: { put: vi.fn() } } } }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ session: { create: async () => ({ id: 'session-review' }), interrupt: mocks.interrupt, instructions: { entry: { put: vi.fn() } } } }) }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.turn }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))

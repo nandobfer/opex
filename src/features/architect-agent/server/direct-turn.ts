@@ -1,6 +1,6 @@
 import type { TurnEvent, TurnResult } from "@/lib/ai/opencode-run"
-import type { AiTextProviderId } from "@/lib/ai/providers"
-import { streamAi } from "@/lib/ai/stream"
+import type { AiTextProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { streamAi } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 
 /** Pedido de um turno do arquiteto num provedor direto (Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go). */
 export interface DirectTurnRequest {

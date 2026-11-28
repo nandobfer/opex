@@ -1,3 +1,4 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -9,27 +10,27 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   getIntegrationConfig: vi.fn(async () => ({ apiKey: 'chave' })),
   getIntegration: vi.fn(async () => ({ version: 'v1' })),
   isIntegrationConfigured: () => true,
-}))
-vi.mock('@/lib/ai/api-keys', () => {
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/api-keys", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => {
   const key = { id: 'key_ativa', name: 'Principal', apiKey: 'chave' }
   return { fetchWithKeyFailover: vi.fn(async (_id: string, _label: string, call: (k: typeof key) => Promise<Response>) => ({ response: await call(key), key })) }
-})
-vi.mock('@/lib/integrations/debug', () => ({
+})()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   integrationDebug: () => ({}),
   debugFetch: (_dbg: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
-}))
+}))()) as Record<string, unknown>) }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {} }))
-vi.mock('@/lib/db/models/IntegrationStatus', () => ({ IntegrationStatus: { find: () => ({ lean: async () => [] }) } }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ IntegrationStatus: { find: () => ({ lean: async () => [] }) } }))()) as Record<string, unknown>) }))
 
 import { NextRequest } from 'next/server'
-import { listGeminiEmbeddingModels, listGeminiModels } from '@/lib/ai/gemini'
-import { listOpenaiEmbeddingModels } from '@/lib/ai/openai'
-import { clearAiCatalogCache } from '@/lib/ai/catalog'
-import { GET } from '@/app/api/ai/providers/[provider]/models/route'
+import { listGeminiEmbeddingModels, listGeminiModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/gemini"
+import { listOpenaiEmbeddingModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/openai"
+import { clearAiCatalogCache } from "@nandobfer/integracoes/modules/integrations/ia/ai/catalog"
+const { GET } = legacyRoute("ai", "providers/[provider]/models")
 
 const json = (body: unknown) => new Response(JSON.stringify(body), { status: 200, headers: { 'Content-Type': 'application/json' } })
 const geminiModels = {

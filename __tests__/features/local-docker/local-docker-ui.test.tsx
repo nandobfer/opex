@@ -27,7 +27,7 @@ vi.mock('@/features/local-docker/hooks/useLocalDocker', () => ({
   useSetLocalDockerOverride: () => ({ mutate: mocks.override }),
   useLocalDockerRealtime: () => {},
 }))
-vi.mock('@/features/integrations/components/detail/GeneralCard', () => ({ GeneralCard: () => <div>Geral</div> }))
+vi.mock("@nandobfer/integracoes/modules/react/central/detail/GeneralCard", () => ({ GeneralCard: () => <div>Geral</div> }))
 
 import { TunnelStatusCard } from '@/features/local-docker/components/tunnel/TunnelStatusCard'
 import { SetupChecklist, checklistSummary, setupChecklist } from '@/features/local-docker/components/tunnel/SetupChecklist'
@@ -193,10 +193,11 @@ describe('abas: ordem e onde cada seção fica', () => {
     expect(BUILDER_MACHINE_TABS).toEqual(['geral', 'tunel', 'conexao', 'preparo', 'docker'])
   })
 
-  it('aba Geral mostra o Geral da integração e a ativação', () => {
-    render(<GeneralTab draft={{ environment: 'interno', debugMode: false, publicValues: { active: true }, secrets: {}, swaggerUrl: '' } as never} setDraft={vi.fn()} savedActive />)
-    expect(screen.getByText('Geral')).toBeTruthy()
+  it('aba Geral mostra só a ativação (sem ambiente nem modo debug)', () => {
+    render(<GeneralTab draft={{ publicValues: { active: true }, secrets: {}, swaggerUrl: '' } as never} setDraft={vi.fn()} savedActive />)
     expect(screen.getByRole('switch', { name: /Integração ativa/ })).toBeTruthy()
+    expect(screen.queryByRole('switch', { name: 'Modo debug' })).toBeNull()
+    expect(screen.queryByText('Ambiente')).toBeNull()
   })
 
   it('Preparo do PC: só chave e script; o Docker do PC fica na aba Docker', () => {
@@ -305,7 +306,7 @@ describe('card da central', () => {
 })
 
 describe('ativação da integração', () => {
-  const draft = (active: boolean) => ({ environment: 'interno', debugMode: false, publicValues: { active }, secrets: {}, swaggerUrl: '' }) as never
+  const draft = (active: boolean) => ({ publicValues: { active }, secrets: {}, swaggerUrl: '' }) as never
 
   it('o interruptor grava "active" no rascunho da integração', () => {
     const setDraft = vi.fn()

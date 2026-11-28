@@ -2,7 +2,7 @@
 
 import { AnimatePresence } from "framer-motion"
 import { Brain, CircleCheck, CircleX, Coins, Gauge, HelpCircle, ListChecks, Sparkles } from "lucide-react"
-import { formatUsd } from "@/features/ai/provider-usage"
+import { formatUsd } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/provider-usage"
 import { CRITERIA_RULE_LABELS } from "../../criteria"
 import type { SimulateResult } from "../../server/simulate"
 import { CriteriaFlow } from "../criteria/CriteriaFlow"

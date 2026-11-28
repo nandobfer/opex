@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /**
  * OPE-165: aprendizado do Agente Mentor na conclusão da mesa — transcrição → digestor (casos) → decisor →
@@ -22,8 +23,8 @@ const store = vi.hoisted(() => ({ runs: null as unknown, cases: null as unknown 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { EXECUTAR: 'EXECUTAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.streamAi }))
-vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: mocks.streamAi }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/agentic/server/hub', () => ({ prepareHub: vi.fn(async () => undefined), publishWorkbenchEvent: mocks.publishWorkbenchEvent, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limitsFor }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, createAgentMemory: mocks.create, updateAgentMemory: mocks.update, resolveCategory: vi.fn(async (value: string) => (value === 'PROJECT_RULES' ? value : Promise.reject(new Error('fora')))) }))

@@ -1,10 +1,10 @@
 import { createHash } from "node:crypto"
 import mongoose from "mongoose"
-import { AI_AGENTS, isAiAgentId } from "@/features/ai/agents"
+import { AI_AGENTS, isAiAgentId, scopedChannelPrefix } from "@/features/ai/agents"
 import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { getLocalUser } from "@/lib/local-user"
-import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import {
     CURATOR_CHUNK,
     CURATOR_CONSUMPTION_ORIGIN,
@@ -49,6 +49,11 @@ const STEP_KEYS: StepKey[] = ["backup", "triage", "compact", "import"]
 const messageOf = (error: unknown) => (error instanceof Error ? error.message : String(error))
 const sha256 = (value: string) => createHash("sha256").update(value).digest("hex")
 const iso = (value: Date | string | null | undefined) => (value ? new Date(value).toISOString() : null)
+
+/** Espaço de nomes dos canais da instância (OPE-206). */
+async function namespace() {
+    return (await import("./instance")).channelNamespace()
+}
 
 async function publish(): Promise<void> {
     await publishEngramind({ type: "migration.updated" }).catch(() => undefined)
@@ -159,6 +164,7 @@ export async function generateBackup(actorId: string): Promise<MemoryMigrationDt
     const hash = sha256(content)
     const backupId = new mongoose.Types.ObjectId().toString()
     const createdAt = new Date()
+    const ns = await (await import("./instance")).channelNamespaceOrLegacy()
     await MemoryBackup.create({ _id: backupId, createdAt, count: memories.length, sha256: hash, json: content })
     const localId = getLocalUser().id
     const previous = new Map(state.items.map((item) => [item.sourceId, item]))
@@ -177,7 +183,7 @@ export async function generateBackup(actorId: string): Promise<MemoryMigrationDt
             createdAt: row.createdAt ?? createdAt,
             updatedAt: row.updatedAt ?? createdAt,
             ownerProtected: isOwnerAuthored({ createdBy: row.createdBy, origin }, localId),
-            channel: channelOfSource(base),
+            channel: channelOfSource(base, ns),
             // Rodar de novo preserva o que já foi decidido, revisado e importado (texto igual).
             decision: unchanged ? before.decision : null,
             review: unchanged ? before.review : { status: "pendente", texto: null, categoria: null, at: null },
@@ -224,7 +230,7 @@ const groupKey = (item: Pick<IMigrationItem, "list" | "centralId">) => `${item.l
  * com mensagem acionável, para a etapa nunca ficar "em andamento" para sempre.
  */
 async function askCurator(input: CuratorRunInput, instructions: string, prompt: string, subject: string, timeoutMs = CURATOR_TIMEOUT_MS): Promise<string> {
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
@@ -284,10 +290,11 @@ export async function runCurator(input: CuratorRunInput, actorId: string): Promi
         for (const items of groups.values()) {
             const sources = items.map(sourceOf)
             const summaries = sources.map((item) => ({ id: item.id, resumo: item.resumo || item.texto.slice(0, 120), createdAt: item.createdAt }))
-            const channel = channelOfSource(sources[0]) ?? sources[0].list
+            const ns = await namespace()
+            const channel = channelOfSource(sources[0], ns) ?? sources[0].list
             for (let start = 0; start < sources.length; start += CURATOR_CHUNK) {
                 const chunk = sources.slice(start, start + CURATOR_CHUNK)
-                const rules = { categories: settings.categories, textMax: settings.textMax }
+                const rules = { categories: settings.categories, textMax: settings.textMax, ns }
                 chunks++
                 try {
                     const answers = parseCuratorAnswer(await askCurator(input, instructions, buildCuratorPrompt(chunk[0].list, chunk, summaries, channel), chunk[0].list, curatorTimeoutMs))
@@ -338,7 +345,7 @@ export async function compactCombination(combinationKey: string, actorId: string
         const items = current.items.filter((item) => !item.imported && item.channel && combo.channels.includes(item.channel) && included(item))
         const sources = items.map((item) => ({ ...sourceOf(item), texto: finalOf(item).texto }))
         const answers = parseCuratorAnswer(await askCurator(curator, buildCompactInstructions(combo.budget), buildCuratorPrompt("compactacao", sources, [], combo.channels.join(", ")), `compactar ${combo.key}`, curatorTimeoutMs))
-        const decisions = applyCuratorRules(sources, answers, { categories: settings.categories, textMax: settings.textMax })
+        const decisions = applyCuratorRules(sources, answers, { categories: settings.categories, textMax: settings.textMax, ns: await namespace() })
         const latest = await loadState()
         const next = latest.items.map((item) => {
             const decision = decisions.get(item.sourceId)
@@ -442,11 +449,12 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
         const { memorySettings } = await import("@/features/ai/server/memory-settings")
         const network = await ensureAgentMemoryNetwork(actorId)
         if (network.step.status === "failed") throw new Error(network.step.message)
+        const ns = await namespace()
         const settings = await memorySettings()
         const byChannel = new Map<string, IMigrationItem[]>()
         for (const item of approved) {
-            // Sempre o canal da lista de origem (o curador não move memórias de lista).
-            const channel = item.channel
+            // Sempre o canal da lista de origem (o curador não move memórias de lista), no espaço de nomes atual (OPE-206).
+            const channel = channelOfSource(item, ns) ?? item.channel
             if (!channel) continue
             byChannel.set(channel, [...(byChannel.get(channel) ?? []), item])
         }
@@ -455,7 +463,7 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
         let duplicates = 0
         const importedAt = new Date()
         for (const [channel, items] of byChannel) {
-            if (channel.startsWith(`${AI_AGENTS["developer-central"].channel}/`)) await ensureMemoryChannel(channel, `Memórias da central · ${channel.split("/").pop()}`, AI_AGENTS["developer-central"].description)
+            if (channel.startsWith(scopedChannelPrefix("developer-central", ns))) await ensureMemoryChannel(channel, `Memórias da central · ${channel.split("/").pop()}`, AI_AGENTS["developer-central"].description)
             for (let start = 0; start < items.length; start += settings.maxBatch) {
                 const batch = items.slice(start, start + settings.maxBatch)
                 const memories = batch.map((item) => {
@@ -465,7 +473,7 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
                         ...(final.categoria ? { category: final.categoria } : {}),
                         created_at: new Date(item.createdAt).toISOString(),
                         status: "active" as const,
-                        author: { app: "opex" },
+                        author: { app: ns.app },
                         origin: item.origin ?? { source: "dono", label: "Dono" },
                     }
                 })
@@ -498,7 +506,8 @@ export async function importApproved(actorId: string): Promise<MemoryMigrationDt
 // ── Leitura ─────────────────────────────────────────────────────────────────
 
 async function budgetOf(state: IMemoryMigration) {
-    const entries = state.items.filter((item) => item.channel && included(item)).map((item) => ({ channel: item.channel!, text: finalOf(item).texto }))
+    const ns = await (await import("./instance")).channelNamespaceOrLegacy()
+    const entries = state.items.filter((item) => item.channel && included(item)).map((item) => ({ channel: channelOfSource(item, ns) ?? item.channel!, text: finalOf(item).texto }))
     const centrals = [...new Set(state.items.map((item) => item.centralId).filter((value): value is string => Boolean(value)))]
     let budget = 4000
     try {
@@ -506,7 +515,7 @@ async function budgetOf(state: IMemoryMigration) {
     } catch {
         // Sem o Engramind, a estimativa usa o padrão.
     }
-    return estimateBudgets(entries, budgetCombinations(centrals), budget)
+    return estimateBudgets(entries, budgetCombinations(centrals, ns), budget)
 }
 
 const stepDto = (step: IMigrationStep): MigrationStepDto => ({ status: step.status, error: step.error, startedAt: iso(step.startedAt), finishedAt: iso(step.finishedAt), progress: step.progress })

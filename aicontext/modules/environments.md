@@ -5,15 +5,89 @@
 Página **Ambientes** (`/ambientes`, no grupo **Configurações** do menu, junto de Integrações) para gerenciar ambientes **Docker Compose** no **servidor** e no **PC** (pela conexão
 do Builder Machine, nativo), com build e execução em máquinas diferentes por um **registry local**.
 
+O bootstrap de projeto (OPE-215, `modules/project-bootstrap.md`) cria o ambiente de uma central nova pelas mesmas funções
+(`createEnvironment` + `startDeploy`): origem Central, ref da branch do push, build e execução no servidor, a porta do
+projeto, URL de saúde e sem limites, com as variáveis lidas do `.env` do projeto no host (o conteúdo não vai para log,
+evento nem auditoria). Deploy com falha devolve o erro e o fim do log ao Agente de Bootstrap.
+
 ### Tela
 
 - **Builder do servidor** (OPE-186): card fixo **acima** dos grupos Servidor/PC (`components/builder/`), para o
   builder do buildx do Docker do servidor (o `buildx_buildkit_<nome>0` do `docker stats`). Ver "Builder do
   servidor" abaixo.
-- Lista (kit `src/components/list`) agrupada em **Servidor** e **PC** (máquina de execução). Cada
-  ambiente mostra o estado (No ar / Parcial / Parado / Nunca implantado / Implantando), portas,
-  serviços no ar, CPU/RAM (a lista é consultada a cada 10 s), onde foi o build e o último deploy
-  (ref @ commit; clique abre o log).
+- **Lista em cards** (OPE-211, `EnvironmentCard`; peças compartilhadas com o portal em `components/card/`), agrupada em
+  **Servidor** e **PC** (máquina de execução, com a contagem). Um card largo por ambiente, um embaixo do outro
+  (`ENV_CARD_LIST_CLASS`), consultada a cada 10 s e em tempo real:
+  - **Cabeçalho**: ponto de estado (`EnvironmentStateDot`: verde pulsando No ar, amarelo Parcial, cinza Parado, vazado
+    Nunca implantado, primário Implantando; pulso parado com movimento reduzido), o nome (`ItemNameLink` para o Editar) e o
+    slug, e os selos de origem (Central / Gerenciado vN / Adotado / Adotado (sem git)), onde está (`placementLabel`) e a
+    versão. À direita, **Deploy/Redeploy** (`DeployMenu`), **Logs** (botão com rótulo) e o menu **⋯**
+    (`EnvironmentActionsMenu`): Levantar, Derrubar, Reiniciar | Compose (só gerenciado), Histórico de deploys, Editar,
+    Mover | Apagar (vermelho, depois de um separador). Item desligado mostra o motivo abaixo do rótulo (PC indisponível,
+    ainda não implantado, ação em andamento, adotado do PC no Mover, deploy em andamento no Editar).
+  - **Faixa de aviso** (`PendingDeployNotice`, `pendingDeployItems`), só com algo salvo e não implantado: uma linha
+    "Mudanças salvas ainda não implantadas: limites, ajustes dos serviços e compose v4 (implantado: v3)." com **Fazer
+    deploy** (a mesma ação do Deploy, a ref salva); o detalhe do que está salvo fica no `title`.
+  - **Containers** (`ContainerList`), um por linha, em colunas no `md` (Serviço · Situação · Portas · Recursos) e
+    empilhados com rótulos abaixo: ponto e nome do serviço (o container no `title`), o `status` do Docker, as **portas**
+    (ver "Portas de cada container") e, na coluna **Recursos** (só no dono, 16rem), as quatro barras de uso CPU, RAM,
+    Swap e Disco **lado a lado numa linha, compactas** (OPE-218, `UsageBars compact`): cada uma só com o rótulo e o %;
+    o detalhe usado/total (e "lido às" do disco) fica no `title` da célula e no `aria-label` da barra, e o texto sem
+    valor ("Sem swap", "lendo…", "não lido", "parado") ocupa o lugar da trilha, na mesma altura. Abaixo de `sm`, as
+    quatro quebram em 2×2 (`CONTAINER_USAGE_CLASS`). Ver "Uso dos containers". Sem containers: "Nunca implantado: faça o deploy…" ou "Nenhum container
+    encontrado…".
+  - **Uso do ambiente** (`EnvironmentUsageSummary`, só no dono e só com containers): faixa acima dos containers com as
+    mesmas quatro barras, somando os containers (`environmentUsage`).
+  - **Rodapé**: o último deploy (ícone por status, "há 2 horas", ref @ commit; link para a página do log), "2/3 no ar"
+    e, executando no PC, "Portas liberadas: 4100" (as repassadas ao servidor).
+  - Skeleton `EnvironmentCardSkeleton` com as mesmas classes (`environment-card-layout.ts`), inclusive a faixa de uso e as
+    4 barras compactas por container no dono (mesma grade `CONTAINER_USAGE_CLASS` e classes de `usage-bar-layout.ts`).
+- **Filtros da lista** (OPE-211, `EnvironmentsFiltersBar` sobre o `ListFilters`; regra pura `filterEnvironmentList` em
+  `filters.ts`; estado na URL com `useUrlFilters`, `ENVIRONMENT_FILTER_SCHEMA`): valem para os ambientes **e** os não
+  gerenciados, com o total ("N REGISTROS") das duas listas. O cartão aparece também enquanto a lista carrega.
+  - **Busca** (sem diferenciar maiúsculas nem acentos): nome, slug, projeto, serviços, containers, a pasta (adotado e não
+    gerenciado), o arquivo e a ref da central. Termo só numérico (`3000`, `:4100`) casa por **igualdade** com uma porta
+    interna ou publicada (`listen`) ou liberada (`env.ports`); `3000` não acha `30001`. Os não gerenciados levam
+    `services` e `ports` no DTO para isso.
+  - **Máquina** (Servidor/PC), **Situação** (No ar, Parcial, Parado, Nunca implantado; `healthOf`, e nos não gerenciados
+    pelo `running/containers`) e **Origem** (Central, Gerenciado, Adotado, Não gerenciado), em `CadastroSearchPicker`
+    múltiplos: E entre os filtros, OU dentro de cada um. "Não gerenciado" só vale para a lista dos não gerenciados.
+  - Grupos e card dos não gerenciados só com o que passou (contagem filtrada; grupo vazio some). Nada encontrado: "Nenhum
+    ambiente com estes filtros" com **Limpar filtros**.
+- **Uso dos containers** (OPE-211, `resource-usage.ts`, puro; `ServiceStatusDto.usage`, só no dono — o portal não
+  recebe): o % é sobre o **limite aplicado** no container; sem limite, sobre a **capacidade da máquina** onde ele roda
+  (`HostCapacityDto`). O detalhe da barra diz a base: "300 MiB de 1 GiB (limite)", "1,2 de 8 CPUs (servidor)" (visível na faixa "Uso do
+  ambiente"; nos containers, no `title` da barra compacta).
+  - **CPU**: `CPUPerc` do `docker stats` (até N×100%) sobre as CPUs do limite ou da máquina, limitado a 100%.
+  - **RAM**: os bytes usados do `MemUsage` sobre o limite ou a RAM da máquina.
+  - **Swap**: lido sem `docker exec`, na própria máquina: o `docker inspect` dá o pid e o comando lê
+    `/proc/<pid>/cgroup` (linha `0::`) e `/sys/fs/cgroup<caminho>/memory.swap.current` (cgroup v2; vale no rootless).
+    No PC vai pela conexão mestra do túnel (`muxCommand`). Base: o swap além da RAM do limite ou o swap total da
+    máquina (`/proc/meminfo`). Sem swap (limite 0 ou máquina sem swap): "Sem swap". Não lido: "não lido".
+  - **Disco**: camada gravável (`docker ps --size`) + volumes nomeados que o container monta (`docker system df -v` e
+    os `Mounts` do `inspect`; bind mount não entra), sobre o disco onde o Docker guarda os dados (`df` do
+    `DockerRootDir`). Lento: `server/disk-usage.ts` guarda a leitura **por máquina no processo por 5 min**; a lista nunca
+    espera (vencido, lê em segundo plano, uma por vez, e devolve a anterior; a primeira vez mostra "lendo…"). Ao
+    terminar publica `environments` com `change: "usage"` e a tela relê. Falha só registra no log e espera a validade.
+    O `title` da barra mostra a hora da leitura.
+  - Parado: CPU, RAM e swap "parado"; o disco continua em barra.
+  - **Total do ambiente**: a soma; a base é a soma dos limites quando todos os containers (no ar) têm limite naquela
+    métrica, senão a máquina. Um volume montado por dois containers conta uma vez só no total (na linha de cada
+    container ele aparece).
+  - O `get_environment` do Agente Opex mostra o swap e o disco de cada serviço em texto.
+- **Portas de cada container** (OPE-211, `container-ports.ts`, puro): o snapshot junta o `{{.Ports}}` do `docker ps`
+  (só no ar) com `{{json .Config.ExposedPorts}}` e `{{json .HostConfig.PortBindings}}` do `docker inspect` que já lia os
+  limites (vale também parado; nenhum comando novo). `parseContainerPorts` tira as repetições (`0.0.0.0` e `::` da mesma
+  porta; a exposta some quando a mesma porta está publicada), expande faixas (até 64) e ordena pela porta do container.
+  Cada porta vai no DTO (`ServiceStatusDto.listen`) com o alcance (`portReach`): `link` (publicada; no PC, só se estiver
+  em Portas, repassada ao servidor), `pc` (publicada só no PC), `local` (só em `127.0.0.1`), `udp` e `internal` (sem
+  publicação). O chip (`PortChip`) mostra "3000/tcp → :4100"; com `link`, o publicado é link para
+  `http://<host>:<porta>` em aba nova, com o botão de copiar o link (`CopyButton`, toast "Link copiado."); os outros
+  alcances ficam em texto com a dica no `title`. App que escuta numa porta fora do `EXPOSE` e do `ports` do compose
+  aparece como "sem porta declarada" (o Docker não sabe dela).
+- **Host dos links** (`usePortLinkHost`): o **Endereço dos links das portas** das Configurações (`portLinkHost`, vai na
+  lista como `EnvironmentsListDto.portLinkHost`) ou, vazio, o endereço com que a tela foi aberta (`window.location.hostname`).
+  Abrindo o Opex por um domínio (atrás da Cloudflare), configure o IP ou host do servidor.
 - **Versão do app** em cada ambiente: lida do `package.json` do `WORKDIR` de cada container no ar
   (`docker exec <id> head -c 200000 package.json`, `containerVersionsCommand`/`parseContainerVersions`),
   com cache em memória **pelo id do container** (`{{.ID}}` no snapshot) — só roda de novo quando o
@@ -26,7 +100,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   deploy): diálogo com os 30 últimos (`GET /api/environments/[id]/deploys`, guardados 90 dias), cada
   um com data/hora e "há X", duração (`formatDuration`; "em andamento" sem fim), tipo (Deploy/Mover),
   build → execução (PC ou servidor), resultado, ref @ commit, versão implantada, as marcas **Build
-  reaproveitado** e **Recuperado após reinício** e o erro resumido. Clicar abre o log no drawer.
+  reaproveitado** e **Recuperado após reinício** e o erro resumido. Cada linha é o link para a página do log
+  (`/ambientes/deploys/<id>`, ver "Página do log do deploy").
   Skeleton, vazio e erro com "Tentar novamente"; atualiza pelo tempo real e a cada 10 s.
 - **Não gerenciados**: projetos do compose descobertos pelos labels
   (`com.docker.compose.project`, `…project.working_dir`, `…project.config_files`) nos dois Dockers,
@@ -37,17 +112,42 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   **Reiniciar** (otimistas, com reversão e toast), **Logs** (últimas 200 linhas no xterm),
   **Editar**, **Mover** (troca build/execução; aviso de volumes e de tempo fora do ar), **Apagar**
   (confirmação, opção de apagar os volumes; otimista).
-- **Novo/Editar** (react-hook-form; `environmentCreateSchema` no Novo, `environmentInputSchema` no Editar): nome e slug
-  (sugerido pelo nome); seletor **Origem** (`OptionTabs`) com **Central**, **Compose gerenciado** e **Projeto adotado**
-  (desabilitado no Novo: vem de **Adotar**; o seletor inteiro fica travado no Editar e o servidor recusa trocar a origem,
-  422 `ENVIRONMENT_SOURCE_LOCKED`). Central: central, ref, arquivo compose, serviços, nome do projeto. Compose
-  gerenciado: nome do projeto, serviços e, só no Novo, o editor do `docker-compose.yml` (ver "Compose gerenciado").
-  Adotado: só leitura + "git pull no redeploy" quando há git; variáveis extras **cifradas**, com os valores à
-  vista (ver "Variáveis extras no formulário"); **limites de recursos** (RAM, swap e CPUs, ver "Limites de
-  recursos"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
-  desabilitado com o motivo quando o túnel está fechado).
-- A linha do ambiente mostra os limites **aplicados** nos containers ("limites: RAM 4 GiB · swap padrão · 2 CPUs"
-  ou por serviço) e o selo "Limites salvos diferem dos aplicados: faça Deploy" (ver "Limites de recursos").
+- **Novo/Editar** (OPE-211: páginas próprias, o modal saiu): `/ambientes/novo` e `/ambientes/[id]/editar`
+  (`EnvironmentEditorPage` → `EnvironmentEditorForm`, `components/editor/`). Na lista, **Novo ambiente** e o estado vazio
+  levam ao Novo; o **nome** do ambiente (`ItemNameLink`) e **Editar** levam ao Editar (Editar desligado durante um deploy).
+  O ambiente, as máquinas e a capacidade vêm da lista (`useEnvironments` + tempo real); ambiente inexistente mostra
+  "Ambiente não encontrado" com "Voltar para Ambientes"; erro, `ErrorState`; carregando, `EnvironmentEditorSkeleton`
+  (mesmo leiaute, constantes de `environment-editor-layout.ts`).
+  - **Leiaute**: cabeçalho `FormPageHeader` (voltar para Ambientes, título, status e as ações Cancelar e Salvar/Criar
+    ambiente, repetidas no `FormFooter` do fim; nada fixo na tela) e, no `lg`, o índice das seções preso à lateral
+    (`FormSectionNav`: seção visível marcada, ponto nas alteradas, alerta nas com erro; abaixo do `lg`, faixa no topo).
+  - **Seções** (cards `FormSection`, âncoras `ambiente-<seção>`, `editor-sections.ts`): **Identificação** (nome e slug;
+    no Novo o slug e o nome do projeto do compose acompanham o nome até serem editados), **Origem** (tipo em `OptionTabs`,
+    travado no Editar com "A origem não muda depois de criada" e o servidor recusa a troca, 422
+    `ENVIRONMENT_SOURCE_LOCKED`; Projeto adotado desabilitado no Novo, vem de **Adotar**. Central: central pelo
+    `SearchPicker` (busca por nome e repositório), ref, arquivo do compose, nome do projeto e os **serviços do ambiente**
+    em `ChipInput` com os do compose lido como atalho "Do compose: + app" — vazio = todos. Gerenciado: projeto, serviços
+    e, no Novo, o editor do `docker-compose.yml`; no Editar, "Compose vN" com **Abrir revisões** (o `ComposeDialog` na
+    própria página). Adotado: o resumo e "git pull no redeploy" quando há git), **Execução** (Build em / Executar em em
+    `OptionTabs`, PC desligado com o motivo; **Portas** em `ChipInput`: digitar ou colar "4100, 4101", só 1–65535 sem
+    repetir; URL de saúde), **Variáveis extras** (ver "Variáveis extras no formulário"), **Recursos** (ver "Limites de
+    recursos") e **Serviços do compose** (ver "Serviços do compose").
+  - **Status** ao lado do Salvar (`editorStatus`): "Tudo salvo", "Alterações não salvas em Origem e Serviços do
+    compose" ou "Erro em …"/"N seções com erro" (clicável: leva à seção). Salvar com erro rola até a primeira seção com
+    erro e põe o foco no campo.
+  - **Salvar**: Novo volta para `/ambientes` (toast "Ambiente criado"). Editar fica na página ("Tudo salvo") com o aviso
+    "Salvo. As mudanças valem no próximo deploy" e o botão **Fazer deploy** (a mesma ação da linha; abre a página do log).
+  - **Sair com alterações** (`useUnsavedChangesGuard`): Cancelar, o voltar e qualquer link interno do app pedem
+    "Descartar alterações?"; fechar/recarregar a aba usa o `beforeunload`. O **voltar do navegador** também pergunta:
+    com alterações, o guarda empilha uma entrada sentinela de mesma URL; o voltar a consome, o guarda a empilha de novo e
+    pergunta ("Descartar e sair" volta duas entradas). Sem alterações (depois de salvar), esse voltar segue direto.
+    Sair por Cancelar ou por link interno consome a sentinela antes de navegar: o editor não fica duplicado no histórico
+    (do destino, um voltar chega ao editor e o seguinte à página anterior a ele).
+  - **Tempo real**: o formulário é montado uma vez por ambiente (um evento não reseta o que está sendo editado). Versão
+    **mais nova** do ambiente no servidor (`updatedAt`) mostra "Este ambiente foi alterado em outro lugar" com
+    **Recarregar** (descarta e relê) e **Manter o que estou editando**.
+- O card mostra os limites **aplicados** em cada container ("limite: RAM 4 GiB · swap padrão · 2 CPUs") e, com limites
+  salvos diferentes dos aplicados, "limites" na faixa de aviso (ver "Limites de recursos").
 - **Variáveis extras no formulário** (OPE-175):
   - Em **Editar**, os valores salvos são lidos à parte (`GET /api/environments/[id]/env`, só o dono,
     `readEnvValues`: decifra um a um; o que falhar volta `null`) e aparecem legíveis no campo **Valor**
@@ -71,14 +171,52 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
     aviso "Nenhuma variável encontrada" e a lista intacta. Nada é gravado antes de **Salvar**; **Cancelar**
     descarta o importado.
   - Portal do cliente e ferramentas do Agente Opex não mudam: sem valores (ver "Agente Opex").
-- **Log do deploy ao vivo** num drawer com o xterm (NDJSON, pedaços da saída via
+- **Página do log do deploy** (OPE-208, no lugar da gaveta lateral, decisão do dono): `/ambientes/deploys/[deployId]`
+  (`deployPath`). Server Component que lê `loadDeployPage` (`server/deploy-page.ts`: o resumo do deploy, sem o log, e o
+  nome do ambiente; ambiente apagado aparece como "Ambiente removido"; id inválido ou deploy inexistente → 404) e
+  renderiza a `DeployLogPage`: cabeçalho `AgentPageHeader` com a seta **Voltar para os ambientes**, o título "Deploy de
+  <ambiente>" ("Mudança de máquina de" / "Remoção de" nos outros tipos) e a linha build → execução · ref @ commit ·
+  início; abaixo, o cartão do log (`DeployLog`) com o status animado, a barra de progresso e o terminal ocupando o resto
+  da tela (`useFillViewportHeight`, mínimo 320 px). Skeleton com as mesmas classes (`deploy-page-layout.ts`,
+  `loading.tsx`). Quem abre a página: o Deploy/Redeploy e o Mover iniciados (`router.push`, como a gaveta abria
+  sozinha), o "Último deploy …" da linha e as linhas do Histórico (links). O Voltar do navegador volta para Ambientes;
+  sair no meio não interrompe o deploy e reabrir o link mostra o log inteiro de novo (o stream reenvia tudo a cada conexão).
+  Regra geral de qual padrão usar: `use-para-atualizar-tema-e-componentes-ui.md`, "Qual padrão usar para cada tipo de
+  conteúdo".
+- **Log do deploy ao vivo** na página acima, com o xterm (NDJSON, pedaços da saída via
   `HostRunOptions.onOutput`), guardado em `environment_deploys`. Os passos, levantar/derrubar/
   reiniciar, o derrubar de Apagar e o `garbage-collect` rodam pelo **executor desacoplado** do
   Builder Machine (`detached: true`): o OpenCode descartar o shell no meio (diretório reciclado) não
   derruba o deploy. Logs e as leituras da descoberta usam `retryOnLost`. Se a conexão do log cair
-  (o servidor reiniciou) ou o stream fechar sem o status final, o drawer mostra "Reconectando ao
+  (o servidor reiniciou) ou o stream fechar sem o status final, a página mostra "Reconectando ao
   servidor…" e tenta de novo a cada 3 s por até 3 min **contados desde a queda** (uma conexão que
-  volta a entregar eventos zera a contagem), redesenhando o log inteiro ao reconectar.
+  volta a entregar eventos zera a contagem), redesenhando o log inteiro ao reconectar. Desistindo, o status vira
+  "Falhou: Sem conexão com o servidor … Recarregue a página para tentar de novo."
+- **Barra de progresso do deploy** (OPE-202), entre o status e o terminal da página do log, só enquanto o deploy está
+  em andamento:
+  - Vem do evento `meta` (`DeployMetaEvent`: `startedAt`, `serverNow`, `estimateMs`, `sampleSize`, `initial`), a primeira linha
+    do NDJSON de um deploy `running` (inclusive quando outro processo conduz o deploy e o stream fecha sem status).
+    Deploy já encerrado (aberto pelo Histórico) não recebe `meta`: só o resultado e o log, sem barra. O `meta` chega
+    de novo a cada reconexão, e o tempo continua do `startedAt` absoluto.
+  - **Estimativa** (`estimateDeployDuration`, `deploy-estimate.ts`; consulta em `server/estimate.ts`): mediana das
+    durações dos 10 deploys mais recentes **com sucesso do próprio ambiente** (nunca de outros) e do mesmo tipo
+    (Deploy/Mover/Apagar) quando há pelo menos 3; senão, dos 10 mais recentes de qualquer tipo do ambiente. Com 1 ou
+    2 amostras a estimativa é "inicial" (o texto avisa "(estimativa inicial)"); sem nenhuma, `estimateMs: null`.
+    Deploys retomados e com build reaproveitado entram na conta. Falha ao ler o histórico vai para o log e o `meta`
+    sai sem estimativa (o stream não cai).
+  - **Tela** (`DeployProgress` sobre a `UsageBar` compartilhada, `tone="primary"`: cor primária fixa, sem faixas de
+    consumo nem pulso): rótulo "Deploy", detalhe "há 01:12 · restam ~02:05" e % = decorrido sobre a estimativa
+    (`deployProgress`, `deploy-progress.ts`; tempo em `mm:ss`, `h:mm:ss` a partir de 1 h). Passou do previsto: o %
+    trava em 99% e o detalhe vira "há 05:12 · mais que o previsto (~04:00)". Sem estimativa: barra indeterminada
+    (segmento correndo; parado com movimento reduzido), sem % nem `aria-valuenow`, só "há 01:12".
+  - O relógio é o `useTickingNow` (`src/hooks/`, `useSyncExternalStore`, tick de 250 ms, `null` no servidor): o
+    decorrido é sempre `agora − diferença − startedAt`, nunca somado por tick, e segue contando durante "Reconectando…".
+    A diferença entre o relógio do navegador e o do servidor (`clockSkewMs`, pelo `serverNow` do `meta`) é medida a
+    cada `meta` recebido (inclusive nas reconexões): um dispositivo com o relógio adiantado ou atrasado vê o mesmo
+    decorrido e o mesmo % que o servidor.
+  - Ao chegar o status final (Concluído, Falhou ou a desistência por falta de conexão) a barra sai com fade e
+    recolhe a altura (Framer Motion); nunca fica parada num % alto. `role="progressbar"` com `aria-label` explicando
+    que é tempo decorrido sobre a duração prevista e `aria-valuetext` com o tempo.
 - **Deploy retomado depois de o app reiniciar** (ex.: o redeploy do próprio my-tasks, em que o
   `up -d` recria o container do app no meio do deploy):
   - Durante o deploy, a cada 5 s, o log e o sinal de vida (`heartbeatAt`, `runnerId` do processo) vão
@@ -97,7 +235,7 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   - A retomada roda no tick do agendador (`runEnvironmentsTick`), na lista (no máximo a cada 10 s por
     processo, em segundo plano) e ao abrir o log de um deploy órfão (o stream passa a seguir o
     deploy retomado). Deploy com o sinal de vida recente (outro processo vivo) não é tocado: o stream
-    manda o log gravado e fecha sem status, e o drawer reconecta.
+    manda o log gravado e fecha sem status, e a página do log reconecta.
   - Se a pasta do job sumiu entre o fim do passo e a gravação do índice seguinte, o passo roda de novo
     (`up -d`, saúde e repasses são idempotentes; um build repetido só custa tempo).
 - **Lendo o compose**: a saída do `docker compose config` traz as variáveis já resolvidas (segredos)
@@ -115,8 +253,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
 - **Sem variáveis extras** o deploy apaga o `.env.opex` (`removeEnvFileCommand`): o compose usa o
   arquivo sempre que ele existe, e o de um deploy anterior não pode continuar valendo.
 - **Configurações** (engrenagem): pasta base no servidor (`opex-envs`), porta do registry
-  (`5050`, só `127.0.0.1`) e tags mantidas por ambiente (`5`). A conexão com o PC é a do Builder
-  Machine.
+  (`5050`, só `127.0.0.1`), tags mantidas por ambiente (`5`) e o **Endereço dos links das portas** (`portLinkHost`,
+  só o host; vazio = o endereço da tela; OPE-211). A conexão com o PC é a do Builder Machine.
 
 ### Compose gerenciado (OPE-191)
 
@@ -176,33 +314,37 @@ servidor (`~/opex-envs/<slug>`, como a central) a cada deploy. As variáveis, o 
 - **Portal do cliente**: nunca aparece (o portal só lista origem central).
 ### Limites de recursos (OPE-193)
 
-- **Campos** (`EnvironmentLimitsField` no formulário Novo/Editar, entre as variáveis e as portas): RAM (GiB), swap
+- **Campos** (seção **Recursos** da página Novo/Editar, `ResourcesSection`; no modo "Por serviço", o grupo Recursos do
+  painel de cada serviço, `ServiceLimitsGroup`, OPE-211): RAM (GiB), swap
   **além da RAM** (GiB) e CPUs (fração), com a mesma semântica, validação e textos do builder do servidor: vazio =
   sem limite; swap vazio = padrão do Docker; swap 0 = sem swap; swap sem RAM é erro ("Defina a RAM para limitar o
   swap"). Os três campos são o componente compartilhado `ResourceLimitsFields` (o mesmo do formulário do builder), e
   a ajuda mostra a RAM e as CPUs da máquina de execução (`EnvironmentsListDto.hosts`, do `docker info` do snapshot).
-- **Modos** (`OptionTabs`): **Mesmos para cada serviço** (`{ mode: "shared", memoryGb, cpus, swapGb }`: cada
+- **Modos** (`OptionTabs`): **Mesmos para todos** (`{ mode: "shared", memoryGb, cpus, swapGb }`: cada
   container do ambiente recebe esses limites) ou **Por serviço** (`{ mode: "service", services: [{ service, … }] }`:
   uma linha por serviço; serviço sem linha fica sem limite; nomes repetidos são erro). Trocar para "Por serviço" copia
-  os valores do modo único para os serviços conhecidos (os do último "Ler compose" ou, antes dele, os do host) e, sem
-  nenhum, lê o compose sozinho; voltar ao modo único usa os valores quando são iguais em todas as linhas
-  (`switchLimitMode`, `limits-form.ts`).
-- **Ler compose** (`POST /api/environments/compose-services` `{ source }`, só o dono, `readComposeServices`): os
+  os valores do modo único para os serviços conhecidos (os do compose lido ou, antes da leitura, os do host); voltar ao
+  modo único usa os valores quando são iguais em todas as linhas (`switchLimitMode`, `limits-form.ts`). No modo "Por
+  serviço", a seção Recursos mostra o resumo de cada serviço ("RAM 2 GiB · …", "Sem limite" ou "Corrija os limites") e
+  cada linha leva ao painel do serviço, no grupo Recursos: "Definir limites de <serviço>" / "Sem limite para
+  <serviço>", com o declarado no compose e o aplicado no host.
+- **Leitura do compose** (`POST /api/environments/compose-services` `{ source }`, só o dono, `readComposeServices`): os
   serviços do compose da origem e os limites declarados neles (`mem_limit`, `memswap_limit`, `cpus` ou
   `deploy.resources.limits`, em bytes ou com unidade), sem o override do app, com `config --no-env-resolution
   --no-interpolate` (valor com `${VAR}` volta vazio). Central: `git fetch` + a ref resolvida e uma pasta temporária
   com só o arquivo do compose e os `*.yml`/`*.yaml` da ref (`git archive`), apagada no fim — o worktree do ambiente
   no ar não é tocado; os serviços escolhidos na origem filtram a lista. Adotado: a pasta do projeto (servidor ou PC).
   Compose gerenciado: a **revisão vigente** guardada no Opex, lida do YAML (`parseComposeYaml`, sem Docker); no Novo
-  ainda não há revisão, então o botão fica desabilitado (o YAML está no editor) e, sem `environmentId`, a rota
+  ainda não há revisão: a página lê o YAML do editor no navegador (`parseComposeYaml`) e, sem `environmentId`, a rota
   responde 422 `ENVIRONMENT_COMPOSE_READ_UNAVAILABLE`.
-  Por serviço, as linhas existentes ficam e os serviços novos entram com os limites do compose; linha de serviço que
-  não está no compose ganha o selo "não está no compose" e pode ser removida. No modo único, os campos vazios
-  recebem os limites do compose quando são iguais em todos os serviços (diferentes: toast sugerindo "Por serviço").
-  Falha: 502 `ENVIRONMENT_COMPOSE_READ_FAILED` com a última linha do erro (nunca o JSON), aviso com "Tentar
-  novamente" no campo; skeleton das linhas durante a leitura. Com a origem incompleta (ex.: Novo sem a central), o
-  botão fica desabilitado, a troca para "Por serviço" não lê nada e o campo diz "Escolha a origem para ler o
-  compose." (`composeServicesInputSchema`).
+  Na página Novo/Editar (OPE-211, `ComposeReadProvider`/`useComposeRead`, `hooks/useFormComposeRead.tsx`) a leitura é
+  **automática e única para a página toda** (sugestões da Origem, Recursos e Serviços): sai na hora ao abrir (ou quando a
+  origem fica completa) e de novo quando a origem muda, depois de 800 ms parada (`COMPOSE_READ_DEBOUNCE_MS`); pede sempre
+  **todos** os serviços (`services: []`: a lista marca os que ficam fora do ambiente). "Ler de novo" no cabeçalho dos
+  Serviços do compose. A leitura não preenche limites nem mostra toast. Falha: 502 `ENVIRONMENT_COMPOSE_READ_FAILED`
+  com a última linha do erro (nunca o JSON) e o aviso com "Tentar novamente" na seção Serviços. Com a origem
+  incompleta (ex.: Novo sem a central), nada é lido (`composeServicesInputSchema`) e a seção diz "Escolha a origem
+  para ver os serviços". O DTO traz também o `limitStyle` de cada serviço (para a prévia do override).
 - **Editar abre com o que vale**: os limites **configurados**, mesmo vazios ("sem limite" salvo reabre vazio); nunca
   configurados (`limits` ausente/`null`: ambiente antigo, adotado, criado pela ferramenta sem `limits`), os
   **aplicados** hoje nos containers (`docker inspect` no snapshot: `HostConfig.Memory`/`MemorySwap`/`NanoCpus`/
@@ -231,6 +373,121 @@ servidor (`~/opex-envs/<slug>`, como a central) a cada deploy. As variáveis, o 
   `limitsConfigured`, `deployedLimits` e `ServiceStatusDto.limits` (aplicados no container). `environmentInputSchema`
   aceita `limits: null` (as ferramentas sem `limits` mantêm o que está salvo, inclusive o `null`); a tela sempre
   envia o objeto. O portal do cliente não recebe limites. Auditoria: `limites` (texto) no antes/depois.
+
+### Serviços do compose (OPE-211)
+
+Ajustes dos dados de cada serviço do compose pela tela, sem mexer no repositório (nas três origens, inclusive no
+compose gerenciado, por cima da revisão vigente). Entram no override `docker-compose.opex.yml` do próximo **Deploy**.
+
+- **Dados** (`composeOverridesSchema`, `schemas.ts`): `environments.composeOverrides = { services: ServiceOverride[], yaml }`
+  (`null`/ausente = nunca configurado, igual a sem ajustes) e `environments.deployedComposeOverrides` (os do último deploy
+  com sucesso, vindos do ponto de retomada `checkpoint.overrides`). Sem migração. **Texto simples** (decisão do dono: nada
+  é cifrado), mas o log do deploy e a auditoria mostram só as **chaves** do `environment`.
+- **Por serviço** (`ServiceOverride`; em cada campo `null` = o valor do compose, "Personalizar" desligado; um valor
+  substitui o do compose **por inteiro**, inclusive lista vazia):
+
+| Campo | Formato | No override |
+|---|---|---|
+| `image` | referência sem espaços/aspas | `image: X` + `build: !reset null` |
+| `command`, `entrypoint` | lista (um argumento por item) | lista; vazia = `!reset null` (o padrão da imagem) |
+| `environment`, `labels` | `{ key, value }[]` (labels `com.docker.compose.*` recusados) | mapa com `!override` |
+| `ports` | `{ target, published ("8080", "8000-8010" ou ""), protocol, hostIp }[]` | forma longa com `!override` |
+| `volumes` | `{ type: bind\|volume\|tmpfs, source, target, readOnly }[]` | forma longa com `!override`; volume nomeado declarado no topo (`volumes: { nome: {} }`) |
+| `restart` | `no`, `always`, `on-failure`, `unless-stopped` | `restart: X` |
+| `healthcheck` | `{ mode: "disable" }` ou `{ mode: shell\|exec, test, interval, timeout, startPeriod, retries }` | `!override` (`CMD-SHELL`/`CMD`; duração vazia = padrão) |
+| `dependsOn` | `{ service, condition, restart }[]` | `depends_on` com `!override` |
+
+  Os valores vão como estão, com a semântica do compose: `${VAR}` é interpolado (`$$` = literal), diferente das
+  Variáveis extras. O `environment` do serviço **vence** as Variáveis extras (`env_file`) com o mesmo nome (a tela avisa).
+- **YAML avançado** (`yaml`, `override-yaml.ts`): o conteúdo do bloco `services:` (serviço → chaves), até 64 KB, com as
+  tags `!reset`/`!override`. A validação (`overrideYamlProblem`, a mesma na tela e no servidor) recusa YAML inválido (com a
+  linha), conteúdo que não seja mapa de serviços, as chaves que o Opex controla (`env_file`, `build`, `deploy`, `mem_limit`,
+  `memswap_limit`, `cpus`) e a mesma chave personalizada no bloco guiado do mesmo serviço ("app.image está no bloco guiado e
+  no YAML avançado: deixe em um só"). `image` no YAML avançado com uma referência (texto não vazio) também conta como
+  imagem própria; `image: !reset null` (ou vazia) só tira a imagem e o build do compose continua.
+- **Deploy** (`server/deploy.ts`, `overrideYaml`, `serviceOverrideLines`):
+  1. Ordem no serviço: imagem do registry ou nenhuma (imagem própria), `env_file`, limites, campos guiados, `build: !reset
+     null` (imagem própria) e, por último, as chaves do YAML avançado.
+  2. **Imagem própria** (`ownImageServices`): o serviço sai de `buildServices` (não builda, não vai ao registry, não recebe
+     `localhost:<porta>/opex-env/...`). No compose gerenciado, a recusa de `build` ignora esses serviços. Com build e execução
+     na mesma máquina entra o passo **"Pull das imagens prontas"** (`compose pull <serviços>`, antes de subir; a tag nova de
+     um `latest` vem a cada deploy); em máquinas diferentes, o `Pull` de sempre já os busca. Os serviços do pull vão no ponto
+     de retomada (`checkpoint.pullServices`).
+  3. Serviço dos ajustes que não está no compose: "Ajustes do serviço X ignorados: o serviço não está no compose." (não
+     bloqueia).
+  4. Executar no PC: os bind mounts dos ajustes entram no bloqueio (`withOverrideMounts`; volumes personalizados no bloco
+     guiado e `volumes: !override`/`!reset` do YAML avançado substituem os do compose; `volumes` sem tag no YAML soma).
+  5. Log: "Serviços: app imagem nginx:1.27, ports (2); db environment (3: A, B, C)" e "YAML avançado: serviços app,
+     worker". O override é gravado com o debug "gravar docker-compose.opex.yml (conteúdo omitido)".
+  6. **Conferência do override** (só com ajustes): passo "Conferindo o override" (`docker compose … -f
+     docker-compose.opex.yml config --quiet`) antes de qualquer build. YAML avançado ruim ou um Compose sem as
+     tags (exigem v2.24.4 ou mais nova; o servidor tem a v5) falham aqui. A saída da conferência **nunca vai para o log**:
+     o erro do deploy leva só a última linha, com os valores do environment, dos labels e do YAML avançado trocados por
+     `[valor oculto]`. Na falha, o override é regravado **sem os ajustes** (passo "Override sem os ajustes (a
+     conferência falhou)") e, em seguida, a regra do item 8 o volta ao do último deploy concluído, quando existe.
+  7. **Cópias dos arquivos gerados** (o override, o `.env.opex` e, no compose gerenciado, o `docker-compose.yml` da
+     revisão, `deployedExtras`), numa pasta só do Opex, **fora da pasta do projeto**:
+     `$HOME/.opex/environments-deployed/<id do ambiente>/` na máquina dos arquivos (`deployedStore`, `DEPLOYED_STORE`), com
+     `current` (o último deploy concluído) e `pending` (o deploy em andamento). Antes de subir, o passo "Cópia dos arquivos
+     deste deploy" prepara a `pending`; no sucesso, ela vira a `current` (a anterior só sai depois da troca). Se a troca
+     falhar, o deploy **conclui assim mesmo** (containers, arquivos e `deployedComposeOverrides` ficam na configuração
+     nova), as cópias saem e o log avisa "Não foi possível guardar a cópia…". Apagar o ambiente apaga só essa pasta do
+     Opex, nunca nada da pasta do projeto. Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
+  8. **Deploy que falha antes de subir os containers** (antes do passo "Sobe no …", inclusive na retomada e **no mover**,
+     em que o implantado continua sendo o da origem): o override, o `.env.opex` e, no gerenciado, o `docker-compose.yml`
+     voltam aos da `current` ("Override[, compose gerenciado] e variáveis extras voltaram aos do último deploy concluído";
+     a revisão que falhou não fica na pasta), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada.
+     Cópia antiga sem o `docker-compose.yml` não o apaga (fica como está).
+     **O passo que sobe terminou e um passo seguinte falhou** (ex.: a saúde): os containers estão com a configuração
+     nova, então os arquivos ficam os deste deploy, a `pending` vira a `current` e o estado implantado (`deployedOn`, ref,
+     commit, versão, limites, `deployedComposeOverrides`, revisão do compose) passa a ser o deste deploy, mesmo com o deploy
+     falho; o log registra "Os containers subiram com a configuração deste deploy e um passo seguinte falhou…".
+     **O próprio passo que sobe falhou** (estado dos containers indeterminado): os arquivos voltam aos da `current`, o estado implantado continua o do último deploy concluído e o log registra a deriva possível ("O passo
+     que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy… faça um novo deploy…").
+     Na retomada vale o mesmo, pelo passo gravado no ponto de retomada.
+     Ambiente implantado antes das cópias existirem ganha a `current` no começo do deploy seguinte (passo "Cópia do último
+     deploy", antes de regravar os arquivos). Sem cópia (nunca implantado), nada é restaurado.
+- **"Ler compose"** (`POST /api/environments/compose-services`) passa a devolver também `values` por serviço
+  (`normalizeServiceValues`, `service-overrides.ts`): do JSON do `config --no-env-resolution --no-interpolate` (central e
+  adotado; `${VAR}` volta como escrito) ou do YAML bruto da revisão vigente (gerenciado; formas curtas de portas com IP e
+  intervalo, volumes `:ro`, `environment` em lista, `command` em texto, `depends_on` em lista). `${VAR:-padrão}` fica inteiro
+  ao separar por `:` (porta publicada e destino do volume aceitam `${VAR}`). Porta ou volume que não dá para ler na forma da
+  tela (ex.: alvo `${VAR}`) vem em `unreadable` e o campo avisa "Não foi possível ler este item do compose: …" (ao
+  personalizar, ele sai do serviço), em vez de sumir calado.
+- **Tela** (seção **Serviços do compose** da página Novo/Editar, `ServicesSection`, OPE-211 v2): **lista e painel**.
+  - **Lista** (`ServiceList`, à esquerda no `lg`; abaixo, um `SearchPicker` "Serviço: app" acima do painel): os serviços do
+    compose lido, na ordem do compose, e depois os que têm ajuste ou limite salvo mas não estão no compose
+    (`serviceListItems`, `services-form.ts`). Selos: "build" ou a imagem do compose, "imagem própria", "N ajustes", "fora do
+    ambiente" (não está entre os escolhidos na Origem) e "não está no compose". Escolha por clique ou ↑/↓; o escolhido vai
+    na URL (`?servico=`) e o primeiro vem escolhido. Lendo: skeleton das linhas; sem serviços, estado vazio.
+  - **Painel** (`ServicePanel`): nome, resumo dos ajustes e "Desfazer os ajustes deste serviço" (com confirmação). Campos
+    em grupos (`SERVICE_FIELD_GROUPS`): **Imagem e comando** (imagem, command, entrypoint), **Rede** (portas publicadas,
+    depende de), **Armazenamento** (volumes), **Saúde e ciclo** (healthcheck, restart), **Variáveis e labels**
+    (environment, labels) e **Recursos** (ver "Limites de recursos"). Cada campo (`ServiceFieldRow`) mostra o valor do
+    compose com o selo "do compose" e **Editar**, que abre o editor no lugar já com o valor do compose (ou vazio, sem
+    leitura); personalizado, mostra o editor, "No compose: …" e **Voltar ao do compose** (grava `null`, com "Desfazer" no
+    toast). O serviço entra nos ajustes no primeiro campo editado e sai quando nenhum campo fica personalizado
+    (`setOverrideField`). Editores: imagem (`Input`); command/entrypoint como **Linha de comando** (dividida como o
+    compose faz, `splitCommandLine`) ou **Um argumento por linha**; environment e labels (`KeyValueRows`, compartilhado com
+    as Variáveis extras); portas, volumes e dependências em tabelas com cabeçalho de coluna (`TableHeader`; abaixo do `sm`
+    as linhas empilham), "Adicionar …" no fim, `OptionTabs` para protocolo, tipo e condição e o serviço da dependência por
+    `SearchPicker`; restart em `OptionTabs` (Nunca, Sempre, Se falhar, Até ser parado); healthcheck Shell/Exec/Desligado
+    com as durações. Avisos no campo: item do compose não lido, chave do environment também nas Variáveis extras e,
+    executando no PC, porta publicada fora de Execução › Portas. As chaves do YAML avançado do serviço aparecem como chips
+    no fim do painel, com "Abrir o YAML avançado".
+  - **YAML avançado** (bloco recolhível, aberto quando há YAML salvo): o `ComposeEditorField` (limite de 64 KB, exemplo e
+    ajuda próprios) com o erro em tempo real.
+  - **O que muda no deploy** (bloco recolhível, `DeployPreview`): o `docker-compose.opex.yml` que o próximo deploy vai
+    gerar com o que está na tela, pela mesma função do deploy (`deployPreview` → `overrideYaml`, `editor-sections.ts`):
+    valores do environment como `[valor oculto]`, só os serviços escolhidos na Origem, `env_file` só com Variáveis extras e
+    a imagem do registry com marcadores (`localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`). No Editar de ambiente
+    implantado, o selo "Difere do implantado"/"Igual ao implantado" e o resumo do implantado.
+  - Falha da leitura: aviso com "Tentar novamente"; os ajustes salvos continuam na lista e Salvar fica livre.
+- **Linha**: "serviços: app imagem nginx:1.27 · 3 ajustes" (os implantados) e o selo **"Ajustes dos serviços salvos diferem
+  dos implantados: faça Deploy"** (`composeOverridesPendingDeploy`: salvo × `deployedComposeOverrides`, só em ambiente
+  implantado; serviço sem campo personalizado, ordem e espaços nas pontas do YAML não contam).
+- **Auditoria**: `servicos` (resumo em texto, do environment só as chaves) no antes/depois. O portal do cliente não recebe
+  nada disso.
 
 ### Builder do servidor (OPE-186)
 
@@ -325,6 +582,18 @@ mesma validação, auditoria, Pusher e erros.
   em si só se edita pela tela (não há ferramenta de revisões); `start_environment`, `create_environments_builder`, `start_environments_builder`.
 - `create_environment` e `update_environment` aceitam `limits` (o mesmo `environmentLimitsSchema` da tela; substitui os
   limites salvos inteiros, `null` num campo = sem limite).
+- `create_environment` e `update_environment` aceitam `composeOverrides` (OPE-211, o mesmo `composeOverridesSchema` da tela;
+  substitui os ajustes salvos inteiros; ausente mantém; `null` no editar = sem ajustes). `get_environment` traz
+  `ajustesDosServicos: { salvos, configuracao, implantados, diferem }` e `list_environments`, `ajustesImplantados` e
+  `ajustesNaoImplantados`. Os valores do `environment`, dos `labels` e do YAML avançado nunca vão para o modelo, o card
+  nem o histórico (`redactComposeOverrides`, `opex-format.ts`): a `configuracao` do `get_environment` e o `redact` das
+  ferramentas de criar/editar levam as chaves (e, no YAML, as chaves e as tags) com os valores como `[valor oculto]`; o
+  YAML mascarado sai **sem os comentários** (uma linha comentada pode guardar um segredo).
+- **Reenviar a `configuracao`** do `get_environment` (`restoreHiddenOverrides`): `[valor oculto]` nunca é gravado. No
+  `environment` e nos `labels` ele mantém o valor salvo da mesma chave no mesmo serviço; no YAML avançado, o YAML
+  mascarado **igual** ao do salvo mantém o YAML salvo. Sem valor salvo para manter (chave nova, YAML mascarado alterado
+  ou no `create_environment`), a ferramenta recusa dizendo o que fazer (enviar o valor real, tirar a chave ou reenviar o
+  YAML sem mudar).
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; no gerenciado,
   `projectName` e `services`; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
@@ -377,7 +646,8 @@ mesma validação, auditoria, Pusher e erros.
   lembra de cadastrá-la em **Variáveis extras**.
 - **Override** `docker-compose.opex.yml` (regravado a cada deploy; os comandos do compose só o
   incluem quando existe — um adotado ainda não implantado pelo app derruba/reinicia/apaga sem ele): `env_file`, os limites de
-  recursos preenchidos e, com build e execução em máquinas diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`.
+  recursos preenchidos, os ajustes dos serviços (OPE-211, ver "Serviços do compose") e, com build e execução em máquinas
+  diferentes, `image: localhost:<porta>/opex-env/<slug>-<serviço>:<commit>` (menos nos serviços com imagem própria).
 - Combinações (`pipeline.ts`, `deploySteps`):
 
 | Build → Execução | Passos |
@@ -413,6 +683,11 @@ mesma validação, auditoria, Pusher e erros.
   projeto continua valendo (aparece em "No host hoje" no Editar); tirá-lo exige editar o compose. Limites novos só
   entram com Deploy (Reiniciar/Levantar não). "Ler compose" de uma central só traz os YAML da ref: `include`/`extends` de arquivos com outra extensão falham.
 
+- Serviços do compose: as tags `!reset`/`!override` exigem Docker Compose v2.24.4 ou mais nova na máquina dos arquivos (a
+  conferência do override falha cedo). `depends_on` para um serviço fora dos serviços escolhidos na origem sobe a
+  dependência mesmo assim (regra do compose). Pasta (bind) relativa é a partir da pasta do primeiro arquivo do compose. O
+  YAML avançado não declara `networks`/`volumes` de topo. Valores em texto simples no banco e nas ferramentas do Agente Opex.
+
 - Builder do servidor: só os builds conhecidos pela fila global do build deste processo contam como "build
   em andamento"; um `docker build` manual no host não é detectado (recriar/derrubar/apagar o derrubaria).
   Recriar pode baixar uma imagem mais nova do BuildKit (`buildx-stable-1`); o estado `--keep-state`
@@ -441,14 +716,19 @@ mesma validação, auditoria, Pusher e erros.
 ### Portal do cliente (`/cliente/ambientes`)
 
 - Item **Ambientes** no menu do portal (`clienteNav`), para **todos** os usuários do cliente; a página
-  (`ClienteAmbientesPage`) lista os ambientes com estado ("No ar", "Parcial", "Parado", "Nunca
-  implantado", "Implantando"), versão em execução (ou a implantada), ref, serviços no ar e quando foi o
-  último deploy. Atualiza a cada 15 s e em tempo real.
+  (`ClienteAmbientesPage`) lista os ambientes **no mesmo card do dono** (OPE-211, `PortalEnvironmentCard` com as peças de
+  `components/card/`): estado ("No ar", "Parcial", "Parado", "Nunca implantado", "Implantando"), nome (sem link), slug,
+  ref e versão em execução (ou a implantada); os containers com serviço, situação e **portas** (link e copiar, com o
+  host das Configurações do dono, `PortalEnvironmentDto.portLinkHost`, ou o da página), sem CPU/RAM nem limites; no
+  rodapé, o último deploy (texto) e "N/M no ar". Admin: **Implantar** visível e Levantar/Reiniciar no menu ⋯. Skeleton
+  `EnvironmentCardSkeleton variant="portal"`. Atualiza a cada 15 s e em tempo real.
 - **Vínculo**: o cliente vê só ambientes de origem **central** cuja central (`AgenticCentral.projectId`)
   está em `client.projectIds`, conferido em **toda** requisição (`server/portal.ts`). Projetos
   **adotados**, **compose gerenciado** e ambientes de outro cliente nunca aparecem e respondem 404 nas ações.
-- **Visão reduzida** (`PortalEnvironmentDto`, `toPortalEnvironment`): sem variáveis, máquinas,
-  portas, caminhos, containers, CPU/RAM, commit, erro nem log do deploy.
+- **Visão reduzida** (`PortalEnvironmentDto`, `toPortalEnvironment`): sem variáveis, máquinas, portas liberadas do
+  ambiente, caminhos, nome dos containers, CPU/RAM, limites, commit, erro nem log do deploy. Por serviço vai só o estado,
+  a situação, a versão e as portas que ele escuta (`listen`, OPE-211, decisão do dono; o Agente Opex do portal também as
+  vê, por ler o mesmo DTO).
 - **Ações só do admin do cliente** (`assertClientAdmin`, 403 para os demais): **Implantar** (sempre a
   ref salva, sem trocar de ref nem de máquina), **Levantar** e **Reiniciar** — `POST
   /api/cliente/ambientes/[id]/actions` `{ action: "deploy" | "up" | "restart" }`, chamando
@@ -471,7 +751,9 @@ mesma validação, auditoria, Pusher e erros.
   `hooks/useEnvironmentsBuilder.ts`, `components/builder/` (`BuilderCard`, `BuilderRow`, `BuilderFormDialog`,
   `BuilderConfirmDialog`),
   `compose-config.ts`, `pipeline.ts`, `view.ts`, `opex-format.ts`, `managed-compose.ts` (regras puras do compose
-  gerenciado), `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
+  gerenciado), `service-overrides.ts`, `override-yaml.ts` e `services-form.ts` (serviços do compose, puros),
+  `hooks/useFormComposeRead.tsx`, `hooks/useEnvironmentEditor.ts`, `editor-sections.ts`, `environment-editor-layout.ts`,
+  `components/editor/` (página Novo/Editar, OPE-211) e `components/services/` (editores dos campos), `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
   `EnvironmentStatus.tsx` com o botão e os selos compartilhados com o portal), `hooks/`,
   `portal/` (página, linha e hooks do portal) e `server/` (`models`, `service`, `deploy`, `resume`,
   `hub`, `stream`, `forwards`, `registry`, `settings`, `opex-notice`, `portal`).
@@ -486,7 +768,7 @@ mesma validação, auditoria, Pusher e erros.
   gerenciado, sem TTL; saem ao apagar o ambiente), `environments_state`; auditoria
   `entidade: "Ambiente"`.
 - Testes: `__tests__/features/environments/` (`commands`, `deploy`, `resume`, `environments-ui`, `managed-compose`,
-  `compose-revisions`, `compose-ui`,
+  `compose-revisions`, `compose-ui`, `service-overrides`, `editor-sections`, `environment-editor-ui`,
   `opex-tools`, `portal`, `portal-ui`, `builder-commands`, `builder`, `builder-ui`),
   `__tests__/features/agentic/build-queue.test.ts` (`runExclusiveBuild` e a recriação pendente antes da
   próxima mesa), `__tests__/features/opex-agent/client-tools.test.ts` (grupo do portal).

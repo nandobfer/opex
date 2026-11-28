@@ -1,7 +1,8 @@
 import type { LanguageModelUsage, ModelMessage, ToolSet } from "ai"
 import { z } from "zod"
-import { prepareModel } from "@/lib/ai/stream"
-import { recordAiConsumption } from "@/lib/ai/consumption"
+import { prepareModel } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
+import { recordAiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption"
+import { tokenDetailsOf, tokensFromUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
 import { SecretaryDeliveryError } from "../ai-errors"
 import { SECRETARY_CONSUMPTION_ORIGIN } from "../constants"
 import { priceKey, stepCostUsd } from "../cost"
@@ -29,7 +30,7 @@ export async function secretaryInference<T>(options: {
         const cost = stepCostUsd(reported?.costUsd, { inputTokens: tokens.inputTokens ?? 0, outputTokens: tokens.outputTokens ?? 0 }, options.settings.pricing[priceKey(provider, model)])
         await recordAiConsumption({ dedupKey: `secretary:${options.id}:${++step}`, provider, model, subject: options.subject, origin: options.origin ?? SECRETARY_CONSUMPTION_ORIGIN,
             inputTokens: tokens.inputTokens ?? null, outputTokens: tokens.outputTokens ?? null, totalTokens: tokens.totalTokens ?? null,
-            costUsd: cost.costUsd, billing: reported?.billing, apiKeyId: prepared.apiKeyId })
+            costUsd: cost.costUsd, billing: reported?.billing, apiKeyId: prepared.apiKeyId, tokenDetails: tokenDetailsOf(tokensFromUsage(tokens)) })
     }
     const strict = async (raw: unknown) => options.schema.safeParseAsync(options.normalize ? options.normalize(raw) : raw)
     try {

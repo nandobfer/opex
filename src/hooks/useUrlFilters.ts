@@ -64,6 +64,21 @@ export const urlFilterCodecs = {
     },
 }
 
+/**
+ * Link que só muda a query da página atual (ex.: "Abrir memórias" trocando a aba, OPE-207): grava no histórico
+ * (`pushState`, o Voltar desfaz) e avisa quem lê a URL (`useUrlFilters` pelo evento, `useSearchParams` pelo Next), sem a
+ * ida ao servidor que o `router.push` faz. Devolve `false` quando o caminho é outro (a navegação normal segue).
+ */
+export function navigateInPage(href: string): boolean {
+    const target = new URL(href, window.location.href)
+    if (target.origin !== window.location.origin || target.pathname !== window.location.pathname) return false
+    // Estado `null` (nunca o `history.state` do Next, que tem `__NA`): só assim o `pushState` do Next copia o estado
+    // interno e sincroniza o `useSearchParams`.
+    window.history.pushState(null, "", `${target.pathname}${target.search}${target.hash}`)
+    window.dispatchEvent(new Event(URL_FILTERS_CHANGE_EVENT))
+    return true
+}
+
 function subscribe(onStoreChange: () => void): () => void {
     window.addEventListener("popstate", onStoreChange)
     window.addEventListener(URL_FILTERS_CHANGE_EVENT, onStoreChange)

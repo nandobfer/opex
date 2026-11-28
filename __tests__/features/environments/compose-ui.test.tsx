@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { framerMotionMock } from '../../helpers/framer-motion'
 import type { EnvironmentComposeDto, EnvironmentDto } from '@/features/environments/types'
 
-/** Compose gerenciado (OPE-191): origem no formulário, linha, diálogo Compose (revisões) e apagar. */
+/** Compose gerenciado (OPE-191): origem no formulário, card, diálogo Compose (revisões) e apagar. */
 
 const V1 = 'services:\n  minio:\n    image: minio/minio\n'
 const V3 = `${V1}    ports:\n      - "9000:9000"\n`
@@ -21,7 +21,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('sonner', () => ({ toast: { success: vi.fn(), warning: vi.fn(), error: vi.fn() } }))
+vi.mock('next/navigation', () => ({ useRouter: () => ({ push: vi.fn() }), usePathname: () => '/ambientes/novo', useSearchParams: () => new URLSearchParams() }))
+vi.mock('sonner', () => ({ toast: Object.assign(vi.fn(), { success: vi.fn(), warning: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [], isLoading: false }) }))
 vi.mock('@/features/environments/hooks/useEnvironments', () => ({
   useSaveEnvironment: () => ({ mutate: mocks.save, isPending: false }),
@@ -39,8 +40,9 @@ vi.mock('@/features/environments/hooks/useEnvironmentCompose', () => ({
 
 import { ComposeDialog } from '@/features/environments/components/ComposeDialog'
 import { DeleteEnvironmentDialog } from '@/features/environments/components/DeleteEnvironmentDialog'
-import { EnvironmentFormDialog, NO_HOSTS } from '@/features/environments/components/EnvironmentFormDialog'
-import { EnvironmentRow } from '@/features/environments/components/EnvironmentRow'
+import { EnvironmentEditorForm } from '@/features/environments/components/editor/EnvironmentEditorForm'
+import { NO_HOSTS } from '@/features/environments/view'
+import { EnvironmentCard } from '@/features/environments/components/EnvironmentCard'
 
 const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   id: 'e1',
@@ -52,6 +54,11 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   healthUrl: null,
   buildOn: 'server',
   runOn: 'server',
+  limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  limitsConfigured: false,
+  deployedLimits: null,
+  composeOverrides: null,
+  deployedComposeOverrides: null,
   deployedOn: { buildOn: 'server', runOn: 'server' },
   deployedVersion: null,
   deployedComposeVersion: 2,
@@ -77,9 +84,9 @@ beforeEach(() => {
 })
 afterEach(cleanup)
 
-describe('formulário: origem', () => {
+describe('página do ambiente: origem', () => {
   it('Novo: três origens (adotado desabilitado, vem de Adotar); gerenciado mostra projeto, serviços e o editor e exige o compose', async () => {
-    render(<EnvironmentFormDialog open env={null} pcAvailable pcReason={null} hosts={NO_HOSTS} onClose={vi.fn()} />)
+    render(<EnvironmentEditorForm env={null} pcAvailable pcReason={null} hosts={NO_HOSTS} />)
     const radios = screen.getAllByRole('radio').filter((item) => ['Central', 'Compose gerenciado', 'Projeto adotado'].includes(item.textContent ?? ''))
     expect(radios.map((item) => item.textContent)).toEqual(['Central', 'Compose gerenciado', 'Projeto adotado'])
     expect(radios[2]!.hasAttribute('disabled')).toBe(true)
@@ -91,7 +98,7 @@ describe('formulário: origem', () => {
     expect((screen.getByLabelText('Nome do projeto do compose') as HTMLInputElement).value).toBe('minio')
     const editor = screen.getByLabelText('docker-compose.yml') as HTMLTextAreaElement
 
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Criar ambiente' })))
+    await act(async () => fireEvent.click(screen.getAllByRole('button', { name: 'Criar ambiente' })[0]!))
     expect(mocks.save).not.toHaveBeenCalled()
     expect(await screen.findByText('Escreva o compose (YAML)')).toBeTruthy()
 
@@ -99,37 +106,46 @@ describe('formulário: origem', () => {
     expect(await screen.findByText(/^YAML inválido na linha 3/)).toBeTruthy()
 
     fireEvent.change(editor, { target: { value: V1 } })
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Criar ambiente' })))
+    // O YAML ainda não salvo é lido no navegador: o serviço já aparece em Serviços do compose.
+    await waitFor(() => expect(screen.getByLabelText('Serviço minio')).toBeTruthy())
+    await act(async () => fireEvent.click(screen.getAllByRole('button', { name: 'Criar ambiente' })[0]!))
     await waitFor(() => expect(mocks.save).toHaveBeenCalled())
     expect(mocks.save.mock.calls[0]![0]).toMatchObject({ name: 'MinIO', slug: 'minio', compose: V1, source: { kind: 'managed', projectName: 'minio', services: [] } })
   })
 
-  it('Editar gerenciado: origem travada e o compose fica no botão Compose', () => {
-    render(<EnvironmentFormDialog open env={env()} pcAvailable pcReason={null} hosts={NO_HOSTS} onClose={vi.fn()} />)
+  it('Editar gerenciado: origem travada e o compose abre as revisões (diálogo Compose) na própria página', async () => {
+    render(<EnvironmentEditorForm env={env()} pcAvailable pcReason={null} hosts={NO_HOSTS} />)
     const managed = screen.getAllByRole('radio').find((item) => item.textContent === 'Compose gerenciado')!
     expect(managed.getAttribute('aria-checked')).toBe('true')
     expect(managed.hasAttribute('disabled')).toBe(true)
+    expect(screen.getByText('A origem não muda depois de criada.')).toBeTruthy()
     expect(screen.queryByLabelText('docker-compose.yml')).toBeNull()
-    expect(screen.getByText(/O compose se edita pelo botão Compose/)).toBeTruthy()
+    expect(screen.getByText(/Compose v3: cada gravação cria uma revisão/)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Abrir revisões' }))
+    expect(await screen.findByText(/Revisão vigente v3/)).toBeTruthy()
   })
 })
 
-describe('linha do ambiente gerenciado', () => {
-  it('badge Gerenciado com a revisão vigente, aviso de compose não implantado e o botão Compose', () => {
+const openMenu = () => fireEvent.pointerDown(screen.getByRole('button', { name: 'Mais ações de MinIO' }), { button: 0, pointerType: 'mouse' })
+
+describe('card do ambiente gerenciado', () => {
+  it('selo Gerenciado com a revisão vigente, aviso de compose não implantado e Compose no menu', () => {
     const onIntent = vi.fn()
-    render(<EnvironmentRow env={env()} pcAvailable onIntent={onIntent} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentCard env={env()} pcAvailable linkHost="h" onIntent={onIntent} />)
     expect(screen.getByText('Gerenciado v3')).toBeTruthy()
-    expect(screen.getByText(/Há compose novo não implantado \(implantada: v2\)/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Compose' }))
+    expect(screen.getByText(/Mudanças salvas ainda não implantadas: compose v3 \(implantado: v2\)/)).toBeTruthy()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Compose' }))
     expect(onIntent).toHaveBeenCalledWith({ kind: 'compose' })
   })
 
-  it('revisão vigente já implantada: sem aviso; central não tem o botão Compose', () => {
-    render(<EnvironmentRow env={env({ deployedComposeVersion: 3 })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
-    expect(screen.queryByText(/Há compose novo/)).toBeNull()
+  it('revisão vigente já implantada: sem aviso; central não tem Compose no menu', () => {
+    render(<EnvironmentCard env={env({ deployedComposeVersion: 3 })} pcAvailable linkHost="h" onIntent={vi.fn()} />)
+    expect(screen.queryByText(/Mudanças salvas/)).toBeNull()
     cleanup()
-    render(<EnvironmentRow env={env({ source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: 'Compose' })).toBeNull()
+    render(<EnvironmentCard env={env({ source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } })} pcAvailable linkHost="h" onIntent={vi.fn()} />)
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Compose' })).toBeNull()
   })
 })
 

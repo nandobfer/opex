@@ -1,9 +1,11 @@
 
 import { isGroupJid, jidNumber, normalizeJid } from "../constants"
+import { lidAliasOf } from "../message"
 import type { ContactKind, SendTestInput } from "../schemas"
 import type { EvolutionContactDto, EvolutionNumberCheckDto } from "../types"
 import { evolution, toDomainError } from "./client"
 import { defaultInstanceName } from "./instances"
+import { rememberLidAliases } from "./lid"
 import { EvolutionContact, evolutionDb, type IEvolutionContact } from "./models"
 import { AcaoAuditoria, auditEvolution, evolutionLog, publishEvolution } from "./shared"
 import { upsertContacts } from "./webhook"
@@ -74,6 +76,11 @@ export async function syncContacts(actorId: string): Promise<{ contacts: number;
                 .map((chat) => ({ jid: normalizeJid(chat.remoteJid), name: chat.name ?? null, pushName: chat.pushName ?? null, pictureUrl: chat.profilePicUrl ?? null, isGroup: isGroupJid(chat.remoteJid), unreadCount: typeof chat.unreadMessages === "number" ? chat.unreadMessages : null })),
             { hasChat: true },
         )
+        // Conversa `@lid` cuja última mensagem traz o número: preenche a correspondência das conversas já partidas (OPE-207).
+        await rememberLidAliases(instance, chats.flatMap((chat) => {
+            const alias = chat.lastMessage?.key ? lidAliasOf(chat.lastMessage.key) : null
+            return alias ? [alias] : []
+        }))
         counts = { contacts: contacts.length, groups: groups.length, chats: chats.length }
     } catch (error) {
         toDomainError(error)

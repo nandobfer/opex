@@ -7,6 +7,7 @@ import { centralTools } from "./centrals"
 import { clientTools } from "./clients"
 import { contextTools } from "./context"
 import { docTools } from "./docs"
+import { documentTools } from "./documents"
 import { engramindTools } from "./engramind"
 import { environmentTools } from "./environments"
 import { fileTools } from "./files"
@@ -23,6 +24,7 @@ import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { pluginTools } from "./plugins"
 import { previewTools } from "./previews"
+import { projectBootstrapTools } from "./project-bootstrap"
 import { routineAgentTools } from "./routine-agents"
 import { secretaryTools } from "./secretary"
 import { serviceTools } from "./services"
@@ -36,12 +38,14 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...contextTools,
     ...docTools,
     ...fileTools,
+    ...documentTools,
     ...memoryTools,
     ...taskTools,
     ...previewTools,
     ...timeTools,
     ...workbenchTools,
     ...centralTools,
+    ...projectBootstrapTools,
     ...githubTools,
     ...issueTools,
     ...integrationTools,

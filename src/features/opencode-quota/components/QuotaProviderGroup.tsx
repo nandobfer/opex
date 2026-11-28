@@ -3,8 +3,8 @@
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { AlertTriangle, ChevronDown } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { hasMultipleAccounts, summaryWindows } from "../logic"
-import type { QuotaProviderDto } from "../types"
+import { hasMultipleAccounts, summaryWindows } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/logic"
+import type { QuotaProviderDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 import { QuotaWindowBar } from "./QuotaWindowBar"
 
 interface QuotaProviderGroupProps {

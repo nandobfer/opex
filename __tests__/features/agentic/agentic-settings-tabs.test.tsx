@@ -37,12 +37,13 @@ vi.mock("@/features/agentic/hooks/useAgentic", () => ({
 }))
 vi.mock("@/features/agentic/components/settings/AgentRolesCard", () => ({ AgentRolesCard: () => <div data-testid="agent-roles">agentes padrão</div> }))
 vi.mock("@/features/agentic/components/settings/CentralsCard", () => ({ CentralsCard: () => <div data-testid="centrals">centrais</div> }))
+vi.mock("@/features/project-bootstrap/components/ActiveBootstrapsCard", () => ({ ActiveBootstrapsCard: () => null }))
 vi.mock("@/features/agentic/components/DeveloperMemoriesSection", () => ({ DeveloperMemoriesSection: ({ centralId }: { centralId?: string }) => <div data-testid="developer-memories">{centralId ?? "globais"}</div> }))
 vi.mock("@/features/agentic/components/settings/ColumnsCard", () => ({ ColumnsCard: ({ title }: { title: string }) => <div data-testid="columns-card">{title}</div> }))
 
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
-import { useLocalTabs } from "@/features/integrations/components/tabs/useLocalTabs"
-import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
+import { useLocalTabs } from "@nandobfer/integracoes/react"
+import { useIntegrationTab } from "@nandobfer/integracoes/react"
 
 beforeEach(() => {
     window.history.replaceState({}, "", "/integracoes/ia?aba=desenvolvimento-agentico")

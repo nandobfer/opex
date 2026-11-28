@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("@/lib/crypto/secretBox", () => ({ encryptSecret: (value: string) => ({ box: value }) }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR", EXECUTAR: "EXECUTAR" }, dbConnect: vi.fn(), recordAudit: vi.fn() }))
-vi.mock("@/lib/integrations/store", () => ({ invalidateStoredIntegrations: vi.fn() }))
-vi.mock("@/lib/integrations/config", () => ({
+vi.mock("@/lib/integrations/server", () => ({ invalidateStoredIntegrations: vi.fn() }))
+vi.mock("@/lib/integrations/runtime", () => ({
     getIntegrationConfig: async () => {
         // Simula a leitura no banco com uma pausa (dá chance de as duas chamadas correrem juntas).
         await new Promise((resolve) => setTimeout(resolve, 1))
@@ -17,7 +17,7 @@ vi.mock("@/lib/integrations/config", () => ({
         return { webhookSecret: box?.box, defaultInstance: "opex" }
     },
 }))
-vi.mock("@/lib/db/models/Integration", () => ({
+vi.mock("@nandobfer/integracoes/mongoose", () => ({
     Integration: {
         updateOne: async (filter: Record<string, unknown>, update: { $setOnInsert?: Record<string, unknown>; $set?: Record<string, unknown> }) => {
             if (update.$setOnInsert) {

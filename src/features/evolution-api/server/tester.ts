@@ -1,6 +1,6 @@
 
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { fail, warnResult, type IntegrationTester } from "@/features/integrations/testers/types"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { fail, warnResult, type IntegrationTester } from "@/lib/integrations/server"
 import { EVOLUTION_INTEGRATION_ID, connectionStateOf, EVOLUTION_STATE_LABELS } from "../constants"
 import { evolution, EvolutionError, type EvolutionTarget } from "./client"
 

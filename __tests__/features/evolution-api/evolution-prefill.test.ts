@@ -10,9 +10,9 @@ const mocks = vi.hoisted(() => ({
     update: vi.fn(async (_id: string, input: unknown) => ({ id: "evolution-api", input })),
 }))
 
-vi.mock("@/lib/integrations/config", () => ({ getIntegration: async () => ({ stored: mocks.stored, values: {}, secretSources: {} }) }))
+vi.mock("@/lib/integrations/runtime", () => ({ getIntegration: async () => ({ stored: mocks.stored, values: {}, secretSources: {} }) }))
 vi.mock("@/features/environments/server/service", () => ({ resolveEnvironmentRef: async () => ({ id: "env" }), envVarsOf: () => mocks.vars }))
-vi.mock("@/features/integrations/services/integration-service", () => ({ updateIntegration: mocks.update, IntegrationUpdateError: class extends Error {} }))
+vi.mock("@/lib/integrations/server", () => ({ updateIntegration: mocks.update, IntegrationUpdateError: class extends Error {} }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: {}, dbConnect: vi.fn(), recordAudit: vi.fn() }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: vi.fn() }))
 

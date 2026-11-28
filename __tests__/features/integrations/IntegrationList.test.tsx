@@ -1,27 +1,29 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from "react"
 import { fireEvent, render, screen, within } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationListItemDto } from "@/features/integrations/types"
+import type { IntegrationListItemDto } from "@nandobfer/integracoes/modules/core/dto"
 
 const mocks = vi.hoisted(() => ({ useIntegrations: vi.fn(), testDialog: vi.fn(), debugDialog: vi.fn() }))
 
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegrationStatusLive: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: mocks.useIntegrations }))
-vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegrations: mocks.useIntegrations }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationTestDialog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     IntegrationTestDialog: (props: { integrationId: string | null }) => {
         mocks.testDialog(props.integrationId)
         return null
     },
-}))
-vi.mock("@/features/integrations/components/IntegrationDebugDialog", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationDebugDialog", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     IntegrationDebugDialog: (props: { integrationId: string | null }) => {
         mocks.debugDialog(props.integrationId)
         return null
     },
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("framer-motion", () => {
     const MOTION_PROPS = new Set(["initial", "animate", "exit", "variants", "transition", "whileTap", "layout"])
     const passthrough = (tag: string) =>
@@ -35,14 +37,13 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { IntegrationList } from "@/features/integrations/components/IntegrationList"
+import { IntegrationList } from "@nandobfer/integracoes/modules/react/central/IntegrationList"
 
 const item = (overrides: Partial<IntegrationListItemDto>): IntegrationListItemDto => ({
     id: "pusher",
     name: "Pusher",
     description: "Eventos em tempo real para as telas do app",
-    environment: "interno",
-    debugMode: false,
+    source: "library",
     health: { status: "ok" },
     configured: true,
     ...overrides,
@@ -53,27 +54,29 @@ beforeEach(() => {
 })
 
 describe("IntegrationList", () => {
-    it("mostra nome, descrição e ambiente de cada integração", () => {
+    it("mostra nome, descrição e a origem do adaptador (Biblioteca ou Próprio)", () => {
         mocks.useIntegrations.mockReturnValue({
-            data: [item({}), item({ id: "crons", name: "Crons", description: "Rotinas", environment: "externo" })],
+            data: [item({}), item({ id: "engramind", name: "Engramind", description: "Memórias", source: "app" })],
             isLoading: false,
         })
         render(<IntegrationList />)
         const row = screen.getByText("Pusher").closest("li")!
         expect(within(row).getByText("Eventos em tempo real para as telas do app")).toBeTruthy()
-        expect(within(row).getByText("Interno")).toBeTruthy()
-        expect(within(screen.getByText("Crons").closest("li")!).getByText("Externo")).toBeTruthy()
+        expect(within(row).getByText("Biblioteca")).toBeTruthy()
+        expect(within(screen.getByText("Engramind").closest("li")!).getByText("Próprio")).toBeTruthy()
+        expect(screen.queryByText("Interno")).toBeNull()
+        expect(screen.queryByText("Externo")).toBeNull()
     })
 
-    it("Debug fica desabilitado quando o modo debug está desligado", () => {
-        mocks.useIntegrations.mockReturnValue({ data: [item({ debugMode: false })], isLoading: false })
+    it("Debug está sempre disponível (o debug é sempre ativo)", () => {
+        mocks.useIntegrations.mockReturnValue({ data: [item({})], isLoading: false })
         render(<IntegrationList />)
         const debug = screen.getByRole("button", { name: "Debug" })
-        expect(debug.hasAttribute("disabled")).toBe(true)
+        expect(debug.hasAttribute("disabled")).toBe(false)
     })
 
     it("o card inteiro é um link para a página da integração; testar e debug abrem os modais", () => {
-        mocks.useIntegrations.mockReturnValue({ data: [item({ debugMode: true })], isLoading: false })
+        mocks.useIntegrations.mockReturnValue({ data: [item({})], isLoading: false })
         render(<IntegrationList />)
 
         expect(screen.getByText("Pusher").closest("a")!.getAttribute("href")).toBe("/integracoes/pusher")

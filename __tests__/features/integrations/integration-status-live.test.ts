@@ -7,19 +7,22 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(async () => undefined) }))
-vi.mock('@/lib/db/models/IntegrationStatus', () => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({ IntegrationStatus: { updateOne: mocks.updateOne } }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({
   integrationDebug: () => new Proxy({}, { get: () => vi.fn() }),
-}))
+}))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 vi.mock('@/lib/pusher/server', () => ({
   isPusherServerConfigured: mocks.configured,
   getRawPusherServer: vi.fn(async () => ({ trigger: mocks.trigger })),
 }))
-vi.mock('@/features/integrations/testers/testers', () => ({ INTEGRATION_TESTERS: {} }))
+vi.mock("@nandobfer/integracoes/modules/integrations/pusher/connection", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (() => ({
+  isPusherServerConfigured: mocks.configured,
+  getRawPusherServer: vi.fn(async () => ({ trigger: mocks.trigger })),
+}))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { runIntegrationTest } from '@/features/integrations/services/integration-test-runner'
-import { RUNNING_STALE_MS, toHealth } from '@/features/integrations/services/integration-service'
+import { runIntegrationTest } from "@nandobfer/integracoes/modules/server/test-runner"
+import { RUNNING_STALE_MS, toHealth } from "@nandobfer/integracoes/modules/server/service"
 
 beforeEach(() => {
   vi.clearAllMocks()

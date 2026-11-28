@@ -3,7 +3,7 @@
 import type { UseFormReturn } from "react-hook-form"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FORM_GRID } from "@/components/ui/form-grid"
-import { AI_TEXT_PROVIDER_IDS, type AiProviderStatusDto } from "@/lib/ai/providers"
+import { AI_TEXT_PROVIDER_IDS, type AiProviderStatusDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { NumberField } from "@/features/pr-review/components/NumberField"
 import { MENTOR_BUDGET_MAX, MENTOR_BUDGET_MIN, MENTOR_COMPACT_MAX, MENTOR_COMPACT_MIN, MENTOR_DIGEST_TIMEOUT_MAX, MENTOR_DIGEST_TIMEOUT_MIN } from "../../mentor/constants"
 import type { MentorSettings } from "../../mentor/schemas"

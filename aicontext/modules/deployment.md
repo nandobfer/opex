@@ -40,7 +40,13 @@ na `main` sem repeti-la, com dois jobs encadeados.
 - A tag é o SHA completo do commit (`opex:<sha>`), o que torna cada imagem imutável e permite
   rollback por tag.
 - A imagem é salva com `docker save | gzip -9` e acompanhada do arquivo `opex-image.tar.gz.sha256`.
-- O `next build` roda com **Turbopack**, o padrão do Next 16. A versão do `next` é fixada
+- **O build de produção usa Webpack** (`"build": "next build --webpack"` no `package.json`, o mesmo
+  script do `Dockerfile`, do `Build image` e da prévia). Com o Turbopack, a compilação no runner
+  (4 vCPU / 16 GB) crescia muito mais rápido que o código — 64 s (06/11/2026) → 85 s (21/11) → 2,6 min →
+  4,5 min (28/11) com ~40% a mais de código — e o pico de memória já tinha estourado a RAM (OPE-207); no
+  Zaturno a medição foi Webpack 334 s / ~6,8 GB contra Turbopack 783 s / ~25 GB. O `next dev` segue com
+  Turbopack. Para voltar, basta tirar o `--webpack` do script.
+- Histórico (Turbopack): a versão do `next` é fixada
   exatamente no `package.json` (hoje `16.4.5`): o `16.1.4` derrubava o build com o panic interno
   do Turbopack `Dependency tracking is disabled so invalidation is not allowed`
   ([vercel/next.js#85496](https://github.com/vercel/next.js/issues/85496)) na geração das rotas —
@@ -48,6 +54,11 @@ na `main` sem repeti-la, com dois jobs encadeados.
   numa versão fixada, o caminho de contenção é `next build --webpack` (o defeito é exclusivo do
   Turbopack; a flag existe no Next 16) e, para achar o gatilho, `next build --debug-build-paths`
   com um recorte de rotas.
+- **Prévia por GitHub Action (`.github/workflows/preview.yml`):** os testes (`vitest`, 4 shards,
+  `fail-fast`) e o build da imagem (`preview`, "Build e artefato") são jobs **paralelos**. O artefato
+  `preview-<tentativa>` sai do job de build, mas o `scripts/preview-github.ts` só o baixa quando o run
+  inteiro termina com `success`: um shard vermelho reprova a prévia como antes. Em série, a suíte
+  (~7 min) somava ao build e a prévia passava de 16 min.
 - **Compilador de plugins (OPE-172):** logo depois do `next build`, o `Dockerfile` copia para o
   standalone o binário nativo do Rolldown (`node_modules/.pnpm/rolldown@*/node_modules/@rolldown/binding-*`)
   e o pacote `tailwindcss` inteiro, e roda `node scripts/plugin-runtime-check.mjs .next/standalone`.
@@ -62,6 +73,15 @@ na `main` sem repeti-la, com dois jobs encadeados.
   MCPs do Agente Opex falhava com "Cannot find module 'undici'"; agora o build da imagem falha com
   "Dependência de execução ausente na imagem: …". `pnpm dev` e os testes não mostram o problema (usam o
   `node_modules` completo).
+- **Type check do build da imagem (OPE-207):** o `next build` roda com `OPEX_SEPARATE_TYPE_CHECK=1` e
+  `next.config.ts` desliga o type check interno; logo depois, em processo próprio, o `Dockerfile` roda
+  `pnpm exec tsc --noEmit`. Dentro do `next build`, o tsc somava a memória ainda ocupada pelo Turbopack e
+  estourava a RAM do runner (`cannot allocate memory`, exit 102) logo após "Running TypeScript" — primeiro
+  em execuções simultâneas e depois de forma determinística no `Build image` da `main` e no `Preview`,
+  bloqueando o deploy de produção desde o build de 19:04 de 27/11/2026. Em processo separado o pico é só o
+  do tsc (~3,6 GB, medido com `tsc --diagnostics`); o escopo é o mesmo, inclusive os tipos de rota que o
+  build grava em `.next/types`. Fora do build da imagem (PR, `pnpm dev`) o `next build` continua checando
+  os tipos normalmente.
 - Versões recém-publicadas do `next` entram em `minimumReleaseAgeExclude` no
   `pnpm-workspace.yaml`: a política de idade mínima de release do pnpm bloquearia a atualização.
 
@@ -109,6 +129,7 @@ existir no servidor. O script de deploy confere cada uma antes de tocar em qualq
 | `minio-network` | Armazenamento de anexos do Agente Opex |
 | `mcp` | MCPs em container — hoje o **Playwright MCP**, em `http://playwright:8931/mcp`, para os agentes do motor `opex` (que rodam no container) |
 | `evolution-network` | Evolution API (OPE-192): o Opex chama `http://evolution-api:8080` e a Evolution entrega o webhook em `http://opex-<PORT>:<PORT>/api/evolution/webhook` (alias `opex-${PORT}` do serviço `app` nessa rede, um por porta, porque `app` é genérico na rede compartilhada) |
+| `gotenberg-network` | Gotenberg (OPE-210): HTML → PDF/PNG dos documentos dos agentes em `http://gotenberg:3000`. O compose do Gotenberg fica fora deste repositório (`/home/burgos/opex-envs/gotenberg`, gerenciado por Opex › Ambientes). Se a Variable `DEPLOY_REQUIRED_NETWORKS` estiver definida no Environment do GitHub, ela precisa ganhar `gotenberg-network` à mão |
 
 Criar uma vez no servidor: `docker network create mcp`. Só o serviço `app` entra na rede `mcp`
 (nem `app-dev` nem o portal precisam dela); o `docker-compose.deploy.yml` não mexe em redes, então o

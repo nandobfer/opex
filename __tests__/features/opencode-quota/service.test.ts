@@ -2,11 +2,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ config: vi.fn(), publish: vi.fn(), rpc: vi.fn(), call: vi.fn(), connection: vi.fn(), shell: vi.fn() }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.config }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: mocks.config }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
-vi.mock('@/lib/ai/opencode', () => ({ getOpencodeConnection: mocks.connection }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ rpc: { call: mocks.call }, shell: { create: mocks.shell } }) }))
+vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn(), request: vi.fn(), response: vi.fn() }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode', () => ({ getOpencodeConnection: mocks.connection }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ rpc: { call: mocks.call }, shell: { create: mocks.shell } }) }))
 
 import { getOpencodeQuota, refreshOpencodeQuota, setQuotaRpcForTests } from '@/features/opencode-quota/server/service'
 import { callQuotaRpc } from '@/features/opencode-quota/server/rpc'

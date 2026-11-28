@@ -3,6 +3,7 @@
 @import "../../plugin-sdk/theme.css";
 /* Componentes do @engramind/client (rede do Engramind, OPE-116): o Tailwind gera as classes que ele usa. */
 @source "../../node_modules/@engramind/client/dist";
+@source "../../node_modules/@nandobfer/integracoes/dist";
 
 @layer base {
   *,

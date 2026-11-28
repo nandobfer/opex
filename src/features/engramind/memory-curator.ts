@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { AI_AGENTS, isAiAgentId, listOfChannel, memoryChannelOf, type AiAgentId } from "@/features/ai/agents"
+import { AI_AGENTS, fixedChannelOf, isAiAgentId, listOfChannel, memoryChannelOf, type AiAgentId, type ChannelNamespace } from "@/features/ai/agents"
 import { estimateTokens } from "@/features/ai/memory-text"
 
 /**
@@ -67,9 +67,9 @@ export function isOwnerAuthored(memory: { createdBy?: string | null; origin?: un
 }
 
 /** Canal de destino de uma memória do backup (a lista antiga com o mesmo id; central quando houver). */
-export function channelOfSource(item: Pick<CuratorSourceItem, "list" | "centralId">): string | null {
+export function channelOfSource(item: Pick<CuratorSourceItem, "list" | "centralId">, ns: ChannelNamespace): string | null {
     if (!isAiAgentId(item.list)) return null
-    return memoryChannelOf(item.list, { centralId: item.centralId })
+    return memoryChannelOf(item.list, { centralId: item.centralId }, ns)
 }
 
 export function buildCuratorInstructions(categories: readonly { key: string; label: string }[], textMax: number): string {
@@ -127,6 +127,8 @@ export function parseCuratorAnswer(raw: string): CuratorAnswerItem[] {
 export interface CuratorRuleContext {
     categories: readonly { key: string }[]
     textMax: number
+    /** Espaço de nomes dos canais da instância (OPE-206). */
+    ns: ChannelNamespace
 }
 
 /**
@@ -145,7 +147,7 @@ export function applyCuratorRules(items: readonly CuratorSourceItem[], answers: 
     const first = context.categories[0]?.key ?? null
     const result = new Map<string, CuratorDecisionRecord>()
     for (const item of items) {
-        const channel = channelOfSource(item) ?? item.list
+        const channel = channelOfSource(item, context.ns) ?? item.list
         const answer = byId.get(item.id)
         if (!answer) {
             result.set(item.id, { decisao: "revisar_dono", motivo: INVALID_CLASSIFICATION_REASON, textoProposto: null, categoriaProposta: first, canalDestino: channel, duplicataDe: null, confianca: null })
@@ -170,7 +172,7 @@ export function applyCuratorRules(items: readonly CuratorSourceItem[], answers: 
         } else if (decisao === "revisar_dono" && textoProposto && textoProposto.length > context.textMax) {
             motivo = `${motivo} (a reescrita proposta também passa de ${context.textMax} caracteres)`
         }
-        if (answer.canalDestino && answer.canalDestino !== channel && listOfChannel(answer.canalDestino)) {
+        if (answer.canalDestino && answer.canalDestino !== channel && listOfChannel(answer.canalDestino, context.ns)) {
             motivo = `${motivo} (o curador sugeriu mover para ${answer.canalDestino}; a memória fica na lista de origem)`
         }
         const canalDestino = channel
@@ -196,8 +198,8 @@ export interface BudgetCombination {
 }
 
 /** Combinações de turno de todos os agentes (desenvolvedor: global + cada central com memórias). */
-export function budgetCombinations(centralIds: readonly string[]): BudgetCombination[] {
-    const channel = (id: AiAgentId) => AI_AGENTS[id].channel
+export function budgetCombinations(centralIds: readonly string[], ns: ChannelNamespace): BudgetCombination[] {
+    const channel = (id: AiAgentId) => fixedChannelOf(id, ns)
     const app = channel("app-global")
     const combos: BudgetCombination[] = [
         { key: "opex-owner", label: "Agente Opex · dono", channels: [app, channel("opex-global"), channel("opex-owner")] },
@@ -208,7 +210,7 @@ export function budgetCombinations(centralIds: readonly string[]): BudgetCombina
         { key: "arquiteto", label: "Agente Arquiteto", channels: [app, channel("architect")] },
         { key: "desenvolvedor", label: "Agente desenvolvedor · globais", channels: [app, channel("developer-global")] },
     ]
-    for (const centralId of centralIds) combos.push({ key: `desenvolvedor:${centralId}`, label: `Agente desenvolvedor · central ${centralId}`, channels: [app, channel("developer-global"), memoryChannelOf("developer-central", { centralId })!] })
+    for (const centralId of centralIds) combos.push({ key: `desenvolvedor:${centralId}`, label: `Agente desenvolvedor · central ${centralId}`, channels: [app, channel("developer-global"), memoryChannelOf("developer-central", { centralId }, ns) ?? ""] })
     return combos
 }
 

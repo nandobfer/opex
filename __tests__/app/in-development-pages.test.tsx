@@ -1,5 +1,4 @@
 /** @vitest-environment happy-dom */
-
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 import { readFileSync } from "node:fs"
@@ -21,8 +20,8 @@ vi.mock("@/features/tasks/components/detail/TaskDetailPage", () => ({
     TaskDetailPage: ({ id }: { id: string }) => <div data-testid="task">{id}</div>,
 }))
 vi.mock("@/features/tasks/server/resolve-route", () => ({ resolveTaskRoute: mocks.resolveTaskRoute }))
-vi.mock("@/features/integrations/components/IntegrationDetailPage", () => ({
-    IntegrationDetailPage: ({ id }: { id: string }) => <div data-testid="detail">{id}</div>,
+vi.mock("@/features/integrations/components/IntegrationsCentralPage", () => ({
+    IntegrationsCentralPage: ({ slug }: { slug: string[] }) => <div data-testid="detail">{slug.join("/")}</div>,
 }))
 
 import HomePage from "@/app/page"
@@ -30,7 +29,7 @@ import UnknownPage from "@/app/(app)/[...rest]/page"
 import DashboardsPage from "@/app/(app)/dashboard/page"
 import TarefasPage from "@/app/(app)/tarefas/page"
 import TarefaPage from "@/app/(app)/tarefas/[id]/page"
-import IntegracaoPage from "@/app/(app)/integracoes/[id]/page"
+import IntegracoesPage from "@/app/(app)/integracoes/[[...slug]]/page"
 import { APP_NAV_ITEMS, HOME_HREF } from "@/features/layout/navigation"
 
 beforeEach(() => vi.clearAllMocks())
@@ -71,17 +70,26 @@ describe("páginas do app", () => {
     })
 
     it("detalhe de integração: id do catálogo renderiza; desconhecido ou em desenvolvimento dá 404", async () => {
-        render(await IntegracaoPage({ params: Promise.resolve({ id: "crons" }) }))
+        render(await IntegracoesPage({ params: Promise.resolve({ slug: ["crons"] }) }))
         expect(screen.getByTestId("detail").textContent).toBe("crons")
 
         for (const id of ["google_drive", "archflow", "linx"]) {
-            await expect(IntegracaoPage({ params: Promise.resolve({ id }) })).rejects.toThrow("NEXT_NOT_FOUND")
+            await expect(IntegracoesPage({ params: Promise.resolve({ slug: [id] }) })).rejects.toThrow("NEXT_NOT_FOUND")
         }
     })
 
     it("todo item de menu tem página (arquivo existe)", () => {
         for (const item of APP_NAV_ITEMS) {
-            expect(() => readFileSync(`src/app/(app)${item.href}/page.tsx`)).not.toThrow()
+            // A central de integrações é uma página catch-all opcional (`/integracoes/[[...slug]]`).
+            const page = [`src/app/(app)${item.href}/page.tsx`, `src/app/(app)${item.href}/[[...slug]]/page.tsx`].some((file) => {
+                try {
+                    readFileSync(file)
+                    return true
+                } catch {
+                    return false
+                }
+            })
+            expect(page, item.href).toBe(true)
         }
     })
 })
@@ -94,7 +102,8 @@ describe("layout padrão do Smart Desk", () => {
         expect(readFileSync("src/features/layout/content-padding.ts", "utf8")).toContain('CONTENT_PADDING_X = "px-4 md:px-6 lg:px-8"')
         for (const file of [
             "src/features/tasks/components/TasksPage.tsx",
-            "src/features/integrations/components/IntegrationList.tsx",
+            // Lista da central de integrações (biblioteca `@nandobfer/integracoes`).
+            "node_modules/@nandobfer/integracoes/dist/react/central/IntegrationList.js",
         ]) {
             expect(readFileSync(file, "utf8")).not.toMatch(/mx-auto|max-w-(?:[3-7]xl|screen)/)
         }

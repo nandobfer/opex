@@ -14,9 +14,16 @@ export const ENGRAMIND_CONSUMPTION_EVENT = "engramind-consumption"
 export const UNIVERSE_LAYOUT_EVENT_TYPE = "universe-layout"
 /** Tipo do `engramind-updated` quando o cache das similares das memórias muda (OPE-164). */
 export const RELATED_MEMORIES_EVENT_TYPE = "related-memories"
+/** Tipo do `engramind-updated` quando o espaço de nomes dos canais muda (OPE-206: migração B ou outra chave). */
+export const NAMESPACE_EVENT_TYPE = "namespace"
+/** Tipo do `engramind-updated` a cada passo da migração dos nomes dos canais (OPE-206). */
+export const CHANNEL_MIGRATION_EVENT_TYPE = "channel-migration"
 /** Entidade da auditoria do Opex. */
 export const ENGRAMIND_AUDIT_ENTITY = "Engramind"
-/** App do próprio Opex na rede do Engramind (criado no bootstrap). */
+/**
+ * App criado pelo bootstrap (o do dono). Desde a OPE-206 cada instância usa o app da própria chave
+ * (`instanceApp()` em `server/instance.ts`); esta constante só vale para a chave do bootstrap.
+ */
 export const OPEX_APP_SLUG = "opex"
 export const OPEX_APP_NAME = "Opex"
 export const OPEX_TOKEN_LABEL = "Opex"

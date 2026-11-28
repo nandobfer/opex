@@ -1,7 +1,7 @@
 "use client"
 
-import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { ModelVariantValue } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelVariantFields"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { WORKBENCH_MODEL_ROLE_INFO, WORKBENCH_MODEL_ROLES, type WorkbenchModelRole } from "../../constants"
 import type { ModelChoiceDto } from "../../types"
 import { ModelRoleSection } from "./ModelRoleSection"

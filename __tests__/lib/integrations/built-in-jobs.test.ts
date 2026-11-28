@@ -1,10 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { AGENT_USAGE_DAILY_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, HEALTH_CHECK_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, OPENCODE_GO_USAGE_JOB_ID, COMMAND_CODE_USAGE_JOB_ID, HOST_METRICS_JOB_ID, ENGRAMIND_PENDING_WRITES_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
-import { withBuiltInJobs } from '@/lib/integrations/config'
+import { AGENT_USAGE_DAILY_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, DEFAULT_CRON_JOBS, GITHUB_ISSUE_SYNC_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, OPENCODE_GO_USAGE_JOB_ID, COMMAND_CODE_USAGE_JOB_ID, FX_PTAX_JOB_ID, AI_SUBSCRIPTION_DAYS_JOB_ID, HOST_METRICS_JOB_ID, ENGRAMIND_PENDING_WRITES_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, TASK_TAGS_JOB_ID } from "@/features/integrations/registry/jobs"
+import { HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@nandobfer/integracoes"
+import { withBuiltInJobs } from "@nandobfer/integracoes/crons/server"
 
 describe('rotinas internas nos Crons salvos', () => {
   it('sem lista salva, usa as rotinas padrão', () => {
-    expect(withBuiltInJobs(undefined)).toBe(DEFAULT_CRON_JOBS)
+    expect(withBuiltInJobs(undefined)).toEqual(DEFAULT_CRON_JOBS)
   })
 
   it('rotina interna que falta entra em quem já salvou os Crons; as salvas não mudam', () => {
@@ -13,7 +14,7 @@ describe('rotinas internas nos Crons salvos', () => {
     ]
     const jobs = withBuiltInJobs(saved)
     expect(jobs[0]).toEqual(saved[0])
-    expect(jobs.map((job) => job.id)).toEqual(['minha', HEALTH_CHECK_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, AGENT_USAGE_DAILY_JOB_ID, OPENCODE_QUOTA_JOB_ID, OPENCODE_GO_USAGE_JOB_ID, COMMAND_CODE_USAGE_JOB_ID, HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, ENGRAMIND_PENDING_WRITES_JOB_ID])
+    expect(jobs.map((job) => job.id)).toEqual(['minha', HEALTH_CHECK_JOB_ID, GITHUB_ISSUE_SYNC_JOB_ID, AGENTIC_PR_WATCH_JOB_ID, AGENTIC_QUEUE_JOB_ID, TASK_SUMMARY_JOB_ID, TASK_TAGS_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, ATTACHMENT_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, AGENT_USAGE_DAILY_JOB_ID, OPENCODE_QUOTA_JOB_ID, OPENCODE_GO_USAGE_JOB_ID, COMMAND_CODE_USAGE_JOB_ID, FX_PTAX_JOB_ID, AI_SUBSCRIPTION_DAYS_JOB_ID, HOST_METRICS_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, OPENCODE_SESSIONS_CLEANUP_JOB_ID, OPEX_AGENT_SESSIONS_CLEANUP_JOB_ID, MADDOX_AGENT_SESSIONS_CLEANUP_JOB_ID, ENGRAMIND_PENDING_WRITES_JOB_ID])
     expect(jobs[1]).toEqual(DEFAULT_CRON_JOBS[0])
     expect(jobs[2]).toEqual(DEFAULT_CRON_JOBS[1])
     expect(jobs[3]).toEqual(DEFAULT_CRON_JOBS[2])
@@ -31,12 +32,15 @@ describe('rotinas internas nos Crons salvos', () => {
     // Assinatura Command Code (OPE-190): entra ligada, a cada 5 minutos.
     expect(jobs[13]).toEqual(DEFAULT_CRON_JOBS[12])
     expect(jobs[13]).toMatchObject({ id: COMMAND_CODE_USAGE_JOB_ID, enabled: true, schedule: { type: 'interval', minutes: 5 } })
+    // OPE-203: PTAX e uso diário das assinaturas de IA entram ligadas.
+    expect(jobs[14]).toMatchObject({ id: FX_PTAX_JOB_ID, enabled: true })
+    expect(jobs[15]).toMatchObject({ id: AI_SUBSCRIPTION_DAYS_JOB_ID, enabled: true })
     // Recursos do servidor (OPE-145): entra ligada, a cada 10 segundos.
-    expect(jobs[14]).toEqual(DEFAULT_CRON_JOBS[13])
+    expect(jobs[16]).toEqual(DEFAULT_CRON_JOBS[15])
     // Limpeza da Builder Machine entra desligada (a ativação da integração liga).
-    expect(jobs[15]).toEqual({ ...DEFAULT_CRON_JOBS[14], enabled: false })
+    expect(jobs[17]).toEqual({ ...DEFAULT_CRON_JOBS[16], enabled: false })
     // Limpeza do registry dos ambientes nasce desligada.
-    expect(jobs[16]).toEqual({ ...DEFAULT_CRON_JOBS[15], enabled: false })
+    expect(jobs[18]).toEqual({ ...DEFAULT_CRON_JOBS[17], enabled: false })
   })
 
   it('rotina interna já salva mantém a configuração do usuário', () => {
@@ -54,6 +58,8 @@ describe('rotinas internas nos Crons salvos', () => {
       { id: OPENCODE_QUOTA_JOB_ID, label: 'Quota', kind: 'internal', schedule: { type: 'interval', minutes: 10 }, enabled: false },
       { id: OPENCODE_GO_USAGE_JOB_ID, label: 'Assinatura Go', kind: 'internal', schedule: { type: 'interval', minutes: 15 }, enabled: false },
       { id: COMMAND_CODE_USAGE_JOB_ID, label: 'Assinatura Command Code', kind: 'internal', schedule: { type: 'interval', minutes: 15 }, enabled: false },
+      { id: FX_PTAX_JOB_ID, label: 'PTAX', kind: 'internal', schedule: { type: 'interval', minutes: 360 }, enabled: true },
+      { id: AI_SUBSCRIPTION_DAYS_JOB_ID, label: 'Assinaturas de IA', kind: 'internal', schedule: { type: 'interval', minutes: 60 }, enabled: true },
       { id: HOST_METRICS_JOB_ID, label: 'Servidor', kind: 'internal', schedule: { type: 'interval', seconds: 30 }, enabled: false },
       { id: BUILDER_MACHINE_CLEANUP_JOB_ID, label: 'Limpeza do PC', kind: 'internal', schedule: { type: 'daily', time: '04:00' }, enabled: true },
       { id: ENVIRONMENTS_REGISTRY_CLEANUP_JOB_ID, label: 'Registry', kind: 'internal', schedule: { type: 'daily', time: '05:00' }, enabled: true },

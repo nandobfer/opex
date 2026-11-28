@@ -21,33 +21,36 @@ import { useRoutineAgents } from "../../hooks/useRoutineAgents"
 import { useRoutineAgentsMetrics } from "../../hooks/useRoutineRuns"
 import { useRoutineRealtime } from "../../hooks/useRoutineRealtime"
 import type { RoutineAgentDto } from "../../types"
-import { RoutineAgentRow } from "./RoutineAgentRow"
+import { RoutineAgentRow, RoutineRowChartSkeleton } from "./RoutineAgentRow"
 import { RoutineAgentsFilters } from "./RoutineAgentsFilters"
-import { ROUTINE_ROW_CHART_CLASS, ROUTINE_ROW_GRID, ROUTINE_ROW_KPI_HEIGHT, ROUTINE_ROW_KPIS, ROUTINE_ROWS_GAP } from "./routine-agents-layout"
+import { ROUTINE_ROW_BODY, ROUTINE_ROW_CARD, ROUTINE_ROW_HEADER, ROUTINE_ROW_KPI_COUNT, ROUTINE_ROW_KPI_HEIGHT, ROUTINE_ROW_KPIS, ROUTINE_ROWS_GAP } from "./routine-agents-layout"
 
-/** Altura estimada de uma linha na lista virtualizada (mais de 50 agentes). */
-const ROUTINE_ROW_ESTIMATE = 220
+/** Altura estimada de um item na lista virtualizada (mais de 50 agentes): identificação + duas fileiras de KPIs. */
+const ROUTINE_ROW_ESTIMATE = 340
 const scrollRef = { get current() { return typeof document === "undefined" ? null : document.getElementById(APP_SCROLL_CONTAINER_ID) } }
 
-/** Skeleton com a mesma grade das linhas (identificação | KPIs | gráfico). */
+/** Skeleton com a mesma estrutura dos itens (identificação em cima; KPIs | gráfico embaixo). */
 export function RoutineAgentsSkeleton() {
     return (
         <div className={ROUTINE_ROWS_GAP} data-testid="routine-agents-skeleton">
             {[0, 1, 2].map((index) => (
-                <Card key={index}>
-                    <div className={ROUTINE_ROW_GRID}>
-                        <div className="space-y-2">
-                            <Skeleton className="h-5 w-2/3" />
+                <Card key={index} className={ROUTINE_ROW_CARD}>
+                    <div className={ROUTINE_ROW_HEADER}>
+                        <div className="min-w-0 flex-1 space-y-2" data-testid="routine-agent-identity-skeleton">
+                            <Skeleton className="h-5 w-1/3" />
                             <Skeleton className="h-4 w-full" />
                             <Skeleton className="h-3 w-1/2" />
-                            <Skeleton className="h-3 w-3/4" />
+                            <Skeleton className="h-5 w-2/3 rounded-full" />
                         </div>
-                        <div className={ROUTINE_ROW_KPIS}>
-                            {[0, 1, 2, 3].map((kpi) => (
+                        <Skeleton className="h-9 w-24 shrink-0" />
+                    </div>
+                    <div className={ROUTINE_ROW_BODY}>
+                        <div className={ROUTINE_ROW_KPIS} data-testid="routine-row-kpis-skeleton">
+                            {Array.from({ length: ROUTINE_ROW_KPI_COUNT }, (_, kpi) => (
                                 <Skeleton key={kpi} className={`${ROUTINE_ROW_KPI_HEIGHT} w-full rounded-lg`} />
                             ))}
                         </div>
-                        <Skeleton className={`${ROUTINE_ROW_CHART_CLASS} w-full rounded-lg`} />
+                        <RoutineRowChartSkeleton />
                     </div>
                 </Card>
             ))}

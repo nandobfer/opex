@@ -1,7 +1,7 @@
-import type { AiUsage } from "@/lib/ai/stream"
+import type { AiUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import type { BudgetPreviewSettings, EstimateHoursSettings, PluginVersionSummarySettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings } from "./schemas"
 
-export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@/lib/ai/providers"
+export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 /** Pode ser usada agora? Sem `available`, `reason` explica (botão desabilitado com o motivo). */
 export interface AiFeatureAvailability {
@@ -142,6 +142,8 @@ export interface MemoriesMetaDto {
     categories: { key: string; label: string }[]
     /** Nenhuma importação concluída ainda: "Migração de memórias pendente". */
     migrationPending: boolean
+    /** Migração dos nomes dos canais em andamento (OPE-206): aviso "Migrando canais de memória". Ausente = não. */
+    maintenance?: boolean
     availability: { unavailable: boolean; since: string | null; lastOkAt: string | null; reason: string | null }
     /** Memórias fora do texto completo do contexto (faixa de títulos + overflow), por agente e combinação de canais. */
     outside: { consumer: string; channels: string[]; outside: number }[]

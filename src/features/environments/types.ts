@@ -1,5 +1,7 @@
+import type { ContainerPortDto } from "./container-ports"
 import type { ResourceLimits } from "./resource-limits"
-import type { BuilderAction, EnvironmentLimits, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
+import type { ContainerUsageDto } from "./resource-usage"
+import type { BuilderAction, ComposeOverrides, EnvironmentLimits, ServiceValues, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 export type DeployStatus = "running" | "success" | "failed"
 export type DeployKind = "deploy" | "move" | "delete"
@@ -10,12 +12,16 @@ export interface ServiceStatusDto {
     state: string
     status: string
     ports: string
+    /** Portas que o container escuta, onde estão publicadas e como abrem no navegador (OPE-211). */
+    listen: ContainerPortDto[]
     cpu: string | null
     memory: string | null
     /** Versão do `package.json` do app no container (`null` = sem o arquivo ou parado). */
     version: string | null
     /** Limites aplicados no container (`docker inspect`; `null` = não lidos). */
     limits: ResourceLimitsDto | null
+    /** Uso em números (OPE-211): CPU, RAM e swap do snapshot; disco da leitura a cada 5 min. Só no dono. */
+    usage: ContainerUsageDto
 }
 
 export interface EnvironmentDeploySummaryDto {
@@ -85,6 +91,10 @@ export interface EnvironmentDto {
     limitsConfigured: boolean
     /** Limites do último deploy com sucesso (`null` = nenhum deploy desde a OPE-193). */
     deployedLimits: EnvironmentLimits | null
+    /** Ajustes dos serviços do compose salvos (OPE-211; valem no próximo deploy; `null` = nunca configurado). */
+    composeOverrides: ComposeOverrides | null
+    /** Ajustes do último deploy com sucesso (`null` = nenhum deploy desde a OPE-211 ou sem ajustes). */
+    deployedComposeOverrides: ComposeOverrides | null
     /** Onde está no ar (último deploy com sucesso); `null` = nunca implantado. */
     deployedOn: { buildOn: Machine; runOn: Machine } | null
     /** Versão do código do último deploy com sucesso. */
@@ -106,6 +116,9 @@ export interface UnmanagedProjectDto {
     git: boolean
     containers: number
     running: number
+    /** Serviços e portas (internas e publicadas) dos containers, para a busca da lista (OPE-211). */
+    services: string[]
+    ports: number[]
 }
 
 export interface EnvironmentsListDto {
@@ -116,17 +129,31 @@ export interface EnvironmentsListDto {
     pcReason: string | null
     /** CPUs e memória de cada máquina (`null` = não lidas). */
     hosts: Record<Machine, HostCapacityDto | null>
+    /** Host dos links das portas (Configurações; `null` = o endereço com que a tela foi aberta). */
+    portLinkHost: string | null
     checkedAt: string
 }
 
 /** "Ler compose" do formulário: os serviços e os limites declarados no compose (sem o override do app). */
 export interface ComposeServicesDto {
-    services: { name: string; hasBuild: boolean; declared: ResourceLimitsDto }[]
+    services: {
+        name: string
+        hasBuild: boolean
+        declared: ResourceLimitsDto
+        /** Forma dos limites no compose (`mem_limit`/`cpus` ou `deploy.resources`), para a prévia do override. */
+        limitStyle: { memory: "service" | "deploy"; cpus: "service" | "deploy" }
+        values: ServiceValues
+        unreadable: { ports: string[]; volumes: string[] }
+    }[]
 }
 
 export interface HostCapacityDto {
     cpus: number
     memoryGb: number
+    /** Swap total da máquina (`0` = sem swap; `null`/ausente = não lido). */
+    swapGb?: number | null
+    /** Disco onde o Docker guarda os dados (`null`/ausente = não lido). */
+    disk?: { totalBytes: number; usedBytes: number } | null
 }
 
 export interface EnvironmentDeployDto extends EnvironmentDeploySummaryDto {
@@ -136,6 +163,16 @@ export interface EnvironmentDeployDto extends EnvironmentDeploySummaryDto {
 
 /** Linha do NDJSON do log ao vivo. */
 export type DeployEvent = { type: "log"; text: string } | { type: "status"; status: DeployStatus; error: string | null }
+
+/**
+ * Primeira linha do stream de um deploy em andamento (só o stream envia, não o hub): início absoluto e
+ * a duração estimada pelos deploys anteriores do ambiente (`null` sem histórico). Reenviada a cada conexão.
+ * `serverNow` é o instante do servidor ao enviar: a tela corrige o próprio relógio pela diferença.
+ */
+export type DeployMetaEvent = { type: "meta"; startedAt: string; serverNow: string; estimateMs: number | null; sampleSize: number; initial: boolean }
+
+/** Linhas que o stream do log entrega ao cliente. */
+export type DeployStreamEvent = DeployEvent | DeployMetaEvent
 
 export interface EnvironmentsSettingsDto {
     settings: EnvironmentsSettings
@@ -206,7 +243,8 @@ export interface BuilderResultDto {
 
 /**
  * Ambiente visto no **portal do cliente** (só os de central cujo repositório está vinculado ao
- * cliente). Sem variáveis, máquinas, caminhos, portas, containers nem log: só o estado.
+ * cliente). Sem variáveis, máquinas, caminhos, CPU/RAM, limites nem log: o estado e, por serviço, as
+ * portas que ele escuta (OPE-211).
  */
 export interface PortalEnvironmentDto {
     id: string
@@ -217,7 +255,9 @@ export interface PortalEnvironmentDto {
     health: "running" | "partial" | "stopped" | "never"
     /** Versão do código no ar (último deploy com sucesso). */
     deployedVersion: string | null
-    services: { service: string; state: string; status: string; version: string | null }[]
+    services: { service: string; state: string; status: string; version: string | null; listen: ContainerPortDto[] }[]
+    /** Host dos links das portas (`null` = o endereço com que a tela foi aberta). */
+    portLinkHost: string | null
     lastDeploy: { status: DeployStatus; startedAt: string; finishedAt: string | null; durationMs: number | null; version: string | null } | null
     /** Há um deploy em andamento (as ações ficam bloqueadas). */
     deploying: boolean

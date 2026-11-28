@@ -7,7 +7,7 @@ import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { AI_CONSUMPTION_UPDATED_EVENT } from "@/lib/ai/consumption-events"
+import { AI_CONSUMPTION_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption-events"
 import { AGENTIC_UPDATED_EVENT } from "@/features/agentic/constants"
 import { ADVERSARIAL_UPDATED_EVENT } from "@/features/adversarial-agent/constants"
 import { MENTOR_UPDATED_EVENT } from "@/features/adversarial-agent/mentor/constants"
@@ -19,6 +19,7 @@ import { REFINEMENT_UPDATED_EVENT } from "@/features/refinement/constants"
 import { TASKS_UPDATED_EVENT } from "@/features/tasks/constants"
 import type { AgentId } from "../catalog"
 import { AGENT_METRICS_UPDATED_EVENT } from "../constants"
+import { consumptionConcernsAgent } from "../consumption-origins"
 import type { AgentHistoryPageDto, AgentMetricsDto } from "../types"
 import type { OpexSessionDetailDto } from "@/features/opex-agent/types"
 
@@ -85,9 +86,16 @@ export function useAgentMetricsRealtime(agent: AgentId): void {
         }
         const events = [...AGENT_REALTIME_EVENTS[agent], AGENT_METRICS_UPDATED_EVENT]
         for (const event of events) channel.bind(event, handler)
+        // Taxa de cache (OPE-205): só o consumo das origens do agente (quem já ouve o evento inteiro não repete).
+        const onConsumption = (payload: unknown) => {
+            if (consumptionConcernsAgent(agent, payload)) handler()
+        }
+        const filtersConsumption = !events.includes(AI_CONSUMPTION_UPDATED_EVENT)
+        if (filtersConsumption) channel.bind(AI_CONSUMPTION_UPDATED_EVENT, onConsumption)
         return () => {
             if (timer) clearTimeout(timer)
             for (const event of events) channel.unbind(event, handler)
+            if (filtersConsumption) channel.unbind(AI_CONSUMPTION_UPDATED_EVENT, onConsumption)
             releaseChannel(name)
         }
     }, [agent, queryClient])

@@ -1,7 +1,7 @@
 "use client"
 
 import { useQuery } from "@tanstack/react-query"
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { ApplyAiSourceInput, TestAiSourceInput } from "../schemas/ai-source"
 import type { AiSourceSection } from "../ai-source"
 import type { AiSourceStateDto, ApplyAiSourceResult } from "../types"

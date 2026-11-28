@@ -17,6 +17,7 @@ import {
     forwardPorts,
     imagesExistCommand,
     logsCommand,
+    overrideCheckCommand,
     packageVersionCommand,
     parseCommit,
     parsePackageVersion,
@@ -27,15 +28,23 @@ import {
     removeGeneratedCommand,
     removeWorktreeCommand,
     restartCommand,
+    bootstrapDeployedFilesCommand,
+    dropDeployedFilesCommand,
+    promoteDeployedFilesCommand,
+    restoreDeployedFilesCommand,
+    stageDeployedFilesCommand,
     startCommand,
     writeFileCommand,
     type ComposePlan,
 } from "../commands"
-import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices, type ComposeService } from "../compose-config"
+import { overrideYaml, parseComposeConfig, runOnPcProblem, selectServices, withOverrideMounts, type ComposeService } from "../compose-config"
+import { HIDDEN_VALUE } from "../opex-format"
+import { overrideYamlKeys, overrideYamlServices } from "../override-yaml"
+import { composeOverridesOf, customizedFields, overrideServiceNames, ownImageServices, serviceOverrideText } from "../service-overrides"
 import { DEPLOY_HEARTBEAT_MS, DEPLOY_LOG_MAX, ENVIRONMENTS_AUDIT_ENTITY, ENV_FILE, MANAGED_COMPOSE_FILE, OVERRIDE_FILE } from "../constants"
 import { executionSteps, type DeployStep } from "../pipeline"
 import { environmentLimitsOf, limitsForService, limitsText, unknownLimitServices, type ResourceLimits } from "../resource-limits"
-import type { EnvironmentActionInput, EnvironmentLimits, EnvironmentsSettings, Machine } from "../schemas"
+import type { ComposeOverrides, EnvironmentActionInput, EnvironmentLimits, EnvironmentsSettings, Machine } from "../schemas"
 import type { DeployKind } from "../types"
 import { emitDeploy, openDeployChannel } from "./hub"
 import { Environment, EnvironmentDeploy, type DeployCheckpoint, type IEnvironment, type IEnvironmentDeploy } from "./models"
@@ -195,7 +204,14 @@ async function prepareSource(ctx: DeployContext, env: IEnvironment, settings: En
  * `.env.opex`, arquivos de variáveis do compose, `config`, bloqueio de executar no PC e o override com
  * as imagens. Devolve os serviços e os arquivos de variáveis que o compose declara.
  */
-async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<{ services: ComposeService[]; envFiles: string[]; composeVersion: number | null }> {
+async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<{ services: ComposeService[]; envFiles: string[]; composeVersion: number | null; ownImages: string[] }> {
+    const overrides = composeOverridesOf(env.composeOverrides)
+    // Ambiente implantado antes da cópia do último deploy existir: a cópia sai dos arquivos de agora, antes de
+    // regravá-los (inclusive no mover: até o fim, o implantado continua sendo o da origem).
+    if (env.deployedOn) {
+        await runStep(ctx, { label: "Cópia do último deploy", command: bootstrapDeployedFilesCommand(plan, String(env._id), deployedExtras(env)), timeoutMs: 30_000 }, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} do último deploy (se ainda não guardados)` })
+    }
+    const ownImages = ownImageServices(overrides)
     const composeVersion = env.source.kind === "managed" ? await writeManagedCompose(ctx, env, plan) : null
     const vars = envVarsOf(env)
     if (vars.length) {
@@ -219,18 +235,92 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     const names = services.map((service) => service.name).join(", ")
     if (composeVersion !== null) {
         // Antes de qualquer build: o compose gerenciado não tem código-fonte na pasta.
-        if (services.some((service) => service.hasBuild)) throw new StepError(MANAGED_BUILD_UNSUPPORTED)
+        if (services.some((service) => service.hasBuild && !ownImages.includes(service.name))) throw new StepError(MANAGED_BUILD_UNSUPPORTED)
         ctx.write(`Compose gerenciado v${composeVersion} (${services.length} serviço(s)): ${names}\n`)
     } else ctx.write(`Compose lido: ${services.length} serviço(s): ${names}\n`)
     if (target.runOn === "pc" && plan.filesOn === "server") {
-        const problem = runOnPcProblem(services)
+        const problem = runOnPcProblem(withOverrideMounts(services, overrides))
         if (problem) throw new StepError(problem)
     }
     const cross = target.buildOn !== target.runOn
-    const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
+    const images = cross ? Object.fromEntries(services.filter((service) => service.hasBuild && !ownImages.includes(service.name)).map((service) => [service.name, registryImage(settings, env.slug, service.name, tag)])) : {}
     const limits = deployLimits(ctx, environmentLimitsOf(env.limits), services)
-    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits })), timeoutMs: 30_000 })
-    return { services, envFiles, composeVersion }
+    deployOverrides(ctx, overrides, services)
+    const overrideInput = { services, images, withEnvFile: vars.length > 0, envFilePath: envFileFromProject(plan), limits }
+    await runStep(ctx, { label: "Override do opex", command: writeFileCommand(plan, OVERRIDE_FILE, overrideYaml({ ...overrideInput, overrides })), timeoutMs: 30_000 }, { redactedAs: `gravar ${OVERRIDE_FILE} (conteúdo omitido)` })
+    // Antes de qualquer build: YAML avançado ruim ou um Compose sem `!reset`/`!override` (< 2.24.4) falham aqui.
+    if (overrideServiceNames(overrides).length) await checkOverride(ctx, plan, access, overrides, overrideYaml({ ...overrideInput, overrides: null }))
+    return { services, envFiles, composeVersion, ownImages }
+}
+
+/**
+ * Progresso da execução: `upStarted` = o passo que sobe os containers começou; `upDone` = ele terminou sem erro (o
+ * passo seguinte começou sem falha). Começado e não terminado = estado dos containers indeterminado.
+ */
+interface ExecutionProgress {
+    upStarted: boolean
+    upDone: boolean
+}
+
+const newProgress = (): ExecutionProgress => ({ upStarted: false, upDone: false })
+
+/** Arquivos que o deploy regrava além do override e do `.env.opex`: o compose gerenciado (a revisão deste deploy). */
+const deployedExtras = (env: Pick<IEnvironment, "source">): string[] => (env.source.kind === "managed" ? [MANAGED_COMPOSE_FILE] : [])
+
+/**
+ * A cópia `pending` (os arquivos deste deploy) vira a do último deploy. Nunca derruba o deploy: os containers já
+ * estão com esta configuração. Se não der para guardar, as cópias saem (a próxima falha não volta arquivos de outro
+ * deploy) e o log avisa a condição.
+ */
+async function promoteDeployedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string): Promise<void> {
+    try {
+        const result = await ctx.run(promoteDeployedFilesCommand(plan, environmentId), 30_000, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} deste deploy` })
+        if (result.exitCode === 0) return
+    } catch (error) {
+        envLog.warn({ deployId: ctx.deployId, err: error instanceof Error ? error.message : String(error) }, "[environments] Não foi possível guardar a cópia dos arquivos do deploy")
+    }
+    await ctx.run(dropDeployedFilesCommand(plan, environmentId), 30_000).catch(() => undefined)
+    ctx.write(`\n\u001b[33mNão foi possível guardar a cópia do override e das variáveis extras deste deploy: os containers e os arquivos da pasta seguem com esta configuração, mas uma falha no próximo deploy não vai voltar os arquivos.\u001b[0m\n`)
+}
+
+/**
+ * Deploy que falhou antes de subir os containers: o override e o `.env.opex` voltam aos do último deploy
+ * concluído, para Levantar, Reiniciar e Derrubar seguirem com a configuração implantada. Falhar aqui só avisa.
+ */
+async function restoreDeployedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string, extras: readonly string[]): Promise<void> {
+    try {
+        const result = await ctx.run(restoreDeployedFilesCommand(plan, environmentId, extras), 30_000, { redactedAs: `voltar ${OVERRIDE_FILE} e ${ENV_FILE} aos do último deploy` })
+        if (result.exitCode === 0 && result.output.includes("restored")) ctx.write(`\nOverride${extras.length ? ", compose gerenciado" : ""} e variáveis extras voltaram aos do último deploy concluído.\n`)
+    } catch (error) {
+        envLog.warn({ deployId: ctx.deployId, err: error instanceof Error ? error.message : String(error) }, "[environments] Não foi possível voltar os arquivos do último deploy")
+    }
+}
+
+/** Textos dos ajustes que podem ser segredo (valores do environment, dos labels e do YAML avançado). */
+function overrideSecrets(overrides: ComposeOverrides): string[] {
+    const values = overrides.services.flatMap((item) => [...(item.environment ?? []), ...(item.labels ?? [])].map((entry) => entry.value))
+    const collect = (node: unknown): void => {
+        if (typeof node === "string") values.push(node)
+        else if (Array.isArray(node)) node.forEach(collect)
+        else if (node && typeof node === "object") Object.values(node).forEach(collect)
+    }
+    for (const node of overrideYamlServices(overrides.yaml).values()) collect(node.toJSON())
+    return [...new Set(values.map((value) => value.trim()).filter((value) => value.length >= 3))].sort((a, b) => b.length - a.length)
+}
+
+/**
+ * Confere o override gravado (`config --quiet`). A saída nunca vai para o log (o erro do compose pode citar um
+ * valor): só a última linha, com os valores dos ajustes ocultos. Na falha, o override volta a ser o sem ajustes
+ * (válido): Reiniciar, Derrubar e Levantar não ficam presos a um override quebrado.
+ */
+async function checkOverride(ctx: DeployContext, plan: ComposePlan, access: MachineAccess, overrides: ComposeOverrides, safeOverride: string): Promise<void> {
+    ctx.write(`\n\u001b[36m▸ Conferindo o override\u001b[0m\n`)
+    const result = await ctx.run(overrideCheckCommand(plan, access.targets.server), 60_000, { detached: true, redactedAs: "docker compose config --quiet (conferir o override; saída omitida)" })
+    if (result.exitCode === 0) return
+    let detail = configError(result.output)
+    for (const secret of overrideSecrets(overrides)) detail = detail.split(secret).join(HIDDEN_VALUE)
+    await runStep(ctx, { label: "Override sem os ajustes (a conferência falhou)", command: writeFileCommand(plan, OVERRIDE_FILE, safeOverride), timeoutMs: 30_000 }, { redactedAs: `gravar ${OVERRIDE_FILE} (sem os ajustes dos serviços)` })
+    throw new StepError(`Conferindo o override falhou (código ${result.exitCode ?? "?"})${detail}. Revise os ajustes dos serviços (ou o YAML avançado); o Docker Compose precisa ser 2.24.4 ou mais novo.`)
 }
 
 /**
@@ -255,6 +345,19 @@ export function deployLimits(ctx: Pick<DeployContext, "write">, limits: Environm
     for (const service of unknownLimitServices(limits, services.map((item) => item.name))) ctx.write(`\u001b[33mLimite do serviço ${service} ignorado: o serviço não está no compose.\u001b[0m\n`)
     if (configured) ctx.write(`Limites: ${services.map((service) => `${service.name} ${byService[service.name] ? limitsText(byService[service.name]!) : "sem limite"}`).join("; ")}\n`)
     return byService
+}
+
+/**
+ * Log dos ajustes dos serviços (OPE-211): por serviço (do `environment`, só as chaves), os serviços do YAML
+ * avançado e os que não estão no compose (ignorados, sem bloquear o deploy).
+ */
+export function deployOverrides(ctx: Pick<DeployContext, "write">, overrides: ComposeOverrides, services: ComposeService[]): void {
+    const names = services.map((service) => service.name)
+    for (const service of overrideServiceNames(overrides).filter((name) => !names.includes(name))) ctx.write(`\u001b[33mAjustes do serviço ${service} ignorados: o serviço não está no compose.\u001b[0m\n`)
+    const guided = overrides.services.filter((item) => names.includes(item.service) && customizedFields(item).length).map((item) => `${item.service} ${serviceOverrideText(item)}`)
+    if (guided.length) ctx.write(`Serviços: ${guided.join("; ")}\n`)
+    const yaml = Object.keys(overrideYamlKeys(overrides.yaml)).filter((name) => names.includes(name))
+    if (yaml.length) ctx.write(`YAML avançado: serviços ${yaml.join(", ")}\n`)
 }
 
 /** Fim da saída de erro do `config` (sem JSON: nunca as variáveis resolvidas). */
@@ -337,26 +440,35 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     const target = { buildOn: env.buildOn, runOn: env.runOn }
     let commit: string | null = null
     let tag: string | null = null
+    let plan: ComposePlan | null = null
+    const progress = newProgress()
+    let checkpoint: DeployCheckpoint | null = null
     try {
         const settings = await loadEnvironmentsSettings()
-        const plan = composePlanOf(env, settings)
+        plan = composePlanOf(env, settings)
         ctx.write(`Deploy de ${env.name}: build no ${machineName(target.buildOn)}, execução no ${machineName(target.runOn)}.\n`)
         commit = await prepareSource(ctx, env, settings, plan, ref, kind)
         tag = commit ?? `t${Date.now()}`
         const version = await readVersion(ctx, plan)
-        const { services, envFiles, composeVersion } = await prepareCompose(ctx, env, settings, plan, access, target, tag)
-        const buildServices = services.filter((service) => service.hasBuild).map((service) => service.name)
+        const { services, envFiles, composeVersion, ownImages } = await prepareCompose(ctx, env, settings, plan, access, target, tag)
+        // Antes de subir: a cópia destes arquivos fica pronta e só vira a do último deploy no fim.
+        await runStep(ctx, { label: "Cópia dos arquivos deste deploy", command: stageDeployedFilesCommand(plan, String(env._id), deployedExtras(env)), timeoutMs: 30_000 }, { redactedAs: `copiar ${OVERRIDE_FILE} e ${ENV_FILE} deste deploy` })
+        const buildServices = services.filter((service) => service.hasBuild && !ownImages.includes(service.name)).map((service) => service.name)
+        const pullServices = target.buildOn === target.runOn ? services.filter((service) => ownImages.includes(service.name)).map((service) => service.name) : []
         if (target.buildOn !== target.runOn && buildServices.length) {
             await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { repositories: buildServices.map((service) => registryRepository(env.slug, service)) } })
         }
         const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices, envFiles)
         if (skipBuild) ctx.write(`\nBuild reaproveitado: as imagens do commit ${commit} já existem no ${machineName(target.buildOn)}.\n`)
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
-        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion }
+        checkpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion, overrides: env.composeOverrides ?? null, pullServices }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
-        await runExecution(ctx, env, settings, plan, access, checkpoint)
+        await runExecution(ctx, env, settings, plan, access, checkpoint, progress)
+        await promoteDeployedFiles(ctx, plan, String(env._id))
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
+        if (plan) await settleFailedFiles(ctx, plan, String(env._id), { extras: deployedExtras(env), progress })
+        if (progress.upDone && checkpoint) await recordApplied(env, checkpoint)
         await failDeploy(String(env._id), deployId, recorder, error, commit, tag)
     } finally {
         await recorder.stop()
@@ -364,14 +476,43 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     }
 }
 
+/** Aviso de que os containers podem divergir do que consta como implantado (o passo que sobe falhou no meio). */
+export const DEPLOY_DRIFT_WARNING =
+    "O passo que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy. O que consta como implantado continua o do último deploy concluído; faça um novo deploy para os containers voltarem a bater com ele."
+
+/**
+ * Arquivos depois de um deploy que falhou:
+ * - antes de subir os containers: voltam aos do último deploy concluído;
+ * - o passo que sobe terminou e um passo seguinte falhou: os containers estão com a configuração deste deploy, então
+ *   os arquivos ficam os dele e viram a cópia (e quem chama grava o estado aplicado);
+ * - o próprio passo que sobe falhou (estado indeterminado): os arquivos voltam aos do último deploy concluído, que
+ *   continua sendo o estado gravado, e o log registra a deriva possível dos containers.
+ */
+async function settleFailedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string, state: { extras: readonly string[]; progress: ExecutionProgress }): Promise<void> {
+    if (state.progress.upDone) {
+        ctx.write(`\n\u001b[33mOs containers subiram com a configuração deste deploy e um passo seguinte falhou: o override, as variáveis extras e o que consta como implantado passam a ser os deste deploy.\u001b[0m\n`)
+        await promoteDeployedFiles(ctx, plan, environmentId)
+        return
+    }
+    // Sem cópia (nunca implantado), nada volta. No mover, também volta: o implantado segue sendo o da origem.
+    await restoreDeployedFiles(ctx, plan, environmentId, state.extras)
+    if (state.progress.upStarted) ctx.write(`\n\u001b[33m${DEPLOY_DRIFT_WARNING}\u001b[0m\n`)
+}
+
 /** Fase de execução (`executionSteps`) a partir do passo do ponto de retomada, que avança a cada passo. */
-async function runExecution(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, checkpoint: DeployCheckpoint): Promise<void> {
-    const steps = executionSteps({ settings, plan, buildOn: env.buildOn, runOn: env.runOn, targets: access.targets, buildServices: checkpoint.buildServices, ports: env.ports, healthUrl: env.healthUrl, skipBuild: checkpoint.skipBuild, from: checkpoint.from, down: downCommand })
+async function runExecution(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, checkpoint: DeployCheckpoint, progress: ExecutionProgress = newProgress()): Promise<void> {
+    const steps = executionSteps({ settings, plan, buildOn: env.buildOn, runOn: env.runOn, targets: access.targets, buildServices: checkpoint.buildServices, ports: env.ports, healthUrl: env.healthUrl, skipBuild: checkpoint.skipBuild, pullServices: checkpoint.pullServices ?? [], from: checkpoint.from, down: downCommand })
+    const upIndex = steps.findIndex((step) => step.label.startsWith("Sobe no "))
+    // Retomada: no passo que sobe, o estado é indeterminado; depois dele (sem falha gravada), os containers já subiram.
+    if (checkpoint.step > 0 && upIndex >= 0 && checkpoint.step >= upIndex) progress.upStarted = true
+    if (checkpoint.step > 0 && upIndex >= 0 && checkpoint.step > upIndex && !checkpoint.failure) progress.upDone = true
     await runSteps(ctx, steps, {
         start: checkpoint.step,
         failure: checkpoint.failure,
         jobIds: (index) => executionJobId(ctx.deployId, index),
         onStep: async (index, failure) => {
+            if (index === upIndex && !failure) progress.upStarted = true
+            if (index > upIndex && progress.upStarted && !failure) progress.upDone = true
             await EnvironmentDeploy.updateOne({ _id: ctx.deployId }, { $set: { "checkpoint.step": index, "checkpoint.failure": failure } })
         },
     })
@@ -379,10 +520,19 @@ async function runExecution(ctx: DeployContext, env: IEnvironment, settings: Env
 
 type Recorder = ReturnType<typeof deployRecorder>
 
+/**
+ * Grava o que está aplicado nos containers (máquinas, ref, commit, versão, limites, ajustes e revisão do compose):
+ * no sucesso e quando o passo que sobe terminou mas um passo seguinte falhou.
+ */
+async function recordApplied(env: IEnvironment, checkpoint: DeployCheckpoint): Promise<void> {
+    const target = { buildOn: env.buildOn, runOn: env.runOn }
+    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), deployedComposeOverrides: checkpoint.overrides !== undefined ? checkpoint.overrides : (env.composeOverrides ?? null), ...(typeof checkpoint.composeVersion === "number" ? { deployedComposeVersion: checkpoint.composeVersion } : {}), updatedAt: new Date() } })
+    if (typeof checkpoint.composeVersion === "number") await markComposeDeployed(String(env._id), checkpoint.composeVersion)
+}
+
 async function completeDeploy(env: IEnvironment, deployId: string, recorder: Recorder, checkpoint: DeployCheckpoint): Promise<void> {
     const target = { buildOn: env.buildOn, runOn: env.runOn }
-    await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), ...(typeof checkpoint.composeVersion === "number" ? { deployedComposeVersion: checkpoint.composeVersion } : {}), updatedAt: new Date() } })
-    if (typeof checkpoint.composeVersion === "number") await markComposeDeployed(String(env._id), checkpoint.composeVersion)
+    await recordApplied(env, checkpoint)
     await finishDeploy(deployId, "success", null, recorder.log(), checkpoint.commit, checkpoint.tag)
     envLog.info({ id: String(env._id), deployId, ...target }, "[environments] Deploy concluído")
 }
@@ -440,19 +590,29 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
     const recorder = deployRecorder(deployId, deploy.log ?? "")
     const ctx: DeployContext = { deployId, run, write: recorder.write }
     const checkpoint = deploy.checkpoint ?? null
+    let plan: ComposePlan | null = null
+    let extras: string[] = []
+    const progress = newProgress()
+    let resumedEnv: IEnvironment | null = null
     busy().add(envId)
     try {
         if (!checkpoint) throw new StepError(INTERRUPTED_BEFORE_EXECUTION)
         const saved = await loadEnvironment(envId)
         const env: IEnvironment = { ...saved, buildOn: deploy.buildOn, runOn: deploy.runOn }
+        resumedEnv = env
         const access = await machineAccess(run)
         if ((env.buildOn === "pc" || env.runOn === "pc") && !access.pcAvailable) throw new StepError(`Não foi possível retomar o deploy depois de o app reiniciar: ${access.pcReason ?? "o PC não está disponível"}`)
         const settings = await loadEnvironmentsSettings()
         ctx.write(`\n\u001b[33m↻ O app reiniciou durante o deploy: retomando no passo ${checkpoint.step + 1}.\u001b[0m\n`)
         envLog.info({ id: envId, deployId, step: checkpoint.step }, "[environments] Retomando deploy interrompido")
-        await runExecution(ctx, env, settings, composePlanOf(env, settings), access, checkpoint)
+        plan = composePlanOf(env, settings)
+        extras = deployedExtras(env)
+        await runExecution(ctx, env, settings, plan, access, checkpoint, progress)
+        await promoteDeployedFiles(ctx, plan, envId)
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
+        if (plan) await settleFailedFiles(ctx, plan, envId, { extras, progress })
+        if (progress.upDone && checkpoint && resumedEnv) await recordApplied(resumedEnv, checkpoint)
         await failDeploy(envId, deployId, recorder, error, checkpoint?.commit ?? deploy.commit, checkpoint?.tag ?? deploy.imageTag)
     } finally {
         busy().delete(envId)
@@ -517,6 +677,8 @@ export async function deleteEnvironment(id: string, options: { volumes: boolean 
     } else {
         await run(removeGeneratedCommand(plan), 30_000)
     }
+    // As cópias dos arquivos dos deploys ficam numa pasta só do Opex (nunca a do projeto).
+    await run(dropDeployedFilesCommand(plan, id), 30_000).catch(() => undefined)
     await Environment.deleteOne({ _id: id })
     await EnvironmentDeploy.deleteMany({ environmentId: id })
     await recordAudit({ userId: actorId, entidade: ENVIRONMENTS_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { nome: env.name, slug: env.slug, projeto: env.source.projectName }, depois: { volumesApagados: options.volumes } })

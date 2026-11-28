@@ -30,9 +30,9 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D12 | Com o cursor sobre a partícula de uma memória, o nome aparece **completo e destacado** (antes sumia), em todos os universos. |
 | D13 | As ferramentas de memória do rotineiro funcionam em **qualquer canal assinado e não arquivado** (próprio, global dos rotineiros, `opex` e extras do provisionamento), com o token do agente. Sem `canal`, vale o próprio. |
 | D14 | **Gravação por chave**: `remember` aceita `canal`, `chave`, `titulo` e `tags`; com `chave` é idempotente (upsert do Engramind: a mesma chave atualiza a entrada, `criada: false`). `update_memory` edita por id com a versão lida. |
-| D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. |
+| D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. Desde a OPE-209, o uso normal é por `chave`, começando pela memória `indice` do canal; listar o canal inteiro é exceção. |
 | D16 | O catálogo do Indexador fica em `experiencia/desenvolvimento` com chave `catalogo-<dono>-<repo>`; as 18 memórias de catálogo em prosa (sem chave) do canal próprio foram arquivadas (`scripts/routine-indexador-cleanup.ts`, reversível). |
-| D18 | `/agentes-rotineiros` mostra **uma linha por agente** (card na largura inteira: identificação, 4 KPIs e "Execuções por dia") com os filtros padrão `ListFilters`: busca, status, motor e período, na URL. |
+| D18 | `/agentes-rotineiros` mostra **um item por agente** (card na largura inteira; desde a OPE-213 a identificação fica em linha própria acima, com gatilhos, próxima execução e Pausar/Retomar, e embaixo os 12 KPIs e "Execuções por dia") com os filtros padrão `ListFilters`: busca, status, motor e período, na URL. |
 | D19 | No cabeçalho da página de agente, **"Configurar" e as ações ficam na linha do título**, sempre juntos (sem quebrar entre si); a descrição longa fica abaixo, na largura inteira, sem aumentar a distância entre título e descrição (escolha do dono na implementação, no lugar de cortar a descrição em 2 linhas). |
 | D20 | O "Configurar" da página do agente rotineiro **abre o editor ali mesmo** (`?configurar=1`), sem navegar para a integração. |
 | D21 | Na lista da aba Rotineiros da integração, o **nome do agente é um link** para `/agentes-rotineiros/[id]`. |
@@ -134,7 +134,11 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 
 Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo sem aprovação:
 
-1. cadastra o agente `opex/rotineiro-<slug>` no Engramind com o nome **"Agente <nome>"** (OPE-170: o
+Os nomes de canal abaixo são **lógicos**: no Engramind eles levam o app da instância na frente
+(`<app>/agentes/rotineiros/<slug>`, OPE-206), e as telas continuam mostrando o nome lógico
+(`channelDisplay`). Ver `modules/engramind.md`, "Isolamento por instância e nomes dos canais (OPE-206)".
+
+1. cadastra o agente `<app>/rotineiro-<slug>` no Engramind (app da chave da instância) com o nome **"Agente <nome>"** (OPE-170: o
    prefixo não é duplicado quando o nome já começa com "Agente ", até 120 caracteres; a rede esconde o
    prefixo e mostra só "<nome>"), com token de app (admin se não houver). Reprovisionar não renomeia:
    agente que já existe mantém o nome;
@@ -144,7 +148,8 @@ Roda sozinho ao criar (em segundo plano, deduplicado por agente) e aplica tudo s
    `opex`, o global e o próprio (`inject`);
 4. lista os canais (`GET /v1/channels`), pede ao modelo de D2 um JSON com `subscribe`/`create`
    (`provision-plan.ts`): canal inexistente é descartado com aviso, `create` que já existe vira
-   assinatura, canais `agentes/...` de outros agentes e `opex` ficam de fora, no máximo 8 extras;
+   assinatura, os canais reservados (`isReservedChannel`: a raiz do app, `<app>/agentes/...` e os nomes
+   antigos `agentes/...`) ficam de fora, no máximo 8 extras; canais de **outros apps** continuam elegíveis;
 5. motor OpenCode: cria `~/opex-rotineiros/<slug>` no host pelo OpenCode (`workdir`).
 
 Cada passo marca `provisioning.steps.*`. Falha → status **"Provisionamento com erro"** com a
@@ -213,7 +218,9 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
     `expected_version`; versão diferente → 409 acionável; memória de canal fora da lista é recusada.
   - `list_my_memories` (`canal?`, `chave?`, `formato`, `cursor?`, `limite`): texto inteiro (sem corte),
     `titulos` com `fields=title` (até 200 por página; 50 no completo), `parcial` + `proximoCursor` + aviso
-    quando há mais páginas (D15).
+    quando há mais páginas (D15). A descrição da ferramenta (igual nos dois motores, sem citar outras
+    ferramentas pelo nome) trata a consulta por `chave` como uso normal, começando pela chave `indice`
+    (`ROUTINE_MEMORY_INDEX_KEY`, `constants.ts`), e a listagem `titulos` do canal inteiro como exceção (OPE-209).
   - Sem limite de gravações por turno: `remember` e `update_memory` gravam quantas o trabalho exigir (o
     teto de 5 caiu na OPE-163; a memória própria dos outros agentes mantém o `SELF_MEMORY_TURN_LIMIT`).
     Decisão do dono no planejamento da OPE-163: **não** há configuração de limite (nem nas configurações do
@@ -222,8 +229,29 @@ o marca "com erro" depois de 2 min ("O provisionamento foi interrompido… Use \
     canal (já conferido na lista), com aviso no log e na execução. Escrita negada no canal
     (`SCOPE_REQUIRED`/`CHANNEL_NOT_SUBSCRIBED`) → `ROUTINE_CHANNEL_FORBIDDEN` (reprovisionar); outros
     erros sobem sem repetir. Auditoria na entidade das memórias (`canal`, `chave`, `execucao`, sem texto).
-  - As instruções da execução listam os canais graváveis e mandam consultar o canal (formato `titulos`)
-    antes de trabalhar e usar chave fixa por item.
+  - As instruções da execução listam os canais graváveis e mandam usar chave fixa por item.
+  - **Memórias por índice (OPE-209)**: as instruções não mandam mais listar o canal inteiro antes de
+    trabalhar (em canais grandes, a listagem de títulos ocupava dezenas de milhares de caracteres reenviados
+    em todos os passos). A regra geral, nos dois motores e com o prefixo das ferramentas no OpenCode:
+    - ler primeiro a memória de chave `indice` do canal (`list_my_memories` com `chave: "indice"`, o mapa
+      das chaves, uma por linha `chave — o que guarda`) e buscar o resto por `chave`;
+    - listar os títulos do canal inteiro (formato `titulos`, seguindo o cursor) só quando o canal não tem
+      `indice` ou o item não está nele, acrescentando ao índice o que encontrar;
+    - canal sem `indice`: o agente cria o índice uma única vez, com as chaves que já existem, por `remember`
+      com `chave: "indice"`. Não há verificação no servidor: conferir a cada execução custaria uma chamada ao
+      Engramind e mudaria as instruções (quebra o cache); depois de criado, a regra de leitura passa a valer.
+      Se o índice não couber numa memória (`ROUTINE_MEMORY_TEXT_MAX`, 20 mil caracteres, o teto do `texto` de
+      `remember`/`update_memory`), o `indice` fica como mapa curto e o resto vai para índices por tema
+      (`indice-<tema>`), citados nele — como o `indice-receitas` do Candidatador;
+    - chave nova criada na execução entra no `indice` do mesmo canal na mesma execução, editado com
+      `update_memory` com o id e a `versao` lidos: duas gravações simultâneas no índice de um canal
+      compartilhado dão o 409 "releia e tente de novo", em vez de uma apagar a outra (`remember` com a mesma
+      chave sobrescreveria sem conferir a versão);
+    - leituras e consultas independentes (várias chaves, canais diferentes) saem juntas, no mesmo passo;
+    - instruções próprias do agente (ex.: o Candidatador, com `indice` e `indice-receitas`) valem por cima da
+      regra geral. A listagem continua disponível: nenhum agente perde acesso a memória nenhuma.
+    - Validação depois da implantação: comparar tokens por execução e taxa de cache por agente em
+      `ai_consumption_logs.tokenDetails` (origem `routine-agent`) antes e depois da mudança.
 - Aba **Memórias** da página: um card só (`AgentUniverseCard`, compartilhado com os demais agentes desde a
   OPE-148) com o universo do agente `opex/rotineiro-<slug>`; "Nova memória" começa no canal próprio. O card
   inteiro ocupa a altura visível da tela (`fill="viewport"`, ver `aicontext/modules/engramind.md`, "Altura dos
@@ -302,10 +330,22 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   (espera viva cancelável; soma por ativação; estourou → hiberna em 1 min), `hibernate` (mínimo
   1 min, com o motivo), `request_confirmation` (só com o switch ligado) e `finish` (relato final). As
   três últimas encerram o turno. Turno sem `finish` conclui com o último texto e um aviso.
+- **Cache de prompt (OPE-204)**: as instruções do sistema (`routineInstructions`, `run-prompt.ts`) não
+  trazem data e hora nem nada que mude a cada execução: com a mesma configuração, as mesmas memórias e os
+  mesmos avisos, saem idênticas byte a byte, e o 1º passo de cada execução acerta o cache de prefixo do
+  provedor. A ordem das seções vai do mais estável ao mais variável e deve ser mantida: identidade →
+  objetivo → instruções do dono → como trabalhar → HTTP e segredos → skills → avisos → memórias. A data e
+  a hora (`Data e hora atual: … (horário de Brasília).`) vão na mensagem de cada ativação
+  (`activationMessage`), logo depois do cabeçalho, no disparo e na retomada (com a hora da retomada); na
+  mensagem combinada da retomada sem histórico (disparo + retomada), aparecem uma vez só, na parte da retomada.
+  Vale para os dois motores. A regra das memórias por índice (OPE-209) é texto fixo e mantém as instruções
+  idênticas entre execuções.
 - **Motor Opex** (`server/engines/opex.ts`): `prepareModel` + `streamText` (o mesmo loop do Agente
   Opex; o `streamAi` não aceita ferramentas), o registro do Agente Opex filtrado pelas liberadas, os
   MCPs liberados (`loadMcpTools(..., { serverIds })`) e o histórico do modelo em `messages` para a
-  retomada. Ficam de fora, com aviso na execução: ferramentas removidas do catálogo, desligadas pelo
+  retomada. As ferramentas chegam ao modelo em ordem fixa entre execuções (cache de prompt): as externas
+  (app e MCPs) ordenadas pelo nome (código de caractere, sem depender do locale) e as internas num bloco
+  depois, sem depender da ordem dos servidores, do `tools/list` de cada um nem da seleção. Ficam de fora, com aviso na execução: ferramentas removidas do catálogo, desligadas pelo
   dono no Agente Opex (`disabledTools`) e as do grupo proibido aos rotineiros (também recusadas ao
   executar uma ação confirmada). Consumo por passo em `recordAiConsumption` (origem `routine-agent`).
   **Uma ferramenta por vez depois de encerrar**: se uma ferramenta do passo já encerrou o turno
@@ -328,6 +368,11 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   MCPs do host não liberados, e as ferramentas internas **por rede** num MCP do Opex por execução
   (`POST /api/routine-agents/mcp/<runId>`, em `PUBLIC_PREFIXES`, autenticado por um segredo
   aleatório da execução — só o hash no banco; registrado como `rotina_<id>` e removido no fim).
+  Como o prefixo `rotina_<id>_` muda a cada execução e entra nas instruções e nas ferramentas, o cache de
+  prompt do motor OpenCode só se repete entre as ativações (retomadas) da mesma execução.
+  Subagentes em segundo plano (OPE-216): o turno espera a sessão ficar quieta; cada espera vira um passo de
+  aviso "Aguardando trabalho em segundo plano" (com a contagem) e o relato da execução é o da execução final
+  (`onSegment` zera o texto acumulado).
   Serviço desligado → **Erro** com o motivo. As permissões falham fechadas: sem conseguir listar os
   MCPs do host → **Erro** acionável; sessão reaproveitada cujas permissões não puderam ser atualizadas
   → sessão nova, com aviso. As chamadas ao MCP da execução (memória, Chamada HTTP) viram passos.
@@ -343,7 +388,7 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   (`routineSkillPermissions`; a última regra que casa vence no OpenCode). O curinga bloqueia também as
   nativas, as de projeto e as que surgirem. Falha fechada: sem conseguir listar as skills do host
   (`client.skill.list`) → **Erro** acionável, antes de registrar o MCP da execução. A lista é lida por
-  `listOpencodeSkillsAt` (`src/lib/ai/opencode-skill-list.ts`, OPE-158), que espera o diretório da execução
+  `listOpencodeSkillsAt` (`@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list`, OPE-158), que espera o diretório da execução
   carregar as skills (diretório recém-aberto responde vazio e depois só com as nativas) até as selecionadas
   aparecerem; a seleção casa por id ou nome (`matchOpencodeSkill`, ver `modules/refinement.md`) e o `allow`
   usa sempre o id do OpenCode. Skill selecionada que sumiu do host vira aviso e é ignorada. A sessão reaproveitada recebe as regras novas; sem conseguir
@@ -411,12 +456,22 @@ Roda só no Opex original (na prévia o agendador fica desligado).
 ## Páginas
 
 - `/agentes-rotineiros` (item **"Rotineiros"** da categoria Agentes, entrada `rotineiros` do
-  `AGENT_CATALOG`, D18): uma linha por agente não arquivado (`RoutineAgentRow`, grade de
-  `routine-agents-layout.ts` compartilhada com o skeleton):
-  - identificação (link para a página do agente): nome, selos de status e provisionamento, objetivo inteiro
-    (quebra a linha, sem corte), motor e modelo, última execução e próximo disparo;
-  - KPIs Execuções, Concluídas, Com erro e Tokens, e o gráfico "Execuções por dia" (`UsageByDateChart`
-    compacto) do período escolhido; sem execuções → "Sem execuções no período.";
+  `AGENT_CATALOG`, D18): um item por agente não arquivado (`RoutineAgentRow`, classes de
+  `routine-agents-layout.ts` compartilhadas com o skeleton `RoutineAgentsSkeleton`):
+  - **linha 1, identificação na largura inteira** (OPE-213): o nome é o link para a página do agente
+    (`ItemNameLink`), selos de status e provisionamento, objetivo inteiro (quebra a linha, sem corte), motor e
+    modelo, última execução, os **gatilhos e a próxima execução** (`RoutineScheduleIndicators`, ver abaixo) e, à
+    direita, **Pausar/Retomar** (`RoutinePauseToggle`);
+  - **linha 2, na largura inteira** (`ROUTINE_ROW_BODY`; KPIs e gráfico lado a lado a partir de `xl`), **12 KPIs** em
+    duas fileiras de seis (`routineRowKpis`, puro, em `routine-row-kpis.ts`): Execuções, Concluídas, Com erro, Tokens,
+    **Tokens por execução** (tokens ÷ execuções) e **Tokens por dia** (tokens ÷ dias corridos; `kpis.tokensPerRun` e
+    `kpis.tokensPerDay` da mesma agregação); **Custo efetivo**, **Média por execução (efetivo)**, **Média por dia
+    (efetivo)**, **Custo de tabela**, **Média por execução (tabela)** e **Média por dia (tabela)** — US$ no valor, o
+    R$, a base ("N execução(ões) com custo" / "N dia(s) corrido(s)") e parcial/estimado na dica; sem dado "—", nunca
+    0. Médias com o critério da Visão geral (`cost.perRun` = custo ÷ execuções com custo; `cost.perCalendarDay` =
+    custo ÷ dias corridos do período), recalculadas com o período do filtro. Efetivo e tabela com cores diferentes
+    (`COST_KIND_TONE`). E o gráfico "Execuções por dia" (`UsageByDateChart` compacto) do período escolhido; sem
+    execuções → "Sem execuções no período.";
   - filtros (`RoutineAgentsFilters`, `ListFilters`; regras puras em `list-filters.ts`, estado na URL):
     busca por nome/objetivo (fuse.js), Status (Ativo, Pausado, Provisionando, Com erro de provisionamento —
     o provisionamento incompleto vence o status do agente), Motor (Todos/Opex/OpenCode) e Período
@@ -433,11 +488,46 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   e **"Executar agora"**, na linha do título (D19), (diálogo com "Solicitação desta execução"; desabilitado
   pausado ou sem provisionamento). Abas na URL (`?aba=`): **Visão geral** em duas colunas (OPE-160,
   `RoutineOverviewLayout`): à esquerda o filtro de período compartilhado, os KPIs (execuções, concluídas,
-  com erro, tempo médio, tokens e custo) e os gráficos por dia (`GET /api/routine-agents/[id]/metrics?periodo=`);
+  com erro, tempo médio, tokens e os seis de custo da OPE-203, ver "Custos") e os gráficos (`GET /api/routine-agents/[id]/metrics?periodo=`):
+  "Custo por dia" (largura toda), "Execuções por dia", "Tokens por dia" e "Divisão do custo";
   à direita a conversa com o agente, recolhível (ver "Conversa com o agente"). O carregamento da página
-  (`RoutineAgentPageSkeleton`) tem o cabeçalho, as abas e as duas colunas. **Execuções** (lista ao vivo, detalhe em
-  `?execucao=` com passos, ferramentas, relato, avisos, ação pendente e Cancelar), **Entradas**,
-  **Memórias** e **Segredos**.
+  (`RoutineAgentPageSkeleton`) tem o cabeçalho com as ações, a faixa dos gatilhos, as abas e as duas colunas.
+  **Pausar/Retomar** (OPE-213) também fica na linha do título, e os **gatilhos e a próxima execução** ficam acima das
+  abas (espaço `notice` do `AgentPageFrame`), visíveis em todas. **Execuções** (lista ao vivo de cards, ver "Card da
+  execução" abaixo), **Entradas**, **Memórias** e **Segredos**.
+- **Gatilhos e próxima execução** (OPE-213, pedido do dono em 27/11/2026; `routineScheduleSummary`, puro, em
+  `schedule-summary.ts`): um chip por gatilho **ligado** com o ícone do tipo e o texto de `describeTrigger` (dica: o
+  próximo horário daquele gatilho); sem gatilhos ligados, "Só manual". Próxima execução: ativo com horário →
+  "Próxima execução dd/MM/yyyy HH:mm (em 2 horas)" (o relativo se atualiza a cada minuto); pausado → "Pausado: sem
+  disparos"; ativo sem horário → "Sem disparo agendado". **Pausar/Retomar** usa `useRoutineAgentStatus` com resposta
+  otimista (status no cache do agente e das listas, pausado sem próximo disparo; reverte com toast na falha) e não
+  aparece para agente arquivado.
+- **Card da execução** (OPE-213, aba Execuções, `RoutineRunCard`; regras puras em `runs/run-card.ts`): um card por
+  execução, mais recentes primeiro, `VirtualStack` (inteira até 50, virtualizada acima), ao vivo pelo tempo real. Mostra
+  a situação com cor e ícone (`ROUTINE_RUN_STATUS_ICONS`), **"Execução #N" como link** para a página da execução (sem
+  botão "Abrir", regra da OPE-172 confirmada pelo dono), a origem gravada (só as que existem; não há origem
+  "retomada"), motor · modelo, início e, terminada, término e duração; "Pedido:" quando houver; o **início do relato**
+  em texto simples (`reportExcerpt`, sem marcação do Markdown) cortado em 3 linhas, sem bloco quando não há relato;
+  Erro com o motivo; Aguardando confirmação com o resumo do pendente e o link **Responder** (abre a página da execução,
+  sem Confirmar/Recusar no card); Hibernada com a próxima verificação e o motivo; tokens e os custos efetivo e de
+  tabela nas suas cores (`*` = parcial; R$ e estimado na dica; sem custo "—"). Executando e Esperando ficam
+  **destacados** (borda e ponto pulsante, sem pulso com movimento reduzido). **Cancelar** só nos status não finais, com
+  a mesma confirmação da página da execução. Skeleton no formato do card. Decisões do dono de 27/11/2026: destaque =
+  em execução (Executando/Esperando); Responder abre a página; relato pelo início; título é o link.
+- **Página da execução** (OPE-208, no lugar da gaveta `?execucao=`, decisão do dono):
+  `/agentes-rotineiros/[id]/execucoes/[runId]` (`routineRunPath`), `RoutineRunPage`. Cabeçalho `AgentPageHeader` com a
+  seta **Voltar para as execuções** (`routineRunsHref`: a página do agente com `?aba=execucoes`), o título "Execução #N",
+  a linha agente · origem · motor · modelo e, na linha do título, o status e **Cancelar execução** (com confirmação).
+  Corpo em duas colunas no computador (`run-page-layout.ts`; uma só no celular): à esquerda a ação pendente
+  (Confirmar/Recusar), a hibernação, a solicitação, o erro, o relato final e os passos (`RoutineRunMain`); à direita,
+  fixo ao rolar, o resumo com início, fim, duração ativa, esperando, tokens, custos de tabela/efetivo/economia, custo
+  por modelo, avisos e ferramentas usadas (`RoutineRunAside`). Tudo atualiza pelo tempo real (`useRoutineRealtime`).
+  Estados: skeleton com a mesma grade (`RoutineRunPageSkeleton`), erro com Tentar novamente e, para
+  `ROUTINE_RUN_NOT_FOUND` (sem repetir a consulta), "Execução não encontrada" com **Ver as execuções do agente**.
+  Execução de outro agente: o endereço é trocado (`router.replace`) para o do agente dela. O toast "Abrir execução"
+  (`routine-run-attention`) leva para esta página. **Link antigo** `?execucao=<id>` na página do agente (da gaveta
+  removida) é redirecionado com `router.replace` para a página da execução; `execucao` só continua no schema da URL
+  para isso. O `RoutineRunDetailSheet` foi apagado.
 - **Memórias** (`RoutineMemoriesTab`, D10/D11): um card "Rede de memórias" com o `AgentUniverse` da lib
   (`agent="opex/rotineiro-<slug>"`, `defaultCreateChannel` = canal próprio), dentro do
   `OpexEngramindProvider`: as memórias de `opex`, `agentes/rotineiros/global`, do canal próprio e dos
@@ -458,6 +548,55 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   `routine-agent-updated` refaz as listas de entradas montadas.
 - Toast em qualquer tela (`useRoutineAttentionToasts`, no `AppLayoutShell`): confirmação pendente e
   fim da execução, com **"Abrir execução"**.
+
+## Custos: custo de tabela e custo efetivo (OPE-203, só motor Opex)
+
+- **Custo de tabela por passo**: no início do turno, `createStepPricer` (`@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server`) carrega o preço
+  do modelo (prazo próprio + sinal da execução; falhou, a última cópia boa em memória e depois em `ai_price_catalogs`,
+  com aviso no log; sem cópia, o passo fica sem preço com o motivo; cancelamento propaga). A cada `finish-step` o
+  motor grava no **mesmo registro** de `ai_consumption_logs` (`origin: routine-agent`, `subject: execução`, `apiKeyId`
+  da chave que respondeu) os tokens separados (`tokenDetails`: sem cache, cache lido, cache escrito, saída, reasoning,
+  de `inputTokenDetails`/`outputTokenDetails` da SDK `ai` v7) e o `listCost` (`usd`, `source`, `price` congelado com a
+  faixa — pico/fora de pico/contexto longo —, `estimated`, `missingReason`). O preço vale pelo **início do passo**
+  (`start-step`). Fontes por provedor: DeepSeek (tabela oficial, pico seg–sex 01–04h e 06–10h UTC, feriados chineses
+  da lista da integração DeepSeek fora de pico), OpenCode Go (`list_cost` da própria resposta), Command Code
+  (`pricing` do catálogo `?view=client`, com cache e faixas de contexto) e Anthropic/OpenAI/Gemini (models.dev). Ver
+  `modules/ai.md`, "Custo de tabela".
+- O motor OpenCode de sessão também grava `tokenDetails` desde a OPE-205, pelo runner compartilhado em
+  `session.step.ended`, sem duplicar a linha no `onUsage`. A medição de custo de tabela por passo não muda.
+- **Custo efetivo** (derivado na leitura, `@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/effective`): pelo plano de cobrança da chave que
+  respondeu (`modules/ai.md`, "Plano de cobrança"). Pago por uso = tabela; Créditos = tabela × (pago ÷ face), fora da
+  validade/esgotados/antes do início = tabela com aviso; Assinatura = cota do dia × min(1, uso do passo ÷ uso total do
+  dia) + uso extra do Go. Alterar o plano recalcula o efetivo; o custo de tabela gravado não muda. **Economia** =
+  tabela − efetivo. Valores em US$ e R$ (PTAX do dia do passo em Brasília, `fx_rates_daily`).
+- **Agregação única** (`server/run-costs.ts`): `computeRunCosts` lê os passos, monta o contexto de cobrança
+  (`buildBillingLookup`) e soma por execução; a lista de execuções, o detalhe, a Visão geral e `/agentes-rotineiros`
+  usam a mesma função. O custo de uma execução conta no **dia em que ela foi disparada** (Brasília), como tokens e
+  execuções; o rateio da assinatura usa o dia UTC de cada passo. Falha na leitura dos custos não derruba a tela (custos
+  desconhecidos, com log).
+- **Desconhecido não é zero**: passo sem preço ou sem efetivo deixa o total **Parcial**, e a tela lista os modelos sem
+  preço (`provedor/modelo`) e os avisos (PTAX ausente, dia da assinatura não lido, créditos vencidos/esgotados, chave
+  removida — tratada como pago por uso). Execução do motor Opex com tokens e sem passos gravados = custo desconhecido.
+- **Histórico**: passos antigos sem `listCost` recebem, na primeira leitura, a **estimativa** pelo preço atual e os
+  tokens de entrada e saída (sem a separação do cache), gravada uma vez com `estimated: true` e marcada "estimado"
+  nas telas (no Go o `list_cost` gravado no `billing` é exato, não estimado).
+- **DTOs**: `RoutineRunDto.cost` (`RoutineCostDto`: `listUsd/Brl`, `effectiveUsd/Brl`, `savingsUsd/Brl`, `partial`,
+  `brlPartial`, `missingPrices`, `estimated`, `notices`; `null` no motor OpenCode, "fora desta versão"),
+  `RoutineRunDetailDto.costByModel` e, nas métricas, `cost` (`totals`, `perRun`, `perCalendarDay`, `perActiveDay`,
+  contagens), `days[].cost` e `breakdown` (`providers`, `models`, `plans`).
+- **Telas**: Visão geral com os KPIs "Custo de tabela", "Custo efetivo", "Economia", "Média por execução", "Média por
+  dia" (dias corridos) e "Média por dia ativo" (dias com execução) — valor em US$, R$ no rodapé ("R$ indisponível" sem
+  PTAX) —, os avisos do custo, o gráfico "Custo por dia" (séries tabela e efetivo) e "Divisão do custo" (abas
+  Provedor, Modelo e Chave/plano). Card da execução com os valores tabela e efetivo (`*` = parcial; R$ na dica) e o
+  detalhe com tabela, efetivo, economia, custo por modelo e avisos. Skeletons com as mesmas quantidades
+  (`ROUTINE_OVERVIEW_KPI_COUNT` = 11, `ROUTINE_OVERVIEW_CHART_COUNT` = 4, `ROUTINE_ROW_KPI_COUNT` = 12). **Cores** (OPE-213, decisão do dono em 27/11/2026): custo de tabela em
+  `var(--chart-info-1)` e custo efetivo em `var(--chart-positive-1)` (`COST_KIND_TONE`, `src/features/ai-billing/cost-tone.ts`,
+  as mesmas séries do "Custo por dia") nos KPIs da lista, nos da Visão geral (prop `accentColor` do `KpiCard`: tabela,
+  efetivo e as médias, que mostram o efetivo; Economia neutra) e no card da execução; a página da execução não muda.
+- **Tempo real**: além de `routine-run-updated`, `useRoutineRealtime` relê execuções, detalhe e métricas em
+  `ai-provider-keys-updated` (plano alterado), `ai-billing-updated` (PTAX ou uso das assinaturas gravados) e
+  `ai-consumption-updated` com `origin: routine-agent` (uma vez por rajada de 5 s).
+- **Fora do escopo** desta versão: os outros agentes, o motor OpenCode dos rotineiros, painel geral e orçamento.
 
 ## API
 
@@ -489,6 +628,13 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   e a Chamada HTTP do motor OpenCode só pelo dono. **Skills novas** (`opex.enabledSkills` e
   `opencode.enabledSkills`, OPE-153) também só pelo dono. O que o dono já liberou continua como está.
   As duas ferramentas aceitam a seleção de skills dos dois motores (`enabledSkills` em `opex`/`opencode`).
+
+- **Documentos (OPE-210)**: o grupo `documents` (`gerar_pdf`, `obter_pdf`, `upload_s3`, `get_s3`,
+  `preparar_curriculo`, `obter_curriculo`) aparece na árvore do motor Opex e é liberado por agente. O contexto das
+  ferramentas leva `routine: { agentId, runId }` (motor Opex, MCP da execução e ação confirmada; na conversa,
+  `runId: null`) e o catálogo grava a origem (agente, execução e ferramenta). O Candidatador recebeu as
+  ferramentas de currículo, o bloco de instruções e as memórias novas pela migração
+  `candidatador-curriculo-tools` (ver `modules/agent-documents.md`, "Candidatador").
 
 Grupo `routine-agents` (`server/tools/routine-agents.ts`, só no dono): `list_routine_agents`,
 `get_routine_agent`, `create_routine_agent`, `update_routine_agent`, `pause_routine_agent`,
@@ -535,6 +681,8 @@ a ação confirmada pode ser destrutiva, então pede Confirmar/Cancelar no chat 
   As telas invalidam o TanStack Query (`useRoutineRealtime`).
 - Conversa (OPE-160): `routine-chat-session-updated` / `routine-chat-session-deleted` em `private-app`
   (`{ id, agentId }`); a resposta ao vivo vai pelo NDJSON. Sessões auditadas em `ConversaAgenteRotineiro`.
+- Custos (OPE-203): as telas também reagem a `ai-provider-keys-updated`, `ai-billing-updated` e
+  `ai-consumption-updated` (ver "Custos").
 
 ## Limitações conhecidas
 

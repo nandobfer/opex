@@ -26,7 +26,7 @@ não existe — ver `modules/opencode-resources.md`.
 ## Ativação
 
 - Campo público **"Integração ativa"** (`active`, `boolean`, padrão `false`) da integração
-  `builder_machine` (`src/lib/integrations/catalog.ts`). Sem `env`. Segredo `sshPrivateKey`
+  `builder_machine` (adaptador do Opex: `src/features/integrations/registry/definitions.ts` e `adapters/opex.server.ts`). Sem `env`. Segredo `sshPrivateKey`
   (`group: "card"`, só pela aba Preparo do PC).
 - `src/features/local-docker/server/active.ts`: `isBuilderMachineActive()` (`getIntegrationConfig`
   → `active === true`; erro → `false`) e `assertBuilderMachineActive()` (404
@@ -38,7 +38,7 @@ não existe — ver `modules/opencode-resources.md`.
   Desativada, a página mostra só **Geral** + card **Ativação** ("Integração ativa") e as demais abas
   bloqueadas ("Ative a integração e salve…"); a configuração do PC nem é carregada.
 - **Ativar** (transição desligada → ligada, `updateIntegration`) roda o gancho de ativação
-  (`src/features/integrations/services/enable-hooks.ts`, `INTEGRATION_ENABLE_HOOKS`, depois de gravar
+  (`onEnable` do adaptador `builderMachineAdapter`, `src/features/integrations/adapters/opex.server.ts`, depois de gravar
   e auditar; falha só é logada e não desfaz): `onBuilderMachineEnabled` liga a rotina
   `builder-machine-cleanup` em Integrações › Crons.
 - **Desativar com prévias no PC deixa os containers lá** (o código não alcança mais o PC): a tela
@@ -124,6 +124,11 @@ não existe — ver `modules/opencode-resources.md`.
   processo) e a pasta do job é apagada no fim. `onOutput` entrega a saída aos pedaços; `retryOnLost`
   repete uma leitura sem efeito colateral; `quiet` não escreve no debug. `createHostRunner(debug)` cria
   um executor que escreve no debug de outra integração.
+- **Saída do comando** (`server/shell.ts`, `readAll`): lida do OpenCode em páginas de 64k seguindo o `cursor`
+  devolvido até o fim (`truncated`/`cursor < size`), também depois do fim com `onOutput`. Teto padrão de 2 MB
+  (`HOST_OUTPUT_MAX`, opção `maxOutput`, vale também para o que é acumulado ao vivo com `onOutput`); acima dele o
+  resultado traz o começo e `truncated: true`. Página que falha é repetida uma vez; se falhar de novo, o resultado
+  traz o que veio antes com `truncated: true` e `readError: true` (nunca como saída completa).
 - **Fila do build** continua única (um build local por vez em todo o app).
 - **Forks não usam a Builder Machine**: só o build **da mesa** passa por ela (o marcador de nova
   prévia do fork do My Tasks não foi portado); um `docker compose` rodado por um fork vai para o

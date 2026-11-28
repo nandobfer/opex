@@ -140,6 +140,14 @@ describe('segredos fora do chat', () => {
     expect(redacted).toMatchObject({ secrets: [{ key: 'token', value: '[segredo omitido]' }, { key: 'outro', value: null }] })
   })
 
+  it('update_integration não aceita ambiente nem modo debug (OPE-212: debug sempre ativo)', () => {
+    const tool = findOpexTool('update_integration')!
+    const parsed = tool.input.parse({ id: 'github', environment: 'interno', debugMode: true }) as Record<string, unknown>
+    expect(parsed).not.toHaveProperty('environment')
+    expect(parsed).not.toHaveProperty('debugMode')
+    expect(tool.description).not.toMatch(/modo debug|ambiente/)
+  })
+
   it('a senha do usuário do portal não vai para o histórico nem para o card', () => {
     const tool = findOpexTool('create_client_user')!
     const redacted = tool.redact!(tool.input.parse({ clientId: 'c1', username: 'ana', password: 'senha-forte', admin: false }))

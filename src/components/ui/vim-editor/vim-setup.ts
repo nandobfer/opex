@@ -4,6 +4,7 @@ import { runCtrlEnterAction } from "@/components/ctrl-enter-submit"
 import { readSystemClipboard, writeSystemClipboard } from "./clipboard"
 import { vimHostTextarea } from "./host"
 import { readLineNumbers, setLineNumberOption, type LineNumberOption } from "@/features/editor-mode/line-numbers"
+import { selectionClipboard } from "@/lib/markdown/copy"
 
 type RegisterController = ReturnType<typeof Vim.getRegisterController>
 type ExCm = { cm6?: EditorView }
@@ -98,7 +99,9 @@ function copiedSelection(): string {
         const { selectionStart, selectionEnd, value } = active
         return selectionStart !== null && selectionEnd !== null ? value.slice(selectionStart, selectionEnd) : ""
     }
-    return window.getSelection()?.toString() ?? ""
+    // Seleção num `Markdown`: o mesmo Markdown que vai para a área de transferência (OPE-220).
+    const selection = window.getSelection()
+    return selectionClipboard(selection)?.text ?? selection?.toString() ?? ""
 }
 
 function listenCopies(): void {

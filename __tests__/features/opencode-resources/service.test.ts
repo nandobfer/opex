@@ -14,7 +14,7 @@ const mocks = vi.hoisted(() => ({ recordAudit: vi.fn(), publish: vi.fn(), npmAva
 
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXCLUIR: "EXCLUIR", EXECUTAR: "EXECUTAR" } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
-vi.mock("@/lib/ai/catalog", () => ({ clearAiCatalogCache: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/catalog", () => ({ clearAiCatalogCache: vi.fn() }))
 vi.mock("@/features/opencode-resources/server/versions", () => ({ npmAvailable: mocks.npmAvailable, githubFolderHash: vi.fn(async () => null), clearVersionCache: vi.fn(), fetchNpmPackage: vi.fn() }))
 vi.mock("@/features/opencode-resources/server/scopes", () => ({
     GLOBAL_SCOPE_DTO: { id: "global", label: "Global (usuário)", directory: null },

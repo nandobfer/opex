@@ -1,5 +1,6 @@
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
-import { recordAiConsumption } from "@/lib/ai/consumption"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { recordAiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption"
+import { tokenDetailsOf, tokensFromOpencode } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
 import { appendTextDelta, joinTextBlocks } from "@/lib/ai/opencode-text"
 import {
     describeToolInput,
@@ -17,7 +18,8 @@ import {
     type OpencodeTokenUsage,
     type ProviderLimitPolicy,
 } from "@/lib/ai/opencode-events"
-import { SCHEDULE_TIMEZONE } from "@/lib/integrations/schedule"
+import { BACKGROUND_REQUEST_TIMEOUT_MS, cancelBackgroundWork, hasBackgroundWork, sameBackgroundCounts, sessionBackgroundWork, sessionIsActive, type BackgroundWork } from "@/lib/ai/opencode-background"
+import { SCHEDULE_TIMEZONE } from "@nandobfer/integracoes"
 
 /**
  * Um turno de agente numa sessão longa do OpenCode (`@opencode/client`): troca agente/modelo, envia
@@ -98,6 +100,11 @@ export type TurnEvent =
     | { type: "permission-replied"; id: string; decision: string }
     | { type: "form"; form: OpencodeFormDto }
     | { type: "form-closed"; id: string }
+    /**
+     * Trabalho em segundo plano que o turno aguarda (OPE-216): a execução terminou, mas a sessão ainda tem
+     * subagentes, comandos ou outros jobs rodando. Tudo zerado = a espera acabou (a sessão acordou ou ficou quieta).
+     */
+    | { type: "background"; subagents: number; shells: number; other: number }
     | { type: "turn-end"; outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number }
 
 export interface TurnHooks {
@@ -111,6 +118,11 @@ export interface TurnHooks {
     onText?: (delta: string) => void | Promise<void>
     onStep?: (usage: { costUsd: number; tokens: OpencodeTokenUsage; stepId?: string }) => void | Promise<void>
     onMoved?: (directory: string) => void | Promise<void>
+    /**
+     * Começou a espera pelo trabalho em segundo plano (OPE-216): quem acumula o `onText` zera o acumulado, porque
+     * o resultado do turno é o texto da execução final (a que vem depois da espera).
+     */
+    onSegment?: () => void | Promise<void>
     heartbeat?: () => void | Promise<void>
 }
 
@@ -136,6 +148,12 @@ const RECONNECT_DELAY_MS = 2_000
 const MAX_RECONNECTS = 30
 const READY_TIMEOUT_MS = 3_000
 const INTERRUPT_GRACE_MS = 15_000
+/** Nova leitura das pendências durante a espera (rede de segurança se a sessão não acordar). */
+export const BACKGROUND_POLL_MS = 5_000
+/** Leituras seguidas sem pendência (e sem execução) que encerram a espera. */
+const QUIET_READS_TO_FINISH = 2
+/** Releitura logo após o fim quando só a própria sessão aparece em execução (o mapa de ativas pode atrasar). */
+const ACTIVE_RECHECK_MS = 500
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms))
 const message = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -144,11 +162,25 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
  * Reconstrói o texto do turno a partir do histórico da sessão (usado na reconexão: parte da saída
  * pode ter passado antes de reatarmos). Junta as partes de texto das mensagens do assistente
  * criadas depois de `sinceMs` (ou, sem marco, apenas a última). Best-effort: falha vira string vazia.
+ * `lastExecution` (OPE-216): só as mensagens depois da última entrega sintética (o resultado de um
+ * subagente que acordou a sessão), ou seja, o texto da execução final do turno.
  */
-async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceMs: number): Promise<string> {
+async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceMs: number, options: { lastExecution?: boolean; requireBoundary?: boolean } = {}): Promise<string> {
     try {
-        const response = await client.message.list({ sessionID: sessionId, type: "assistant", order: "desc", limit: 50 })
-        const items = [...(response.data ?? [])].reverse()
+        const response = await client.message.list(options.lastExecution ? { sessionID: sessionId, order: "desc", limit: 100 } : { sessionID: sessionId, type: "assistant", order: "desc", limit: 50 }, { signal: AbortSignal.timeout(BACKGROUND_REQUEST_TIMEOUT_MS) })
+        const all = [...(response.data ?? [])].reverse()
+        let since = all
+        if (options.lastExecution && sinceMs > 0) {
+            const recent = all.filter((item) => (item.time?.created ?? 0) >= sinceMs)
+            let boundary = -1
+            recent.forEach((item, index) => {
+                if (item.type === "synthetic") boundary = index
+            })
+            // `requireBoundary`: sem a entrega do resultado, a sessão não acordou — não há execução final.
+            if (boundary < 0 && options.requireBoundary) return ""
+            since = boundary >= 0 ? recent.slice(boundary + 1) : recent
+        }
+        const items = since.filter((item) => item.type === "assistant")
         const relevant = sinceMs > 0 ? items.filter((item) => (item.time?.created ?? 0) >= sinceMs) : []
         const chosen = relevant.length ? relevant : items.slice(-1)
         const parts = chosen
@@ -169,7 +201,8 @@ async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceM
 export type AttachProbe =
     | { kind: "unavailable" }
     | { kind: "missing-session" }
-    | { kind: "running" }
+    /** `background`: a execução terminou, mas a sessão aguarda trabalho em segundo plano (OPE-216). */
+    | { kind: "running"; background?: BackgroundWork }
     | { kind: "finished"; outcome: TurnResult["outcome"]; message: string | null }
     | { kind: "idle" }
 
@@ -193,6 +226,9 @@ export async function probeAttachSession(client: OpencodeClient, sessionId: stri
         return { kind: "unavailable" }
     }
     if (running) return { kind: "running" }
+    // Parada, mas com subagentes/comandos rodando ou entrega pendente: o turno ainda não acabou.
+    const background = await sessionBackgroundWork(client, sessionId)
+    if (background.ok && hasBackgroundWork(background)) return { kind: "running", background }
     if (info.outcome && (info.time?.idle ?? 0) >= startedAt) {
         return { kind: "finished", outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null }
     }
@@ -254,6 +290,8 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     // começa em linha nova no texto do turno (a saída publicada segue com o delta original).
     let lastTextBlock: string | null = null
     let textBoundary = false
+    // Execução atual do turno (OPE-216): o texto dela começa em `segmentStart`; o resultado é o da execução final.
+    let segmentStart = 0
     let costUsd = 0
     const toolNames = new Map<string, string>()
     const toolInputs = new Map<string, string | null>()
@@ -362,6 +400,97 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     const live: LiveTurn = { client, sessionId, finished: () => finished }
     liveTurns.set(request.id, live)
 
+    // Espera pelo trabalho em segundo plano (OPE-216): a execução terminou, mas a sessão ainda tem
+    // subagentes/comandos rodando ou entrega pendente — o OpenCode acorda a sessão numa execução nova.
+    let waiting = false
+    let shown = { subagents: 0, shells: 0, other: 0 }
+    let quietReads = 0
+    // Uma releitura por vez: eventos `job` seguidos e o relógio não empilham leituras.
+    let polling = false
+    // Houve espera neste turno: o texto anterior a ela não é o resultado (é o anúncio).
+    let waited = false
+    let waitPoll: ReturnType<typeof setInterval> | null = null
+    // A espera fechou pelas leituras, sem ver a sessão acordar (ex.: SSE caiu no meio): o texto final vem do histórico.
+    let quietFinish = false
+    const showBackground = (work: Pick<BackgroundWork, "subagents" | "shells" | "other">) => {
+        const next = { subagents: work.subagents, shells: work.shells, other: work.other }
+        if (sameBackgroundCounts(next, shown)) return
+        shown = next
+        publish({ type: "background", ...next })
+    }
+    const stopWaiting = () => {
+        waiting = false
+        quietReads = 0
+        if (waitPoll) clearInterval(waitPoll)
+        waitPoll = null
+        showBackground({ subagents: 0, shells: 0, other: 0 })
+    }
+    /** Só a própria sessão em execução conta como pendência: ela acordou e a execução nova vem pelo SSE. */
+    const ownRunning = () => sessionIsActive(client, sessionId)
+    /**
+     * Relê as pendências na espera. Só a leitura do relógio (`fromTimer`, a cada `BACKGROUND_POLL_MS`) conta para
+     * fechar a espera: o evento `job` apenas atualiza a contagem exibida (dois subagentes que terminam juntos não
+     * fecham o turno antes de o OpenCode entregar o resultado).
+     */
+    const pollWaiting = async (fromTimer: boolean) => {
+        if (!waiting || finished || interruptRequested || polling) return
+        polling = true
+        try {
+            const work = await sessionBackgroundWork(client, sessionId)
+            if (!waiting || finished || interruptRequested) return
+            if (work.ok && (hasBackgroundWork(work) || (await ownRunning()))) {
+                quietReads = 0
+                // A caixa de entrada não entra na contagem exibida (é o resultado já a caminho da sessão).
+                if (hasBackgroundWork({ ...work, inbox: 0 })) showBackground(work)
+                return
+            }
+            if (!fromTimer || !waiting || finished || interruptRequested) return
+            // O job acabou e a sessão não acordou: depois de leituras seguidas sem nada, o turno fecha.
+            if (++quietReads >= QUIET_READS_TO_FINISH) {
+                quietFinish = true
+                stopWaiting()
+                finish({ outcome: "succeeded", message: null })
+            }
+        } finally {
+            polling = false
+        }
+    }
+    const enterWaiting = (work: BackgroundWork) => {
+        waiting = true
+        waited = true
+        quietReads = 0
+        // O texto que vier daqui em diante é o da execução seguinte (a final, se não houver outra espera).
+        segmentStart = text.length
+        lastTextBlock = null
+        // Quem acumula o `onText` descarta o texto anterior (o anúncio): o resultado é o que vier depois.
+        void Promise.resolve(hooks.onSegment?.()).catch(() => undefined)
+        // Só a entrega pendente ou a própria sessão rodando: não há contagem a exibir (a execução nova já vem).
+        if (hasBackgroundWork({ ...work, inbox: 0 })) showBackground(work)
+        if (!waitPoll) {
+            waitPoll = setInterval(() => void pollWaiting(true).catch(() => undefined), BACKGROUND_POLL_MS)
+            waitPoll.unref?.()
+        }
+    }
+    /** Fim de uma execução com sucesso: termina o turno só com a sessão quieta. */
+    const settleOrWait = async () => {
+        let work = await sessionBackgroundWork(client, sessionId)
+        let running = !hasBackgroundWork(work) && (await ownRunning())
+        if (running) {
+            // O mapa de sessões ativas pode atrasar um instante em relação ao evento de fim: confere de novo.
+            await sleep(ACTIVE_RECHECK_MS)
+            work = await sessionBackgroundWork(client, sessionId)
+            running = !hasBackgroundWork(work) && (await ownRunning())
+        }
+        if (finished) return
+        if (!work.ok) publish({ type: "notice", level: "warn", message: "Não foi possível conferir o trabalho em segundo plano da sessão do OpenCode; o turno foi dado como concluído" })
+        if (work.ok && (hasBackgroundWork(work) || running)) {
+            enterWaiting(work)
+            return
+        }
+        if (waiting) stopWaiting()
+        finish({ outcome: "succeeded", message: null })
+    }
+
     const subscription = new AbortController()
     let readyResolve: () => void = () => undefined
     const ready = new Promise<void>((resolve) => {
@@ -420,6 +549,8 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                         outputTokens: event.tokens.output,
                         totalTokens: event.tokens.input + event.tokens.output + event.tokens.reasoning,
                         costUsd: event.costUsd,
+                        // OPE-205: `inputTokens` segue a entrada sem cache do OpenCode; o cache vai separado.
+                        tokenDetails: tokenDetailsOf(tokensFromOpencode(event.tokens)),
                     })
                 }
                 break
@@ -446,9 +577,17 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 publish({ type: "notice", level: "info", message: `Sessão movida para ${event.directory}` })
                 await hooks.onMoved?.(event.directory)
                 break
+            case "start":
+                // A sessão acordou com o resultado do trabalho em segundo plano: começa a execução final (o resultado do turno).
+                if (waiting) stopWaiting()
+                break
+            case "job":
+                if (waiting) await pollWaiting(false)
+                break
             case "end":
                 // Desistência por limite: o fim (interrompido) que vier é o da interrupção pedida aqui.
                 if (limitEnd) finish(limitFinish(limitEnd))
+                else if (event.outcome === "succeeded" && !interruptRequested) await settleOrWait()
                 else
                     finish(event.outcome === "succeeded" ? { outcome: "succeeded", message: null } : event.outcome === "failed" ? { outcome: "failed", message: event.message, failure: "model", ...(event.error && !attach && isProviderLimitError(event.error) ? { limited: true } : {}) } : { outcome: "interrupted", message: event.reason === "user" ? "Interrompido" : `Interrompido (${event.reason})` })
                 break
@@ -486,9 +625,11 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             await sleep(RECONNECT_DELAY_MS)
             const info = await client.session.get({ sessionID: sessionId }).catch(() => null)
             if (!finished && limitEnd && info?.outcome) finish(limitFinish(limitEnd))
-            else if (!finished && info?.outcome && (info.time.idle ?? 0) >= startedAt) {
+            else if (!finished && !waiting && info?.outcome && (info.time.idle ?? 0) >= startedAt && !(await ownRunning())) {
                 publish({ type: "notice", level: "warn", message: "A conexão com o OpenCode caiu; parte da saída pode não ter sido exibida" })
-                finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null, ...(info.outcome === "failed" ? { failure: "model" as const } : {}) })
+                // Terminou com sucesso durante a queda: só fecha com a sessão quieta (pode estar aguardando subagentes).
+                if (info.outcome === "succeeded" && !interruptRequested) await settleOrWait()
+                else finish({ outcome: info.outcome, message: info.outcome === "failed" ? "O agente terminou com erro" : info.outcome === "interrupted" ? "Interrompido" : null, ...(info.outcome === "failed" ? { failure: "model" as const } : {}) })
             }
         }
     })()
@@ -500,8 +641,15 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         if (request.signal.aborted) userStop = true
         if (interruptRequested || finished) return
         interruptRequested = true
-        await client.session.interrupt({ sessionID: sessionId }).catch(() => undefined)
+        // A folga e o fim na espera vêm antes das chamadas: um host que não responde não prende o Parar.
         setTimeout(() => finish({ outcome: "interrupted", message: reason }), INTERRUPT_GRACE_MS).unref?.()
+        // Na espera não há execução para o OpenCode encerrar: o turno fecha na hora.
+        if (waiting) {
+            stopWaiting()
+            finish({ outcome: "interrupted", message: reason })
+        }
+        // Parar também encerra os subagentes e comandos em segundo plano da sessão (OPE-216).
+        await Promise.all([client.session.interrupt({ sessionID: sessionId }, { signal: AbortSignal.timeout(BACKGROUND_REQUEST_TIMEOUT_MS) }).catch(() => undefined), cancelBackgroundWork(client, sessionId)])
     }
     const onAbort = () => void interrupt(request.signal.reason instanceof Error ? request.signal.reason.message : "Interrompido")
     request.signal.addEventListener("abort", onAbort, { once: true })
@@ -522,8 +670,11 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             // Perguntas e permissões que ficaram pendentes durante a queda: relê do estado da sessão.
             await syncSessionPending()
             if (probe.kind === "finished") {
-                text = await recoverTurnText(client, sessionId, startedAt)
+                text = await recoverTurnText(client, sessionId, startedAt, { lastExecution: true })
                 finish({ outcome: probe.outcome, message: probe.message })
+            } else if (probe.background) {
+                // A sessão está parada aguardando o trabalho em segundo plano: o acompanhamento começa na espera.
+                enterWaiting(probe.background)
             }
         }
     }
@@ -540,16 +691,22 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
             }
         }
         const end = await ended
-        // Reconectado: o texto pode ter começado antes de reatar; recupera o turno inteiro do histórico.
-        if (attach && end.outcome === "succeeded") {
-            const recovered = await recoverTurnText(client, sessionId, startedAt)
-            if (recovered) text = recovered
+        if (waiting) stopWaiting()
+        // Resultado = texto da execução final (depois da espera pelo segundo plano). Com espera e sem texto depois
+        // dela, o resultado fica vazio: o texto anterior é o anúncio ("fecho quando chegarem"), nunca o resultado.
+        const finalText = text.slice(segmentStart).replace(/^\s+/, "")
+        let resultText = finalText.trim() ? finalText : waited ? "" : text
+        // Reconectado (ou espera fechada sem ver a sessão acordar): recupera a execução final do histórico.
+        if ((attach || quietFinish) && end.outcome === "succeeded") {
+            const recovered = await recoverTurnText(client, sessionId, startedAt, { lastExecution: true, requireBoundary: quietFinish })
+            if (recovered) resultText = recovered
         }
         const durationMs = Date.now() - beginAt
         publish({ type: "turn-end", outcome: end.outcome, message: end.message, durationMs, costUsd })
-        return { outcome: end.outcome, text, message: end.message, costUsd, durationMs, ...(end.outcome === "failed" ? { failure: attach ? "other" : (end.failure ?? "other") } : {}), ...(end.limited ? { limited: true } : {}) }
+        return { outcome: end.outcome, text: resultText, message: end.message, costUsd, durationMs, ...(end.outcome === "failed" ? { failure: attach ? "other" : (end.failure ?? "other") } : {}), ...(end.limited ? { limited: true } : {}) }
     } finally {
         if (liveTurns.get(request.id) === live) liveTurns.delete(request.id)
+        if (waitPoll) clearInterval(waitPoll)
         clearInterval(heartbeat)
         clearTimeout(timeout)
         request.signal.removeEventListener("abort", onAbort)

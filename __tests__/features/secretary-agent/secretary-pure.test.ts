@@ -24,9 +24,10 @@ describe("conversationIdOfJid", () => {
     })
 
     it("o canal da conversa vai e volta pelo id", () => {
-        const channel = memoryChannelOf("secretary-conversation", { conversationId: "g-120363000000000001" })
+        const ns = { app: "opex", prefixed: false }
+        const channel = memoryChannelOf("secretary-conversation", { conversationId: "g-120363000000000001" }, ns)
         expect(channel).toBe("agentes/secretario/conversas/g-120363000000000001")
-        expect(listOfChannel(channel)).toEqual({ agentId: "secretary-conversation", conversationId: "g-120363000000000001" })
+        expect(listOfChannel(channel, ns)).toEqual({ agentId: "secretary-conversation", conversationId: "g-120363000000000001" })
     })
 })
 

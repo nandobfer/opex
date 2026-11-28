@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { DebugLogConsole, useDebugTerminal } from "@/features/integrations/components/DebugLogConsole"
+import { DebugLogConsole, useDebugTerminal } from "@nandobfer/integracoes/react"
 import { usePluginDebugLogs } from "../../hooks/usePluginDebugLogs"
 
 /** Terminal de logs de um plugin (mesmo terminal das integrações, sem "Testar conexão"). */

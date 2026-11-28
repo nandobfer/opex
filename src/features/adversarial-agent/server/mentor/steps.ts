@@ -1,6 +1,6 @@
 import { memoryChannelOf } from "@/features/ai/agents"
 import { listAgentMemories } from "@/features/ai/server/agent-memory-service"
-import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { loggerFor } from "@/lib/logger"
 import type { MentorTarget } from "../../mentor/constants"
 import type { WriterMemory } from "../../mentor/operations"
@@ -27,7 +27,8 @@ export const centralOf = (target: MentorTarget, centralId: string | null) => (ta
 export async function targetTextMax(target: MentorTarget, centralId: string | null): Promise<number | undefined> {
     try {
         const { memoryLimitsFor } = await import("@/features/ai/server/memory-settings")
-        return (await memoryLimitsFor(memoryChannelOf(target, { centralId }))).textMax
+        const { channelNamespace } = await import("@/features/engramind/server/instance")
+        return (await memoryLimitsFor(memoryChannelOf(target, { centralId }, await channelNamespace()))).textMax
     } catch (error) {
         log.warn({ target, err: error instanceof Error ? error.message : String(error) }, "[mentor] limites das memórias indisponíveis: usando o padrão")
         return undefined
@@ -51,7 +52,7 @@ export async function generate(
     request: { provider: AiProviderId; model: string; variant: string | null; instructions: string; prompt: string; timeoutSeconds: number; origin: string; subject: string; signal?: AbortSignal },
     usage: StepUsage,
 ): Promise<string> {
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     let text = ""
     for await (const event of streamAi({
         provider: request.provider,

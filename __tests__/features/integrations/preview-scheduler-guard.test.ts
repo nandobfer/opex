@@ -9,12 +9,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const logs = vi.hoisted(() => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: logs }))
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { updateOne: vi.fn(), findOneAndUpdate: vi.fn() } }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn(async () => ({ schedulerEnabled: true, jobs: [] })), getInternalBaseUrl: async () => 'http://127.0.0.1:3100' }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ CronJobState: { updateOne: vi.fn(), findOneAndUpdate: vi.fn() } }))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegrationConfig: vi.fn(async () => ({ schedulerEnabled: true, jobs: [] })), getInternalBaseUrl: async () => 'http://127.0.0.1:3100' }))(importOriginal)) as Record<string, unknown>), }))
 
 async function start() {
   vi.resetModules()
-  const { startCronScheduler } = await import('@/features/integrations/scheduler/cron-scheduler')
+  const { startCronScheduler } = await import('@/lib/integrations/scheduler')
   startCronScheduler()
 }
 
@@ -33,7 +33,7 @@ describe('startCronScheduler', () => {
     vi.stubEnv('OPEX_PREVIEW', '1')
     await start()
     expect(vi.getTimerCount()).toBe(0)
-    expect(logs.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('Agendador automático desligado: instância de prévia'))
+    expect(logs.info).toHaveBeenCalledWith(expect.anything(), expect.stringContaining('Agendador automático desligado nesta instância (prévia)'))
   })
 
   it('sem a marcação liga o tick de minuto e o tick rápido', async () => {

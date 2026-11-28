@@ -27,7 +27,7 @@ vi.mock('@/features/opex-agent/server/tools/registry', () => ({
     { name: 'schedule_job', group: 'jobs', label: 'Agendar', description: '', risk: 'write', alwaysOn: false },
   ],
 }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({}) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({}) }))
 vi.mock('@/features/maddox-agent/server/opencode-session', () => ({ ensureMaddoxMcp: mocks.ensureMcp, maddoxDirectory: async () => '/home/dono' }))
 vi.mock('@/features/maddox-agent/server/client-config', () => ({ publishMaddoxSettingsToClients: mocks.publishToClients }))
 

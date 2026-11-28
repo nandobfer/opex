@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { toEngramindError } from '@/features/engramind/server/errors'
 
 /**
@@ -30,7 +31,7 @@ const ALLOWED = ['agentes/rotineiros/indexador', 'opex', 'agentes/rotineiros/glo
 const memory = (id: string, extra: Record<string, unknown> = {}) => ({ id, channel: 'experiencia/desenvolvimento', title: `catalogo: ${id}`, text: 'x'.repeat(2_500), category: 'PROJECT_RULES', status: 'active', version: 1, key: null, tags: [], updated_at: '2026-11-05T00:00:00Z', origin: { source: 'rotineiro' }, ...extra })
 
 function tools(warn = vi.fn()) {
-  const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador #1', runId: 'run_1', target: AGENT, allowed: ALLOWED, warn })
+  const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador #1', runId: 'run_1', target: AGENT, allowed: ALLOWED, warn, ns: { app: 'opex', prefixed: false } })
   const byName = (name: string) => list.find((tool) => tool.name === name) as OpexTool
   const run = (name: string, input: unknown) => byName(name).execute(byName(name).input.parse(input), { sessionId: '', actorId: 'local' })
   return { run, warn }
@@ -184,20 +185,30 @@ describe('credencial do agente', () => {
 })
 
 describe('instruções da execução (D13)', () => {
-  it('listam os canais graváveis e mandam consultar o catálogo e usar chave fixa', async () => {
+  it('listam os canais graváveis e mandam consultar pelo índice e usar chave fixa', async () => {
     const { routineInstructions } = await import('@/features/routine-agents/run-prompt')
-    const text = routineInstructions({ name: 'Agente Indexador', objective: 'Catalogar', instructions: '', engine: 'opex', confirmIrreversible: false, maxLiveWaitMinutes: null, memoryBlock: '', memoryChannels: ALLOWED, toolPrefix: '', warnings: [], now: new Date('2026-11-05T12:00:00Z') })
+    const text = routineInstructions({ name: 'Agente Indexador', objective: 'Catalogar', instructions: '', engine: 'opex', confirmIrreversible: false, maxLiveWaitMinutes: null, memoryBlock: '', memoryChannels: ALLOWED, toolPrefix: '', warnings: [] })
     expect(text).toContain('experiencia/desenvolvimento')
     expect(text).toContain('formato "titulos"')
     expect(text).toContain('`chave`')
     expect(text).toContain('update_memory')
+    expect(text).toContain('`indice`')
+  })
+
+  it('a descrição de list_my_memories trata a consulta por chave como uso normal e a listagem como exceção (OPE-209)', () => {
+    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador #1', runId: 'run_1', target: AGENT, allowed: ALLOWED, ns: { app: 'opex', prefixed: false } }).find((tool) => tool.name === 'list_my_memories') as OpexTool
+    expect(list.description).toContain('Uso normal: por `chave`')
+    expect(list.description).toContain('Comece pela chave `indice`')
+    expect(list.description).toContain('é exceção')
+    expect(list.description).toContain('acrescente ao `indice` o que encontrar')
+    expect(list.description).not.toMatch(/consultar um catálogo inteiro/)
   })
 })
 
 describe('conversa com o agente (OPE-160)', () => {
   it('a auditoria registra a conversa no lugar da execução', async () => {
     engramind.handler = () => ({ memory: memory('m_1'), duplicate: false, created: true, similar: [] })
-    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador · conversa', runId: '', sessionId: 'sess_1', target: AGENT, allowed: ALLOWED })
+    const list = routineMemoryTools({ slug: 'indexador', label: 'Agente Indexador · conversa', runId: '', sessionId: 'sess_1', target: AGENT, allowed: ALLOWED, ns: { app: 'opex', prefixed: false } })
     const remember = list.find((tool) => tool.name === 'remember') as OpexTool
     await remember.execute(remember.input.parse({ texto: 'fato dito na conversa' }), { sessionId: 'sess_1', actorId: 'local' })
     expect(audits[0]?.depois).toMatchObject({ conversa: 'sess_1', rotineiro: 'indexador' })

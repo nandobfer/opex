@@ -12,7 +12,8 @@ export type { MemoryContextResult, MemoryContextOptions } from "@/features/engra
 /** `options.focus`: o foco do turno já montado por `buildMemoryFocus` (sem segredos, cortado). */
 export async function agentMemoryContext(consumer: MemoryConsumer, turn: MemoryTurn, options: { focus?: string } = {}) {
     const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
-    return getAgentMemoryContext(consumer, contextChannelsFor(consumer, turn), options)
+    const { channelNamespaceOrLegacy } = await import("@/features/engramind/server/instance")
+    return getAgentMemoryContext(consumer, contextChannelsFor(consumer, turn, await channelNamespaceOrLegacy()), options)
 }
 
 /** Agente Adversário: Memórias do Opex + a lista dele. */
@@ -33,11 +34,13 @@ export async function getMemoriesMeta(): Promise<MemoriesMetaDto> {
     ])
     const availability = await memoryContextHealth().catch(() => ({ unavailable: false, since: null, lastOkAt: null, reason: null }))
     const migrationPending = await isMemoryMigrationPending().catch(() => true)
+    const { isMemoryMaintenance } = await import("@/features/engramind/server/instance")
+    const maintenance = await isMemoryMaintenance()
     const outside = (await memoryContextOverflow().catch(() => [])).map((row) => ({ consumer: row.consumer, channels: row.channels, outside: row.outside + row.titles }))
     try {
         const settings = await memorySettings()
-        return { textMin: settings.textMin, textMax: settings.textMax, categories: settings.categories.map((item) => ({ key: item.key, label: item.label })), migrationPending, availability, outside, error: null }
+        return { textMin: settings.textMin, textMax: settings.textMax, categories: settings.categories.map((item) => ({ key: item.key, label: item.label })), migrationPending, maintenance, availability, outside, error: null }
     } catch (error) {
-        return { textMin: 3, textMax: 4000, categories: [], migrationPending, availability, outside, error: error instanceof Error ? error.message : String(error) }
+        return { textMin: 3, textMax: 4000, categories: [], migrationPending, maintenance, availability, outside, error: error instanceof Error ? error.message : String(error) }
     }
 }

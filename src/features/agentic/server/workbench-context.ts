@@ -1,5 +1,5 @@
 import mongoose from "mongoose"
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import type { IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { logger } from "@/lib/logger"
 import type { WorkbenchStage } from "../constants"

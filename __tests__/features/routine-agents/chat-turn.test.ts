@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /**
  * Turno da conversa com um agente rotineiro (OPE-160): carrega só o que é do agente (modelo atual,

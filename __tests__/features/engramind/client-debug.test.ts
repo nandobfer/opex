@@ -7,9 +7,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const lines = vi.hoisted(() => [] as { kind: string; message: string; data: unknown }[])
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ baseUrl: 'http://engramind:8000', adminToken: 'eng.tk_0.segredo' }) }))
-vi.mock('@/lib/integrations/debug', async (original) => {
-  const actual = await original<typeof import('@/lib/integrations/debug')>()
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ baseUrl: 'http://engramind:8000', adminToken: 'eng.tk_0.segredo' }) }))
+vi.mock('@/lib/integrations/server', async (original) => {
+  const actual = await original<typeof import('@/lib/integrations/server')>()
   const record = (kind: string) => (message: string, a?: unknown, b?: unknown) => lines.push({ kind, message, data: b ?? a })
   return { ...actual, integrationDebug: () => ({ info: record('info'), step: record('step'), request: record('request'), response: record('response'), success: record('success'), warn: record('warn'), error: record('error') }) }
 })

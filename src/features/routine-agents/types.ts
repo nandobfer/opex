@@ -96,6 +96,8 @@ export interface RoutineRunDto {
     costUsd: number | null
     /** Custo parcial: algum passo não informou custo (provedor direto). */
     costPartial: boolean
+    /** Custo de tabela e efetivo (OPE-203, motor Opex); `null` no motor OpenCode (fora do escopo desta versão). */
+    cost: RoutineCostDto | null
     hibernation: { at: string; reason: string } | null
     pendingAction: RoutinePendingActionDto | null
     report: string | null
@@ -118,6 +120,58 @@ export interface RoutineRunStepDto {
 export interface RoutineRunDetailDto extends RoutineRunDto {
     steps: RoutineRunStepDto[]
     tools: { name: string; count: number }[]
+    /** Custo por modelo da execução (OPE-203). */
+    costByModel: RoutineCostBreakdownRow[]
+}
+
+/**
+ * Custos de IA (OPE-203): custo de tabela (pago por uso), custo efetivo (pelo plano da chave que respondeu) e a
+ * economia, em US$ e R$ (PTAX do dia). Valor desconhecido é `null`; `partial` quando algum passo ficou sem preço
+ * ou sem efetivo; `estimated` quando há passos antigos estimados sem a separação do cache.
+ */
+export interface RoutineCostDto {
+    listUsd: number | null
+    listBrl: number | null
+    effectiveUsd: number | null
+    effectiveBrl: number | null
+    savingsUsd: number | null
+    savingsBrl: number | null
+    partial: boolean
+    brlPartial: boolean
+    /** Modelos sem preço (`provedor/modelo`). */
+    missingPrices: string[]
+    estimated: boolean
+    notices: string[]
+}
+
+export interface RoutineCostBreakdownRow {
+    key: string
+    label: string
+    listUsd: number | null
+    effectiveUsd: number | null
+    listBrl: number | null
+    effectiveBrl: number | null
+    partial: boolean
+}
+
+export interface RoutineMoneyPair {
+    listUsd: number | null
+    effectiveUsd: number | null
+    listBrl: number | null
+    effectiveBrl: number | null
+}
+
+export interface RoutineCostKpisDto {
+    totals: RoutineCostDto
+    /** Média por execução com custo (motor Opex). */
+    perRun: RoutineMoneyPair
+    /** Média por dia corrido do período. */
+    perCalendarDay: RoutineMoneyPair
+    /** Média por dia com execução. */
+    perActiveDay: RoutineMoneyPair
+    runsWithCost: number
+    calendarDays: number
+    activeDays: number
 }
 
 export interface RoutineEntryDto {
@@ -130,8 +184,24 @@ export interface RoutineEntryDto {
 }
 
 export interface RoutineAgentMetricsDto {
-    kpis: { runs: number; completed: number; errors: number; avgDurationMs: number | null; tokens: number; costUsd: number | null; costPartial: boolean }
-    days: { day: string; runs: number; completed: number; errors: number; tokens: number; costUsd: number | null }[]
+    kpis: {
+        runs: number
+        completed: number
+        errors: number
+        avgDurationMs: number | null
+        tokens: number
+        /** Tokens ÷ execuções do período (OPE-213); `null` sem execuções. */
+        tokensPerRun: number | null
+        /** Tokens ÷ dias corridos do período (OPE-213); `null` sem execuções. */
+        tokensPerDay: number | null
+        costUsd: number | null
+        costPartial: boolean
+    }
+    days: { day: string; runs: number; completed: number; errors: number; tokens: number; costUsd: number | null; cost: RoutineMoneyPair }[]
+    /** Custos de tabela e efetivo do período (OPE-203). */
+    cost: RoutineCostKpisDto
+    /** Divisão do custo do período. */
+    breakdown: { providers: RoutineCostBreakdownRow[]; models: RoutineCostBreakdownRow[]; plans: RoutineCostBreakdownRow[] }
     lastRunAt: string | null
 }
 

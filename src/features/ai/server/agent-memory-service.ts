@@ -8,7 +8,7 @@ import { publishToChannels } from "@/lib/pusher/channels"
 import { engramindCall, type EngramindTarget } from "@/features/engramind/server/client"
 import { engramindCodeOf } from "@/features/engramind/server/errors"
 import type { EngramindMemory, MemoryWrite } from "@/features/engramind/types"
-import { AI_AGENTS, MEMORY_CONSUMER_DEFS, MEMORY_CONSUMERS, isAiAgentId, memoryChannelName, memoryChannelOf, type AiAgentId, type MemoryConsumer, type MemoryIdentity, type MemoryListScope } from "../agents"
+import { AI_AGENTS, MEMORY_CONSUMER_DEFS, MEMORY_CONSUMERS, fixedChannelOf, isAiAgentId, memoryChannelName, memoryChannelOf, type AiAgentId, type MemoryConsumer, type MemoryIdentity, type MemoryListScope } from "../agents"
 import { AI_MEMORIES_UPDATED_EVENT, AI_MEMORY_AUDIT_ENTITY } from "../constants"
 import { firstSentence, memoryTextSchema } from "../memory-text"
 import { sortMemories } from "../memory-list"
@@ -100,10 +100,12 @@ export async function resolveList(agentId: string, rawScope?: string | MemoryLis
     const client = scope.clientId?.trim() || null
     const routine = scope.routineSlug?.trim() || null
     const conversation = scope.conversationId?.trim() || null
+    const { channelNamespace } = await import("@/features/engramind/server/instance")
+    const ns = await channelNamespace()
     if (def.scope !== "conversation" && conversation) throw new DomainError(400, `A lista "${def.title}" não é de uma conversa`, "CONVERSATION_NOT_ALLOWED")
     if (def.scope === "conversation") {
         if (!conversation) throw new DomainError(400, `Informe a conversa da lista "${def.title}"`, "CONVERSATION_REQUIRED")
-        const channel = memoryChannelOf(agent, { conversationId: conversation })
+        const channel = memoryChannelOf(agent, { conversationId: conversation }, ns)
         if (!channel) throw new DomainError(404, "Conversa não encontrada", "CONVERSATION_NOT_FOUND")
         const { conversationLabel } = await import("@/features/secretary-agent/server/conversation-labels")
         return { agent, centralId: null, clientId: null, conversationId: conversation, channel, scopeName: await conversationLabel(conversation) }
@@ -111,7 +113,7 @@ export async function resolveList(agentId: string, rawScope?: string | MemoryLis
     if (def.scope !== "routine" && routine) throw new DomainError(400, `A lista "${def.title}" não é de um agente rotineiro`, "ROUTINE_NOT_ALLOWED")
     if (def.scope === "routine") {
         if (!routine) throw new DomainError(400, `Informe o agente rotineiro da lista "${def.title}"`, "ROUTINE_REQUIRED")
-        const channel = memoryChannelOf(agent, { routineSlug: routine })
+        const channel = memoryChannelOf(agent, { routineSlug: routine }, ns)
         if (!channel) throw new DomainError(404, "Agente rotineiro não encontrado", "ROUTINE_AGENT_NOT_FOUND")
         await dbConnect()
         const { RoutineAgent } = await import("@/lib/db/models/RoutineAgent")
@@ -128,7 +130,9 @@ export async function resolveList(agentId: string, rawScope?: string | MemoryLis
         const { AgenticCentral } = await import("@/lib/db/models/Agentic")
         const doc = await AgenticCentral.findById(central).select({ projectName: 1 }).lean()
         if (!doc) throw new DomainError(404, "Central não encontrada", "CENTRAL_NOT_FOUND")
-        return { agent, centralId: central, clientId: null, channel: memoryChannelOf(agent, { centralId: central })!, scopeName: doc.projectName ?? null }
+        const channel = memoryChannelOf(agent, { centralId: central }, ns)
+        if (!channel) throw new DomainError(404, "Central não encontrada", "CENTRAL_NOT_FOUND")
+        return { agent, centralId: central, clientId: null, channel, scopeName: doc.projectName ?? null }
     }
     if (def.scope === "client") {
         if (!client) throw new DomainError(400, `Informe o cliente da lista "${def.title}"`, "CLIENT_REQUIRED")
@@ -137,9 +141,11 @@ export async function resolveList(agentId: string, rawScope?: string | MemoryLis
         const { OrcamentoClient } = await import("@/lib/db/models/Orcamento")
         const doc = await OrcamentoClient.findById(client).select({ name: 1 }).lean<{ name?: string } | null>()
         if (!doc) throw new DomainError(404, "Cliente não encontrado", "CLIENT_NOT_FOUND")
-        return { agent, centralId: null, clientId: client, channel: memoryChannelOf(agent, { clientId: client })!, scopeName: doc.name ?? null }
+        const channel = memoryChannelOf(agent, { clientId: client }, ns)
+        if (!channel) throw new DomainError(404, "Cliente não encontrado", "CLIENT_NOT_FOUND")
+        return { agent, centralId: null, clientId: client, channel, scopeName: doc.name ?? null }
     }
-    return { agent, centralId: null, clientId: null, channel: def.channel, scopeName: null }
+    return { agent, centralId: null, clientId: null, channel: fixedChannelOf(agent, ns), scopeName: null }
 }
 
 const isConsumer = (value: string): value is MemoryConsumer => (MEMORY_CONSUMERS as readonly string[]).includes(value)
@@ -269,7 +275,19 @@ async function ensureListChannel(list: ResolvedList): Promise<void> {
     await ensureMemoryChannel(list.channel, memoryChannelName(list.agent, list.scopeName ?? undefined), AI_AGENTS[list.agent].description)
 }
 
+/** Portão da migração B (OPE-206): gravações de memória são recusadas enquanto os canais mudam de nome. */
+async function assertWritable(): Promise<void> {
+    const { assertNoMemoryMaintenance } = await import("@/features/engramind/server/instance")
+    await assertNoMemoryMaintenance()
+}
+
+async function namespace() {
+    const { channelNamespace } = await import("@/features/engramind/server/instance")
+    return channelNamespace()
+}
+
 export async function createAgentMemory(agentId: string, texto: string, actorId: string, options: AgentMemoryWriteOptions = {}): Promise<MemoryMutationResult> {
+    await assertWritable()
     const list = await resolveList(agentId, options)
     const text = await parseText(texto, list.channel)
     const category = await resolveCategory(options.categoria)
@@ -320,6 +338,7 @@ async function writeCall<T>(method: "POST" | "PATCH", path: string, body: unknow
 
 export async function updateAgentMemory(agentId: string, id: string, change: string | MemoryPatch, actorId: string, options: AgentMemoryWriteOptions = {}): Promise<MemoryMutationResult> {
     const patch: MemoryPatch = typeof change === "string" ? { texto: change } : change
+    await assertWritable()
     const list = await resolveList(agentId, options)
     const current = await findMemory(list, id)
     if (options.agent && patch.ativa === false && isOwnerMemory(current)) throw ownerProtected(current, "inativá-la")
@@ -388,6 +407,7 @@ export async function moveAgentMemory(
     actorId: string,
     options: { from?: MemoryListScope | null; to?: MemoryListScope | null; agent?: MemoryAgentActor; auditContext?: Record<string, unknown> } = {},
 ): Promise<MemoryDto> {
+    await assertWritable()
     const from = await resolveList(fromAgentId, options.from)
     const to = await resolveList(toAgentId, options.to)
     const current = await findMemory(from, id)
@@ -419,6 +439,7 @@ export async function moveAgentMemory(
 }
 
 export async function deleteAgentMemory(agentId: string, id: string, actorId: string, scope?: string | MemoryListScope | null, options: Pick<AgentMemoryWriteOptions, "agent" | "auditContext"> = {}): Promise<MemoryDto> {
+    await assertWritable()
     const list = await resolveList(agentId, scope)
     const current = await findMemory(list, id)
     if (options.agent && isOwnerMemory(current)) throw ownerProtected(current, "excluí-la")
@@ -442,9 +463,9 @@ export async function deleteAgentMemory(agentId: string, id: string, actorId: st
 
 /** Central criada: cria o canal de memórias dela (melhor esforço; sem ele, nasce na primeira gravação). Nunca lança. */
 export async function ensureCentralMemoryChannel(centralId: string, projectName: string): Promise<void> {
-    const channel = memoryChannelOf("developer-central", { centralId })
-    if (!channel) return
     try {
+        const channel = memoryChannelOf("developer-central", { centralId }, await namespace())
+        if (!channel) return
         const { ensureMemoryChannel } = await import("@/features/engramind/server/memory-network")
         await ensureMemoryChannel(channel, memoryChannelName("developer-central", projectName), AI_AGENTS["developer-central"].description)
     } catch (error) {
@@ -454,9 +475,9 @@ export async function ensureCentralMemoryChannel(centralId: string, projectName:
 
 /** Central excluída: arquiva o canal dela no Engramind (recuperável). Nunca lança; devolve se arquivou. */
 export async function archiveCentralMemories(centralId: string): Promise<boolean> {
-    const channel = memoryChannelOf("developer-central", { centralId })
-    if (!channel) return false
     try {
+        const channel = memoryChannelOf("developer-central", { centralId }, await namespace())
+        if (!channel) return false
         const { archiveMemoryChannel } = await import("@/features/engramind/server/memory-network")
         const archived = await archiveMemoryChannel(channel)
         if (archived) await publish({ agent: "developer-central", centralId, clientId: null })
@@ -470,8 +491,10 @@ export async function archiveCentralMemories(centralId: string): Promise<boolean
 /** Cliente excluído: arquiva os canais de memórias dele (Agente Opex e Maddox). Nunca lança. */
 export async function archiveClientMemories(clientId: string): Promise<void> {
     const { archiveMemoryChannel } = await import("@/features/engramind/server/memory-network")
+    const { channelNamespaceOrLegacy } = await import("@/features/engramind/server/instance")
+    const ns = await channelNamespaceOrLegacy()
     for (const agent of ["opex-client-specific", "maddox-client-specific"] as const) {
-        const channel = memoryChannelOf(agent, { clientId })
+        const channel = memoryChannelOf(agent, { clientId }, ns)
         if (!channel) continue
         try {
             if (await archiveMemoryChannel(channel)) await publish({ agent, centralId: null, clientId })

@@ -1,3 +1,4 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
@@ -6,22 +7,22 @@ const mocks = vi.hoisted(() => ({
   executeExplorerOperation: vi.fn(),
 }))
 
-vi.mock('@/features/integrations/openapi/explorer-service', async () => {
+vi.mock("@nandobfer/integracoes/modules/server/openapi/explorer-service", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async () => {
   const actual = await vi.importActual<typeof import('@/features/integrations/openapi/explorer-service')>(
-    '@/features/integrations/openapi/explorer-service',
+    '@nandobfer/integracoes/modules/server/openapi/explorer-service',
   )
   return {
     ExplorerError: actual.ExplorerError,
     getExplorerSpec: mocks.getExplorerSpec,
     executeExplorerOperation: mocks.executeExplorerOperation,
   }
-})
+})(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/lib/logger', () => ({ logApiError: vi.fn(), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
-import { GET as openapiGET } from '@/app/api/integrations/[id]/openapi/route'
-import { POST as explorePOST } from '@/app/api/integrations/[id]/explore/route'
-import { ExplorerError } from '@/features/integrations/openapi/explorer-service'
-import { OpenApiSpecError } from '@/features/integrations/openapi/parser'
+const { GET: openapiGET } = legacyRoute("integrations", "[id]/openapi")
+const { POST: explorePOST } = legacyRoute("integrations", "[id]/explore")
+import { ExplorerError } from "@nandobfer/integracoes/modules/server/openapi/explorer-service"
+import { OpenApiSpecError } from "@nandobfer/integracoes/modules/server/openapi/parser"
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const post = (body: unknown) => new NextRequest('http://x', { method: 'POST', body: JSON.stringify(body) })

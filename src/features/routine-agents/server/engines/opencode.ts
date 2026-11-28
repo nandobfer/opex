@@ -7,8 +7,9 @@ import { messageOf, routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
 import { previewBaseUrl } from "@/lib/instance"
-import { matchOpencodeSkill } from "@/lib/ai/opencode-skills"
-import { listOpencodeSkillsAt } from "@/lib/ai/opencode-skill-list"
+import { skillPermissionRules } from "@/features/opencode-resources/skill-permissions"
+import { backgroundLabel } from "@/features/agentic/background-label"
+import { listOpencodeSkillsAt } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list"
 
 /**
  * Motor **OpenCode no host** (OPE-130): a sessão abre na pasta do agente no host (persistente entre
@@ -48,26 +49,10 @@ export function routineSessionPermissions(hostMcps: readonly string[], allowed: 
 }
 
 /**
- * Skills do host (OPE-153): nega todas (`skill` + `*`, inclusive nativas, de projeto e as que surgirem) e
- * libera só as selecionadas que existem — a última regra que casa vence no OpenCode. Seleção por id ou nome
- * (`matchOpencodeSkill`); a regra usa sempre o id do OpenCode.
+ * Skills do host (OPE-153): nega todas e libera só as selecionadas que existem — regra compartilhada com o
+ * Agente de Bootstrap (`skillPermissionRules`, OPE-215).
  */
-export function routineSkillPermissions(hostSkills: readonly { id: string; name: string }[], allowed: readonly string[]): { rules: PermissionRule[]; missing: string[] } {
-    const rules: PermissionRule[] = [{ action: "skill", resource: "*", effect: "deny" }]
-    const granted = new Set<string>()
-    const missing: string[] = []
-    for (const name of allowed) {
-        const skill = matchOpencodeSkill(name, hostSkills)
-        if (!skill) {
-            missing.push(name)
-            continue
-        }
-        if (granted.has(skill.id)) continue
-        granted.add(skill.id)
-        rules.push({ action: "skill", resource: skill.id, effect: "allow" })
-    }
-    return { rules, missing }
-}
+export const routineSkillPermissions = skillPermissionRules
 
 /** Quanto a retomada espera o turno antigo da sessão parar depois de interrompê-lo. */
 export const STALE_TURN_WAIT_MS = 15_000
@@ -103,7 +88,7 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
     let sessionId = run.opencodeSessionId ?? null
     let text = ""
     let directory: string | null = null
-    const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
+    const { getOpencodeClient } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client")
     let client: Awaited<ReturnType<typeof getOpencodeClient>>
     try {
         client = await getOpencodeClient()
@@ -168,6 +153,8 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
         await client.session.instructions.entry.put({ sessionID: sessionId, key: INSTRUCTIONS_KEY, value: input.instructions(`${mcpName}_`) })
         const [{ runAgentTurn }, { runWithFallback, fallbackNotice }, { DEFAULT_PROVIDER_LIMIT_POLICY }] = await Promise.all([import("@/lib/ai/opencode-run"), import("@/features/agentic/server/model-fallback"), import("@/lib/ai/opencode-events")])
         let graceTimer: ReturnType<typeof setTimeout> | null = null
+        // Um passo de aviso por espera pelo trabalho em segundo plano (OPE-216), não a cada mudança da contagem.
+        let waitingNoticed = false
         const poll = setInterval(() => {
             if (activation.outcome && !graceTimer) graceTimer = setTimeout(() => activation.controller.abort("control"), STOP_GRACE_MS)
         }, 1_000)
@@ -200,11 +187,21 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
                                 onText: (delta) => {
                                     text += delta
                                 },
+                                // A sessão acordou depois dos subagentes (OPE-216): o relato é o da execução final.
+                                onSegment: () => {
+                                    text = ""
+                                },
                                 onStep: (usage) => {
                                     const tokens = usage.tokens.input + usage.tokens.output + usage.tokens.reasoning
                                     input.onUsage({ tokens, inputTokens: usage.tokens.input, outputTokens: usage.tokens.output, costUsd: usage.costUsd, stepId: usage.stepId ?? String(Date.now()), model: turnAgent.model ?? engine.model, provider: "opencode", recorded: true })
                                 },
                                 publish: (event) => {
+                                    if (event.type === "background") {
+                                        const label = backgroundLabel(event)
+                                        if (label && !waitingNoticed) input.onStep({ kind: "notice", label: "Aguardando trabalho em segundo plano", detail: label })
+                                        waitingNoticed = Boolean(label)
+                                        return
+                                    }
                                     if (event.type === "tool" && event.state !== "running" && !event.name.startsWith(`${mcpName}_`)) input.onStep({ kind: "tool", label: event.name, toolName: event.name, detail: (event.error ?? event.input ?? null)?.slice(0, 400) ?? null, error: event.state === "error" })
                                 },
                             },

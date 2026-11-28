@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({ confirm: vi.fn() }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: vi.fn(), AcaoAuditoria: {} }))
 vi.mock('@/lib/db/models/Ai', () => ({ AiFeatureSetting: { findOne: () => ({ lean: async () => ({ settings: { enabled: true }, updatedAt: null }) }), updateOne: vi.fn() } }))
-vi.mock('@/lib/ai/catalog', () => ({ listAiModels: vi.fn(async () => []), listAiAgents: vi.fn(async () => []) }))
-vi.mock('@/lib/ai/connection', () => ({ confirmAiProviderConnection: mocks.confirm, CONNECTION_READ_PROBE_TIMEOUT_MS: 2_000 }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ listAiModels: vi.fn(async () => []), listAiAgents: vi.fn(async () => []) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/connection', () => ({ confirmAiProviderConnection: mocks.confirm, CONNECTION_READ_PROBE_TIMEOUT_MS: 2_000 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: vi.fn() }))
 
 import { DEFAULT_AGENTIC_SETTINGS } from '@/features/agentic/schemas'

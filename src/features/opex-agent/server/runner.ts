@@ -1,8 +1,8 @@
 import { isLoopFinished, streamText } from "ai"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
-import { recordAiConsumption } from "@/lib/ai/consumption"
-import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
+import { recordAiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption"
+import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import { DEFAULT_OPEX_CLIENT_INSTRUCTIONS, OPEX_CLIENT_CONSUMPTION_ORIGIN, OPEX_CLIENT_JOBS_INSTRUCTION, OPEX_CLIENT_WATCH_INSTRUCTION, OPEX_CONSUMPTION_ORIGIN, OPEX_WATCH_INSTRUCTION, type OpexProviderId } from "../constants"
@@ -15,7 +15,9 @@ import { refreshConfirmations, requestConfirmation } from "./confirmations"
 import { beginTurn, endTurn, enqueueFollowUp, isTurnActive, liveMessageOf, publishLine, takeFollowUp, abortTurn, type OpexFollowUp } from "./hub"
 import { OpexMessage, OpexSession, type IOpexFileRef, type IOpexMessage } from "@/lib/db/models/Opex"
 import { claimOpexFiles, fileMarkers } from "./files"
-import { addStepCost, type AiStepCost } from "@/lib/ai/provider-cost"
+import { addStepCost, type AiStepCost } from "@nandobfer/integracoes/modules/integrations/ia/ai/provider-cost"
+import type { TokenDetails } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/types"
+import { tokenDetailsOf, tokensFromUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
 import { loadSession, loadSessionRaw, opexDb, publishSessionUpdated, toMessageDto } from "./sessions"
 import { loadOpexSettings, opexAvailability } from "./settings"
 import { refreshSessionTitle, refreshSessionTitleWith, type TitleTurn } from "./titler"
@@ -501,6 +503,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     let timedOut = false
     let timer: ReturnType<typeof setTimeout> | null = null
     let usage: OpexUsageDto | null = null
+    let tokenDetails: TokenDetails | null = null
     let cost: AiStepCost | null = null
     let responseMessages: unknown[] | null = null
     const toolNames: string[] = []
@@ -594,6 +597,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     break
                 case "finish":
                     usage = { inputTokens: numberOrNull(part.totalUsage.inputTokens), outputTokens: numberOrNull(part.totalUsage.outputTokens), totalTokens: numberOrNull(part.totalUsage.totalTokens) }
+                    tokenDetails = tokenDetailsOf(tokensFromUsage(part.totalUsage))
                     if (part.finishReason === "error" && !errorMessage) errorMessage = "O modelo terminou com erro"
                     break
             }
@@ -618,7 +622,7 @@ async function executeTurn(args: TurnArgs): Promise<void> {
     // Teto técnico: o turno vira erro com o motivo (não "interrompido pelo usuário").
     if (timedOut) aborted = false
 
-    await finishTurn(args, { startedAt, errorMessage, aborted, usage, cost, responseMessages, toolNames, apiKeyId: (prepared as PreparedModel | null)?.apiKeyId ?? null })
+    await finishTurn(args, { startedAt, errorMessage, aborted, usage, tokenDetails, cost, responseMessages, toolNames, apiKeyId: (prepared as PreparedModel | null)?.apiKeyId ?? null })
 }
 
 /** Título da conversa com um rotineiro: o subagente de título do Agente Opex; sem modelo dele, o do agente. */
@@ -632,6 +636,8 @@ interface TurnOutcome {
     errorMessage: string | null
     aborted: boolean
     usage: OpexUsageDto | null
+    /** Tokens separados do turno (cache e raciocínio, OPE-205), somados pela SDK; `null` sem `finish`. */
+    tokenDetails?: TokenDetails | null
     /** Custo informado pelo provedor no turno (OpenCode Go). */
     cost: AiStepCost | null
     responseMessages: unknown[] | null
@@ -697,6 +703,7 @@ async function finishTurn(args: TurnArgs, outcome: TurnOutcome): Promise<void> {
             costUsd: outcome.cost?.costUsd ?? null,
             billing: outcome.cost?.billing ?? null,
             apiKeyId: outcome.apiKeyId,
+            tokenDetails: outcome.tokenDetails ?? null,
         })
     }
     if (status !== "interrupted" || text) {

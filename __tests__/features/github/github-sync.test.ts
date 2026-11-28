@@ -11,8 +11,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: vi.fn() }))
-vi.mock('@/lib/integrations/debug', () => ({ integrationDebug: () => ({ request: vi.fn(), response: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: vi.fn() }))
+vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ request: vi.fn(), response: vi.fn(), error: vi.fn(), warn: vi.fn() }) }))
 vi.mock('@/features/github/client', () => ({ githubPaginate: vi.fn(), githubRequestFull: vi.fn() }))
 vi.mock('@/features/tasks/server/service', () => ({ createTaskFromIssue: mocks.createTaskFromIssue }))
 vi.mock('@/features/github/server/issue-links', () => ({ findIssueLink: mocks.findIssueLink, createIssueLink: mocks.createIssueLink, updateIssueState: mocks.updateIssueState }))

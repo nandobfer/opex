@@ -79,8 +79,8 @@ recursos do PC (Builder Machine), histórico/minigráfico, Prometheus/node_expor
   (`/integracoes/ia/opencode`, OPE-161); ao navegar, a troca de rota fecha o painel e, no celular,
   também a gaveta do menu (`AppShell`).
 - **Bloco Servidor** (`HostMetricsPanel`): cabeçalho "Servidor", "Atualizado às HH:mm:ss", selo
-  "Desatualizado" (`StaleBadge`) e botão "Atualizar" (`RefreshIconButton`); linhas `UsageBar` na ordem
-  CPU (só %), RAM, Swap ("Sem swap" sem swap) e Disco, com "usado / total" em texto pequeno. Falha sem
+  "Desatualizado" (`StaleBadge`) e botão "Atualizar" (`RefreshIconButton`); linhas `UsageBar` (pela
+  `UsageBars` compartilhada com os Ambientes, OPE-211) na ordem CPU (só %), RAM, Swap ("Sem swap" sem swap) e Disco, com "usado / total" em texto pequeno. Falha sem
   leitura anterior: "Não foi possível ler os recursos do servidor pelo OpenCode." com "Tentar novamente";
   sem URL: "Configure o OpenCode em Integrações para ver os recursos do servidor."; falha com leitura
   anterior: mantém as barras e marca desatualizado. Skeleton (`HostMetricsSkeleton`) com cabeçalho e

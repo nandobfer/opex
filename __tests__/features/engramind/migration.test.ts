@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engramind'
 
 /** OPE-104: importação da migração de memórias (só aprovadas, por canal, em lotes, idempotente) e revisão em lote. */

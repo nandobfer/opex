@@ -1,9 +1,9 @@
 "use client"
 
 import { motion } from "framer-motion"
-import type { IntegrationDef } from "@/lib/integrations/catalog"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
-import { DetailHeader } from "@/features/integrations/components/detail/DetailHeader"
+import type { IntegrationDef } from "@nandobfer/integracoes"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
+import { DetailHeader } from "@nandobfer/integracoes/react"
 import { useOrcamentosRealtime } from "../hooks/useOrcamentos"
 import { ClientesTab } from "./clients/ClientesTab"
 

@@ -12,19 +12,19 @@ import { describe, expect, it, vi } from 'vitest'
  */
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/api', async (original) => ({
+vi.mock("@/lib/api", async (original) => ({
   ...(await original<object>()),
   api: { put: vi.fn(async () => ({ data: { success: true, data: { connection: {}, steps: [] } } })), post: vi.fn(async () => ({ data: { success: true, data: { connection: {}, steps: [] } } })), get: vi.fn() },
 }))
 
-import { getIntegrationDef } from '@/lib/integrations/catalog'
-import { buildIntegrationPatch, draftFrom } from '@/features/integrations/components/detail/draft'
-import { buildIntegrationUpdateSchema } from '@/features/integrations/schemas/integration.schema'
-import { integrationDetailKey, integrationsListKey } from '@/features/integrations/hooks/useIntegrations'
-import { useRunEngramindBootstrap, useSaveEngramindConnection } from '@/features/engramind/hooks/useEngramindConnection'
-import type { IntegrationDetailDto } from '@/features/integrations/types'
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
+import { buildIntegrationPatch, draftFrom } from "@nandobfer/integracoes/react"
+import { buildIntegrationUpdateSchema } from "@nandobfer/integracoes"
+import { integrationDetailKey, integrationsListKey } from "@nandobfer/integracoes/react"
+import { useRunEngramindBootstrap, useSaveEngramindConnection } from "@/features/engramind/hooks/useEngramindConnection"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
 
-const detail = (debugMode: boolean) => ({ id: 'engramind', environment: 'externo', debugMode, swaggerUrl: null, swaggerUrlManaged: false, publicValues: {}, secrets: {} }) as unknown as IntegrationDetailDto
+const detail = () => ({ id: 'engramind', swaggerUrl: null, swaggerUrlManaged: false, publicValues: {}, secrets: {} }) as unknown as IntegrationDetailDto
 
 describe('conexão do Engramind x rascunho genérico', () => {
   it('URLs, Ambiente e segredos da conexão ficam fora do PATCH genérico', () => {
@@ -33,11 +33,10 @@ describe('conexão do Engramind x rascunho genérico', () => {
     expect(buildIntegrationUpdateSchema(def).safeParse({ publicValues: { baseUrl: 'http://antiga:8000' } }).success).toBe(false)
   })
 
-  it('o detalhe refeito depois de salvar a conexão não gera alteração pendente; só o debug vai no PATCH', () => {
+  it('o detalhe refeito depois de salvar a conexão não gera alteração pendente', () => {
     const def = getIntegrationDef('engramind')
-    const draft = draftFrom(detail(false))
-    expect(buildIntegrationPatch(def.publicFields, detail(false), draft)).toEqual({})
-    expect(buildIntegrationPatch(def.publicFields, detail(false), { ...draft, debugMode: true })).toEqual({ debugMode: true })
+    const draft = draftFrom(detail())
+    expect(buildIntegrationPatch(def.publicFields, detail(), draft)).toEqual({})
   })
 
   it('salvar a conexão e repetir o bootstrap invalidam o detalhe e a lista da integração', async () => {

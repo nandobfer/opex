@@ -51,7 +51,7 @@ vi.mock('@/features/adversarial-agent/server/models', async () => {
   return { AdversarialReview: store.models.adversarial, adversarialDb: async () => {} }
 })
 vi.mock('@opencode/client', () => ({ isSessionNotFoundError: (error: unknown) => (error as { notFound?: boolean })?.notFound === true }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => {
     if (oc.unavailable) throw new Error('sem conexão')
     return {
@@ -72,7 +72,8 @@ vi.mock('@/lib/ai/opencode-client', () => ({
           oc.removed.push(sessionID)
         },
       },
-      project: { list: async (options?: { signal?: AbortSignal }) => (oc.hang === 'project' ? hanging(options?.signal) : oc.projects) },
+      // Cliente 2.4: `project.list(input, requestOptions)` (o prazo vai nas opções da requisição).
+      project: { list: async (_input?: unknown, options?: { signal?: AbortSignal }) => (oc.hang === 'project' ? hanging(options?.signal) : oc.projects) },
     }
   },
 }))

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engramind'
 import { createFakeCollection, type FakeCollection } from '../../helpers/fake-collection'
 
@@ -40,12 +41,12 @@ vi.mock('@/features/engramind/server/client', () => ({
   engramindTarget: async () => ({ baseUrl: 'http://engramind', token: 'admin-token' }),
 }))
 vi.mock('@/features/engramind/server/shared', () => ({ AcaoAuditoria: { EXECUTAR: 'EXECUTAR' }, auditEngramind: async () => undefined, engramindLog: { warn: () => undefined, info: () => undefined } }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({}) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({}) }))
 vi.mock('@/features/engramind/server/memory-network', async (importOriginal) => {
   const original = await importOriginal<typeof import('@/features/engramind/server/memory-network')>()
   return { ...original, ensureAppToken: async () => null }
 })
-vi.mock('@/lib/ai/stream', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({
   streamAi: async function* (input: { instructions: string; prompt: string; signal?: AbortSignal }) {
     holder.plannerCalls++
     if (holder.hang) {

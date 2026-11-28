@@ -15,13 +15,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { FormToggleCard } from "@/components/ui/toggle-card"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { getAiProvider, isAiTextProviderId, type AiProviderId } from "@/lib/ai/providers"
+import { getAiProvider, isAiTextProviderId, type AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { DEFAULT_BUDGET_PREVIEW_INSTRUCTIONS } from "../../constants"
 import { DEFAULT_BUDGET_PREVIEW_SETTINGS, budgetPreviewSettingsSchema, type BudgetPreviewSettings } from "../../schemas"
-import { useAiProviderStatuses, useBudgetPreviewSettings, useSaveBudgetPreviewSettings } from "../../hooks/useAi"
-import { ProviderModelCard } from "../shared/ProviderModelCard"
+import { useBudgetPreviewSettings, useSaveBudgetPreviewSettings } from "../../hooks/useAi"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
 import { useFeatureSection, type FeatureSectionProps } from "../shared/feature-section"
-import { TemperatureInput } from "@/features/ai/components/TemperatureInput"
+import { TemperatureInput } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/TemperatureInput"
 
 /** `""` no campo numérico = vazio (usa o padrão do modelo). */
 const toNumberOrNull = (value: string) => (value.trim() === "" ? null : Number(value))

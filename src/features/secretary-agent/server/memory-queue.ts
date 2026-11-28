@@ -33,7 +33,8 @@ export async function withPendingQueue<T>(input: { list: AiAgentId; conversation
     } catch (error) {
         if (!input.write || !isEngramindUnavailable(error)) throw error
         const scope = secretaryListScope(input.list, input.conversationId)
-        const channel = memoryChannelOf(input.list, scope)
+        const { channelNamespaceOrLegacy } = await import("@/features/engramind/server/instance")
+        const channel = memoryChannelOf(input.list, scope, await channelNamespaceOrLegacy())
         if (!channel) throw error
         const id = await enqueuePendingWrite({ channel, list: input.list, options: { ...scope, agent: SECRETARY_MEMORY_AGENT }, actorId: input.actorId, write: input.write })
         return { pendente: true, id }

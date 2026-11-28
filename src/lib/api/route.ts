@@ -3,18 +3,13 @@ import type { ZodType } from "zod"
 import { logApiError } from "@/lib/logger"
 import { fail, validationError } from "./responses"
 
-/** Erro de regra de negócio com status HTTP (respondido como `ApiResponse` pelo `withRoute`). */
-export class DomainError extends Error {
-    constructor(
-        readonly status: number,
-        message: string,
-        readonly code?: string,
-        readonly details?: unknown,
-    ) {
-        super(message)
-        this.name = "DomainError"
-    }
-}
+/**
+ * Erro de regra de negócio com status HTTP (respondido como `ApiResponse` pelo `withRoute`). É a mesma
+ * classe da central de integrações (`@nandobfer/integracoes`): erros lançados de um lado são
+ * reconhecidos do outro.
+ */
+export { DomainError } from "@nandobfer/integracoes"
+import { DomainError } from "@nandobfer/integracoes"
 
 /** Parâmetros da rota: `string` (segmento dinâmico) ou `string[]` (rota catch-all, ex.: `[...path]`). */
 export interface RouteArgs<P extends Record<string, string | string[]>> {

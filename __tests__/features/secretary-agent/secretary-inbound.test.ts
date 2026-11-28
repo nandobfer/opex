@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+vi.mock("@/features/engramind/server/instance", async () => (await import("../../helpers/engramind-instance")).instanceMock())
 import { DEFAULT_SECRETARY_SETTINGS } from "@/features/secretary-agent/schemas"
 import type { ParsedMessage } from "@/features/evolution-api/message"
 

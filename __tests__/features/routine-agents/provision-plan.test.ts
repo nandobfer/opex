@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { LEGACY_NAMESPACE as L } from '@/features/engramind/channel-namespace'
 import { extraChannelPrompt, parseExtraChannelPlan } from '@/features/routine-agents/provision-plan'
 
 /** Plano dos canais extras (OPE-143): canal bloqueado pelo dono nunca entra, nem em `subscribe` nem em `create`. */
@@ -20,18 +21,18 @@ const answer = JSON.stringify({
 
 describe('parseExtraChannelPlan com canais bloqueados', () => {
   it('descarta o bloqueado em subscribe e em create, com aviso, e mantém os demais', () => {
-    const plan = parseExtraChannelPlan(answer, existing, [], ['experiencia/desenvolvimento', 'dndicas/opex/admin'])
+    const plan = parseExtraChannelPlan(answer, existing, [], ['experiencia/desenvolvimento', 'dndicas/opex/admin'], L)
     expect(plan.items.map((item) => item.channel)).toEqual(['vagas/empresa-x', 'curriculos/backend'])
     expect(plan.warnings).toEqual(['Canal "experiencia/desenvolvimento" está bloqueado neste agente: ignorado.', 'Canal "dndicas/opex/admin" está bloqueado neste agente: ignorado.'])
   })
 
   it('bloqueado que já existe como canal também não vira assinatura', () => {
-    const plan = parseExtraChannelPlan(answer, existing, [], ['vagas/empresa-x'])
+    const plan = parseExtraChannelPlan(answer, existing, [], ['vagas/empresa-x'], L)
     expect(plan.items.map((item) => item.channel)).not.toContain('vagas/empresa-x')
   })
 
   it('sem bloqueados o comportamento é o de sempre', () => {
-    expect(parseExtraChannelPlan(answer, existing).items).toHaveLength(4)
+    expect(parseExtraChannelPlan(answer, existing, [], [], L).items).toHaveLength(4)
   })
 })
 
@@ -40,7 +41,7 @@ describe('extraChannelPrompt com canais bloqueados', () => {
   const channels = existing.map((item) => ({ ...item, description: null }))
 
   it('lista os bloqueados como "não assine" e os tira da lista de existentes', () => {
-    const prompt = extraChannelPrompt(agent, channels, [], ['experiencia/desenvolvimento'])
+    const prompt = extraChannelPrompt(agent, channels, [], ['experiencia/desenvolvimento'], L)
     expect(prompt).toContain('Bloqueados pelo dono (não assine nem crie')
     expect(prompt).toContain('experiencia/desenvolvimento')
     expect(prompt).not.toContain('- experiencia/desenvolvimento —')
@@ -48,6 +49,6 @@ describe('extraChannelPrompt com canais bloqueados', () => {
   })
 
   it('sem bloqueados não há a linha', () => {
-    expect(extraChannelPrompt(agent, channels, [])).not.toContain('Bloqueados')
+    expect(extraChannelPrompt(agent, channels, [], [], L)).not.toContain('Bloqueados')
   })
 })

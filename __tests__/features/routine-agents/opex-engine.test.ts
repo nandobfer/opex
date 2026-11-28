@@ -19,6 +19,11 @@ const holder = vi.hoisted(() => ({
   executed: [] as string[],
   stepCosts: [] as unknown[],
   prepared: [] as unknown[],
+  usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } as Record<string, unknown>,
+  apiKeyId: 'key_x' as string | null,
+  pricerRequests: [] as unknown[],
+  pricedAt: [] as Date[],
+  mcpTools: [] as OpexTool[],
 }))
 
 vi.mock('ai', () => ({
@@ -30,19 +35,38 @@ vi.mock('ai', () => ({
     return {
       fullStream: (async function* () {
         for (const call of holder.calls) holder.results.push(await tools[call.name]!.execute(call.args, {}))
-        yield { type: 'finish-step', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } }
+        yield { type: 'start-step' }
+        yield { type: 'finish-step', usage: holder.usage }
       })(),
       responseMessages: Promise.resolve([]),
     }
   },
 }))
-vi.mock('@/lib/ai/stream', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({
   prepareModel: async (request: unknown) => {
     holder.prepared.push(request)
-    return { model: {}, providerOptions: {}, reasoning: null, apiKeyId: 'key_x', takeStepCost: () => holder.stepCosts.shift() ?? null, dispose: async () => undefined }
+    return { model: {}, providerOptions: {}, reasoning: null, apiKeyId: holder.apiKeyId, takeStepCost: () => holder.stepCosts.shift() ?? null, dispose: async () => undefined }
   },
   describeAiError: (error: unknown) => String(error),
   samplingOptions: () => ({}),
+}))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server', () => ({
+  createStepPricer: async (request: { signal?: AbortSignal }) => {
+    holder.pricerRequests.push(request)
+    return {
+      price: (tokens: { noCache: number | null; output: number | null }, at: Date, billing: { listCostUsd?: number } | null) => {
+        holder.pricedAt.push(at)
+        if (billing?.listCostUsd) return { usd: billing.listCostUsd, source: 'opencode-go-response', price: null, estimated: false, missingReason: null }
+        return { usd: ((tokens.noCache ?? 0) + (tokens.output ?? 0)) / 1_000_000, source: 'models.dev', price: { inputPerMTok: 1, outputPerMTok: 1, cacheReadPerMTok: null, cacheWritePerMTok: null, tier: null, catalogAt: null }, estimated: false, missingReason: null }
+      },
+    }
+  },
+}))
+vi.mock('@/features/opex-agent/server/mcp/service', () => ({
+  loadEnabledMcpServers: async (ids: readonly string[]) => ids.map((id) => ({ _id: { toString: () => id } })),
+}))
+vi.mock('@/features/opex-agent/server/mcp/tools', () => ({
+  loadMcpTools: async () => ({ tools: holder.mcpTools, overrides: {}, notices: [], close: async () => undefined }),
 }))
 vi.mock('@/features/opex-agent/server/settings', () => ({ loadOpexSettings: async () => ({ settings: holder.settings }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', async () => {
@@ -96,7 +120,12 @@ beforeEach(() => {
   holder.executed = []
   holder.stepCosts = []
   holder.prepared = []
+  holder.usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 }
+  holder.apiKeyId = 'key_x'
+  holder.pricerRequests = []
+  holder.pricedAt = []
   holder.settings = { disabledTools: [], confirmationOverrides: {} }
+  holder.mcpTools = []
   holder.catalog = new Map(
     [tool('delete_task', 'destructive'), tool('update_task', 'write'), tool('list_tasks', 'read'), tool('confirm_routine_action', 'write', 'routine-agents'), tool('update_routine_agent', 'write', 'routine-agents')].map((item) => [item.name, item]),
   )
@@ -131,6 +160,33 @@ describe('motor Opex — custo do passo (OPE-154)', () => {
     const result = await runOpexEngine(input)
     expect(result.error).toBeNull()
     expect(usages).toEqual([expect.objectContaining({ costUsd: null, billing: null })])
+  })
+})
+
+describe('motor Opex — custo de tabela por passo (OPE-203)', () => {
+  it('grava os tokens separados, o custo de tabela com origem e preço e a chave que respondeu', async () => {
+    holder.usage = { inputTokens: 1000, outputTokens: 500, totalTokens: 1500, inputTokenDetails: { noCacheTokens: 600, cacheReadTokens: 300, cacheWriteTokens: 100 }, outputTokenDetails: { textTokens: 400, reasoningTokens: 100 } }
+    const usages: Record<string, unknown>[] = []
+    const { input, activation } = engineInput([], true, null, (step) => void usages.push(step as unknown as Record<string, unknown>))
+    const before = Date.now()
+    await runOpexEngine(input)
+    expect(holder.pricerRequests[0]).toMatchObject({ provider: 'anthropic', model: 'claude', signal: activation.controller.signal })
+    expect(usages[0]).toMatchObject({
+      apiKeyId: 'key_x',
+      tokenDetails: { noCache: 600, cacheRead: 300, cacheWrite: 100, output: 500, reasoning: 100 },
+      listCost: { usd: 0.0011, source: 'models.dev', price: expect.objectContaining({ inputPerMTok: 1 }) },
+    })
+    // O preço vale pelo início do passo (pico/fora de pico do DeepSeek).
+    expect(holder.pricedAt[0]!.getTime()).toBeGreaterThanOrEqual(before)
+  })
+
+  it('OpenCode Go: o custo de tabela vem do billing da resposta; passo sem chave grava a chave nula', async () => {
+    holder.apiKeyId = null
+    holder.stepCosts = [{ costUsd: 0.0002, billing: { source: 'go', allowanceUsd: 0.0002, listCostUsd: 0.0003 } }]
+    const usages: Record<string, unknown>[] = []
+    const { input } = engineInput([], true, null, (step) => void usages.push(step as unknown as Record<string, unknown>), 'opencode-go')
+    await runOpexEngine(input)
+    expect(usages[0]).toMatchObject({ apiKeyId: null, listCost: { usd: 0.0003, source: 'opencode-go-response' } })
   })
 })
 
@@ -183,6 +239,24 @@ describe('motor Opex — ferramentas liberadas', () => {
       'A ferramenta "confirm_routine_action" não pode ser usada por agentes rotineiros: a execução segue sem ela.',
       'A ferramenta "update_routine_agent" não pode ser usada por agentes rotineiros: a execução segue sem ela.',
     ])
+  })
+})
+
+describe('motor Opex — ordem determinística das ferramentas (OPE-204)', () => {
+  it('MCPs e seleção em ordens diferentes geram o mesmo ToolSet: externas por nome, internas num bloco depois', async () => {
+    const finish = tool('finish', 'read', 'routine-control')
+    const run = async (enabledTools: string[], mcpOrder: string[]) => {
+      holder.mcpTools = mcpOrder.map((name) => tool(name, 'read', 'mcp'))
+      const { input } = engineInput(enabledTools)
+      ;(input.run.snapshot.opex as { enabledMcpServers: string[] }).enabledMcpServers = ['srv1']
+      ;(input as { internalTools: OpexTool[] }).internalTools = [finish]
+      await runOpexEngine(input)
+      return holder.toolNames
+    }
+    const first = await run(['update_task', 'list_tasks'], ['mcp_z', 'mcp_a'])
+    const second = await run(['list_tasks', 'update_task'], ['mcp_a', 'mcp_z'])
+    expect(first).toEqual(['list_tasks', 'mcp_a', 'mcp_z', 'update_task', 'finish'])
+    expect(second).toEqual(first)
   })
 })
 

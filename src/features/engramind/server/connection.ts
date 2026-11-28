@@ -1,6 +1,8 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegration } from "@/lib/integrations/config"
-import { BOOTSTRAP_APP_SLUG, ENGRAMIND_INTEGRATION_ID, ENGRAMIND_WEBHOOK_PATH, OPEX_APP_SLUG } from "../constants"
+import { getIntegration } from "@/lib/integrations/runtime"
+import { instanceAppOf } from "../channel-namespace"
+import { resetInstanceCache } from "./instance"
+import { BOOTSTRAP_APP_SLUG, ENGRAMIND_INTEGRATION_ID, ENGRAMIND_WEBHOOK_PATH } from "../constants"
 import type { EngramindApp, EngramindConnectionDto, WhoAmI } from "../types"
 import { engramindCall, engramindTarget, type EngramindTarget } from "./client"
 
@@ -11,6 +13,8 @@ let whoamiCache: { key: string; at: number; value: WhoAmI } | null = null
 
 export function resetWhoamiCache(): void {
     whoamiCache = null
+    // O app da instância e o espaço de nomes dos canais dependem da chave (OPE-206).
+    resetInstanceCache()
 }
 
 export async function fetchWhoami(target?: EngramindTarget): Promise<WhoAmI> {
@@ -93,7 +97,7 @@ export async function getConnection(): Promise<EngramindConnectionDto> {
     if (!configured) return base
     try {
         const whoami = await fetchWhoami()
-        const appSlug = whoami.app.slug === BOOTSTRAP_APP_SLUG ? OPEX_APP_SLUG : whoami.app.slug
+        const appSlug = instanceAppOf(whoami.app.slug)
         const app = await engramindCall<EngramindApp>("GET", { path: `/v1/apps/${encodeURIComponent(appSlug)}` }).catch(() => null)
         return {
             ...base,

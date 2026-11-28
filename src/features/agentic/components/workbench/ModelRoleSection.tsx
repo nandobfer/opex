@@ -3,13 +3,13 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { Loader2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { cn } from "@/lib/utils"
 import type { WorkbenchModelRole } from "../../constants"
 import type { ModelChoiceDto } from "../../types"
 import { AgentRoleSection } from "../settings/AgentRoleSection"
 import { RoleModelOverrideFields } from "./RoleModelOverrideFields"
-import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
+import type { ModelVariantValue } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelVariantFields"
 
 interface ModelRoleSectionProps {
     id: string

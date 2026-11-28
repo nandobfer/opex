@@ -1,17 +1,23 @@
 /** Constantes do "Agente Opex" (módulo puro: tela e servidor). */
 
+import { isCustomAiProviderId, type AiCustomProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+
 /** Configuração salva em `ai_feature_settings` (`feature: "opex-agent"`). */
 export const OPEX_FEATURE = "opex-agent"
 
 /** Aba de `/integracoes/ia` com a configuração do agente. */
 export const OPEX_AI_TAB = "agente-opex" as const
 
-/** Provedores do agente: só os que aceitam ferramentas definidas pelo app (o OpenCode de sessão não aceita; o OpenCode Go e o Command Code são só inferência por API e aceitam). */
+/**
+ * Provedores do agente: só os que aceitam ferramentas definidas pelo app (o OpenCode de sessão não
+ * aceita; o OpenCode Go e o Command Code são só inferência por API e aceitam), mais os provedores
+ * customizados OpenAI compatible (`custom-<slug>`, Chat Completions com ferramentas).
+ */
 export const OPEX_PROVIDER_IDS = ["gemini", "anthropic", "openai", "deepseek", "opencode-go", "command-code"] as const
-export type OpexProviderId = (typeof OPEX_PROVIDER_IDS)[number]
+export type OpexProviderId = (typeof OPEX_PROVIDER_IDS)[number] | AiCustomProviderId
 
 export function isOpexProviderId(value: string): value is OpexProviderId {
-    return (OPEX_PROVIDER_IDS as readonly string[]).includes(value)
+    return (OPEX_PROVIDER_IDS as readonly string[]).includes(value) || isCustomAiProviderId(value)
 }
 
 /**
@@ -22,12 +28,14 @@ export const OPEX_TOOL_GROUPS = [
     "context",
     "docs",
     "files",
+    "documents",
     "memories",
     "tasks",
     "previews",
     "time",
     "workbenches",
     "centrals",
+    "project-bootstrap",
     "github",
     "issues",
     "integrations",
@@ -64,12 +72,18 @@ export const OPEX_TOOL_GROUP_LABELS: Record<OpexToolGroup, { label: string; desc
     context: { label: "Contexto", description: "Visão geral do app e data/hora atual" },
     docs: { label: "Documentação do app", description: "Listar, ler e buscar a documentação do app (aicontext/) para explicar como usar, regras e funcionalidades" },
     files: { label: "Arquivos do chat", description: "Ler os arquivos enviados no chat e anexá-los a tarefas e prévias" },
+    documents: {
+        label: "Documentos",
+        description:
+            "Gerar PDF a partir de HTML (ajuste a N páginas e prévia PNG), guardar e ler arquivos no espaço dos agentes no bucket com URLs temporárias, e preparar e buscar os currículos no modelo aprovado",
+    },
     memories: { label: "Memórias do agente", description: "Listar, ler, criar, editar e excluir as memórias (instruções permanentes) do Agente Opex (globais, do dono e do cliente), do Agente Adversário e do agente desenvolvedor (globais e por central)" },
     tasks: { label: "Tarefas", description: "Listar, ler, criar, editar, mover, comentar, arquivar e as features de IA das tarefas" },
     previews: { label: "Prévias", description: "Nova prévia com IA, correções, estimativa e aprovação (cria a tarefa)" },
     time: { label: "Horas", description: "Períodos ativos e horas agênticas apontadas" },
     workbenches: { label: "Mesas de trabalho", description: "Abrir, planejar, implementar, aprovar, corrigir e excluir mesas" },
     centrals: { label: "Centrais", description: "Centrais de desenvolvimento agêntico e a configuração geral" },
+    "project-bootstrap": { label: "Agente de Bootstrap", description: "Catálogo de tecnologias e grupos, as skills do host que o agente usa e a consulta dos bootstraps de projeto (sem iniciar)" },
     github: { label: "Repositórios GitHub", description: "Ler e buscar arquivos, árvore, branches e commits de qualquer branch; criar branches e gravar/excluir arquivos (com confirmação)" },
     issues: { label: "Issues e dependências", description: "Ler e listar issues do GitHub, dependências formais com a entrega de cada uma, qual tarefa começar; registrar dependências e sub-issues (com confirmação)" },
     integrations: { label: "Integrações", description: "Ler (sem segredos), configurar e testar integrações" },

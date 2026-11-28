@@ -8,21 +8,31 @@ import { memoryUniverseOf } from "@/features/ai/memory-universe"
 import { AgentUniverseCard } from "@/features/ai/components/memories/AgentUniverseCard"
 import { MemoryUniverseSection } from "@/features/ai/components/memories/MemoryUniverseSection"
 import { SelfMemorySwitch } from "@/features/ai/components/memories/SelfMemorySwitch"
+import { ChannelNamespaceGate } from "@/features/engramind/components/shared/ChannelNamespaceGate"
+import type { ChannelNamespace } from "@/features/engramind/channel-namespace"
 
 /**
  * Aba Memórias do Agente Secretário: o universo do agente e, com `?conversa=<id>`, o universo só com o canal
  * global e o canal daquela conversa (Nova memória já cai no canal da conversa).
  */
 export function SecretaryMemories() {
-    const params = useSearchParams()
-    const pathname = usePathname()
-    const focus = conversationFocus(params.get(CONVERSATION_PARAM))
-    const all = new URLSearchParams(params.toString())
-    all.delete(CONVERSATION_PARAM)
-    const def = memoryUniverseOf("secretario", {})
     return (
         <>
             <SelfMemorySwitch consumer="secretario" />
+            <ChannelNamespaceGate>{(ns) => <SecretaryUniverse ns={ns} />}</ChannelNamespaceGate>
+        </>
+    )
+}
+
+function SecretaryUniverse({ ns }: { ns: ChannelNamespace }) {
+    const params = useSearchParams()
+    const pathname = usePathname()
+    const focus = conversationFocus(params.get(CONVERSATION_PARAM), ns)
+    const all = new URLSearchParams(params.toString())
+    all.delete(CONVERSATION_PARAM)
+    const def = memoryUniverseOf("secretario", {}, ns)
+    return (
+        <>
             {focus ? (
                 <>
                     <Button asChild variant="outline" className="w-fit">

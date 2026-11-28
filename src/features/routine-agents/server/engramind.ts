@@ -1,15 +1,15 @@
-import { APP_MEMORY_CHANNEL, routineIdentityOf } from "@/features/ai/agents"
-import { OPEX_APP_SLUG } from "@/features/engramind/constants"
+import { APP_MEMORY_CHANNEL, routineIdentityOf, type ChannelNamespace } from "@/features/ai/agents"
+import { realFixedChannel } from "@/features/engramind/channel-namespace"
 import { engramindCall, engramindTarget, type EngramindTarget } from "@/features/engramind/server/client"
 import { engramindCodeOf } from "@/features/engramind/server/errors"
 import type { EngramindChannel, EngramindSubscription, EngramindToken, IssuedToken } from "@/features/engramind/types"
 import { decryptSecret, encryptSecret, isEncryptedSecret } from "@/lib/crypto/secretBox"
 import type { IRoutineAgentToken } from "@/lib/db/models/RoutineAgent"
-import { ROUTINE_GLOBAL_CHANNEL, routineChannelOf } from "../constants"
+import { routineChannelOf, routineGlobalChannel } from "../constants"
 import { routineAgentTitle } from "../identity-plan"
 
 /**
- * Identidade de um agente rotineiro no Engramind (OPE-130): o agente `opex/rotineiro-<slug>` (nome
+ * Identidade de um agente rotineiro no Engramind (OPE-130): o agente `<app>/rotineiro-<slug>` (app da instância, OPE-206; nome
  * "Agente <nome>", sem duplicar o prefixo, OPE-170), as
  * assinaturas `inject` e o token `agent` próprio (escopos `read` e `write`), guardado **cifrado no
  * documento do agente** (nunca vai para o navegador, para o modelo nem para a auditoria). Tudo é
@@ -18,14 +18,14 @@ import { routineAgentTitle } from "../identity-plan"
 
 const enc = encodeURIComponent
 export const ROUTINE_TOKEN_SCOPES = ["read", "write"]
-export const routineAgentRef = (slug: string) => `${OPEX_APP_SLUG}/${routineIdentityOf(slug)}`
+export const routineAgentRef = (app: string, slug: string) => `${app}/${routineIdentityOf(slug)}`
 
-/** Canais que todo agente rotineiro assina (nunca removidos pelo reprovisionamento). */
-export const baseRoutineChannels = (slug: string) => [APP_MEMORY_CHANNEL, ROUTINE_GLOBAL_CHANNEL, routineChannelOf(slug)]
+/** Canais (reais) que todo agente rotineiro assina (nunca removidos pelo reprovisionamento). */
+export const baseRoutineChannels = (slug: string, ns: ChannelNamespace) => [realFixedChannel(ns, APP_MEMORY_CHANNEL), routineGlobalChannel(ns), routineChannelOf(slug, ns)]
 
-export async function ensureRoutineEngramindAgent(slug: string, name: string, description: string, target: EngramindTarget): Promise<"exists" | "created"> {
+export async function ensureRoutineEngramindAgent(app: string, slug: string, name: string, description: string, target: EngramindTarget): Promise<"exists" | "created"> {
     try {
-        await engramindCall("GET", { path: `/v1/agents/${enc(routineAgentRef(slug))}` }, { target })
+        await engramindCall("GET", { path: `/v1/agents/${enc(routineAgentRef(app, slug))}` }, { target })
         return "exists"
     } catch (error) {
         if (engramindCodeOf(error) !== "AGENT_NOT_FOUND") throw error
@@ -33,7 +33,7 @@ export async function ensureRoutineEngramindAgent(slug: string, name: string, de
     try {
         const written = await engramindCall<{ created?: boolean } | null>(
             "POST",
-            { path: "/v1/agents", body: { app: OPEX_APP_SLUG, slug: routineIdentityOf(slug), name: routineAgentTitle(name).slice(0, 120), description: description.slice(0, 500) } },
+            { path: "/v1/agents", body: { app, slug: routineIdentityOf(slug), name: routineAgentTitle(name).slice(0, 120), description: description.slice(0, 500) } },
             { target },
         )
         return written?.created === false ? "exists" : "created"
@@ -44,14 +44,14 @@ export async function ensureRoutineEngramindAgent(slug: string, name: string, de
 }
 
 /** Assina os canais (`inject`); devolve os que foram assinados agora. */
-export async function ensureRoutineSubscriptions(slug: string, channels: readonly string[], target: EngramindTarget): Promise<string[]> {
-    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: routineAgentRef(slug), limit: 200 } }, { target })
+export async function ensureRoutineSubscriptions(app: string, slug: string, channels: readonly string[], target: EngramindTarget): Promise<string[]> {
+    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: routineAgentRef(app, slug), limit: 200 } }, { target })
     const present = new Set((list?.subscriptions ?? []).map((item) => item.target))
     const created: string[] = []
     for (const channel of [...new Set(channels)]) {
         if (present.has(channel)) continue
         try {
-            const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/subscriptions", body: { agent: routineAgentRef(slug), target: channel, mode: "inject" } }, { target })
+            const written = await engramindCall<{ created?: boolean } | null>("POST", { path: "/v1/subscriptions", body: { agent: routineAgentRef(app, slug), target: channel, mode: "inject" } }, { target })
             if (written?.created !== false) created.push(channel)
         } catch (error) {
             if (engramindCodeOf(error) !== "SUBSCRIPTION_EXISTS") throw error
@@ -65,8 +65,8 @@ export async function ensureRoutineSubscriptions(slug: string, channels: readonl
  * outros assinantes ficam. Assinatura por prefixo (`x/*`) não é tocada. Devolve `absent` quando não há
  * assinatura (já cancelada à mão), o que torna a operação idempotente. Falha do Engramind sobe.
  */
-export async function removeRoutineSubscription(slug: string, channel: string, target: EngramindTarget): Promise<"removed" | "absent"> {
-    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: routineAgentRef(slug), limit: 200 } }, { target })
+export async function removeRoutineSubscription(app: string, slug: string, channel: string, target: EngramindTarget): Promise<"removed" | "absent"> {
+    const list = await engramindCall<{ subscriptions: EngramindSubscription[] }>("GET", { path: "/v1/subscriptions", query: { agent: routineAgentRef(app, slug), limit: 200 } }, { target })
     const found = (list?.subscriptions ?? []).filter((item) => item.target === channel && !item.is_prefix)
     if (!found.length) return "absent"
     for (const item of found) await engramindCall("DELETE", { path: `/v1/subscriptions/${enc(item.id)}` }, { target })
@@ -82,10 +82,10 @@ export function decryptRoutineToken(stored: IRoutineAgentToken | null | undefine
     }
 }
 
-async function findToken(slug: string, tokenId: string, target: EngramindTarget): Promise<EngramindToken | null> {
+async function findToken(app: string, slug: string, tokenId: string, target: EngramindTarget): Promise<EngramindToken | null> {
     let cursor: string | null = null
     for (let page = 0; page < 10; page++) {
-        const query: Record<string, string | number> = { agent: routineAgentRef(slug), limit: 200 }
+        const query: Record<string, string | number> = { agent: routineAgentRef(app, slug), limit: 200 }
         if (cursor) query.cursor = cursor
         const list: { tokens?: EngramindToken[]; next_cursor?: string | null } | null = await engramindCall("GET", { path: "/v1/tokens", query }, { target })
         const found = (list?.tokens ?? []).find((token) => token.id === tokenId)
@@ -100,13 +100,13 @@ async function findToken(slug: string, tokenId: string, target: EngramindTarget)
  * Token válido do agente: reaproveita o gravado se estiver ativo e com os escopos esperados; senão emite
  * outro (e revoga o anterior). Devolve o registro a gravar (ou o atual) e se emitiu.
  */
-export async function ensureRoutineToken(slug: string, stored: IRoutineAgentToken | null, target: EngramindTarget): Promise<{ token: IRoutineAgentToken; issued: boolean }> {
+export async function ensureRoutineToken(app: string, slug: string, stored: IRoutineAgentToken | null, target: EngramindTarget): Promise<{ token: IRoutineAgentToken; issued: boolean }> {
     if (stored && decryptRoutineToken(stored)) {
-        const current = await findToken(slug, stored.tokenId, target)
+        const current = await findToken(app, slug, stored.tokenId, target)
         const scopesOk = Array.isArray(current?.scopes) && current!.scopes.length === ROUTINE_TOKEN_SCOPES.length && ROUTINE_TOKEN_SCOPES.every((scope) => current!.scopes.includes(scope))
         if (current && current.status === "active" && scopesOk) return { token: stored, issued: false }
     }
-    const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "agent", agent: routineAgentRef(slug), scopes: ROUTINE_TOKEN_SCOPES, label: `Opex · rotineiro (${slug})` } }, { target })
+    const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "agent", agent: routineAgentRef(app, slug), scopes: ROUTINE_TOKEN_SCOPES, label: `Opex · rotineiro (${slug})` } }, { target })
     if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token")
     if (stored && stored.tokenId !== issued.token.id) await engramindCall("POST", { path: `/v1/tokens/${enc(stored.tokenId)}/revoke`, body: {} }, { target }).catch(() => undefined)
     return { token: { tokenId: issued.token.id, prefix: issued.token.prefix, secret: encryptSecret(issued.secret), issuedAt: new Date() }, issued: true }
@@ -158,8 +158,9 @@ export async function routineMemoryChannels(
     target: EngramindTarget,
     warn: (message: string) => void,
     onCheckFailed: (error: unknown) => void,
+    ns: ChannelNamespace,
 ): Promise<{ channels: string[]; memoryChannels: string[] }> {
-    const subscribed = [...baseRoutineChannels(agent.slug), ...(agent.provisioning?.extras ?? []).map((item) => item.channel)]
+    const subscribed = [...baseRoutineChannels(agent.slug, ns), ...(agent.provisioning?.extras ?? []).map((item) => item.channel)]
     const channels = await activeRoutineChannels(subscribed, target).then(
         ({ active, archived }) => {
             if (archived.length) warn(`Canal arquivado no Engramind, fora desta execução: ${archived.join(", ")}. Restaure-o na rede ou use "Reprovisionar".`)
@@ -170,6 +171,6 @@ export async function routineMemoryChannels(
             return subscribed
         },
     )
-    const own = routineChannelOf(agent.slug)
+    const own = routineChannelOf(agent.slug, ns)
     return { channels, memoryChannels: [own, ...channels.filter((channel) => channel !== own)] }
 }

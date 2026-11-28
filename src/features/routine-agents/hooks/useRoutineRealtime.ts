@@ -2,15 +2,27 @@
 
 import { useEffect } from "react"
 import { useRouter } from "next/navigation"
-import { useQueryClient } from "@tanstack/react-query"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { toast } from "sonner"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { ROUTINE_AGENT_UPDATED_EVENT, ROUTINE_RUN_ATTENTION_EVENT, ROUTINE_RUN_UPDATED_EVENT, routineAgentHref } from "../constants"
+import { ROUTINE_AGENT_UPDATED_EVENT, ROUTINE_RUN_ATTENTION_EVENT, ROUTINE_RUN_UPDATED_EVENT, routineRunPath } from "../constants"
 import { ROUTINE_RUN_STATUS_LABELS } from "../status"
 import type { RoutineAgentUpdatedPayload, RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
 import { routineChatQueryPrefix } from "../chat"
 import { routineKeys } from "./keys"
+import { AI_CONSUMPTION_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption-events"
+import { AI_PROVIDER_KEYS_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/api-keys"
+import { AI_BILLING_UPDATED_EVENT } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/schemas"
+import { ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
+
+/** Intervalo mínimo entre releituras de custo disparadas por consumo novo (passos chegam em rajada). */
+export const ROUTINE_COST_REFRESH_MS = 5_000
+
+/** Custos (OPE-203) mudaram: execuções, detalhe e métricas de todos os agentes são relidos. */
+export function invalidateRoutineCosts(queryClient: QueryClient): void {
+    for (const scope of ["runs", "run", "metrics", "metrics-all"]) void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], scope] })
+}
 
 /**
  * Tempo real dos agentes rotineiros (OPE-130): `routine-agent-updated` e `routine-run-updated` em
@@ -41,11 +53,28 @@ export function useRoutineRealtime(enabled = true): void {
                 void queryClient.invalidateQueries({ queryKey: [routineKeys.all[0], "metrics-all"] })
             }
         }
+        // Custos (OPE-203): plano da chave alterado, PTAX/uso das assinaturas gravados e consumo novo dos rotineiros.
+        let costTimer: ReturnType<typeof setTimeout> | null = null
+        const onCosts = () => invalidateRoutineCosts(queryClient)
+        const onConsumption = (payload: { origin?: string } | undefined) => {
+            if (payload?.origin !== ROUTINE_CONSUMPTION_ORIGIN || costTimer) return
+            costTimer = setTimeout(() => {
+                costTimer = null
+                invalidateRoutineCosts(queryClient)
+            }, ROUTINE_COST_REFRESH_MS)
+        }
         channel.bind(ROUTINE_AGENT_UPDATED_EVENT, onAgent)
         channel.bind(ROUTINE_RUN_UPDATED_EVENT, onRun)
+        channel.bind(AI_PROVIDER_KEYS_UPDATED_EVENT, onCosts)
+        channel.bind(AI_BILLING_UPDATED_EVENT, onCosts)
+        channel.bind(AI_CONSUMPTION_UPDATED_EVENT, onConsumption)
         return () => {
+            if (costTimer) clearTimeout(costTimer)
             channel.unbind(ROUTINE_AGENT_UPDATED_EVENT, onAgent)
             channel.unbind(ROUTINE_RUN_UPDATED_EVENT, onRun)
+            channel.unbind(AI_PROVIDER_KEYS_UPDATED_EVENT, onCosts)
+            channel.unbind(AI_BILLING_UPDATED_EVENT, onCosts)
+            channel.unbind(AI_CONSUMPTION_UPDATED_EVENT, onConsumption)
             releaseChannel(name)
         }
     }, [enabled, queryClient])
@@ -74,7 +103,7 @@ export function useRoutineAttentionToasts(enabled = true): void {
         const handler = (payload: RoutineRunAttentionPayload) => {
             if (!payload?.id || !payload.agentId) return
             const { kind, message } = attentionToast(payload)
-            const action = { label: "Abrir execução", onClick: () => router.push(routineAgentHref(payload.agentId, payload.id)) }
+            const action = { label: "Abrir execução", onClick: () => router.push(routineRunPath(payload.agentId, payload.id)) }
             toast[kind](message, { action, id: `routine-run-${payload.id}-${payload.kind}` })
         }
         channel.bind(ROUTINE_RUN_ATTENTION_EVENT, handler)

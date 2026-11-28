@@ -50,8 +50,15 @@ ENV MONGODB_URI="mongodb://localhost:27017/dummy"
 ENV NEXT_TELEMETRY_DISABLED=1
 # O type check do next build passa do heap padrão do Node (~2 GB) e morre por falta de memória.
 ENV NODE_OPTIONS=--max-old-space-size=4096
+# O type check sai do `next build` (next.config.ts) e roda em processo próprio depois dele: somado ao
+# compilador dentro do mesmo build, ele estourava a memória do runner de 2 vCPU (cannot allocate
+# memory) com o projeto já neste tamanho. Em processo separado o pico é só o do tsc, com o mesmo
+# escopo, inclusive os tipos de rota que o build acabou de gerar em `.next/types`.
+ENV OPEX_SEPARATE_TYPE_CHECK=1
 
 RUN pnpm run build
+
+RUN pnpm exec tsc --noEmit
 
 # Compilador de plugins (OPE-172): o rastreamento do Next leva o JS do Rolldown e do Tailwind ao
 # standalone, mas não o binário nativo do Rolldown (dependência opcional, `require` dinâmico) nem as

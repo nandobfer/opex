@@ -7,7 +7,9 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
  * Aba "Build (N)": o resumo do build e o seletor (igual às abas Plano e Adversário) na mesma linha —
- * mais recente primeiro, só com 2+ builds — e o log do selecionado no terminal.
+ * mais recente primeiro, só com 2+ builds — e o log do selecionado no terminal. No GitHub Action
+ * (OPE-214), o link do run fica no selo "GitHub Action" do resumo: vem do servidor (DTO e stream),
+ * nunca do texto do log (OPE-221).
  */
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +17,8 @@ const mocks = vi.hoisted(() => ({
   stream: { view: { loaded: true, end: 10, status: 'running', message: null }, connected: true, error: false, retry: vi.fn() } as Record<string, unknown>,
   streamCalls: [] as (string | null)[],
   written: [] as string[],
+  logs: {} as Record<string, string>,
+  runUrls: {} as Record<string, string | null>,
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -22,11 +26,12 @@ vi.mock('@/features/agentic/hooks/useBuilds', () => ({
   useWorkbenchBuilds: () => mocks.query,
   useBuildLogStream: (_workbenchId: string, buildId: string | null, sink: { reset: (text: string) => void }) => {
     mocks.streamCalls.push(buildId)
-    React.useEffect(() => sink.reset(`log de ${buildId}`), [buildId, sink])
-    return mocks.stream
+    React.useEffect(() => sink.reset(mocks.logs[buildId ?? ''] ?? `log de ${buildId}`), [buildId, sink])
+    const view = mocks.stream.view as Record<string, unknown>
+    return { ...mocks.stream, view: { ...view, runUrl: mocks.runUrls[buildId ?? ''] ?? null } }
   },
 }))
-vi.mock('@/features/integrations/components/IntegrationConsole', () => ({
+vi.mock('@nandobfer/integracoes/react', () => ({
   IntegrationConsole: React.forwardRef(function Console(props: { ariaLabel?: string }, ref: React.Ref<unknown>) {
     React.useImperativeHandle(ref, () => ({ clear: () => mocks.written.splice(0), write: (text: string) => mocks.written.push(text), search: vi.fn(), clearSearch: vi.fn() }))
     return <div role="log" aria-label={props.ariaLabel} />
@@ -61,6 +66,8 @@ const build = (id: string, number: number, status: string, patch: Record<string,
 beforeEach(() => {
   mocks.streamCalls = []
   mocks.written = []
+  mocks.logs = {}
+  mocks.runUrls = {}
   mocks.stream = { view: { loaded: true, end: 10, status: 'running', message: null }, connected: true, error: false, retry: vi.fn() }
   mocks.query = { isPending: false, isError: false, data: [build('b1', 1, 'failed', { message: 'O build falhou' }), build('b2', 2, 'running')], refetch: vi.fn() }
 })
@@ -122,5 +129,56 @@ describe('BuildLogView', () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
     expect(retry).toHaveBeenCalled()
+  })
+})
+
+describe('BuildLogView — link do run no selo "GitHub Action" (OPE-214, OPE-221)', () => {
+  const RUN = 'https://github.com/nandobfer/opex/actions/runs/46092133916'
+  const FIXTURE = 'https://github.com/org/app/actions/runs/9'
+  const badgeLink = () => screen.queryByText('GitHub Action')?.closest('a') ?? null
+
+  it('regressão OPE-221: o link é o run informado pelo servidor, nunca a última URL do log (saída dos testes)', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'running', { method: 'github', runUrl: RUN })] }
+    mocks.runUrls = { b1: RUN }
+    mocks.logs = { b1: `Prévia GitHub: ${RUN}\n✓ ci.test.ts details_url: ${FIXTURE}\n${FIXTURE}\n` }
+    render(<Harness />)
+    const link = badgeLink()
+    expect(link?.getAttribute('href')).toBe(RUN)
+    expect(link?.getAttribute('target')).toBe('_blank')
+    expect(link?.getAttribute('rel')).toBe('noreferrer')
+    expect(document.querySelector(`a[href="${FIXTURE}"]`)).toBeNull()
+  })
+
+  it('antes do snapshot do stream vale o runUrl da lista', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'succeeded', { method: 'github', runUrl: RUN })] }
+    mocks.stream = { ...mocks.stream, view: { loaded: false, end: 0, status: null, message: null } }
+    render(<Harness />)
+    expect(badgeLink()?.getAttribute('href')).toBe(RUN)
+  })
+
+  it('build GitHub sem run informado: o selo é só texto, mesmo com URLs de run no log', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'running', { method: 'github', runUrl: null })] }
+    mocks.logs = { b1: `Prévia GitHub: ${FIXTURE}\n` }
+    render(<Harness />)
+    expect(screen.getByText('GitHub Action')).toBeTruthy()
+    expect(badgeLink()).toBeNull()
+  })
+
+  it('build local: sem selo e sem link', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'running', { method: 'local', runUrl: null })] }
+    mocks.logs = { b1: `${RUN}\n` }
+    render(<Harness />)
+    expect(screen.queryByText('GitHub Action')).toBeNull()
+    expect(document.querySelector('a')).toBeNull()
+  })
+
+  it('trocar para um build sem run não herda o link do build anterior', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'failed', { method: 'github', runUrl: null }), build('b2', 2, 'running', { method: 'github', runUrl: RUN })] }
+    mocks.runUrls = { b2: RUN }
+    render(<Harness />)
+    expect(badgeLink()?.getAttribute('href')).toBe(RUN)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Build da prévia' }), { target: { value: 'b1' } })
+    expect(screen.getByText('GitHub Action')).toBeTruthy()
+    expect(badgeLink()).toBeNull()
   })
 })

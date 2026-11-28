@@ -4,16 +4,16 @@ import React from 'react'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { OpencodeQuotaDto } from '@/features/opencode-quota/types'
+import type { OpencodeQuotaDto } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 
 const mocks = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn() }))
 
-vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
+vi.mock('framer-motion', async () => (await import("../../helpers/framer-motion")).framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href, ...props }: { children: React.ReactNode; href: string }) => <a href={href} {...props}>{children}</a> }))
-vi.mock('@/lib/api', async (original) => ({ ...(await original<typeof import('@/lib/api')>()), api: { get: mocks.get, post: mocks.post } }))
+vi.mock("@/lib/api", async (original) => ({ ...(await original<typeof import("@/lib/api")>()), api: { get: mocks.get, post: mocks.post } }))
 
-import { OpencodeQuotaPanel } from '@/features/opencode-quota/components/OpencodeQuotaPanel'
-import { OPENCODE_QUOTA_PANEL_KEY, OPENCODE_SETTINGS_HREF } from '@/features/opencode-quota/constants'
+import { OpencodeQuotaPanel } from "@/features/opencode-quota/components/OpencodeQuotaPanel"
+import { OPENCODE_QUOTA_PANEL_KEY, OPENCODE_SETTINGS_HREF } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/constants"
 
 const ok = (data: unknown) => ({ data: { success: true, data } })
 const inHours = (hours: number) => new Date(Date.now() + hours * 3_600_000 + 30_000).toISOString()

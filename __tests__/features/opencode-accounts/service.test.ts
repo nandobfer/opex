@@ -19,11 +19,11 @@ const mocks = vi.hoisted(() => ({
     connection: vi.fn(),
 }))
 
-vi.mock("@/lib/ai/opencode", () => ({ getOpencodeConnection: mocks.connection }))
-vi.mock("@/lib/ai/opencode-client", () => ({ getOpencodeClient: vi.fn(async () => mocks.client) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode", () => ({ getOpencodeConnection: mocks.connection }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client", () => ({ getOpencodeClient: vi.fn(async () => mocks.client) }))
 vi.mock("@/lib/audit/record", () => ({ recordAudit: mocks.audit, AcaoAuditoria: { CRIAR: "CRIAR", ATUALIZAR: "ATUALIZAR", EXCLUIR: "EXCLUIR" } }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
-vi.mock("@/lib/ai/catalog", () => ({ clearAiCatalogCache: mocks.clearCache }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/catalog", () => ({ clearAiCatalogCache: mocks.clearCache }))
 vi.mock("@/lib/db", () => ({ dbConnect: vi.fn(async () => undefined) }))
 
 import { DomainError } from "@/lib/api/route"

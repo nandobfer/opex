@@ -45,13 +45,13 @@ vi.mock("@/lib/pusher/client", () => ({
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
 vi.mock("@/features/opex-agent/components/agents/AgentChatNavItem", () => ({ AgentChatNavItem: () => <li data-testid="agent-nav-item-mock" /> }))
 vi.mock("@/features/host-metrics/components/ServerQuotaSidebarItem", () => ({ ServerQuotaSidebarItem: () => <li data-testid="server-quota-item-mock" /> }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({ useIntegrations: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn(), isRefetching: false }) }))
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
-vi.mock("@/features/integrations/components/IntegrationTestDialog", () => ({ IntegrationTestDialog: () => null }))
-vi.mock("@/features/integrations/components/IntegrationDebugDialog", () => ({ IntegrationDebugDialog: () => null }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", () => ({ useIntegrations: () => ({ data: [], isLoading: false, isError: false, refetch: vi.fn(), isRefetching: false }) }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationTestDialog", () => ({ IntegrationTestDialog: () => null }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationDebugDialog", () => ({ IntegrationDebugDialog: () => null }))
 
 import { AppLayoutShell } from "@/features/layout/components/AppLayoutShell"
-import { routineAgentHref } from "@/features/routine-agents/constants"
+import { routineRunPath } from "@/features/routine-agents/constants"
 
 const emit = (event: string, payload: unknown) => act(() => mocks.handlers.get(event)?.forEach((handler) => handler(payload)))
 
@@ -76,7 +76,7 @@ describe("AppLayoutShell — toasts de atenção dos agentes rotineiros (OPE-130
         expect(message).toBe('O agente "Vagas" aguarda sua confirmação')
         expect(options.action.label).toBe("Abrir execução")
         options.action.onClick()
-        expect(mocks.push).toHaveBeenCalledWith(routineAgentHref("a1", "r1"))
+        expect(mocks.push).toHaveBeenCalledWith(routineRunPath("a1", "r1"))
     })
 
     it("fim de execução vira toast de sucesso/erro com \"Abrir execução\"", () => {
@@ -91,7 +91,7 @@ describe("AppLayoutShell — toasts de atenção dos agentes rotineiros (OPE-130
         expect(done).toBe('Execução do agente "Vagas" concluída')
         expect(doneOptions.action.label).toBe("Abrir execução")
         doneOptions.action.onClick()
-        expect(mocks.push).toHaveBeenCalledWith(routineAgentHref("a1", "r2"))
+        expect(mocks.push).toHaveBeenCalledWith(routineRunPath("a1", "r2"))
         expect(mocks.toast.error).toHaveBeenCalledTimes(1)
     })
 

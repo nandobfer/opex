@@ -1,7 +1,7 @@
 
 import { DomainError } from "@/lib/api/route"
-import { getIntegration } from "@/lib/integrations/config"
-import type { IntegrationUpdateInput } from "@/features/integrations/schemas/integration.schema"
+import { getIntegration } from "@/lib/integrations/runtime"
+import type { IntegrationUpdateInput } from "@nandobfer/integracoes"
 import { EVOLUTION_ENV_KEY, EVOLUTION_ENVIRONMENT_SLUG, EVOLUTION_INTEGRATION_ID } from "../constants"
 import { prefillFromEnv, type EvolutionPrefillDto } from "../prefill"
 import { evolutionLog, saveEvolutionFields } from "./shared"

@@ -35,7 +35,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   const model = memoryModel()
   return { AgenticWorkbench: { ...model, updateOne: (...args: unknown[]) => (mocks.workbenchUpdate(...args), model.updateOne(...(args as Parameters<typeof model.updateOne>))) } }
 })
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => ({
     session: { create: mocks.sessionCreate, remove: mocks.sessionRemove, instructions: { entry: { put: mocks.instructionsPut } }, form: { cancel: mocks.formCancel } },
     permission: { reply: mocks.permissionReply },

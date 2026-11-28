@@ -15,11 +15,11 @@ import { nowContext } from "./tools/context"
 /** Tipos de arquivo que o modelo lê: no OpenCode Go e no Command Code vêm do catálogo (por modelo); nos demais, do provedor. */
 async function acceptedFileKinds(provider: OpexProviderId, model: string, signal?: AbortSignal): Promise<ReadonlySet<OpexFileKind> | undefined> {
     if (provider === "opencode-go") {
-        const { opencodeGoModelInputs } = await import("@/lib/ai/opencode-go")
+        const { opencodeGoModelInputs } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go")
         return modelFileKinds(await opencodeGoModelInputs(model, signal))
     }
     if (provider === "command-code") {
-        const { commandCodeModelInputs } = await import("@/lib/ai/command-code")
+        const { commandCodeModelInputs } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/command-code")
         return modelFileKinds(await commandCodeModelInputs(model, signal))
     }
     return undefined

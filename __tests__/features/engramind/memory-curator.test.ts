@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { INVALID_CLASSIFICATION_REASON, applyCuratorRules, parseCuratorAnswer, type CuratorSourceItem } from '@/features/engramind/memory-curator'
+import { LEGACY_NAMESPACE } from '@/features/engramind/channel-namespace'
 
 /** OPE-104: regras do Opex sobre a resposta do curador da migração (100% das memórias recebem decisão). */
 
@@ -16,7 +17,7 @@ const item = (overrides: Partial<CuratorSourceItem> = {}): CuratorSourceItem => 
   ownerProtected: true,
   ...overrides,
 })
-const context = { categories: [{ key: 'PROJECT_RULES' }, { key: 'NAMING' }], textMax: 50 }
+const context = { categories: [{ key: 'PROJECT_RULES' }, { key: 'NAMING' }], textMax: 50, ns: LEGACY_NAMESPACE }
 
 describe('regras do curador', () => {
   it('memória do dono nunca é descartada: vira revisar_dono com o motivo do curador', () => {
@@ -64,6 +65,11 @@ describe('regras do curador', () => {
     expect(decisions.get('x1')).toMatchObject({ canalDestino: 'agentes/opex/dono' })
     expect(decisions.get('x1')!.motivo).toContain('o curador sugeriu mover para opex')
     expect(decisions.get('x2')).toMatchObject({ canalDestino: `agentes/desenvolvedor/central/${C}` })
+  })
+
+  it('OPE-206: o destino é o canal real da instância (com o app na frente)', () => {
+    const decision = applyCuratorRules([item()], [{ id: 'x1', decisao: 'migrar', motivo: 'ok' }], { ...context, ns: { app: 'alfredopex', prefixed: true } }).get('x1')!
+    expect(decision.canalDestino).toBe('alfredopex/agentes/opex/dono')
   })
 
   it('categoria fora da lista vira a primeira; duplicataDe só vale dentro da lista', () => {

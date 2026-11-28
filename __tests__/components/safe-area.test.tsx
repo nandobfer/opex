@@ -16,7 +16,7 @@ vi.mock("next/link", () => ({
 }))
 vi.mock("@/lib/pusher/RealtimeStatusBanner", () => ({ RealtimeStatusBanner: () => null }))
 vi.mock("@/features/agentic/hooks/useAgentic", () => ({ useTestCentral: () => ({ mutateAsync: vi.fn() }) }))
-vi.mock("@/features/integrations/components/IntegrationDebugConsole", () => ({
+vi.mock("@nandobfer/integracoes/react", () => ({
     IntegrationDebugConsole: ({ onMaximizedChange }: { onMaximizedChange: (value: boolean) => void }) => (
         <button type="button" onClick={() => onMaximizedChange(true)}>
             Maximizar
@@ -62,22 +62,22 @@ describe("safe areas do app instalado", () => {
         expect(hasInset(drawer, "bottom")).toBe(true)
     })
 
-    it.each([
-        ["bottom", ["bottom"]],
-        ["top", ["top"]],
-        ["right", ["top", "bottom"]],
-        ["left", ["top", "bottom"]],
-    ] as const)("folha %s mantém o inset mesmo quando o chamador troca o padding", (side, expected) => {
+    it("a folha (só de baixo, OPE-208) mantém o inset inferior e o limite de altura mesmo quando o chamador troca o padding", () => {
         for (const className of [undefined, "p-0", "p-4 pb-2 pt-2"]) {
             render(
                 <Sheet open>
-                    <SheetContent side={side} className={className} aria-describedby={undefined}>
+                    <SheetContent className={className} aria-describedby={undefined}>
                         <SheetTitle>Folha</SheetTitle>
                     </SheetContent>
                 </Sheet>,
             )
             const content = screen.getByRole("dialog")
-            for (const edge of expected) expect(hasInset(content, edge)).toBe(true)
+            expect(hasInset(content, "bottom")).toBe(true)
+            expect(content.className).toContain("max-h-[85dvh]")
+            expect(content.className).toContain("overflow-y-auto")
+            // Nenhuma gaveta lateral ou de cima: a folha encosta só no pé da tela.
+            expect(content.className).toContain("bottom-0")
+            expect(content.className).not.toMatch(/(^|\s)(inset-y-0|left-0|right-0|top-0)(\s|$)/)
             cleanup()
         }
     })

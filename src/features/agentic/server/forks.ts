@@ -3,13 +3,14 @@ import { isSessionNotFoundError } from "@opencode/client"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { AgenticFork, AgenticWorkbench, type IAgenticFork, type IAgenticWorkbench } from "@/lib/db/models/Agentic"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
 import { getLocalUser } from "@/lib/local-user"
 import { loggerFor } from "@/lib/logger"
 import {
     AGENTIC_AUDIT_FORK,
+    AGENTIC_CONSUMPTION_ORIGIN,
     FORK_CHILD_NOTES_INSTRUCTIONS_KEY,
     FORK_INSTRUCTIONS_KEY,
     FORK_INTEGRATION_TARGET_LABELS,
@@ -404,7 +405,7 @@ async function executeForkTurn(id: string, text: string, controller: AbortContro
         (attempt, prompt) =>
             runAgentTurn(
                 client,
-                { id, sessionId, stage: "fork", title: `Fork ${fork.number}`, agent: attempt, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: "agentic", subject: fork.workbenchId }, files: attachments.files, providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY },
+                { id, sessionId, stage: "fork", title: `Fork ${fork.number}`, agent: attempt, text: prompt, timeoutMs: TURN_TIMEOUT_MS, signal: controller.signal, consumption: { origin: AGENTIC_CONSUMPTION_ORIGIN, subject: fork.workbenchId }, files: attachments.files, providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY },
                 { ...turnHooks(fork), publish },
             ),
         {

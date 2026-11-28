@@ -1,14 +1,14 @@
 import { z } from "zod"
 import { DomainError } from "@/lib/api/route"
 import { defineTool, type OpexTool } from "@/features/opex-agent/server/tools/define"
-import { AI_AGENTS, contextChannelsFor, contextListsFor, writableListsFor, type AiAgentId, type MemoryConsumer, type MemoryListScope, type MemoryTurn } from "../../agents"
+import { AI_AGENTS, contextListsFor, writableListsFor, type AiAgentId, type MemoryConsumer, type MemoryListScope, type MemoryTurn } from "../../agents"
 import { firstSentence } from "../../memory-text"
 import { noticeMemoryRef } from "../../memory-notice"
 import type { NoticeMemoryAction, WorkbenchNoticeMemoryRef } from "@/features/agentic/types"
 import { SELF_MEMORY_TOOL_METAS, SELF_MEMORY_TURN_LIMIT } from "../../self-memory"
 import type { MemoryDto, MemoryMutationResult } from "../../types"
 import { createAgentMemory, deleteAgentMemory, listAgentMemories, updateAgentMemory } from "../agent-memory-service"
-import { selfMemoryReadTools } from "./read-tools"
+import { selfMemoryReadTools, turnChannels } from "./read-tools"
 
 /**
  * Ferramentas "Memória própria" (aprendizado autônomo, OPE-104): o agente grava, edita, fixa,
@@ -102,7 +102,7 @@ async function outsideContext(context: Pick<SelfMemoryContext, "consumer" | "tur
     try {
         const { contextCacheKey } = await import("@/features/engramind/server/memory-context")
         const { EngramindContextCache } = await import("@/features/engramind/server/models")
-        const row = await EngramindContextCache.findById(contextCacheKey(context.consumer, contextChannelsFor(context.consumer, context.turn))).select({ counts: 1 }).lean()
+        const row = await EngramindContextCache.findById(contextCacheKey(context.consumer, await turnChannels(context))).select({ counts: 1 }).lean()
         return (row?.counts?.titles ?? 0) + (row?.counts?.overflow ?? 0)
     } catch {
         return 0

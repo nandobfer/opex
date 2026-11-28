@@ -196,7 +196,9 @@ sem pedido explícito.
   Agente Opex (payload `{ id }`); configuração do cliente `maddox-client-config-updated` em
   `private-app` e `private-client-{clientId}` e configuração geral `maddox-settings-updated` em
   `private-client-{clientId}` (ver `aicontext/modules/maddox-agent.md`).
-- Engramind: `engramind-updated` (`{ type, channel?, keys? }`, abas de gestor de `/integracoes/engramind`)
+- Engramind: `engramind-updated` (`{ type, channel?, keys? }`, abas de gestor de `/integracoes/engramind`;
+  `type: "namespace"` quando o espaço de nomes dos canais muda e `type: "channel-migration"` a cada passo da migração
+  dos nomes dos canais — OPE-206, ver `aicontext/modules/engramind.md`)
   e o consumo de memórias pelos agentes `engramind-consumption`
   (`{ agent, kind, channels, delivered, memoryIds, titleIds?, version? }`, só ids e slugs) em `private-app`.
   O `engramind-consumption` é montado pelo servidor a partir do webhook `memory.consumed` do Engramind,
@@ -241,11 +243,22 @@ sem pedido explícito.
   `secretary-analysis-updated` (`{ id }`) em `private-app`; e `secretary-chat-updated` (`{ chatId }`, OPE-197) a cada
   mensagem nova ou atualizada e mudança de não lidas na instância do Secretário, para a aba Conversas (ver
   `aicontext/modules/secretary-agent.md`).
+- Bootstrap de projeto (OPE-215): `project-bootstrap-updated` (`{ id }`) em `private-app` a cada mudança de etapa, estado,
+  pedidos pendentes ou do que foi criado, e `project-bootstrap-catalog-updated` (`{ kind: "group" | "technology" | "seed" }`)
+  ao mudar o catálogo de tecnologias; a conversa do agente vai pelo NDJSON (`GET /api/project-bootstraps/[id]/events`) e o
+  log do deploy pelo stream do ambiente (ver `aicontext/modules/project-bootstrap.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
+- Custos de IA (OPE-203): `ai-billing-updated` (`{ kind: "fx" | "subscription-days" }`) em `private-app` quando as
+  rotinas `fx-ptax-daily` ou `ai-subscription-days` (ou o preenchimento sob demanda) gravam PTAX ou uso diário das
+  assinaturas; as telas dos rotineiros também releem os custos em `ai-provider-keys-updated` (plano da chave) e
+  `ai-consumption-updated` com `origin: routine-agent` (ver `aicontext/modules/routine-agents.md`, "Custos").
+- Provedores de IA customizados (OpenAI compatible, OPE-212): `ai-custom-providers-updated`
+  (`{ slug, action: "created" | "updated" | "deleted" }`) em `private-app` ao criar, editar ou excluir um provedor
+  customizado (ver `aicontext/modules/ai.md`, "Provedor customizado").
 - Chaves de API dos provedores de IA (OPE-155): `ai-provider-keys-updated` (`{ provider }`) em `private-app`
-  ao criar, renomear, substituir o segredo, pôr ou tirar de uso, tornar principal (OPE-179) ou remover uma chave
-  (ver `aicontext/modules/ai.md`, "Chaves de API").
+  ao criar, renomear, substituir o segredo, pôr ou tirar de uso, tornar principal (OPE-179), alterar o plano de
+  cobrança (OPE-203) ou remover uma chave (ver `aicontext/modules/ai.md`, "Chaves de API").
 - Conversa com um agente rotineiro (OPE-160): `routine-chat-session-updated` / `routine-chat-session-deleted`
   (`{ id, agentId }`) em `private-app`; a resposta ao vivo vai pelo NDJSON
   (`GET /api/routine-agents/[id]/chat/sessions/[sessionId]/stream`).
@@ -272,7 +285,7 @@ sem pedido explícito.
 - Logs estruturados com **Pino** (`logger`/`loggerFor`); nunca `console.log` em código de produção.
 - Use os serviços centrais (banco, auditoria, logger, realtime, integrações, axios) em vez de
   instanciar clientes novos em cada feature.
-- Serviço externo novo = entrada no catálogo de integrações (`src/lib/integrations/catalog.ts`)
+- Serviço externo novo = adaptador no registro de integrações (`src/features/integrations/registry/`, biblioteca `@nandobfer/integracoes`)
   com campos públicos/privados, tester e debug, seguindo `aicontext/modules/integrations.md`.
 - **Ferramentas do Agente Opex** (`src/features/opex-agent/server/tools/`) chamam a **função de
   serviço real** do app (nunca HTTP). Ferramenta de exclusão, arquivamento, gravação de integração ou
@@ -375,7 +388,7 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
 - Logging: Pino
 - IA: Vercel AI SDK (`ai` v7) com `ai-sdk-provider-opencode-sdk` (OpenCode 2.x) `@ai-sdk/google`
   (Gemini), `@ai-sdk/anthropic`, `@ai-sdk/openai`, `@ai-sdk/deepseek` e `@ai-sdk/openai-compatible`
-  (OpenCode Go e Command Code), sempre por `streamAi` (`src/lib/ai/stream.ts`); provedores configurados em
+  (OpenCode Go e Command Code), sempre por `streamAi` (`@nandobfer/integracoes/modules/integrations/ia/ai/stream`); provedores configurados em
   Integrações › Inteligência Artificial (`aicontext/modules/ai.md`); cliente MCP do Agente Opex com
   `@ai-sdk/mcp` (importada sob demanda; `aicontext/modules/opex-agent.md`, "MCPs")
 - Testes: Vitest 5 + React Testing Library, DOM com happy-dom (jsdom só como exceção); CI com
@@ -390,6 +403,13 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   encapsulado em `src/features/plugins/server/kernel/cordis.ts`), compilação das versões com `rolldown` (1.3.3,
   fixado) e CSS das classes do plugin com o `compile` do `tailwindcss` (dependência de produção); diff entre
   versões com `diff`
+- PDF/PNG dos documentos dos agentes: Gotenberg (serviço compartilhado no host, integração `gotenberg` da biblioteca
+  `@nandobfer/integracoes`, chamado com `fetch` nativo; `aicontext/modules/agent-documents.md`)
+- Central de Integrações: biblioteca `@nandobfer/integracoes` (repositório público `nandobfer/integracoes`,
+  instalada por `github:nandobfer/integracoes#vX.Y.Z`, `dist/` versionado; OPE-212): lista, página, campos,
+  segredos, teste, debug, explorador, agendador e rotas da central, mais Pusher, SMTP, Storage S3, Gotenberg, GitHub, Crons,
+  API interna e a camada de IA; o Opex registra os adaptadores em `src/features/integrations/registry/`
+  (`aicontext/modules/integrations.md`)
 - Integrações: terminal de logs com `@xterm/xterm` (+ `@xterm/addon-fit`, `@xterm/addon-search`),
   Swagger UI via `swagger-ui-dist` (CDN)
 

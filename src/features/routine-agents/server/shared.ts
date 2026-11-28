@@ -4,7 +4,7 @@ import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import { routineIdentityOf } from "@/features/ai/agents"
+import { routineIdentityOf, type ChannelNamespace } from "@/features/ai/agents"
 import { RoutineAgent, type IRoutineAgent, type IRoutineRun } from "@/lib/db/models/RoutineAgent"
 import {
     ROUTINE_AGENT_AUDIT_ENTITY,
@@ -14,7 +14,7 @@ import {
     ROUTINE_RUN_UPDATED_EVENT,
     routineChannelOf,
 } from "../constants"
-import type { RoutineAgentDto, RoutinePendingActionDto, RoutineRunDto } from "../types"
+import type { RoutineAgentDto, RoutineCostDto, RoutinePendingActionDto, RoutineRunDto } from "../types"
 import type { RoutineRunAttentionPayload, RoutineRunUpdatedPayload } from "../types"
 import type { RoutineRunStatus } from "../status"
 import { routineAgentTitle } from "../identity-plan"
@@ -71,7 +71,8 @@ export async function publishRunAttention(payload: RoutineRunAttentionPayload): 
 
 const iso = (value: Date | string | null | undefined) => (value ? new Date(value).toISOString() : null)
 
-export function toAgentDto(raw: RoutineAgentDoc, extra: { lastRun?: RoutineAgentDto["lastRun"]; activeRuns?: number } = {}): RoutineAgentDto {
+/** DTO do agente; `ns` = espaço de nomes dos canais da instância (OPE-206: agente e canal no app da instância). */
+export function toAgentDto(raw: RoutineAgentDoc, ns: ChannelNamespace, extra: { lastRun?: RoutineAgentDto["lastRun"]; activeRuns?: number } = {}): RoutineAgentDto {
     const doc = withRoutineEngineDefaults(raw)
     const schedule = (doc.triggers ?? []).map((state) => ({ trigger: state.trigger, nextAt: iso(state.nextAt), lastFiredAt: iso(state.lastFiredAt) }))
     const upcoming = schedule
@@ -107,8 +108,8 @@ export function toAgentDto(raw: RoutineAgentDoc, extra: { lastRun?: RoutineAgent
         },
         webhookEnabled: (doc.triggers ?? []).some((state) => state.trigger.kind === "webhook" && state.trigger.enabled),
         workdir: doc.workdir ?? null,
-        engramindAgent: `opex/${routineIdentityOf(doc.slug)}`,
-        channel: routineChannelOf(doc.slug),
+        engramindAgent: `${ns.app}/${routineIdentityOf(doc.slug)}`,
+        channel: routineChannelOf(doc.slug, ns),
         lastRun: extra.lastRun ?? null,
         nextFireAt: doc.status === "active" ? (upcoming ?? null) : null,
         activeRuns: extra.activeRuns ?? 0,
@@ -132,7 +133,7 @@ function pendingDto(run: RoutineRunDoc): RoutinePendingActionDto | null {
     }
 }
 
-export function toRunDto(run: RoutineRunDoc, agentName: string): RoutineRunDto {
+export function toRunDto(run: RoutineRunDoc, agentName: string, cost: RoutineCostDto | null = null): RoutineRunDto {
     const snapshot = run.snapshot
     return {
         id: String(run._id),
@@ -153,6 +154,7 @@ export function toRunDto(run: RoutineRunDoc, agentName: string): RoutineRunDto {
         tokens: run.tokens ?? 0,
         costUsd: run.costUsd ?? null,
         costPartial: run.costPartial === true,
+        cost,
         hibernation: run.hibernation ? { at: new Date(run.hibernation.at).toISOString(), reason: run.hibernation.reason } : null,
         pendingAction: pendingDto(run),
         report: run.report ?? null,

@@ -7,6 +7,7 @@ import { secretaryChannelLabels } from "@/features/engramind/network/channel-lab
 import { conversationFocus } from "@/features/secretary-agent/memory-focus"
 import { mentionsOwner, parseEvolutionMessage } from "@/features/evolution-api/message"
 import { ownerLidOf } from "@/features/evolution-api/server/webhook"
+import { LEGACY_NAMESPACE as L } from "@/features/engramind/channel-namespace"
 
 describe("pendingOpOfTool", () => {
     it("traduz cada ferramenta de gravação na operação pendente", () => {
@@ -29,7 +30,7 @@ describe("secretaryChannelLabels", () => {
             { jid: "120363000000000001@g.us", name: "Família", number: null, isGroup: true },
             { jid: "123456789@lid", name: "Sem número", number: "123456789", isGroup: false },
             { jid: "status@broadcast", name: "Status", number: null, isGroup: false },
-        ])
+        ], L)
         expect(labels.get("agentes/secretario/conversas/5531999999999")).toEqual({ title: "Mãe", hint: "+5531999999999 · Agente Secretário" })
         expect(labels.get("agentes/secretario/conversas/g-120363000000000001")).toEqual({ title: "Família", hint: "Grupo · Agente Secretário" })
         expect(labels.get("agentes/secretario/conversas/lid-123456789")?.title).toBe("Sem número")
@@ -39,12 +40,13 @@ describe("secretaryChannelLabels", () => {
 
 describe("conversationFocus (abrir as memórias da conversa)", () => {
     it("foca o global do Secretário e o canal da conversa, criando nela", () => {
-        expect(conversationFocus("g-120363000000000001")).toEqual({
+        expect(conversationFocus("g-120363000000000001", { app: "alfredopex", prefixed: true })?.defaultCreateChannel).toBe("alfredopex/agentes/secretario/conversas/g-120363000000000001")
+        expect(conversationFocus("g-120363000000000001", L)).toEqual({
             channels: ["agentes/secretario/global", "agentes/secretario/conversas/g-120363000000000001"],
             defaultCreateChannel: "agentes/secretario/conversas/g-120363000000000001",
         })
-        expect(conversationFocus("../x")).toBeNull()
-        expect(conversationFocus(null)).toBeNull()
+        expect(conversationFocus("../x", L)).toBeNull()
+        expect(conversationFocus(null, L)).toBeNull()
     })
 })
 

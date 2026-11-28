@@ -1,4 +1,5 @@
-import type { AiBilling } from "@/lib/ai/provider-cost"
+import type { AiBilling } from "@nandobfer/integracoes/modules/integrations/ia/ai/provider-cost"
+import type { ListCost, TokenDetails } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/types"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { Activation } from "../hub"
 import type { RoutineAgentDoc, RoutineRunDoc } from "../shared"
@@ -26,7 +27,26 @@ export interface EngineInput {
     internalTools: OpexTool[]
     onStep: (step: EngineStep) => void
     /** Uso de um passo: soma, grava o consumo (se o motor ainda não gravou: `recorded`) e confere os limites (interrompe se estourar). */
-    onUsage: (step: { tokens: number; inputTokens: number | null; outputTokens: number | null; costUsd: number | null; billing?: AiBilling | null; stepId: string; model: string; provider: string; recorded?: boolean; apiKeyId?: string | null }) => void
+    onUsage: (step: EngineUsage) => void
+}
+
+/**
+ * Uso de um passo do motor. `tokenDetails` e `listCost` (OPE-203) vêm só do motor Opex; o motor OpenCode grava o
+ * consumo (com os tokens separados, OPE-205) no próprio runner de sessão (`recorded: true`).
+ */
+export interface EngineUsage {
+    tokens: number
+    inputTokens: number | null
+    outputTokens: number | null
+    costUsd: number | null
+    billing?: AiBilling | null
+    stepId: string
+    model: string
+    provider: string
+    recorded?: boolean
+    apiKeyId?: string | null
+    tokenDetails?: TokenDetails | null
+    listCost?: ListCost | null
 }
 
 export interface EngineResult {

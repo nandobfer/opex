@@ -1,8 +1,9 @@
-import { Integration } from '../models/Integration'
-import { INTEGRATIONS } from '@/lib/integrations/catalog'
-import { resolvePublicField } from '@/lib/integrations/config'
-import { encryptSecret, isSecretBoxConfigured, type EncryptedSecret } from '@/lib/crypto/secretBox'
-import { logger } from '@/lib/logger'
+import { LEGACY_DOC_DEFAULTS } from "@nandobfer/integracoes"
+import { Integration } from "@nandobfer/integracoes/mongoose"
+import { INTEGRATIONS } from "@/features/integrations/registry/definitions"
+import { resolvePublicField } from "@/lib/integrations/server"
+import { encryptSecret, isSecretBoxConfigured, type EncryptedSecret } from "@/lib/crypto/secretBox"
+import { logger } from "@/lib/logger"
 
 /** Autor das gravações feitas por migrações. */
 const BOOTSTRAP_AUDIT_USER = 'system:migration'
@@ -13,11 +14,6 @@ function readEnv(names: readonly string[] | undefined): string | undefined {
     if (value) return value
   }
   return undefined
-}
-
-function envFlag(names: readonly string[] | undefined): boolean {
-  const value = readEnv(names)?.toLowerCase()
-  return value === 'true' || value === '1'
 }
 
 /**
@@ -64,8 +60,7 @@ export async function seedIntegrationsFromEnv(): Promise<void> {
       {
         $setOnInsert: {
           integrationId: def.id,
-          environment: def.defaultEnvironment,
-          debugMode: envFlag(def.debugEnv),
+          ...LEGACY_DOC_DEFAULTS,
           publicValues,
           secretValues,
           createdBy: BOOTSTRAP_AUDIT_USER,

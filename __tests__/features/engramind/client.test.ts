@@ -7,8 +7,8 @@ const mocks = vi.hoisted(() => ({
   fetch: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => mocks.config }))
+vi.mock('@/lib/integrations/server', () => ({
   integrationDebug: () => ({}),
   debugFetch: (_debug: unknown, _label: string, url: string, init: RequestInit) => mocks.fetch(url, init),
 }))

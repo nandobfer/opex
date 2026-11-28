@@ -17,7 +17,7 @@ vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-da-mesa') }))
 vi.mock('@/lib/storage/s3', () => ({ getFileUrl: mocks.getFileUrl, getFileObject: mocks.getFileObject }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => ({ session: { get: mocks.sessionGet } })) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: vi.fn(async () => ({ session: { get: mocks.sessionGet } })) }))
 vi.mock('@/lib/db/models/Agentic', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { AgenticWorkbench: memoryModel(), AgenticFork: memoryModel(), AgenticFile: memoryModel() }

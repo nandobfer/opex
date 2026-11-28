@@ -3,17 +3,13 @@
 import { useEffect } from "react"
 import { useForm, type UseFormReturn } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useQueryClient } from "@tanstack/react-query"
 import { Bell, Brain, ClipboardList, FlaskConical, ListFilter, MessagesSquare, Settings2, Sparkles } from "lucide-react"
-import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
-import { appChannel } from "@/lib/pusher/channel-names"
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
 import { SecretaryModelCard } from "./SecretaryModelCard"
 import { SecretaryMemories } from "./SecretaryMemories"
-import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { isOpexProviderId } from "@/features/opex-agent/constants"
-import { useEvolution, useEvolutionAction, useEvolutionRealtime } from "@/features/evolution-api/hooks/useEvolution"
-import { EVOLUTION_QUERY_KEY } from "@/features/evolution-api/constants"
+import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks/useEvolution"
 import type { EvolutionContactDto, EvolutionInstancesDto } from "@/features/evolution-api/types"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -25,7 +21,7 @@ import { SearchPicker } from "@/components/ui/search-picker"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Switch } from "@/components/ui/switch"
 import { DEFAULT_SECRETARY_SETTINGS, modelsInUse, secretarySettingsSchema, type SecretarySettings } from "../schemas"
-import { SECRETARY_ANALYSIS_EVENT, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, SECRETARY_NOTICES_EVENT, SECRETARY_PERSONALITY_EVENT } from "../constants"
+import { SECRETARY_CHAT_CONTACTS_PATH, SECRETARY_SETTINGS_ENDPOINT, useSecretaryRealtime } from "../hooks/useSecretaryRealtime"
 import { needsPrice, priceKey } from "../cost"
 import { CriteriaTab } from "./CriteriaTab"
 import { SimulationTab } from "./simulation/SimulationTab"
@@ -36,22 +32,12 @@ import { PersonalityTab } from "./PersonalityTab"
 import { personalityTabLabel, useSecretaryAnalyses } from "../hooks/useSecretaryAnalyses"
 
 export type SecretaryForm = UseFormReturn<SecretarySettings>
-const endpoint = "/ai/features/secretary-agent"
-const events = [SECRETARY_ANALYSIS_EVENT, SECRETARY_CONVERSATION_EVENT, SECRETARY_DECISION_EVENT, SECRETARY_NOTICES_EVENT, SECRETARY_PERSONALITY_EVENT, "ai-feature-updated", "pusher:subscription_succeeded"]
-
+const endpoint = SECRETARY_SETTINGS_ENDPOINT
 
 export function SecretaryAgentTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) => void }) {
-    const cache = useQueryClient()
-    useEvolutionRealtime()
-    useEffect(() => {
-        const name = appChannel(), channel = acquireChannel(name)
-        if (!channel) return
-        const refresh = () => { void cache.invalidateQueries({ predicate: ({ queryKey }) => queryKey[0] === EVOLUTION_QUERY_KEY && (queryKey[1] === endpoint || String(queryKey[1]).startsWith("/secretary/")) }) }
-        events.forEach((event) => channel.bind(event, refresh))
-        return () => { events.forEach((event) => channel.unbind(event, refresh)); releaseChannel(name) }
-    }, [cache])
+    useSecretaryRealtime()
     const config = useEvolution<{ settings: SecretarySettings }>(endpoint)
-    const contacts = useEvolution<EvolutionContactDto[]>("/evolution/contacts?kind=chats")
+    const contacts = useEvolution<EvolutionContactDto[]>(SECRETARY_CHAT_CONTACTS_PATH)
     const notices = useEvolution<{ pending: number }>("/secretary/notices")
     const { active: analysis } = useSecretaryAnalyses()
     const save = useEvolutionAction<{ settings: SecretarySettings }, SecretarySettings>(endpoint, "put", "Configuração salva")

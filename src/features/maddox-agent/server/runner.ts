@@ -14,8 +14,8 @@ import { refreshSessionTitleWith } from "@/features/opex-agent/server/titler"
 import { redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
 import type { OpexConfirmationDto, OpexMessageDto, OpexMessageStatus, OpexPart, OpexSessionStatus, OpexToolPartGroup, OpexUsageDto } from "@/features/opex-agent/types"
-import { listAiModels } from "@/lib/ai/catalog"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { listAiModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/catalog"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
 import { runAgentTurn, type TurnEvent } from "@/lib/ai/opencode-run"
@@ -335,6 +335,10 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                     break
                 case "tool":
                     onTool(event)
+                    break
+                case "background":
+                    // Subagentes/comandos em segundo plano (OPE-216): a resposta segue ao vivo até a sessão ficar quieta.
+                    publishLine(sessionId, { type: "background", subagents: event.subagents, shells: event.shells, other: event.other })
                     break
                 case "notice":
                     log.info({ sessionId, level: event.level, message: event.message }, "[maddox] aviso do OpenCode")

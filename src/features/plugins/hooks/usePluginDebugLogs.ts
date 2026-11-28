@@ -4,8 +4,8 @@ import { useMemo } from "react"
 import { api } from "@/lib/api"
 import { isPusherClientAvailable } from "@/lib/pusher/client"
 import { pluginDebugChannel } from "@/lib/pusher/channel-names"
-import type { IntegrationLogLine } from "@/lib/integrations/log-format"
-import { useDebugLogStream, type DebugLogStreamSource } from "@/features/integrations/hooks/useDebugLogStream"
+import type { IntegrationLogLine } from "@nandobfer/integracoes"
+import { useDebugLogStream, type DebugLogStreamSource } from "@nandobfer/integracoes/react"
 import { PLUGIN_DEBUG_EVENT } from "../constants"
 
 /** Logs de debug de um plugin (só o dono): `plugin_logs` (48 h) + tempo real em `private-plugin-{id}`. */

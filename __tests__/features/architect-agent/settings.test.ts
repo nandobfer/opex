@@ -85,7 +85,7 @@ describe('provedor do Agente Arquiteto', () => {
     for (const provider of ['jev', 'xyz']) {
       const result = architectSettingsSchema.safeParse({ ...DEFAULT_ARCHITECT_SETTINGS, provider })
       expect(result.success).toBe(false)
-      expect(result.error?.issues[0]!.message).toContain('OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go ou Command Code')
+      expect(result.error?.issues[0]!.message).toContain('OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go, Command Code ou um provedor customizado')
     }
   })
 
@@ -114,7 +114,7 @@ describe('provedor do Agente Arquiteto', () => {
 
 describe('memórias do Agente Arquiteto', () => {
   it('lê as Memórias do Opex e a lista própria, e grava só nelas', () => {
-    expect(contextChannelsFor('arquiteto', { kind: 'review' })).toEqual(['opex', 'agentes/arquiteto'])
+    expect(contextChannelsFor('arquiteto', { kind: 'review' }, { app: 'opex', prefixed: false })).toEqual(['opex', 'agentes/arquiteto'])
     expect(writableListsFor('arquiteto', { kind: 'review' })).toEqual(['app-global', 'architect'])
   })
 

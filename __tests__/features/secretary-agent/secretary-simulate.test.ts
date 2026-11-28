@@ -20,10 +20,11 @@ vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mock
 
 vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
 vi.mock("@/features/auth/server/context", () => ({ requireAdminSession: vi.fn() }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async (pipeline: [{ $match: { subject?: string } }]) => (pipeline[0].$match.subject ? [{ total: 0.002 }] : [{ total: 1 }]) } }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: async (pipeline: [{ $match: { subject?: string } }]) => (pipeline[0].$match.subject ? [{ total: 0.002 }] : [{ total: 1 }]) } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", () => ({ AiUsageLog: { aggregate: async () => [] } }))
 vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: mocks.memory }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: { findMessages: mocks.findMessages, sendText: mocks.send, markAsRead: mocks.markAsRead } }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ conversationJids: async (_instance: string, jid: string) => (jid === CONTACT ? [jid, "158879933534209@lid"] : [jid]) }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
 vi.mock("@/features/secretary-agent/server/personality", () => ({ loadPersonality: async () => ({ snapshot: { base: { blocks: [] }, variants: [{ jid: CONTACT, title: "Vizinha", blocks: [] }] } }) }))
@@ -115,7 +116,9 @@ describe("simulateSecretary", () => {
         await run()
         expect(mocks.findMessages).not.toHaveBeenCalled()
         await run({ useRealHistory: true })
-        expect(mocks.findMessages).toHaveBeenCalledWith("opex", expect.objectContaining({ remoteJid: CONTACT }))
+        expect(mocks.findMessages).toHaveBeenCalledWith("opex", expect.objectContaining({ remoteJid: CONTACT }), undefined)
+        // OPE-207: a metade @lid da conversa também entra no histórico.
+        expect(mocks.findMessages).toHaveBeenCalledWith("opex", expect.objectContaining({ remoteJid: "158879933534209@lid" }), undefined)
     })
 
     it("sem modelo do agente, pede para escolher antes de simular", async () => {

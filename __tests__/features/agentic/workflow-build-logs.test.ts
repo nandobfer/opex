@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   beginSection: vi.fn(),
   appendOutput: vi.fn(),
   restartSection: vi.fn(),
+  setRun: vi.fn(),
   runBuild: vi.fn(),
   probe: vi.fn(),
   runShell: vi.fn(async () => ({ exitCode: 0, status: 'exited', output: '' })),
@@ -37,6 +38,10 @@ const mocks = vi.hoisted(() => ({
   invalidateRemote: vi.fn(async () => undefined),
   assertRemote: vi.fn(async () => undefined),
 }))
+
+// OPE-214: o acompanhamento do run do GitHub Actions usa a integração GitHub (mockada, sem rede).
+const gh = vi.hoisted(() => ({ full: vi.fn(), text: vi.fn() }))
+vi.mock('@/features/github/client', async (importOriginal) => ({ ...(await importOriginal<typeof import('@/features/github/client')>()), githubRequestFull: gh.full, githubRequestText: gh.text }))
 
 const memories = vi.hoisted(() => ({ sync: vi.fn<(...args: unknown[]) => Promise<{ applied: boolean; section: string }>>(async () => ({ applied: true, section: '' })) }))
 // Métricas dos agentes (OPE-122): o registro dos fatos é mockado (sem banco nem consulta real).
@@ -49,7 +54,7 @@ vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive
 vi.mock('@/features/local-docker/server/agentic-hooks', () => ({ resolveBuildTarget: async () => null, teardownForCleanup: async () => false }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   runOpencodeShell: mocks.runShell,
   getOpencodeClient: vi.fn(async () => ({
     session: {
@@ -88,10 +93,11 @@ vi.mock('@/features/agentic/server/build-logs', () => ({
   beginBuildSection: mocks.beginSection,
   appendBuildOutput: mocks.appendOutput,
   restartBuildSection: mocks.restartSection,
+  setBuildRun: mocks.setRun,
 }))
 vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
-vi.mock('@/features/agentic/server/remote-preview', () => ({ reserveRemotePreview: mocks.reserveRemote, invalidateRemotePreview: mocks.invalidateRemote, assertRemotePreview: mocks.assertRemote }))
+vi.mock('@/features/agentic/server/remote-preview', () => ({ reserveRemotePreview: mocks.reserveRemote, invalidateRemotePreview: mocks.invalidateRemote, assertRemotePreview: mocks.assertRemote, remotePreviewTimeoutMinutes: (minutes: number) => Math.max(25, minutes) }))
 vi.mock('@/features/agentic/server/log', () => ({ centralLogger: () => ({ info: vi.fn(), step: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 vi.mock('@/features/agentic/server/ports', () => ({ releasePreviewPort: vi.fn(async () => undefined), allocatePreviewPort: mocks.allocatePort, waitForPreview: mocks.waitPreview }))
 vi.mock('@/features/agentic/server/build-queue', () => ({ pumpBuildQueue: mocks.pumpBuild, buildQueuePosition: vi.fn(async () => null), buildQueuePositions: vi.fn(async () => new Map()) }))
@@ -343,6 +349,7 @@ describe('workflow — build da prévia rodado pelo app', () => {
 describe('workflow — prévia no GitHub Action rodada pelo app', () => {
   beforeEach(() => {
     mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: githubConfig() })
+    finishedRun('success', '')
   })
 
   /** O build remoto não passa pela fila: entra pelo "Tentar novamente" da mesa parada em "Subindo a prévia". */
@@ -399,6 +406,114 @@ describe('workflow — prévia no GitHub Action rodada pelo app', () => {
     expect(doc().error).toContain('excedeu o tempo limite')
     expect(mocks.runTurn).toHaveBeenCalledTimes(1)
     expect(mocks.invalidateRemote).toHaveBeenCalled()
+  })
+
+  /** Run já concluído na primeira consulta (o acompanhamento não precisa esperar o intervalo). */
+  const finishedRun = (conclusion: 'success' | 'failure', log: string) => {
+    gh.full.mockImplementation(async (path: string) => ({
+      data: path.includes('/jobs')
+        ? { jobs: [{ id: 1, name: 'preview', status: 'completed', conclusion, steps: [{ number: 1, name: 'Testes completos (antes do build)', status: 'completed', conclusion }] }] }
+        : { status: 'completed', conclusion },
+      notModified: false,
+      etag: null,
+      status: 200,
+      next: null,
+      rateRemaining: 5000,
+    }))
+    gh.text.mockResolvedValue(log)
+  }
+  const scriptOutput = (lines: string[], exitCode = 0) =>
+    mocks.runBuild.mockImplementation(async (input: { onOutput: (chunk: string) => void }) => {
+      for (const line of lines) input.onOutput(line)
+      return { exitCode, tail: lines.at(-1) ?? '' }
+    })
+
+  it('OPE-214: a aba mostra as etapas e o log do run na ordem, antes da publicação e do exit', async () => {
+    finishedRun('success', '2026-11-27T22:15:01Z #12 [build 5/9] RUN pnpm build\n')
+    scriptOutput(['remote: Create a pull request\n', 'Prévia GitHub: https://github.com/org/app/actions/runs/42\n', 'Prévia publicada na porta 4015\n'])
+    await startRemote()
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    const log = appended()
+    expect(gh.full).toHaveBeenCalledWith('/repos/org/app/actions/runs/42', expect.anything())
+    const order = ['actions/runs/42', 'Etapa 1/1 · Testes completos', 'RUN pnpm build', 'GitHub Actions concluído', 'Prévia publicada', 'exit 0'].map((text) => log.indexOf(text))
+    expect(order.every((at) => at >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
+  })
+
+  it('OPE-214: run que falha mostra o trecho na aba e o leva ao agente de correção', async () => {
+    finishedRun('failure', '2026-11-27T22:15:01Z FAIL soma.test.ts\n2026-11-27T22:15:02Z ##[error]Process completed with exit code 1.\n')
+    mocks.runBuild
+      .mockImplementationOnce(async (input: { onOutput: (chunk: string) => void }) => {
+        input.onOutput('Prévia GitHub: https://github.com/org/app/actions/runs/42\n[preview] Testes/build remoto falharam (failure)\n')
+        return { exitCode: 1, tail: '[preview] Testes/build remoto falharam (failure)' }
+      })
+      .mockResolvedValueOnce({ exitCode: 0, tail: '' })
+    await startRemote()
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(appended()).toContain('GitHub Actions falhou')
+    const fix = (mocks.runTurn.mock.calls[1]![1] as { text: string }).text
+    expect(fix).toContain('etapa 1 "Testes completos (antes do build)"')
+    expect(fix).toContain('FAIL soma.test.ts')
+    expect(fix).toContain('[preview] Testes/build remoto falharam')
+  })
+
+  it('OPE-214: erro do host depois da URL encerra o acompanhamento do run (nada mais é consultado nem escrito)', async () => {
+    // Run que não termina: sem o abort, o acompanhamento seguiria consultando e escrevendo.
+    gh.full.mockImplementation(async (path: string) => ({ data: path.includes('/jobs') ? { jobs: [] } : { status: 'in_progress', conclusion: null }, notModified: false, etag: null, status: 200, next: null, rateRemaining: 5000 }))
+    mocks.runBuild.mockImplementationOnce(async (input: { onOutput: (chunk: string) => void }) => {
+      input.onOutput('Prévia GitHub: https://github.com/org/app/actions/runs/42\nretido\n')
+      await vi.waitFor(() => expect(gh.full).toHaveBeenCalled())
+      throw new Error('conexão com o host caiu')
+    })
+    await startRemote()
+    await vi.waitFor(() => expect(doc().runState).toBe('failed'))
+    expect(appended()).toContain('retido')
+    // O sinal das consultas ao GitHub foi abortado: o polling (a cada 5 s) não volta a consultar.
+    const signal = (gh.full.mock.calls.at(-1)![1] as { signal: AbortSignal }).signal
+    expect(signal.aborted).toBe(true)
+    const calls = gh.full.mock.calls.length
+    const writes = mocks.appendOutput.mock.calls.length
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(gh.full.mock.calls.length).toBe(calls)
+    expect(mocks.appendOutput.mock.calls.length).toBe(writes)
+  })
+
+  it('OPE-214: URL de outro repositório não liga o acompanhamento', async () => {
+    scriptOutput(['Prévia GitHub: https://github.com/outro/repo/actions/runs/1\n'])
+    await startRemote()
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(gh.full).not.toHaveBeenCalled()
+    expect(mocks.setRun).not.toHaveBeenCalled()
+  })
+
+  it('OPE-221: o build guarda o run do repositório da central, não as URLs de fixture do log dos testes', async () => {
+    finishedRun('success', '2026-11-27T22:15:01Z details_url: https://github.com/org/app/actions/runs/9\n')
+    scriptOutput(['Prévia GitHub: https://github.com/org/app/actions/runs/42\n', 'Prévia publicada na porta 4015\n'])
+    const wb = await startRemote()
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(appended()).toContain('actions/runs/9')
+    expect(mocks.setRun.mock.calls).toEqual([[String(wb._id), { repo: 'org/app', runId: 42 }]])
+  })
+
+  it('OPE-214: falha no acompanhamento vira aviso no log e não muda o resultado do build', async () => {
+    const { GithubError } = await import('@/features/github/client')
+    gh.full.mockRejectedValue(new GithubError('O GitHub negou o acesso (confira as permissões do token)', 'FORBIDDEN', 403))
+    scriptOutput(['Prévia GitHub: https://github.com/org/app/actions/runs/42\n', 'Prévia publicada na porta 4015\n'])
+    const wb = await startRemote()
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(appended()).toContain('Não foi possível acompanhar o GitHub Actions')
+    expect(appended()).toContain('Prévia publicada na porta 4015')
+    expect(mocks.settleBuild).toHaveBeenCalledWith(String(wb._id), 'succeeded', null)
+  })
+
+  it('OPE-214: build Local não acompanha o GitHub Actions', async () => {
+    mocks.loadCentral.mockResolvedValue({ doc: { projectName: 'App', projectId: 'p1' }, config: localConfig() })
+    scriptOutput(['https://github.com/org/app/actions/runs/42\n'])
+    const wb = await workbench()
+    await startBuildTurn(String(wb._id))
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(gh.full).not.toHaveBeenCalled()
+    expect(mocks.setRun).not.toHaveBeenCalled()
   })
 
   it('falha de uma tentativa antiga não invalida a reserva de uma tentativa mais nova', async () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /** Reorganização do acervo do Agente Mentor (OPE-132): prévia, aplicação, fusão e cancelamento. */
 
@@ -18,8 +19,8 @@ const mocks = vi.hoisted(() => ({
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined, recordAudit: mocks.recordAudit, AcaoAuditoria: { EXECUTAR: 'EXECUTAR', APROVAR: 'APROVAR', DEVOLVER: 'DEVOLVER' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.streamAi }))
-vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: mocks.streamAi }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limits }))
 vi.mock('@/features/ai/server/agent-memory-service', () => ({ listAgentMemories: mocks.list, getAgentMemory: mocks.get, createAgentMemory: mocks.create, updateAgentMemory: mocks.update, moveAgentMemory: mocks.move }))
 vi.mock('@/features/adversarial-agent/server/central-options', () => ({ listCentralOptions: async () => [{ id: 'c1', projectName: 'App' }] }))

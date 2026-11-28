@@ -3,7 +3,7 @@ import { pageInfo } from "@/lib/list/query"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { PrReview, type IPrReview } from "@/lib/db/models/PrReview"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
 import { publishAppEvent } from "@/lib/pusher/channels"
@@ -15,7 +15,7 @@ import { abortWorkbenchRun, clearWorkbenchActive, dropWorkbenchEvents, flushWork
 import { fallbackNotice, runWithFallback } from "@/features/agentic/server/model-fallback"
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { availabilityOfPrReview, loadPrReviewSettings } from "@/features/ai/server/settings"
-import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_PAGE_LIMIT, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
+import { PR_REVIEW_AUDIT_ENTITY, PR_REVIEW_CONSUMPTION_ORIGIN, PR_REVIEW_INSTRUCTIONS_KEY, PR_REVIEW_PAGE_LIMIT, PR_REVIEW_STAGE_LABEL, PR_REVIEW_UPDATED_EVENT, type PrReviewState, type PrReviewVerdict } from "../constants"
 import { parsePrUrl, parseReviewResult, reviewMarker, reviewWorktreePath, verdictFromGithubState } from "../logic"
 import { buildPrReviewInstructions, buildPrReviewPrompt } from "../prompt"
 import type { PrReviewListQuery } from "../schemas"
@@ -164,7 +164,7 @@ async function executeReview(id: string, controller: AbortController): Promise<v
                     text: body,
                     timeoutMs: settings.timeoutMinutes * 60_000,
                     signal: controller.signal,
-                    consumption: { origin: "pr-review", subject: `${doc.repo}#${doc.number}` },
+                    consumption: { origin: PR_REVIEW_CONSUMPTION_ORIGIN, subject: `${doc.repo}#${doc.number}` },
                     providerLimit: DEFAULT_PROVIDER_LIMIT_POLICY,
                 },
                 {
@@ -182,6 +182,10 @@ async function executeReview(id: string, controller: AbortController): Promise<v
                     },
                     onText: (delta: string) => {
                         text += delta
+                    },
+                    // A sessão acordou depois dos subagentes (OPE-216): vale o texto da execução final.
+                    onSegment: () => {
+                        text = ""
                     },
                     onStep: async ({ costUsd, tokens }) => {
                         await PrReview.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })

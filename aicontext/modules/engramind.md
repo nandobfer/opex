@@ -12,8 +12,8 @@ coleção antiga `agent_memories` fica intacta, lida só pelo backup da migraç�
 
 ## Integração `engramind` (`/integracoes/engramind`)
 
-- **Catálogo** (`src/lib/integrations/catalog.ts`): ambiente `externo`, `streamsDebugOverPusher`, sem
-  `env`. Públicos, todos `group: "card"` (fora do detalhe e do PATCH genérico, para o card Geral não
+- **Definição** (adaptador do Opex, `src/features/integrations/registry/definitions.ts`; servidor em `adapters/opex.server.ts`): `streamsDebugOverPusher`, sem
+  `env`. Públicos, todos `group: "card"` (fora do detalhe e do PATCH genérico, para o formulário genérico não
   regravar URLs antigas): `baseUrl` (URL que o **servidor** do Opex alcança), `opexPublicUrl` (URL que o
   Engramind alcança para os webhooks) e `environmentId`. Salvar a conexão ou repetir o bootstrap
   invalida também o detalhe e a lista de `/integracoes`. Privados: `adminToken` e
@@ -70,7 +70,7 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Aba | Conteúdo |
 |---|---|
 | Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
-| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data), o card Geral (debug) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
+| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
 | Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
 | Visualização | Layout dos universos de memórias (OPE-142; ver "Aba Visualização"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |
@@ -121,7 +121,7 @@ O Redator e o embedding usam os provedores de IA já configurados no Opex, escol
 | Seção | Opção | Engramind | `base_url` | Chave |
 |---|---|---|---|---|
 | Redator | Gemini / Anthropic | `gemini` / `anthropic` | vazia (oficial) | do Opex |
-| Redator | OpenAI / DeepSeek | `openai_compatible` | `OPENAI_API_URL` / `DEEPSEEK_API_URL` (`src/lib/ai/endpoints.ts`) | do Opex |
+| Redator | OpenAI / DeepSeek | `openai_compatible` | `OPENAI_API_URL` / `DEEPSEEK_API_URL` (`@nandobfer/integracoes/modules/integrations/ia/ai/endpoints`) | do Opex |
 | Embedding | Local | `local` (lista do próprio Engramind) | vazia | — |
 | Embedding | Gemini / OpenAI | `gemini` / `openai_compatible` | vazia / `OPENAI_API_URL` | do Opex |
 | Embedding | Desligado | `off` (só busca textual; o modelo não muda) | vazia | — |
@@ -729,10 +729,18 @@ ainda destaca as 3 memórias mais próximas pelo sentido. No modo `text` ("Busca
 **Busca e filtros destacam sem remover** (`matchesFilters`): nos universos as que casam ficam em
 destaque e as demais apagadas, sem recalcular a escala; na visão inicial os canais mostram "N na
 busca" e os sem resultado ficam apagados. **Nova memória** (`create_memory`) no universo de canal
-ativo. `ChannelPanel` (Sheet): Editar (slug imutável), Arquivar / Restaurar / Excluir de vez (só
-arquivado, com confirmação), `SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard`
-(sobreposições com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar
-leva ao universo do canal).
+ativo. `ChannelPanel`: Editar (slug imutável), Arquivar / Restaurar / Excluir de vez (só arquivado, com
+confirmação), "Abrir detalhe", `SubscribersCard` (assinar, editar, remover) e `ChannelSettingsCard` (sobreposições
+com "Remover sobreposição"). A página `/engramind/canais/<slug>` continua (o voltar leva ao universo do canal).
+
+**Pendência da OPE-208 (painel do canal ainda é gaveta no Opex):** com a dependência atual (`@engramind/client`
+`^0.13.1`), o `ChannelPanel` ainda abre como **gaveta lateral direita** (`Sheet side="right"`, até `sm:max-w-2xl`), em
+`/engramind` e nos universos de `/integracoes/ia`. A troca aprovada no plano da OPE-208 (diálogo centralizado,
+`max-h-[90dvh]`, cabeçalho e ações fixos, assinantes e configurações rolando por dentro, fecha com Esc e clique
+fora; a rede fica atrás com o zoom e o universo intactos) está pronta no repositório da lib (`engramind-client`,
+branch `ope-208`, versão 0.15.0 ainda **não publicada** no npm). Ela só vale no Opex depois de publicar a 0.15.0 e
+subir a dependência para `^0.15.0` (a lib não tem ponto de extensão para trocar o painel pelo app). Ao subir,
+apague este parágrafo e descreva o diálogo acima.
 
 **Novo canal** (OPE-129): depois de criar, a tela abre o universo do canal novo (`ChannelDialog.onCreated`),
 onde fica **Nova memória**; como nasce vazio, ele só entra nas redes quando ganhar a primeira memória. O aviso
@@ -752,8 +760,8 @@ As redes de `/engramind` e os universos de `/integracoes/ia` se adaptam à tela 
   por app fica dentro do card aberto.
 - **Barra compacta** (`NetworkToolbar`): a busca ocupa a linha e roda sozinha ao digitar (o × dentro
   do campo limpa); embaixo, **Filtros** (com quantos estão ativos, sem contar a busca) abre os mesmos
-  campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa gaveta
-  de baixo para cima (`NetworkFiltersSheet`, com Limpar e Ver rede). Importar/Novo canal ficam na
+  campos do computador (Canal, Categoria, Status, Autor, Período e Arquivados) empilhados numa folha
+  de baixo (`NetworkFiltersSheet`, com Limpar e Ver rede; mantida na OPE-208: folha de filtros só no celular). Importar/Novo canal ficam na
   linha do Voltar, só com ícone e dica.
 - **Enquadramento inicial:** nunca afasta abaixo do zoom `MOBILE_FIT_MIN_ZOOM` (0,5): se a rede
   não cabe, centraliza nela com esse zoom e o resto fica a um arrastar (`minZoomCenter`); o
@@ -826,7 +834,10 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 
 ### Listas e canais (`src/features/ai/agents.ts`, puro)
 
-| Lista (`agentId`) | Canal | Consumidor |
+Os canais da tabela são **lógicos**; o nome real no Engramind leva o app da instância na frente
+(`opex/agentes/maddox/dono`). Ver "Isolamento por instância e nomes dos canais (OPE-206)" abaixo.
+
+| Lista (`agentId`) | Canal (lógico) | Consumidor |
 |---|---|---|
 | `app-global` (Memórias do Opex) | `opex` | todos (assinado por todos os agentes) |
 | `opex-global` / `opex-owner` / `opex-client` | `agentes/opex/global` / `dono` / `cliente` | `opex` |
@@ -840,8 +851,10 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
 | `routine-global` (Memórias dos rotineiros) | `agentes/rotineiros/global` | todos os agentes rotineiros (e o dono) |
 | `routine-specific` (por agente rotineiro, `scope: "routine"`) | `agentes/rotineiros/<slug>` | o agente rotineiro `opex/rotineiro-<slug>` |
 
-- `memoryChannelOf(agentId, scope)` e `listOfChannel(slug)` (canal desconhecido → `null`).
-- `contextChannelsFor(consumer, turn)`: sempre `opex` primeiro; Opex/Maddox com o dono → global e dono;
+- `memoryChannelOf(agentId, scope, ns)` e `listOfChannel(slug, ns)` devolvem/interpretam o canal **real**
+   (canal fora do app desta instância → `null`); `fixedMemoryChannels(ns)` e `scopedChannelPrefix(agentId, ns)`
+   também exigem o espaço de nomes.
+- `contextChannelsFor(consumer, turn, ns)`: sempre a raiz do app primeiro; Opex/Maddox com o dono → global e dono;
   no portal → global, cliente (todos) e `clientes/<clientId>` da sessão; Adversário e Arquiteto → o canal de cada um;
   desenvolvedor → global e a central (sem central, só as globais).
 - `writableListsFor(consumer, turn)`: com o dono, todas as listas do agente (e `app-global`); **no
@@ -855,6 +868,103 @@ Tudo por `/api/engramind/**` (o navegador nunca chama o Engramind).
   `getAgentMemoryContext` e `createAgentMemory` aceitam o alvo explícito (`target`) com o token do
   rotineiro; `isOpexMemoryAgent` e o ícone da rede reconhecem `rotineiro-*`. O fake dos testes ganhou
   `GET /v1/channels` (lista). Ver `modules/routine-agents.md`.
+
+### Isolamento por instância e nomes dos canais (OPE-206)
+
+Cada instância do Opex usa o **app da própria chave admin** no Engramind: `server/instance.ts`
+(`instanceApp()`) resolve o app pelo `whoami` com a regra do `connection.ts` (chave do bootstrap → app
+`opex`), grava a reserva em `engramind_state.instance = { app, tokenId, resolvedAt }` e usa essa reserva
+com o Engramind fora do ar. Agentes, tokens e assinaturas saem sempre nesse app
+(`<app>/<identidade>`, `GET /v1/agents?app=<app>`).
+
+**Canais (`channel-namespace.ts`, puro).** `ChannelNamespace = { app, prefixed }`. Com `prefixed`:
+`opex` (raiz lógica) → `<app>` e `agentes/...` → `<app>/agentes/...`; canais escolhidos pelo usuário
+(`vagas/x`, canais de outros apps) não mudam. Acima de 120 caracteres ou 8 segmentos o nome real é
+`null` (o chamador descarta). `logicalChannel` faz o inverso e é o que as telas mostram;
+`realSubscriptionTarget` converte alvos com `*`; `isReservedChannel` cobre a raiz, `<app>/agentes/...` e
+os nomes antigos `opex`/`agentes/...` (base dos canais extras dos rotineiros — canais de **outros** apps
+continuam elegíveis). O que fica gravado no Mongo é sempre o slug **real**.
+
+**Modo dos nomes.** `channelNamespace()` (`server/instance.ts`, cache de 60 s, zerado ao salvar a conexão
+e pelas migrações) junta o app com `engramind_state.channelNaming` (`legacy | prefixed`). Sem o campo, a
+decisão é tomada uma vez e gravada: `legacy` **só** quando o app é `opex` e existe algum canal
+`agentes/...`; nos outros casos (inclusive a instância do Alfredo) `prefixed`. Um `legacy` gravado só vale
+com o app `opex`: com a chave de outro app no mesmo banco (cópia ou troca da chave), a instância usa sempre o
+próprio app na frente e nunca os canais do dono.
+`channelNamespaceOrLegacy()` devolve os nomes antigos do dono sem lançar (telas e leituras de reserva).
+A rota `GET /api/engramind/namespace` e o hook `useChannelNamespace()` (TanStack Query, invalidado por
+`engramind-updated` com `type: "namespace"`) levam o espaço de nomes à tela.
+
+**Migração A — tokens de outro app (`server/foreign-tokens.ts`, automática).** Roda no início do
+`runNetwork` ("Conferir canais e agentes" e bootstrap) e na subida (`scheduleEngramindStartupCheck`,
+30 s depois do boot, fora da prévia): junta os ids gravados **neste banco** (`engramind_state.agentTokens`,
+`engramind_state.appToken` e `RoutineAgent.engramindToken`), confere o app de cada um em `GET /v1/tokens`
+e revoga **só aquele id** quando é de outro app. Nunca revoga por agente, app ou rótulo (os tokens do dono
+em outro banco ficam intocados). Apaga o registro (rotineiro volta a `null` e é reprovisionado), limpa os
+caches derivados (`engramind_context_cache`, `engramind_deliveries`, `engramind_related_memories`),
+registra auditoria (`passo: "foreign-tokens"`, sem segredo) e loga os ids. Sem token estrangeiro, não
+escreve nada.
+
+**Migração B — nomes dos canais (manual, aba Migração, card "Nomes dos canais").** Módulo
+`server/channel-migration/`: `model.ts` (coleção `engramind_channel_migrations`, mapa, assinaturas,
+backup/verify, relatório, batimento), `plan.ts` (puro: mapa, assinaturas, `compareDigests`, mapa
+inverso, `moveIdempotencyKey`), `runner.ts` (passos idempotentes e retomáveis) e `host-export.ts`
+(backup pelo host). Rotas `GET/POST /api/engramind/channel-migration`; eventos `engramind-updated` com
+`type: "channel-migration"` (progresso) e `"namespace"` (modo trocado).
+
+1. **Manutenção** (`engramind_state.channelMigration`), ligada **antes** do backup e em toda retomada: vale o
+   portão da seção "Portão de manutenção", então o backup e a conferência comparam o mesmo acervo parado.
+2. **Backup**: o script do campo público "Script de export das memórias (host)" da integração roda no
+   host pelo `createHostRunner` em `/tmp/opex/engramind-migracao/<id>/antes`; só um resumo por memória
+   (id, canal, status, fixação, chave, SHA-256 do texto) volta para o Opex, numa linha `OPEX_DIGEST:` (~205
+   caracteres por memória: ~611 KB no acervo de 2.987 memórias). O executor do host lê essa saída em páginas de 64k
+   seguindo o `cursor` do OpenCode até o fim, com teto de 64 MB no export (`EXPORT_OUTPUT_MAX`); acima dele falha com
+   `ENGRAMIND_EXPORT_TOO_LARGE`, leitura que falha no meio com `ENGRAMIND_EXPORT_READ_FAILED` e resumo sem marcador ou JSON inválido com `ENGRAMIND_EXPORT_INVALID`. Sem o script, não começa; a
+   listagem de cada origem no Engramind é conferida contra o resumo (garante que o export é o mesmo
+   Engramind da integração). Se não conferir (antes de qualquer `move`), a migração para e a retomada
+   **refaz o backup**. Qualquer falha antes do primeiro `move` (backup, mapa ou destinos) **desliga a
+   manutenção** (nada mudou no acervo); a retomada religa. Falha depois de mover mantém a manutenção.
+3. **Mapa**: canais gerenciados no nome antigo (raiz e todo `agentes/**`, inclusive arquivados), destino
+   pelo nome novo; a raiz e os que já estão no nome novo ficam de fora; destino acima dos limites vai
+   para `tooLong` (fica na origem). O mapa (com `wasArchived`) é gravado antes de qualquer origem ser
+   restaurada, e a retomada reaproveita o mapa gravado.
+4. **Destinos**: origem arquivada é restaurada para o `move` (registrado em `wasArchived`); destino criado
+   com nome, descrição e prioridade e as sobreposições de configuração copiadas.
+5. **`move`** de cada memória com `Idempotency-Key = opex-chmig-<id>-<memória>-<destino>`;
+   `MEMORY_DUPLICATE`/`MEMORY_KEY_EXISTS` viram conflito e a memória **fica na origem**; `429` espera e
+   repete.
+6. **Assinaturas**: recriadas com o mesmo agente, modo, acesso e prioridade no alvo novo (inclusive de
+   outros apps, marcadas `foreign`); a antiga é removida (`DELETE /v1/subscriptions/{id}`, só a assinatura).
+7. **Mongo** (`stored-slugs.ts`): `RoutineAgent.provisioning` (canais, extras, bloqueados),
+   `routine_entries.channel`, `secretary_notices.memoryChannel`, `engramind_related_memories.channel`,
+   `engramind_context_cache` (canais, entregas e a chave recalculada), `engramind_deliveries` e qualquer
+   texto do `universeLayout.config`; depois grava `channelNaming = "prefixed"`.
+8. **Conferência**: novo export no host e `compareDigests` (mesmos ids, totais e status; mesmo hash do
+   texto, status, fixação e chave; cada memória no canal mapeado, menos os conflitos; origem vazia). Só
+   então arquiva as origens (e os destinos de origem já arquivada), desliga a manutenção e marca `done`
+   (`done_with_conflicts` com conflito pendente, e o canal em conflito **não** é arquivado). Conferência
+   falha: nada é arquivado, a manutenção continua e rodar de novo retoma (refaz os `move`).
+9. **Volta atrás** (`direction: "revert"`): o mapa salvo invertido mais os canais gerenciados criados depois
+   da ida (`<app>/agentes/...` de central ou rotineiro novos, com o arquivamento atual; `buildRevertMap`),
+   mesmos passos, e ao fim `channelNaming = "legacy"`.
+
+A migração **nunca** exclui memória nem canal: só `move`, `archive`, `restore` e o cancelamento de
+assinatura (coberto por teste).
+
+### Portão de manutenção (OPE-206)
+
+`isMemoryMaintenance()` (5 s de cache) lê `engramind_state.channelMigration`; enquanto a migração B roda:
+
+| Ponto | Comportamento |
+|---|---|
+| `memory-context.ts` | Serve o `engramind_context_cache` sem chamar o Engramind, com o aviso "Migrando canais de memória" |
+| Gravações de memória (`agent-memory-service`, ferramentas dos agentes e dos rotineiros, fila de pendências) | `DomainError(503, "Migrando canais de memória: tente de novo em alguns minutos.", "ENGRAMIND_MIGRATING")`; a fila de pendências guarda a gravação para depois |
+| `runDueRoutineAgents` | Disparos agendados e retomadas esperam o próximo tick após a retomada |
+| Mentor | A fila espera (`waitForMemoryMaintenance`) |
+| Turno automático do Secretário | Espera a retomada antes de responder |
+| Similares e curador | Não rodam durante a migração |
+
+`MEMORY_MAINTENANCE_NOTICE` ("Migrando canais de memória") aparece no aviso dos consumidores.
 
 ### Rede (`server/memory-network.ts`)
 

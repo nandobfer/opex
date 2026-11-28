@@ -1,9 +1,13 @@
 import { BUILDER_STATUS_LABELS, builderNotices } from "./builder-view"
 import { limitsPendingDeploy } from "./limits-form"
 import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource-limits"
-import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
+import { formatUsageBytes } from "./resource-usage"
+import { isScalar, visit } from "yaml"
+import { parseOverrideYaml } from "./override-yaml"
+import { MACHINE_LABELS, type ComposeOverrides, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
 import { composeNotDeployed } from "./managed-compose"
+import { composeOverridesPendingDeploy, composeOverridesText } from "./service-overrides"
 import { DEPLOY_KIND_LABELS, formatDuration, groupByMachine, healthOf, HEALTH_LABELS, placementLabel, versionLabel } from "./view"
 
 /** Formatação das respostas das ferramentas do Agente Opex para os ambientes (módulo puro). */
@@ -72,6 +76,8 @@ export function environmentRow(env: EnvironmentDto) {
         ...(composeNotDeployed(env) ? { composeNaoImplantado: true } : {}),
         build: placementLabel(env.deployedOn?.buildOn ?? env.buildOn, env.deployedOn?.runOn ?? env.runOn),
         limites: appliedLimitsText(env.services),
+        ...(composeOverridesText(env.deployedComposeOverrides) ? { ajustesImplantados: composeOverridesText(env.deployedComposeOverrides) } : {}),
+        ...(composeOverridesPendingDeploy(env) ? { ajustesNaoImplantados: true } : {}),
         ultimoDeploy: env.lastDeploy ? deployView(env.lastDeploy) : null,
     }
 }
@@ -100,6 +106,9 @@ export function environmentDetailView(env: EnvironmentDto) {
         variaveis: env.envKeys,
         urlSaude: env.healthUrl,
         limites: { salvos: environmentLimitsText(env.limits), configuracao: env.limits, aplicados: appliedLimitsText(env.services), diferem: limitsPendingDeploy(env) },
+        // Ajustes dos serviços do compose (OPE-211): texto simples, por decisão do dono.
+        // A configuração vai sem os valores do environment, dos labels e do YAML avançado (podem ser segredo).
+        ajustesDosServicos: { salvos: composeOverridesText(env.composeOverrides) || "sem ajustes", configuracao: redactComposeOverrides(env.composeOverrides), implantados: composeOverridesText(env.deployedComposeOverrides) || "sem ajustes", diferem: composeOverridesPendingDeploy(env) },
         servicos: env.services.map((service) => ({
             servico: service.service,
             container: service.container,
@@ -108,6 +117,9 @@ export function environmentDetailView(env: EnvironmentDto) {
             portas: service.ports,
             cpu: service.cpu,
             memoria: service.memory,
+            // Uso em números (OPE-211): swap do cgroup e o disco (camada + volumes) da leitura a cada 5 min.
+            swap: service.usage?.swapBytes != null ? formatUsageBytes(service.usage.swapBytes) : null,
+            disco: service.usage?.diskBytes != null ? formatUsageBytes(service.usage.diskBytes) : null,
             versao: service.version,
             limites: service.limits ? limitsText(service.limits) : null,
         })),
@@ -116,10 +128,43 @@ export function environmentDetailView(env: EnvironmentDto) {
     }
 }
 
-/** Entrada sem os valores das variáveis (card e histórico do chat). */
-export function redactEnvValues<T extends { env?: { key: string; value?: string }[] }>(input: T): T {
-    if (!input.env) return input
-    return { ...input, env: input.env.map((item) => ({ key: item.key, value: HIDDEN_VALUE })) }
+/**
+ * YAML avançado com todo valor escalar (não as chaves nem as tags) trocado por `[valor oculto]` e sem os
+ * comentários (uma linha comentada pode guardar um segredo, ex.: `# SENHA: abc`).
+ */
+function redactOverrideYaml(yaml: string): string {
+    if (!yaml.trim()) return yaml
+    const doc = parseOverrideYaml(yaml)
+    if (!doc || doc.errors.length) return HIDDEN_VALUE
+    doc.commentBefore = null
+    doc.comment = null
+    visit(doc, (key, node) => {
+        if (!node || typeof node !== "object") return
+        const commented = node as { comment?: string | null; commentBefore?: string | null; spaceBefore?: boolean }
+        if ("comment" in commented) commented.comment = null
+        if ("commentBefore" in commented) commented.commentBefore = null
+        if ("spaceBefore" in commented) commented.spaceBefore = false
+        if (isScalar(node) && key !== "key" && node.value !== null) node.value = HIDDEN_VALUE
+    })
+    return doc.toString()
+}
+
+/**
+ * Ajustes dos serviços sem os valores que podem ser segredo (OPE-211): os do `environment` e dos `labels`
+ * (ficam as chaves) e os do YAML avançado (ficam as chaves e as tags). Para o modelo, o card e o histórico.
+ */
+export function redactComposeOverrides<T extends ComposeOverrides | null | undefined>(overrides: T): T {
+    if (!overrides) return overrides
+    const hide = (items: { key: string; value: string }[] | null) => (items ? items.map((item) => ({ key: item.key, value: HIDDEN_VALUE })) : items)
+    return { ...overrides, services: overrides.services.map((item) => ({ ...item, environment: hide(item.environment), labels: hide(item.labels) })), yaml: redactOverrideYaml(overrides.yaml) }
+}
+
+/** Entrada sem os valores das variáveis nem os dos ajustes dos serviços (card e histórico do chat). */
+export function redactEnvValues<T extends { env?: { key: string; value?: string }[]; composeOverrides?: ComposeOverrides | null }>(input: T): T {
+    const result = { ...input }
+    if (input.env) result.env = input.env.map((item) => ({ key: item.key, value: HIDDEN_VALUE }))
+    if (input.composeOverrides) result.composeOverrides = redactComposeOverrides(input.composeOverrides)
+    return result
 }
 
 export interface EnvironmentPatch {
@@ -134,6 +179,8 @@ export interface EnvironmentPatch {
     runOn?: EnvironmentInput["runOn"]
     /** Substitui os limites salvos. */
     limits?: EnvironmentInput["limits"]
+    /** Substitui os ajustes dos serviços salvos (OPE-211). */
+    composeOverrides?: EnvironmentInput["composeOverrides"]
 }
 
 /** Valores do ambiente salvo com os campos enviados por cima (variáveis com valor vazio = mantém). */
@@ -148,11 +195,44 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
         buildOn: patch.buildOn ?? current.buildOn,
         runOn: patch.runOn ?? current.runOn,
         limits: patch.limits ?? current.limits,
+        composeOverrides: patch.composeOverrides === undefined ? current.composeOverrides : restoreHiddenOverrides(patch.composeOverrides, current.composeOverrides ?? null),
     }
 }
 
+/** Erro acionável de `[valor oculto]` sem valor salvo para manter (vai para o modelo). */
+export class HiddenOverrideValueError extends Error {}
+
+/**
+ * Ajustes reenviados a partir do `get_environment` (OPE-211): o `[valor oculto]` mantém o valor salvo, nunca é
+ * gravado. No `environment` e nos `labels`, vale o salvo da mesma chave no mesmo serviço; no YAML avançado, o
+ * mascarado igual ao do salvo mantém o YAML salvo. Sem valor salvo para manter, recusa com o que fazer.
+ */
+export function restoreHiddenOverrides(next: ComposeOverrides | null, saved: ComposeOverrides | null): ComposeOverrides | null {
+    if (!next) return next
+    const services = next.services.map((item) => {
+        const before = saved?.services.find((service) => service.service === item.service)
+        const restore = (field: "environment" | "labels", label: string) => {
+            const entries = item[field]
+            if (!entries) return entries
+            return entries.map((entry) => {
+                if (entry.value !== HIDDEN_VALUE) return entry
+                const kept = before?.[field]?.find((old) => old.key === entry.key)
+                if (!kept) throw new HiddenOverrideValueError(`${label} ${entry.key} do serviço ${item.service} veio como ${HIDDEN_VALUE} e não há valor salvo para manter: envie o valor real ou tire a chave.`)
+                return { key: entry.key, value: kept.value }
+            })
+        }
+        return { ...item, environment: restore("environment", "A variável"), labels: restore("labels", "O label") }
+    })
+    let yaml = next.yaml
+    if (yaml.includes(HIDDEN_VALUE)) {
+        if (saved && saved.yaml.trim() && yaml.trim() === redactOverrideYaml(saved.yaml).trim()) yaml = saved.yaml
+        else throw new HiddenOverrideValueError(`O YAML avançado veio com ${HIDDEN_VALUE}: reenvie o YAML como o get_environment devolveu (sem mudar nada) para manter o salvo, ou envie o YAML completo com os valores reais.`)
+    }
+    return { ...next, services, yaml }
+}
+
 export function mergeSettingsPatch(current: EnvironmentsSettings, patch: Partial<EnvironmentsSettings>): EnvironmentsSettings {
-    return { baseDir: patch.baseDir ?? current.baseDir, registryPort: patch.registryPort ?? current.registryPort, keepTags: patch.keepTags ?? current.keepTags }
+    return { baseDir: patch.baseDir ?? current.baseDir, registryPort: patch.registryPort ?? current.registryPort, keepTags: patch.keepTags ?? current.keepTags, portLinkHost: patch.portLinkHost ?? current.portLinkHost }
 }
 
 /** Patch do builder: só os campos enviados mudam; `null` em um limite tira o limite. */

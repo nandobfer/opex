@@ -5,7 +5,7 @@ import * as dateFns from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { pluginToolName, type PluginRouteMethod } from "../../constants"
 import type { OpexTool, OpexToolContext, OpexToolRisk } from "@/features/opex-agent/server/tools/define"
-import { isSecondsSchedule, validateSchedule, type Schedule } from "@/lib/integrations/schedule"
+import { isSecondsSchedule, validateSchedule, type Schedule } from "@nandobfer/integracoes"
 import { Service, fiberEffect, type Context } from "./cordis"
 import { requirePluginMeta } from "./identity"
 import { cronKey, pluginRegistries, routeKey, toolKey, type PluginRouteHandler } from "./registries"
@@ -110,7 +110,7 @@ export class IntegrationsService extends Service {
         super(ctx, "integrations")
     }
     async get(id: string): Promise<unknown> {
-        const { getIntegrationConfig } = await import("@/lib/integrations/config")
+        const { getIntegrationConfig } = await import("@/lib/integrations/runtime")
         return getIntegrationConfig(id as never)
     }
 }
@@ -120,12 +120,12 @@ export class AiService extends Service {
     constructor(ctx: Context) {
         super(ctx, "ai")
     }
-    async *stream(request: import("@/lib/ai/stream").AiStreamRequest) {
-        const { streamAi } = await import("@/lib/ai/stream")
+    async *stream(request: import("@nandobfer/integracoes/modules/integrations/ia/ai/stream").AiStreamRequest) {
+        const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
         yield* streamAi(request)
     }
     /** Texto completo de uma resposta (atalho sobre `stream`). */
-    async text(request: import("@/lib/ai/stream").AiStreamRequest): Promise<string> {
+    async text(request: import("@nandobfer/integracoes/modules/integrations/ia/ai/stream").AiStreamRequest): Promise<string> {
         let text = ""
         for await (const event of this.stream(request)) if (event.type === "delta") text += event.text
         return text

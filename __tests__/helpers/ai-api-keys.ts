@@ -1,10 +1,10 @@
 import { vi } from 'vitest'
-import type { AiApiKeyDto } from '@/features/ai/api-keys'
+import type { AiApiKeyDto } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/api-keys"
 
 /**
  * Mock de `useAiApiKeys` (chaveiro dos provedores de IA, OPE-155) para telas sem QueryClient nem rede,
  * como os painéis de consumo com o filtro "Chave de API":
- * `vi.mock('@/features/ai/hooks/useAiApiKeys', () => aiApiKeysMock(keys))`.
+ * `vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiApiKeys', () => aiApiKeysMock(keys))`.
  */
 export function aiApiKeysMock(keys: AiApiKeyDto[] = []) {
   const mutation = () => ({ mutate: vi.fn(), mutateAsync: vi.fn(async () => keys), isPending: false })
@@ -21,4 +21,4 @@ export function aiApiKeysMock(keys: AiApiKeyDto[] = []) {
 }
 
 /** `active` = em uso (rodízio); `primary` (OPE-179) segue `active` por padrão (uma chave em uso = a principal). */
-export const apiKeyDto = (id: string, name: string, active = false, primary = active): AiApiKeyDto => ({ id, name, active, primary, createdAt: '2026-11-01T12:00:00.000Z', updatedAt: '2026-11-01T12:00:00.000Z' })
+export const apiKeyDto = (id: string, name: string, active = false, primary = active, extra: Partial<AiApiKeyDto> = {}): AiApiKeyDto => ({ id, name, active, primary, billing: { mode: 'usage' }, billingNotices: [], ...extra, createdAt: '2026-11-01T12:00:00.000Z', updatedAt: '2026-11-01T12:00:00.000Z' })

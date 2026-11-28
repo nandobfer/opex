@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { createFakeCollection, fakeId, type FakeCollection } from '../../helpers/fake-collection'
 
 /**
@@ -44,7 +45,7 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: async (event: string, payload: Record<string, unknown>) => void holder.events.push({ event, payload }) }))
 const consumption = vi.hoisted(() => ({ record: vi.fn(async (...args: unknown[]) => void args) }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: consumption.record }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: consumption.record }))
 vi.mock('@/lib/db/models/RoutineAgent', () => ({
   get RoutineAgent() {
     return holder.agents
@@ -213,6 +214,39 @@ describe('hibernação e confirmação', () => {
     expect(messages[1]).toContain('a vaga abrir')
   })
 
+  it('OPE-204: disparo e retomada levam a data e a hora da própria ativação na mensagem; as instruções não', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    try {
+      const brasilia = (date: Date) => `Data e hora atual: ${date.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo' })} (horário de Brasília).`
+      const startAt = new Date('2026-11-05T12:00:00Z')
+      vi.setSystemTime(startAt)
+      const agent = seedAgent()
+      const messages: string[] = []
+      const instructions: string[] = []
+      holder.engine = async (input) => {
+        const turn = input as unknown as { message: string; instructions: (toolPrefix: string) => string }
+        messages.push(turn.message)
+        instructions.push(turn.instructions(''))
+        if (messages.length === 1) await call(input, 'hibernate', { minutes: 5, reason: 'a vaga abrir' })
+        else await call(input, 'finish', { report: 'Feito' })
+        return { error: null, text: '' }
+      }
+      const { runId } = await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+      await flush()
+      const resumeAt = new Date((run(runId).hibernation as { at: Date }).at.getTime() + 1_000)
+      vi.setSystemTime(resumeAt)
+      await runDueRoutineAgents(resumeAt)
+      await flush()
+      expect(run(runId).status).toBe('completed')
+      expect(messages[0]).toContain(brasilia(startAt))
+      expect(messages[1]).toContain(brasilia(resumeAt))
+      expect(messages[1]).not.toContain(brasilia(startAt))
+      expect(instructions.some((text) => text.includes('Data e hora atual'))).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('confirmar retoma com a ação liberada; a segunda resposta recebe 409', async () => {
     const agent = seedAgent()
     const notes: string[] = []
@@ -309,6 +343,8 @@ describe('tick do agendador', () => {
     // Sem histórico salvo (motor Opex): a retomada leva também o disparo, com a nota de interrupção.
     expect(messages[0]).toContain('Ler as vagas')
     expect(messages[0]).toContain(INTERRUPTED_RESUME_NOTE)
+    // OPE-204: na mensagem combinada (disparo + retomada), a data e a hora aparecem uma única vez.
+    expect(messages[0]!.split('Data e hora atual').length - 1).toBe(1)
 
     // Segunda interrupção da mesma execução: o turno vivo some (processo morto) e o batimento envelhece.
     resetActivationsForTests()
@@ -525,6 +561,24 @@ describe('limites ligados ao turno', () => {
     await flush()
     expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ provider: 'anthropic', totalTokens: 10, apiKeyId: 'key_x' }))
     expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 5, apiKeyId: null }))
+  })
+
+  it('OPE-203: o custo de tabela e os tokens separados do passo chegam ao registro de consumo; sem eles, nada é gravado no lugar', async () => {
+    const agent = seedAgent()
+    consumption.record.mockClear()
+    const listCost = { usd: 0.0011, source: 'models.dev' as const, price: null, estimated: false, missingReason: null }
+    const tokenDetails = { noCache: 600, cacheRead: 300, cacheWrite: 100, output: 500, reasoning: 100 }
+    holder.engine = async (input) => {
+      input.onUsage({ tokens: 1500, inputTokens: 1000, outputTokens: 500, costUsd: null, stepId: '1', model: 'claude', provider: 'anthropic', apiKeyId: 'key_x', tokenDetails, listCost })
+      input.onUsage({ tokens: 5, inputTokens: 4, outputTokens: 1, costUsd: null, stepId: '2', model: 'claude', provider: 'anthropic' })
+      return { error: null, text: '' }
+    }
+    await triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')
+    await flush()
+    expect(consumption.record).toHaveBeenCalledWith(expect.objectContaining({ totalTokens: 1500, apiKeyId: 'key_x', tokenDetails, listCost }))
+    const second = consumption.record.mock.calls.map((call) => call[0] as Record<string, unknown>).find((call) => call.totalTokens === 5)!
+    expect(second).not.toHaveProperty('listCost')
+    expect(second).not.toHaveProperty('tokenDetails')
   })
 
   it('o uso de um passo que alcança o máximo de tokens interrompe o turno → Erro "Limite de tokens atingido"', async () => {
@@ -842,7 +896,7 @@ describe('critério aprovado (OPE-130, D9): agente gravado com o OpenCode no mot
   it('o DTO chega com o provedor vazio e o disparo é recusado (409) sem criar execução', async () => {
     const agent = seedAgent({ opex: { provider: 'opencode', model: 'anthropic/claude', variant: null, enabledTools: [], enabledMcpServers: [] } })
     const { toAgentDto } = await import('@/features/routine-agents/server/shared')
-    const dto = toAgentDto(agent as never)
+    const dto = toAgentDto(agent as never, { app: 'opex', prefixed: false })
     expect(dto.opex).toMatchObject({ provider: null, model: '' })
     await expect(triggerRoutineRun(String(agent._id), { origin: 'manual' }, 'local')).rejects.toMatchObject({ status: 409, code: 'ROUTINE_ENGINE_PROVIDER_INVALID' })
     expect(holder.runs.docs).toHaveLength(0)

@@ -25,7 +25,7 @@ vi.mock('@/features/integrations/api-tokens/scope-catalog', () => ({
 }))
 vi.mock('@/lib/audit/record', () => ({ recordAudit: mocks.recordAudit }))
 vi.mock('@/lib/db/plugins/audit.plugin', () => ({ createAuditContext: (userId: string) => ({ userId }) }))
-vi.mock('@/lib/db/models/ApiToken', () => {
+vi.mock('@nandobfer/integracoes/mongoose', () => {
   function ApiToken(this: Record<string, unknown>, data: Record<string, unknown>) {
     Object.assign(this, data, { _id: '66f0c0ffee0000000000abcd', createdAt: new Date('2026-01-01T00:00:00Z') })
     this.set = vi.fn()

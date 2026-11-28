@@ -116,10 +116,38 @@ Parte genérica de WhatsApp da conversa do Secretário (ver `secretary-agent.md`
   vídeo MP4/3GP até 16 MB, áudio (inclui o `audio/webm` gravado no navegador) até 16 MB e documento (PDF, Office, TXT,
   CSV) até 100 MB, até 10 por envio, com as mensagens de recusa em pt-BR.
 - `server/chat.ts`: página da linha do tempo pelo `findMessages` (50 por página, sem cópia das mensagens no Opex),
-  envios (`sendText` com citação, `sendReaction`, `sendLocation`, `sendContact`, `sendMedia` em base64 e
+  por cursor de data (`fetchConversationMessages`: lê cada `remoteJid` da conversa até o cursor, junta em ordem
+  decrescente, descarta ids repetidos — a Evolution grava linhas duplicadas — e corta em 50; o cursor seguinte é o
+  segundo da mais antiga, recuando 1 s se não andou), o histórico recente do turno e da Simulação do Secretário
+  (`recentConversationMessages`), envios (`sendText` com citação, `sendReaction`, `sendLocation`, `sendContact`, `sendMedia` em base64 e
   `sendWhatsAppAudio`, que converte para voz) e o binário da mídia (`getBase64FromMediaMessage`).
 - O corpo dos anexos passa pelo middleware: `experimental.proxyClientMaxBodySize` vale `101mb` no `next.config.ts`
   (o padrão de 10 MB cortaria os documentos).
+
+## Endereçamento por LID (OPE-207)
+
+Quando o WhatsApp passa a endereçar um contato pelo `<lid>@lid`, a Evolution 2.3.8 grava as mensagens novas nesse
+`remoteJid` (com o número em `remoteJidAlt`, quando vem) e as antigas continuam no número. As tabelas `Contact`, `Chat` e
+`IsOnWhatsapp` da Evolution não guardam a correspondência. O `findMessages` (Baileys) aceita `remoteJid` e `remoteJidAlt`
+juntos e devolve as que batem com qualquer um: a consulta de um número leva `remoteJidAlt` igual a ele e já traz a metade
+`@lid`, intercalada e paginada pela própria Evolution, mesmo sem correspondência conhecida (a implementação Business
+ignora o campo).
+
+- `lidAliasOf` (puro, `message.ts`): `@lid` com `remoteJidAlt` de número gera `{ lid, pn }`.
+- O contato do número guarda `lidJid` (`evolution_contacts`, índice `instance_lid`), aprendido no webhook
+  (`MESSAGES_UPSERT`) e preenchido pelo **Sincronizar** a partir da `lastMessage` de cada conversa do `findChats`
+  (`server/lid.ts`, `rememberLidAliases`, que também marca o contato do número como conversa, `hasChat`). Conversas cuja última mensagem não traz o `remoteJidAlt` só ganham a
+  correspondência na próxima mensagem que trouxer.
+- O webhook troca o `chatJid` de uma mensagem `@lid` **sem** `remoteJidAlt` pelo número quando a correspondência já é
+  conhecida (ex.: resposta do dono pelo celular): prévia, não lidas, evento da conversa e turno do Secretário ficam na
+  conversa do número. O mesmo vale para os JIDs de `MESSAGES_UPDATE`.
+- `conversationJids` devolve as duas metades (número primeiro); a linha do tempo e o histórico do Secretário leem as
+  duas (a do `@lid` cobre as mensagens sem `remoteJidAlt`). Ao abrir a conversa, as mensagens do `@lid` com o número em
+  `remoteJidAlt` também ensinam a correspondência (`rememberLidAliases` em segundo plano; falha só no log). Quando um
+  mesmo segundo sozinho passa de uma página, a página traz o segundo inteiro (todas as páginas de 1000 da Evolution) antes de o cursor recuar.
+- Estado do Secretário salvo em qualquer das identidades vale para a conversa: "Nunca responder", "escolhidos" e pausa
+  no turno (`aliases` em `evaluateAudience`), estado da linha na lista, e "Voltar a responder"/"Retomar" limpam as duas. `lidAliases` devolve LID → número, para a lista de conversas juntar a metade LID na do número. A análise de
+  personalidade ainda lê cada conversa pelo próprio JID (pendência).
 
 ## Debug, auditoria e tempo real
 

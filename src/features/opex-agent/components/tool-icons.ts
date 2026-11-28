@@ -1,4 +1,4 @@
-import { AlarmClock, Eye, Globe, Repeat, BookOpen, Terminal, Bot, Boxes, Brain, BrainCircuit, Cable, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Palette, Paperclip, Plug, PlugZap, Puzzle, Receipt, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, Blocks, Hammer, MessageCircle, type LucideIcon } from "lucide-react"
+import { AlarmClock, Eye, Globe, Repeat, BookOpen, Terminal, Bot, Boxes, Brain, BrainCircuit, Cable, CalendarClock, Clock, Compass, FolderGit2, GitPullRequest, LayoutDashboard, Network, ListTodo, Palette, Paperclip, Plug, PlugZap, Puzzle, Receipt, Rocket, Server, Sparkles, SquareTerminal, Users, Wallet, Workflow, Wrench, Blocks, Hammer, MessageCircle, FileText, type LucideIcon } from "lucide-react"
 import type { OpexToolGroup } from "../constants"
 import type { OpexClientToolGroup } from "../client-tools"
 import { OPEX_MCP_TOOL_GROUP } from "../mcp"
@@ -10,12 +10,14 @@ export const OPEX_TOOL_GROUP_ICONS: Record<OpexToolGroup, LucideIcon> = {
     context: Compass,
     docs: BookOpen,
     files: Paperclip,
+    documents: FileText,
     memories: Brain,
     tasks: ListTodo,
     previews: Sparkles,
     time: Clock,
     workbenches: Workflow,
     centrals: Server,
+    "project-bootstrap": Rocket,
     github: FolderGit2,
     issues: Network,
     integrations: Plug,

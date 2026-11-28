@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 
 /**
  * OPE-104: etapas da migração de memórias antes da importação — backup (hash estável, só leitura na
@@ -31,7 +32,7 @@ vi.mock('mongoose', async (importOriginal) => {
     ...Object.fromEntries(['insertOne', 'insertMany', 'updateOne', 'updateMany', 'deleteOne', 'deleteMany', 'replaceOne', 'findOneAndUpdate', 'drop'].map((name) => [name, async () => holder.writes.push(name)])),
   }
   const mocked = { ...actual.default, connection: { db: { collection: () => collection } } }
-  return { ...actual, default: mocked }
+  return { ...actual, models: actual.default.models, model: actual.default.model, Schema: actual.default.Schema, default: mocked }
 })
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Dono' }) }))
@@ -57,7 +58,7 @@ vi.mock('@/features/ai/server/memory-settings', () => ({
   memorySettings: async () => ({ textMin: 3, textMax: 4000, maxBatch: 100, budgetTokens: 4000, categories: [{ key: 'PROJECT_RULES', label: 'Regras' }] }),
   memoryLimitsFor: async () => ({ textMin: 3, textMax: 4000 }),
 }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: (input: { signal?: AbortSignal; prompt?: string }) => holder.stream!(input) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ streamAi: (input: { signal?: AbortSignal; prompt?: string }) => holder.stream!(input) }))(importOriginal)) as Record<string, unknown>), }))
 
 import { compactCombination, downloadBackup, generateBackup, getMigration, resetMigrationRuntimeForTests, runCurator, setCuratorTimeoutForTests } from '@/features/engramind/server/migration'
 

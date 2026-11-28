@@ -1,12 +1,13 @@
 import { DomainError } from "@/lib/api/route"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
+import { integrationDebug } from "@/lib/integrations/server"
+import { streamAi, type AiStreamEvent } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { Project } from "@/lib/db/models/Project"
 import { availabilityOfBudgetPreview, loadBudgetPreviewSettings } from "@/features/ai/server/settings"
 import type { BudgetPreviewSettings } from "@/features/ai/schemas"
 import type { DraftPreview } from "../schemas"
 import { buildBudgetPreviewInstructions, buildBudgetPreviewPrompt, parseDraftPreview } from "../preview-prompt"
 import type { DraftEstimateDto, DraftPreviewDto, DraftTagDto } from "../types"
+import { BUDGET_PREVIEW_CONSUMPTION_ORIGIN } from "../constants"
 import { estimateHours, logUsage, requireEstimateSettings, type EstimateHoursEvent, type ResolvedEstimateSettings } from "./estimate-hours"
 import { getDraftDoc, saveDraftEstimate, saveDraftPreview, saveDraftTags, scopeSubject, scopeTitle, type DraftDoc, type DraftScope } from "./drafts"
 import { resolveTagViews } from "./tag-views"
@@ -148,7 +149,7 @@ export async function* runBudgetPreview(prepared: PreparedBudgetPreview, signal?
         prompt: prepared.prompt,
         title: prepared.title,
         signal,
-        consumption: { origin: "budget-preview", subject: scopeSubject(prepared.scope, prepared.draftId) },
+        consumption: { origin: BUDGET_PREVIEW_CONSUMPTION_ORIGIN, subject: scopeSubject(prepared.scope, prepared.draftId) },
     })) {
         if (event.type === "delta") text += event.text
         if (event.type === "done" || event.type === "error") last = event

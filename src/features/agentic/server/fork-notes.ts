@@ -1,4 +1,4 @@
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { AgenticWorkbench, type IAgenticWorkbench } from "@/lib/db/models/Agentic"
 import { logger } from "@/lib/logger"
 import { FORK_NOTES_INSTRUCTIONS_KEY } from "../constants"

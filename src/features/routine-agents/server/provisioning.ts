@@ -1,9 +1,9 @@
 import { ensureMemoryChannel, ensureAppToken } from "@/features/engramind/server/memory-network"
 import { engramindTarget, type EngramindTarget } from "@/features/engramind/server/client"
-import { AI_AGENTS, memoryChannelName } from "@/features/ai/agents"
+import { AI_AGENTS, memoryChannelName, type ChannelNamespace } from "@/features/ai/agents"
 import { RoutineAgent, type IRoutineProvisioning } from "@/lib/db/models/RoutineAgent"
-import { ROUTINE_GLOBAL_CHANNEL, ROUTINE_PROVISIONING_ORIGIN, routineChannelOf } from "../constants"
-import { EXTRA_CHANNELS_INSTRUCTIONS, extraChannelPrompt, parseExtraChannelPlan } from "../provision-plan"
+import { ROUTINE_PROVISIONING_ORIGIN, routineChannelOf, routineGlobalChannel } from "../constants"
+import { extraChannelsInstructions, extraChannelPrompt, parseExtraChannelPlan } from "../provision-plan"
 import { IDENTITY_INSTRUCTIONS, identityNeeds, identityPrompt, parseGeneratedIdentity, routineAgentTitle } from "../identity-plan"
 import { isPendingRoutineSlug, routineNameKey, uniqueRoutineSlug } from "../slug"
 import { baseRoutineChannels, ensureRoutineEngramindAgent, ensureRoutineSubscriptions, ensureRoutineToken, listEngramindChannels } from "./engramind"
@@ -18,7 +18,7 @@ import { AcaoAuditoria, auditAgent, loadAgentDoc, messageOf, publishAgentUpdated
  * "Reprovisionar"), sem pedir aprovação, e aplica tudo:
  * 0. `identity` (D8): gera o nome (só o papel) e/ou o objetivo que o dono deixou vazios, com uma nova
  *    tentativa quando a resposta é recusada, e fixa o slug definitivo do agente criado sem nome;
- * 1. cadastra o agente no Engramind (`opex/rotineiro-<slug>`, pelo token de app);
+ * 1. cadastra o agente no Engramind (`<app>/rotineiro-<slug>` no app da instância, OPE-206, pelo token de app);
  * 2. emite o token do agente e o guarda **cifrado** no documento do agente;
  * 3. cria o canal próprio (e o global dos rotineiros) e assina `opex`, o global e o próprio;
  * 4. lê o objetivo e as instruções e decide os canais extras com o modelo configurado (D2): assina
@@ -60,14 +60,16 @@ async function save(agentId: string, provisioning: IRoutineProvisioning, extra: 
 }
 
 /** Alvos do Engramind: admin (canais) e app (agente e assinaturas, quando há token de app). */
-export async function routineEngramindTargets(actorId: string, warnings: string[] = []): Promise<{ admin: EngramindTarget; app: EngramindTarget }> {
+export async function routineEngramindTargets(actorId: string, warnings: string[] = []): Promise<{ admin: EngramindTarget; app: EngramindTarget; ns: ChannelNamespace }> {
     let admin: EngramindTarget
+    let ns: ChannelNamespace
     try {
         admin = await engramindTarget()
+        ns = await (await import("@/features/engramind/server/instance")).channelNamespace()
     } catch (error) {
         throw new Error(`Engramind indisponível: ${messageOf(error)}. Confira a integração Engramind e tente de novo.`)
     }
-    return { admin, app: (await ensureAppToken(admin, actorId, warnings)) ?? admin }
+    return { admin, app: (await ensureAppToken(admin, actorId, warnings, ns.app)) ?? admin, ns }
 }
 
 /** Teto da chamada ao subagente: provedor que aceita a conexão e para de responder não prende o provisionamento. */
@@ -75,10 +77,10 @@ export const PLANNER_TIMEOUT_MS = 3 * 60_000
 export const PLANNER_TIMEOUT_MESSAGE = `O modelo do provisionamento não respondeu em ${PLANNER_TIMEOUT_MS / 60_000} min. Confira o provedor em Integrações › Inteligência Artificial › Rotineiros (ou troque o modelo) e use "Tentar de novo".`
 
 /** Texto completo do subagente (uma chamada, resposta JSON), com teto de tempo que aborta a chamada. */
-async function askPlanner(doc: RoutineAgentDoc, prompt: string, instructions = EXTRA_CHANNELS_INSTRUCTIONS): Promise<string> {
+async function askPlanner(doc: RoutineAgentDoc, prompt: string, instructions: string): Promise<string> {
     const settings = await loadRoutineAgentSettings()
     if (!settings.provider || !settings.model) throw new Error(NO_MODEL_MESSAGE)
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {
@@ -187,28 +189,29 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
             await save(agentId, state)
             return
         }
-        const { admin, app } = await routineEngramindTargets(actorId, state.warnings)
+        const { admin, app, ns } = await routineEngramindTargets(actorId, state.warnings)
 
-        await ensureRoutineEngramindAgent(doc.slug, doc.name, doc.objective, app)
+        await ensureRoutineEngramindAgent(ns.app, doc.slug, doc.name, doc.objective, app)
         state.steps.agent = true
 
-        const { token, issued } = await ensureRoutineToken(doc.slug, doc.engramindToken ?? null, app)
+        const { token, issued } = await ensureRoutineToken(ns.app, doc.slug, doc.engramindToken ?? null, app)
         state.steps.token = true
         // O token só vai para o banco (cifrado); a auditoria leva o prefixo.
         await RoutineAgent.updateOne({ _id: agentId }, { $set: { engramindToken: token } })
 
-        await ensureMemoryChannel(ROUTINE_GLOBAL_CHANNEL, memoryChannelName("routine-global"), AI_AGENTS["routine-global"].description, admin)
-        if ((await ensureMemoryChannel(routineChannelOf(doc.slug), memoryChannelName("routine-specific", doc.name), AI_AGENTS["routine-specific"].description, admin)) === "created") created.push(routineChannelOf(doc.slug))
-        await ensureRoutineSubscriptions(doc.slug, baseRoutineChannels(doc.slug), app)
+        await ensureMemoryChannel(routineGlobalChannel(ns), memoryChannelName("routine-global"), AI_AGENTS["routine-global"].description, admin)
+        const own = routineChannelOf(doc.slug, ns)
+        if ((await ensureMemoryChannel(own, memoryChannelName("routine-specific", doc.name), AI_AGENTS["routine-specific"].description, admin)) === "created") created.push(own)
+        await ensureRoutineSubscriptions(ns.app, doc.slug, baseRoutineChannels(doc.slug, ns), app)
         state.steps.channels = true
-        state.channels = baseRoutineChannels(doc.slug)
+        state.channels = baseRoutineChannels(doc.slug, ns)
 
         if (!state.steps.extras || mode === "reprovision") {
             const channels = await listEngramindChannels(admin)
             const known = new Set(channels.map((channel) => channel.slug))
             const blocked = (state.blocked ?? []).map((item) => item.channel)
-            const answer = await askPlanner(doc, extraChannelPrompt(doc, channels, state.extras.map((item) => item.channel), blocked))
-            const plan = parseExtraChannelPlan(answer, channels, state.extras.map((item) => item.channel), blocked)
+            const answer = await askPlanner(doc, extraChannelPrompt(doc, channels, state.extras.map((item) => item.channel), blocked, ns), extraChannelsInstructions(ns))
+            const plan = parseExtraChannelPlan(answer, channels, state.extras.map((item) => item.channel), blocked, ns)
             state.warnings.push(...plan.warnings)
             for (const item of plan.items) {
                 // Slug que já existe (ou passou a existir) é assinatura, nunca recriação.
@@ -217,6 +220,7 @@ export async function provisionRoutineAgent(agentId: string, mode: ProvisionMode
                 state.extras.push({ channel: item.channel, name: item.name, reason: item.reason, created: outcome === "created" })
             }
             await ensureRoutineSubscriptions(
+                ns.app,
                 doc.slug,
                 state.extras.map((item) => item.channel).filter((channel) => !blocked.includes(channel)),
                 app,

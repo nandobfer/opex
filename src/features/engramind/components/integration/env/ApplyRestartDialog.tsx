@@ -7,7 +7,7 @@ import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { apiErrorMessage } from "@/lib/api"
-import { IntegrationConsole, type IntegrationConsoleHandle } from "@/features/integrations/components/IntegrationConsole"
+import { IntegrationConsole, type IntegrationConsoleHandle } from "@nandobfer/integracoes/react"
 import { useApplyEngramindEnv, useApplyLog } from "../../../hooks/useEngramindEnv"
 
 interface ApplyRestartDialogProps {

@@ -6,7 +6,7 @@ import { AgenticWorkbench, type IAgenticWorkbench, type IPendingTurn, type IWork
 import { TaskRefinement } from "@/lib/db/models/Refinement"
 import { REFINEMENT_IN_PROGRESS_REASON, refinementFilesOwner } from "@/features/refinement/constants"
 import { refinementConcluded } from "@/features/refinement/logic"
-import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { getLocalUser } from "@/lib/local-user"
 import { buildTaskContextPrompt } from "@/features/ai/task-context-prompt"
 import { getTask, moveTask } from "@/features/tasks/server/service"
@@ -53,7 +53,8 @@ import { logger } from "@/lib/logger"
 import { runAfterResponse } from "@/lib/after-response"
 import { newJobId } from "@/features/local-docker/server/detached"
 import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
-import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
+import { createRunFollower } from "./github-run-follow"
+import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, setBuildRun, settleBuild, startBuild } from "./build-logs"
 import { runPreviewBuild } from "./preview-build"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
@@ -65,6 +66,7 @@ import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { claimAgenticFiles, transferAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
 import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { withWorkbenchContext } from "../workbench-context"
+import { isPlanText, NOT_A_PLAN_MESSAGE } from "../plan-text"
 import { syncWorkbenchContext, type WorkbenchTurnContext } from "./workbench-context"
 import { registerWorkbenchMcpAt } from "./workbench-mcp/register"
 import { lookupOpencodeSession, OpencodeLookupAbortedError } from "@/lib/ai/opencode-sessions"
@@ -80,7 +82,7 @@ import { agenticAvailability, loadAgenticSettings } from "./settings"
 import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { syncWorkbenchTimer } from "./timer-sync"
 import { needsSlotToRun, occupiedSlots, runInCentral, slotQueuePosition, slotQueuePositions } from "./slots"
-import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } from "./remote-preview"
+import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview, remotePreviewTimeoutMinutes } from "./remote-preview"
 
 /**
  * Fluxo da mesa de trabalho: planejar → (corrigir) → implementar → subir a prévia → (corrigir) →
@@ -89,8 +91,6 @@ import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } fr
  */
 
 const TURN_TIMEOUT_MS = 3 * 60 * 60_000
-/** O script da prévia no GitHub Action espera testes + build do workflow: nunca menos que isto. */
-const REMOTE_BUILD_MIN_MINUTES = 25
 
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
@@ -1097,15 +1097,25 @@ async function buildTurn(
         }
         resumeJob = null
         log.step(`${WORKBENCH_STAGE_LABELS.building}: ${remote ? "script da prévia remota" : "docker compose"}`, { workbenchId: id, jobId })
-        const timeoutMinutes = remote ? Math.max(REMOTE_BUILD_MIN_MINUTES, config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
-        const run = await runPreviewBuild({
-            run: commands.run,
-            jobId,
-            timeoutMs: timeoutMinutes * 60_000,
-            signal: controller.signal,
-            onOutput: (chunk) => appendBuildOutput(id, chunk),
-            heartbeat: hooks.heartbeat,
-        })
+        const timeoutMinutes = remote ? remotePreviewTimeoutMinutes(config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
+        // GitHub Action (OPE-214): a saída do workflow vem da API (o script só espera o run em silêncio).
+        const follower = remote ? createRunFollower({ repo: loaded.repo?.repo ?? null, signal: controller.signal, write: (text) => appendBuildOutput(id, text), onRun: (ref) => setBuildRun(id, ref) }) : null
+        let run: Awaited<ReturnType<typeof runPreviewBuild>>
+        try {
+            run = await runPreviewBuild({
+                run: commands.run,
+                jobId,
+                timeoutMs: timeoutMinutes * 60_000,
+                signal: controller.signal,
+                onOutput: (chunk) => (follower ? follower.output(chunk) : appendBuildOutput(id, chunk)),
+                heartbeat: hooks.heartbeat,
+            })
+        } catch (error) {
+            // Sem o script, o acompanhamento do run não pode seguir escrevendo no log (o próximo build seria outro).
+            follower?.abort()
+            throw error
+        }
+        const remoteFailure = follower ? await follower.finish() : null
         appendBuildOutput(id, buildExitLine(run.exitCode))
         await AgenticWorkbench.updateOne({ _id: doc._id }, { $unset: { "previewBuild.job": 1 } })
         if (controller.signal.aborted) {
@@ -1128,7 +1138,7 @@ async function buildTurn(
         log.warn(`${WORKBENCH_STAGE_LABELS.building}: build falhou`, { workbenchId: id, exitCode: run.exitCode, round })
         notice("warn", `O build da prévia falhou (exit ${run.exitCode}). O agente vai corrigir o código e o build roda de novo (correção ${round}).`)
         appendBuildOutput(id, buildFixSeparator(round))
-        step = { kind: "fix", text: buildFixPrompt(config, ctx, port, { exitCode: run.exitCode, tail: run.tail, round, command: commands.command }, { docker, method }), attach: false }
+        step = { kind: "fix", text: buildFixPrompt(config, ctx, port, { exitCode: run.exitCode, tail: remoteFailure ? `${remoteFailure}\n\n--- saída do script da prévia ---\n${run.tail}` : run.tail, round, command: commands.command }, { docker, method }), attach: false }
     }
 }
 
@@ -1333,6 +1343,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
         case "planning": {
             const text = result.text.trim()
             if (!text) throw new Error("O planejador não devolveu um plano")
+            // Só um anúncio ("fecho o plano quando os resultados chegarem"): não vira versão nem vai à revisão (OPE-216).
+            if (!isPlanText(text)) throw new Error(NOT_A_PLAN_MESSAGE)
             const version = (doc.plans?.length ?? 0) + 1
             await update(doc, { stage: "plan_review", runState: "idle", pendingFeedback: null }, { $push: { plans: { version, text, feedback: doc.pendingFeedback ?? null, createdAt: new Date() } } })
             // Plano pronto não ocupa vaga: a próxima mesa da central pode executar.

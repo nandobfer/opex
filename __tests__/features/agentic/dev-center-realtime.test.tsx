@@ -25,7 +25,7 @@ vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: mocks.available
 vi.mock('framer-motion', async () => (await import('../../helpers/framer-motion')).framerMotionMock())
 vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href: string }) => <a href={href}>{children}</a> }))
 vi.mock('next/navigation', () => ({ useRouter: () => ({ replace: vi.fn() }) }))
-vi.mock('@/features/integrations/hooks/useScrollViewportHeight', () => ({ useScrollViewportHeight: () => undefined }))
+vi.mock('@nandobfer/integracoes/react', () => ({ useScrollViewportHeight: () => undefined }))
 vi.mock('@/features/agentic/components/central/CentralPage', () => ({ AGENTIC_SETTINGS_HREF: '/integracoes/ia?aba=desenvolvimento-agentico' }))
 vi.mock('@/features/agentic/components/workbench/WorkbenchPane', () => ({ WorkbenchPane: () => null }))
 vi.mock('@/features/agentic/components/dev-center/TasksPane', () => ({ TasksPane: () => null }))

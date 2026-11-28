@@ -6,18 +6,18 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ toastError: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
 
-import { AI_TAB_ALIASES, AI_TABS } from '@/features/ai/constants'
-import { AI_EDITOR_TABS } from '@/features/ai/tabs'
-import { canonicalAliasUrl, parseTab } from '@/features/integrations/components/tabs/useIntegrationTab'
-import { MergedFeaturesTab } from '@/features/ai/components/shared/MergedFeaturesTab'
-import type { FeatureSectionProps } from '@/features/ai/components/shared/feature-section'
+import { AI_TAB_ALIASES, AI_TABS } from "@/features/ai/constants"
+import { AI_EDITOR_TABS } from "@/features/ai/tabs"
+import { canonicalAliasUrl, parseTab } from "@nandobfer/integracoes/react"
+import { MergedFeaturesTab } from "@/features/ai/components/shared/MergedFeaturesTab"
+import type { FeatureSectionProps } from "@/features/ai/components/shared/feature-section"
 
 afterEach(cleanup)
 beforeEach(() => vi.clearAllMocks())
 
 describe('abas de Integrações › Inteligência Artificial (OPE-122)', () => {
   it('Provedores primeiro e depois os agentes, na ordem do fluxo e sem "Agente"', () => {
-    expect(AI_EDITOR_TABS.map((tab) => tab.label)).toEqual(['Provedores', 'Opex', 'Maddox', 'Secretário', 'Orçamentista', 'Catalogador', 'Refinador', 'Desenvolvedor', 'Arquiteto', 'Adversário', 'Revisor', 'Mentor', 'Rotineiros'])
+    expect(AI_EDITOR_TABS.map((tab) => tab.label)).toEqual(['Provedores', 'Opex', 'Maddox', 'Secretário', 'Orçamentista', 'Catalogador', 'Refinador', 'Desenvolvedor', 'Arquiteto', 'Adversário', 'Revisor', 'Mentor', 'Rotineiros', 'Bootstrap'])
     expect(AI_EDITOR_TABS.map((tab) => tab.id)).toEqual([...AI_TABS])
   })
 

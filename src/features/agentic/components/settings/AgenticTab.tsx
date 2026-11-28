@@ -7,13 +7,14 @@ import { Bot, Brain, FolderGit2, SlidersHorizontal } from "lucide-react"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
-import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
+import { IntegrationTabs, type IntegrationTabDef } from "@nandobfer/integracoes/react"
+import { useIntegrationTab } from "@nandobfer/integracoes/react"
 import { useAgenticRealtime, useAgenticSettings, useSaveAgenticSettings } from "../../hooks/useAgentic"
 import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings } from "../../schemas"
 import { DeveloperMemoriesSection } from "../DeveloperMemoriesSection"
 import { AgentsSettingsSection } from "./AgentsSettingsSection"
 import { CentralsCard } from "./CentralsCard"
+import { ActiveBootstrapsCard } from "@/features/project-bootstrap/components/ActiveBootstrapsCard"
 import { DefaultSettingsSection } from "./DefaultSettingsSection"
 import { SettingsActions } from "./SettingsActions"
 
@@ -77,7 +78,12 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
 
             {tab === "memorias" && <DeveloperMemoriesSection />}
 
-            {tab === "centrais" && <CentralsCard />}
+            {tab === "centrais" && (
+                <div className="space-y-6">
+                    <ActiveBootstrapsCard />
+                    <CentralsCard />
+                </div>
+            )}
         </IntegrationTabs>
     )
 }

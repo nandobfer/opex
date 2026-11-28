@@ -1,5 +1,5 @@
 import { dynamicTool, isLoopFinished, streamText, type ModelMessage, type ToolSet } from "ai"
-import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
+import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { toolErrorMessage, type OpexTool, type OpexToolContext } from "@/features/opex-agent/server/tools/define"
 import { OWNER_SCOPE } from "@/features/opex-agent/server/scope"
 import { compactToolOutput, redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
@@ -12,6 +12,9 @@ import { isInvalidRoutineOpexProvider, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE }
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
+import { missingCost } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/compute"
+import { tokenDetailsOf, tokensFromUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
+import type { StepPricer } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server"
 
 /**
  * Motor **Opex** (OPE-130): o mesmo pipeline do Agente Opex (`prepareModel` + `streamText` da AI SDK),
@@ -59,6 +62,9 @@ export async function appToolsFor(names: readonly string[], disabledTools: reado
     return tools
 }
 
+/** Por código de caractere (não `localeCompare`), para não depender do locale do processo. */
+const byToolName = (a: OpexTool, b: OpexTool) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0)
+
 export async function mcpToolsFor(ids: readonly string[], signal: AbortSignal, warnings: string[]): Promise<McpTurnTools | null> {
     if (!ids.length) return null
     const { loadEnabledMcpServers } = await import("@/features/opex-agent/server/mcp/service")
@@ -69,6 +75,19 @@ export async function mcpToolsFor(ids: readonly string[], signal: AbortSignal, w
     const mcp = await loadMcpTools(OWNER_SCOPE, signal, { serverIds: [...present] })
     warnings.push(...mcp.notices)
     return mcp
+}
+
+/** Pricer do turno; falha inesperada vira "sem preço" (o turno segue), cancelamento propaga. */
+async function stepPricerFor(provider: string, model: string, signal: AbortSignal): Promise<StepPricer> {
+    const { createStepPricer } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server")
+    try {
+        return await createStepPricer({ provider, model, signal })
+    } catch (error) {
+        if (signal.aborted) throw error
+        const reason = `Tabela de preços indisponível: ${error instanceof Error ? error.message : String(error)}`
+        routineLog.warn({ provider, model, err: reason }, "[routine-agents] custo de tabela indisponível no turno")
+        return { price: () => missingCost(reason) }
+    }
 }
 
 export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
@@ -91,11 +110,12 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         const appTools = await appToolsFor(engine.enabledTools, settings.disabledTools, activation.warnings)
         mcp = await mcpToolsFor(engine.enabledMcpServers, signal, activation.warnings)
         const internalNames = new Set(input.internalTools.map((tool) => tool.name))
-        const external = [...appTools, ...(mcp?.tools ?? [])].filter((tool) => !internalNames.has(tool.name))
+        // Ordem fixa entre execuções (cache de prompt, OPE-204): externas por nome, internas num bloco depois.
+        const external = [...appTools, ...(mcp?.tools ?? [])].filter((tool) => !internalNames.has(tool.name)).sort(byToolName)
         // Mesma política do runner do Agente Opex: ajustes dos MCPs, depois os do dono (que vencem).
         const overrides = { ...(mcp?.overrides ?? {}), ...settings.confirmationOverrides }
         const byName = new Map<string, OpexTool>([...external, ...input.internalTools].map((tool) => [tool.name, tool]))
-        const context: OpexToolContext = { sessionId: "", actorId: "local", signal, scope: OWNER_SCOPE, secrets: activation.secrets }
+        const context: OpexToolContext = { sessionId: "", actorId: "local", signal, scope: OWNER_SCOPE, secrets: activation.secrets, routine: { agentId: activation.agentId, runId: activation.runId } }
         const tools: ToolSet = {}
         for (const def of byName.values()) {
             const internal = internalNames.has(def.name)
@@ -139,6 +159,8 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         }
         prepared = await prepareModel({ provider: engine.provider!, model: engine.model, variant: engine.variant, title: routineAgentTitle(agent.name), session: `opex-routine-${activation.runId}`, signal })
         const meteredModel = prepared
+        // Custo de tabela (OPE-203): a tabela do modelo é carregada uma vez, com prazo próprio e o sinal da execução.
+        const pricer = await stepPricerFor(engine.provider!, engine.model, signal)
         const result = streamText({
             model: prepared.model,
             instructions: input.instructions(""),
@@ -152,8 +174,12 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
         })
         let step = 0
         let stepText = ""
+        let stepStartedAt = new Date()
         for await (const part of result.fullStream) {
             switch (part.type) {
+                case "start-step":
+                    stepStartedAt = new Date()
+                    break
                 case "text-delta":
                     stepText += part.text ?? ""
                     break
@@ -168,7 +194,22 @@ export async function runOpexEngine(input: EngineInput): Promise<EngineResult> {
                     const inputTokens = part.usage?.inputTokens ?? null
                     const outputTokens = part.usage?.outputTokens ?? null
                     const total = part.usage?.totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0)
-                    input.onUsage({ tokens: total ?? 0, inputTokens, outputTokens, costUsd: cost?.costUsd ?? null, billing: cost?.billing ?? null, stepId: String(step), model: engine.model, provider: engine.provider!, apiKeyId: prepared.apiKeyId })
+                    const tokens = tokensFromUsage(part.usage)
+                    const listCost = pricer.price(tokens, stepStartedAt, cost?.billing ?? null)
+                    input.onUsage({
+                        tokens: total ?? 0,
+                        inputTokens,
+                        outputTokens,
+                        costUsd: cost?.costUsd ?? null,
+                        billing: cost?.billing ?? null,
+                        stepId: String(step),
+                        model: engine.model,
+                        provider: engine.provider!,
+                        apiKeyId: prepared.apiKeyId,
+                        tokenDetails: tokenDetailsOf(tokens),
+                        listCost,
+                    })
+                    stepStartedAt = new Date()
                     break
                 }
                 case "error":

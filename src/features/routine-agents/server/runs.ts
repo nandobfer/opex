@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto"
 import { Types } from "mongoose"
 import { DomainError } from "@/lib/api/route"
 import { encryptSecret } from "@/lib/crypto/secretBox"
-import { recordAiConsumption } from "@/lib/ai/consumption"
+import { recordAiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/ai/consumption"
 import { routineIdentityOf } from "@/features/ai/agents"
 import { RoutineAgent, RoutineRun, type IRoutineRun } from "@/lib/db/models/RoutineAgent"
 import { LIVE_WAIT_OVERFLOW_HIBERNATE_MINUTES, ROUTINE_CONSUMPTION_ORIGIN } from "../constants"
@@ -165,11 +165,13 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         if (!target) throw new Error("Token do agente rotineiro indisponível no Engramind: use \"Reprovisionar\" na configuração do agente")
         // Canal arquivado no Engramind depois do provisionamento sai do contexto e da lista de memória (D13);
         // as ferramentas de memória leem e gravam nos ativos, o próprio primeiro.
+        const ns = await (await import("@/features/engramind/server/instance")).channelNamespaceOrLegacy()
         const { channels, memoryChannels } = await routineMemoryChannels(
             agent,
             target,
             (message) => activation.warnings.push(message),
             (error) => routineLog.warn({ err: error, runId }, "[routine-agents] não foi possível conferir os canais arquivados"),
+            ns,
         )
         const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
         const memory = await getAgentMemoryContext(routineIdentityOf(agent.slug), channels, { target, focus: [agent.objective, run.request ?? ""].join("\n").slice(0, 1_000) })
@@ -198,7 +200,7 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
         const secretCatalog = httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? activation.secrets.list() : []
         const internalTools = [
             ...routineControlTools({ activation, limits: run.snapshot.limits, confirmIrreversible: run.snapshot.confirmIrreversible, setPhase: (phase) => setPhase(run, phase) }),
-            ...routineMemoryTools({ slug: agent.slug, label, target, runId, allowed: memoryChannels, warn: (message) => activation.warnings.push(message) }),
+            ...routineMemoryTools({ slug: agent.slug, label, target, runId, allowed: memoryChannels, ns, warn: (message) => activation.warnings.push(message) }),
             // Motor OpenCode: a Chamada HTTP com segredos sai do servidor Opex, pelo MCP da execução.
             ...opencodeHttp,
             ...skills.tools,
@@ -211,13 +213,14 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                 ? setTimeout(() => stopActivation(runId, "active"), Math.max(1_000, remaining))
                 : setTimeout(() => stopActivation(runId, "turn_timeout"), ROUTINE_TURN_TIMEOUT_MS)
         let activationStep = 0
-        const messageInput = { origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote }
+        // Data e hora vão na mensagem da ativação, nunca nas instruções (cache de prompt, OPE-204).
+        const messageInput = { origin: run.origin, request: run.request, payload: run.payload, delayMs: run.delayMs, resumeNote: run.resumeNote, now: new Date() }
         // Turno interrompido antes de salvar o histórico (motor Opex sem `messages`, OpenCode sem sessão):
         // a retomada leva também a mensagem do disparo, senão o modelo perde a solicitação.
         const noHistory = run.snapshot.engine === "opex" ? !run.messages : !run.opencodeSessionId
         const message =
             resume && noHistory && (run.interruptions ?? 0) > 0
-                ? [activationMessage({ kind: "start", ...messageInput }), "", activationMessage({ kind: "resume", ...messageInput })].join("\n")
+                ? [activationMessage({ kind: "start", ...messageInput, now: null }), "", activationMessage({ kind: "resume", ...messageInput })].join("\n")
                 : activationMessage({ kind: resume ? "resume" : "start", ...messageInput })
         const input: EngineInput = {
             agent,
@@ -238,7 +241,6 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                     http: httpEnabled && (run.snapshot.engine === "opex" || opencodeHttp.length) ? { tool: run.snapshot.engine === "opencode" ? `${toolPrefix}${HTTP_REQUEST_TOOL}` : HTTP_REQUEST_TOOL, secrets: secretCatalog } : null,
                     warnings: activation.warnings,
                     skillsBlock: skillsCatalogBlock(skills.catalog, toolPrefix),
-                    now: new Date(),
                 }),
             internalTools,
             onStep: (step) => recordRunStep(run, { kind: step.kind, label: step.label.slice(0, 200), detail: step.detail ?? null, toolName: step.toolName ?? null, durationMs: step.durationMs ?? null, error: step.error ?? false }),
@@ -257,6 +259,8 @@ async function executeActivation(run: RoutineRunDoc, activation: Activation): Pr
                         costUsd: step.costUsd,
                         apiKeyId: step.apiKeyId ?? null,
                         billing: step.billing ?? null,
+                        ...(step.tokenDetails ? { tokenDetails: step.tokenDetails } : {}),
+                        ...(step.listCost ? { listCost: step.listCost } : {}),
                     })
                 }
                 const maxTokens = run.snapshot.limits.maxTokens

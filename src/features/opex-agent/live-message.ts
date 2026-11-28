@@ -1,6 +1,7 @@
 import { OPEX_CLIENT_TOOL_GROUPS } from "./client-tools"
 import { isOpexToolGroup } from "./constants"
 import { MADDOX_NATIVE_TOOL_GROUP } from "@/features/maddox-agent/constants"
+import { activeBackground } from "@/features/agentic/background-label"
 import type { OpexLiveMessage, OpexPart, OpexStreamLine } from "./types"
 
 /**
@@ -62,6 +63,11 @@ export function applyLiveLine(live: OpexLiveMessage | null, line: OpexStreamLine
             return { ...live, thinking: false, parts: [...live.parts, { type: "form", id: line.form.id, form: line.form, status: "pending" }] }
         case "form-status":
             return { ...live, parts: live.parts.map((part) => (part.type === "form" && part.id === line.id ? { ...part, status: line.status } : part)) }
+        case "background": {
+            // Agente Maddox (OPE-216): trabalho em segundo plano que o turno aguarda; zerado = a espera acabou.
+            const background = activeBackground(line)
+            return { ...live, thinking: background ? false : live.thinking, background }
+        }
     }
 }
 

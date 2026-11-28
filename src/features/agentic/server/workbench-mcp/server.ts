@@ -28,7 +28,7 @@ export function isWorkbenchMcpAuthorized(authorization: string | null): boolean 
 }
 
 async function parentSession(sessionId: string): Promise<string | null> {
-    const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
+    const { getOpencodeClient } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client")
     const client = await getOpencodeClient()
     const info: { parentID?: string | null } | null = await client.session.get({ sessionID: sessionId }).catch(() => null)
     return info?.parentID ?? null

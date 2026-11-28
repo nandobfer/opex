@@ -6,8 +6,8 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn() }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.config }))
-vi.mock('@/lib/db/models/CronJobState', () => ({ CronJobState: { findOne: () => ({ select: () => ({ lean: mocks.state }) }) } }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: mocks.config }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ CronJobState: { findOne: () => ({ select: () => ({ lean: mocks.state }) }) } }))
 
 import { loadPrWatchSchedule } from '@/features/agentic/server/pr-watch-schedule'
 

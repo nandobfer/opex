@@ -1,13 +1,14 @@
 /** Constantes das features de IA (módulo puro). */
 
-import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 /**
  * Abas da página "Inteligência Artificial": Provedores (padrão, omitida da URL) e uma aba por agente,
- * na ordem do catálogo de agentes (`AGENT_CATALOG`, OPE-122). Orçamentista e Catalogador fundem duas
- * features cada (uma seção por feature).
+ * na ordem do catálogo de agentes (`AGENT_CATALOG`, OPE-122), mais o Agente de Bootstrap no fim (OPE-215,
+ * fora do catálogo: sem item na sidebar). Orçamentista e Catalogador fundem duas features cada (uma
+ * seção por feature).
  */
-export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "agente-secretario", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor", "rotineiros"] as const
+export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "agente-secretario", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor", "rotineiros", "agente-bootstrap"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /**
@@ -46,6 +47,10 @@ export const AI_PROVIDER_TAB_IDS: Record<AiProviderId, readonly AiProviderTab[]>
 }
 
 /** Features do app que usam IA (uma configuração salva por feature). */
+/** Origens do consumo de IA do Catalogador (`ai_consumption_logs`). */
+export const TASK_SUMMARY_CONSUMPTION_ORIGIN = "task-summary"
+export const TASK_TAGS_CONSUMPTION_ORIGIN = "task-tags"
+
 export const AI_FEATURE_IDS = ["task-summary", "task-tags", "budget-preview", "estimate-hours", "task-refinement", "pr-review", "plugin-version-summary"] as const
 export type AiFeatureId = (typeof AI_FEATURE_IDS)[number]
 

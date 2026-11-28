@@ -1,13 +1,14 @@
 import { dbConnect } from "@/lib/db"
-import { AiUsageLog } from "@/lib/db/models/Ai"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
 import { DevTask } from "@/lib/db/models/DevTask"
 import { DomainError } from "@/lib/api/route"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { integrationDebug } from "@/lib/integrations/server"
 import { loggerFor } from "@/lib/logger"
-import { streamAi, type AiStreamEvent } from "@/lib/ai/stream"
+import { streamAi, type AiStreamEvent } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { concludedColumnKeys, getTask, publishTasksUpdated } from "@/features/tasks/server/service"
 import { buildTaskSummaryInstructions, buildTaskSummaryPrompt, needsSummary, taskSummaryInputFromDetail, taskSummarySourceHash, toSummaryLine, type TaskSummarySource } from "../task-summary"
 import type { TaskSummarySettings } from "../schemas"
+import { TASK_SUMMARY_CONSUMPTION_ORIGIN } from "../constants"
 import type { TaskSummaryEvent } from "../types"
 import { availabilityOfTaskSummary, loadTaskSummarySettings } from "./settings"
 
@@ -100,7 +101,7 @@ export async function* runTaskSummary(prepared: PreparedTaskSummary, signal?: Ab
         prompt: prepared.prompt,
         title: prepared.title,
         signal,
-        consumption: { origin: "task-summary", subject: prepared.taskId },
+        consumption: { origin: TASK_SUMMARY_CONSUMPTION_ORIGIN, subject: prepared.taskId },
     })) {
         if (event.type === "delta") {
             text += event.text

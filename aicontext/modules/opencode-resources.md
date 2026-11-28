@@ -40,7 +40,9 @@ shell do OpenCode enquanto ele está no ar e gravado no campo) e **Impressão di
   (`agentic_workbenches.runState = running`) e refinamentos (`task_refinements.runState = running`)
   que serão interrompidos.
 - **Atualizar**: versão disponível pelo npm (`@opencode/cli`). Sem pedido vai para a **última 2.x**
-  (o Opex usa `@opencode/client` 2.x). Uma major nova (3.x+) aparece como botão próprio e exige
+  (o Opex usa `@opencode/client` 2.x; desde a OPE-216, host e cliente na **2.4.2**, que trazem a API de jobs
+  `experimental.job` usada para esperar subagentes e comandos em segundo plano — ver
+  `modules/agentic-dev.md`, "Subagentes e trabalho em segundo plano"). Uma major nova (3.x+) aparece como botão próprio e exige
   confirmação extra (`allowMajor`) sobre possível incompatibilidade. Roda em segundo plano. Sem
   resposta do npm, o botão continua visível e desabilitado, com o motivo.
 - **Operações** (`opencode_service_operations`, modelo `OpencodeServiceOperation`): uma por vez (409
@@ -153,6 +155,15 @@ execução bloqueia as não selecionadas pela permissão `skill` da sessão (`ai
 - **Concorrência**: um lock em memória (`withConfigLock`) serializa backup → gravação → conferência
   vindos da tela e do agente.
 - **Ids**: base64url de `[tipo, escopo, nome]` (`ids.ts`).
+
+## Skills usadas pelo Agente de Bootstrap (OPE-215)
+
+O Agente de Bootstrap (`modules/project-bootstrap.md`) usa skills do OpenCode do host (padrão `bootstrap-agents-md`,
+`bootstrap-aicontext` e `bootstrap-docker`, instaladas em `~/.agents/skills`): a aba do agente só **escolhe** quais; o
+conteúdo é criado, editado, ligado/desligado e removido aqui (aba Skills) ou pelas ferramentas `opencode-resources`. Renomear
+ou remover uma delas faz o bootstrap falhar com o motivo e o link para esta aba. A regra das permissões (negar todas e
+liberar só as escolhidas) é `skillPermissionRules` (`src/features/opencode-resources/skill-permissions.ts`), a mesma dos
+agentes rotineiros (`routineSkillPermissions`).
 
 ## Tempo real e auditoria
 

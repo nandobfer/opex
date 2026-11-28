@@ -20,6 +20,8 @@ vi.mock('@/lib/api', () => ({
 }))
 vi.mock('@/lib/pusher/client', () => ({ isPusherClientAvailable: () => false, acquireChannel: vi.fn(), releaseChannel: vi.fn() }))
 // Agente cadastrado no Engramind: o universo aparece (o estado "Cadastrar agente" tem teste próprio).
+// OPE-206: a instância do dono nos nomes antigos.
+vi.mock('@/features/engramind/hooks/useChannelNamespace', () => ({ useChannelNamespace: () => ({ data: { app: 'opex', prefixed: false }, isError: false }) }))
 vi.mock('@/features/ai/hooks/useAgentProvision', () => ({ useAgentMemoryStatus: () => ({ data: { exists: true, disabled: false } }), useProvisionAgent: () => ({ mutate: vi.fn() }) }))
 
 import { DeveloperMemoriesSection } from '@/features/agentic/components/DeveloperMemoriesSection'

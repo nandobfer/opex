@@ -1,11 +1,11 @@
 import { dbConnect } from "@/lib/db"
-import { AiUsageLog } from "@/lib/db/models/Ai"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
 import { DomainError } from "@/lib/api/route"
 import { loggerFor } from "@/lib/logger"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { askJevSystemOne } from "@/lib/ai/jev"
-import { describeAiError, streamAi, type AiStreamEvent, type AiUsage } from "@/lib/ai/stream"
-import type { AiProviderId } from "@/lib/ai/providers"
+import { integrationDebug } from "@/lib/integrations/server"
+import { askJevSystemOne } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
+import { describeAiError, streamAi, type AiStreamEvent, type AiUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { generateTagsForInput } from "@/features/ai/server/task-tags"
 import { availabilityOfEstimateHours, loadEstimateHoursSettings } from "@/features/ai/server/settings"
 import type { EstimateHoursSettings } from "@/features/ai/schemas"
@@ -19,6 +19,7 @@ import {
     parseEstimateHours,
 } from "../preview-prompt"
 import type { DraftPreviewDto } from "../types"
+import { ESTIMATE_HOURS_CONSUMPTION_ORIGIN } from "../constants"
 import { findSimilarTasks } from "./similar"
 
 /**
@@ -150,7 +151,7 @@ export async function* estimateHours(prepared: PreparedEstimateHours, hooks: { o
                 prompt,
                 title: prepared.title,
                 signal,
-                consumption: { origin: "estimate-hours", subject: prepared.subject },
+                consumption: { origin: ESTIMATE_HOURS_CONSUMPTION_ORIGIN, subject: prepared.subject },
             })) {
                 if (event.type === "delta") {
                     text += event.text

@@ -1,16 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type MouseEvent } from "react"
 import Link from "next/link"
 import { Ban, Brain, MoreVertical, Pause, Play, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { navigateInPage } from "@/hooks/useUrlFilters"
 import { cn } from "@/lib/utils"
-import { CONVERSATION_PARAM } from "../../memory-focus"
-import { secretarySectionPath } from "../../links"
 import { useConversationAction } from "../../hooks/useSecretaryChat"
 import type { SecretaryConversationDto } from "../../types"
+import { useMemoriesHref, useMemoriesInPage } from "./memories-link"
 
 type Row = Pick<SecretaryConversationDto, "chatId" | "name" | "state">
 
@@ -20,12 +20,14 @@ type Row = Pick<SecretaryConversationDto, "chatId" | "name" | "state">
  */
 export function useConversationActions(row: Row, minutes: number) {
     const action = useConversationAction(row.chatId)
+    const memoriesHrefOf = useMemoriesHref()
+    const memoriesInPage = useMemoriesInPage()
     const [confirming, setConfirming] = useState(false)
     const paused = row.state === "paused"
     const excluded = row.state === "excluded"
     const togglePause = () => action.mutate(paused ? { action: "resume" } : { action: "pause", minutes })
     const toggleExclude = () => (excluded ? action.mutate({ action: "include" }) : setConfirming(true))
-    const memoriesHref = secretarySectionPath("memorias", { [CONVERSATION_PARAM]: row.chatId })
+    const memoriesHref = memoriesHrefOf(row.chatId)
     const confirm = (
         <ConfirmDialog
             open={confirming}
@@ -38,10 +40,19 @@ export function useConversationActions(row: Row, minutes: number) {
             onConfirm={() => action.mutate({ action: "exclude" }, { onSettled: () => setConfirming(false) })}
         />
     )
-    return { paused, excluded, pending: action.isPending, togglePause, toggleExclude, memoriesHref, confirm }
+    return { paused, excluded, pending: action.isPending, togglePause, toggleExclude, memoriesHref, memoriesInPage, confirm }
 }
 
 type Actions = ReturnType<typeof useConversationActions>
+
+/**
+ * Clique simples em "Abrir memórias" na página do agente troca a aba na hora; com tecla modificadora, abre como link.
+ * Em Integrações › IA (sem `inPage`) o link navega normalmente.
+ */
+function openInPage(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (navigateInPage(href)) event.preventDefault()
+}
 
 export function ConversationActionsMenu({ actions, label, className }: { actions: Actions; label: string; className?: string }) {
     return (
@@ -60,7 +71,7 @@ export function ConversationActionsMenu({ actions, label, className }: { actions
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                    <Link href={actions.memoriesHref}>
+                    <Link href={actions.memoriesHref} onClick={actions.memoriesInPage ? (event) => openInPage(event, actions.memoriesHref) : undefined}>
                         <Brain className="h-4 w-4" aria-hidden /> Abrir memórias
                     </Link>
                 </DropdownMenuItem>

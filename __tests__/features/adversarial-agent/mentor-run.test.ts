@@ -22,8 +22,8 @@ const store = vi.hoisted(() => ({ runs: null as unknown, reviews: null as unknow
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { EXECUTAR: 'EXECUTAR', APROVAR: 'APROVAR', DEVOLVER: 'DEVOLVER' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local', name: 'Eu' }), LOCAL_USER_ID: 'local' }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.streamAi }))
-vi.mock('@/lib/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: mocks.streamAi }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/jev', () => ({ askJevSystemOne: mocks.askJev }))
 vi.mock('@/features/agentic/server/hub', () => ({ prepareHub: vi.fn(async () => undefined), publishWorkbenchEvent: mocks.publishWorkbenchEvent, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 // Memórias do adversário: a lista `adversarial` do serviço de memórias dos agentes.
 vi.mock('@/features/ai/server/memory-settings', () => ({ memoryLimitsFor: mocks.limitsFor }))

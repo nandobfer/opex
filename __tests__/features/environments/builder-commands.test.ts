@@ -161,7 +161,7 @@ describe('build dos ambientes no servidor', () => {
 
   it('sem configuração: o build é o de antes (padrão do host) e só o log avisa', () => {
     const build = steps(null)[0]!
-    expect(build.command).toBe(buildCommand(plan, server(null)))
+    expect(build.command).toBe(buildCommand(plan, server(null), ['app']))
     expect(build.command).not.toContain('BUILDX_BUILDER')
     expect(build.note).toBe('Build com o builder padrão do host.')
   })

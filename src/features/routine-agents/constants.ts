@@ -3,6 +3,8 @@
  * `aicontext/modules/routine-agents.md`.
  */
 
+import { realFixedChannel, type ChannelNamespace } from "@/features/engramind/channel-namespace"
+
 export const ROUTINE_AGENT_AUDIT_ENTITY = "AgenteRotineiro"
 export const ROUTINE_RUN_AUDIT_ENTITY = "ExecucaoAgenteRotineiro"
 
@@ -15,10 +17,13 @@ export const ROUTINE_RUN_ATTENTION_EVENT = "routine-run-attention"
 export const ROUTINE_CONSUMPTION_ORIGIN = "routine-agent"
 export const ROUTINE_PROVISIONING_ORIGIN = "routine-agent-provisioning"
 
-/** Canais do Engramind. */
+/** Canais do Engramind (nomes LÓGICOS; o real leva o app da instância na frente, OPE-206). */
 export const ROUTINE_GLOBAL_CHANNEL = "agentes/rotineiros/global"
 export const ROUTINE_CHANNEL_PREFIX = "agentes/rotineiros"
-export const routineChannelOf = (slug: string) => `${ROUTINE_CHANNEL_PREFIX}/${slug}`
+/** Canal real do global dos rotineiros (`<app>/agentes/rotineiros/global`). */
+export const routineGlobalChannel = (ns: ChannelNamespace) => realFixedChannel(ns, ROUTINE_GLOBAL_CHANNEL)
+/** Canal real próprio de um rotineiro (`<app>/agentes/rotineiros/<slug>`). */
+export const routineChannelOf = (slug: string, ns: ChannelNamespace) => realFixedChannel(ns, `${ROUTINE_CHANNEL_PREFIX}/${slug}`)
 
 /** Espera viva máxima sem valor configurado. */
 export const DEFAULT_LIVE_WAIT_MINUTES = 10
@@ -44,7 +49,20 @@ export const ROUTINE_SETTINGS_TAB = "rotineiros"
 export const routineSettingsHref = (agentId?: string) => `/integracoes/ia?aba=${ROUTINE_SETTINGS_TAB}${agentId ? `&agente=${agentId}` : ""}`
 /** Lista dos agentes rotineiros (seta de voltar da página do agente, OPE-160). */
 export const ROUTINE_AGENTS_PATH = "/agentes-rotineiros"
-export const routineAgentHref = (agentId: string, runId?: string) => `/agentes-rotineiros/${agentId}${runId ? `?aba=execucoes&execucao=${runId}` : ""}`
+export const routineAgentHref = (agentId: string) => `${ROUTINE_AGENTS_PATH}/${agentId}`
+/** Aba Execuções da página do agente (o voltar da página de uma execução). */
+export const routineRunsHref = (agentId: string) => `${routineAgentHref(agentId)}?aba=execucoes`
+/** Página de uma execução (OPE-208: substituiu a gaveta `?execucao=`). */
+export const routineRunPath = (agentId: string, runId: string) => `${routineAgentHref(agentId)}/execucoes/${runId}`
+
+/**
+ * Chave da memória-índice de um canal (OPE-209): o mapa das chaves do canal, lido antes de consultar o resto
+ * por chave (listar o canal inteiro é exceção).
+ */
+export const ROUTINE_MEMORY_INDEX_KEY = "indice"
+
+/** Teto do texto de uma memória gravada pelo agente rotineiro (`remember`/`update_memory`). */
+export const ROUTINE_MEMORY_TEXT_MAX = 20_000
 
 /** Ferramentas internas da execução (sempre liberadas, nos dois motores). */
 export const ROUTINE_INTERNAL_TOOLS = ["remember", "list_my_memories", "wait", "hibernate", "request_confirmation", "finish"] as const

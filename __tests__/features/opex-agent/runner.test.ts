@@ -41,16 +41,16 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@/lib/ai/stream', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   prepareModel: async (request: unknown) => {
     mocks.prepareModel(request)
     return { model: { id: 'modelo' }, apiKeyId: 'key_x', takeStepCost: () => mocks.stepCosts.shift() ?? null, dispose: async () => {} }
   },
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
-}))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.recordAiConsumption }))
-vi.mock('@/lib/ai/opencode-go', () => ({ opencodeGoModelInputs: async () => ['text', 'image/png'] }))
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/consumption", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ recordAiConsumption: mocks.recordAiConsumption }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ opencodeGoModelInputs: async () => ['text', 'image/png'] }))()) as Record<string, unknown>) }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: async () => {}, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: vi.fn(async () => {}) }))
 vi.mock('@/lib/storage/s3', () => ({
@@ -244,8 +244,24 @@ describe('runner do Agente Opex', () => {
     ])
     expect(sessions().docs[0]).toMatchObject({ status: 'idle', lastError: null })
     expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ origin: 'opex-agent', subject: sessionId, totalTokens: 60, costUsd: null, apiKeyId: 'key_x' }))
+    // OPE-205: sem detalhes no `totalUsage`, os tokens de cache e de raciocínio ficam null (não informado), nunca 0.
+    expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ tokenDetails: { noCache: null, cacheRead: null, cacheWrite: null, output: 10, reasoning: null } }))
     expect(mocks.refreshSessionTitle).toHaveBeenCalledWith(sessionId, settings, { userText: 'Quais tarefas do CRM?', assistantText: 'Achei 2 tarefas.', tools: ['Listar tarefas'] }, { kind: 'owner' })
     expect(isTurnActive(sessionId)).toBe(false)
+  })
+
+  it('grava os tokens de cache e de raciocínio do turno quando o provedor informa (OPE-205)', async () => {
+    const sessionId = await newSession()
+    mocks.parts = [
+      { type: 'text-delta', id: 'x', text: 'Ok.' },
+      {
+        type: 'finish',
+        finishReason: 'stop',
+        totalUsage: { inputTokens: 100, outputTokens: 20, totalTokens: 120, inputTokenDetails: { noCacheTokens: 30, cacheReadTokens: 60, cacheWriteTokens: 10 }, outputTokenDetails: { textTokens: 15, reasoningTokens: 5 } },
+      },
+    ]
+    await runTurn(sessionId, 'Oi')
+    expect(mocks.recordAiConsumption).toHaveBeenCalledWith(expect.objectContaining({ tokenDetails: { noCache: 30, cacheRead: 60, cacheWrite: 10, output: 20, reasoning: 5 } }))
   })
 
   it('OpenCode Go: sessão estável da conversa e consumo com o custo e o billing somados dos passos (OPE-154)', async () => {

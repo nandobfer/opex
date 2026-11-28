@@ -87,11 +87,13 @@ export async function prepareRoutineChatTurn(input: PrepareTurnInput): Promise<P
     const notices: string[] = []
     const target = await routineAgentTarget(agent.engramindToken).catch(() => null)
     if (!target) throw new Error("Token do agente rotineiro indisponível no Engramind: use \"Reprovisionar\" na configuração do agente")
+    const ns = await (await import("@/features/engramind/server/instance")).channelNamespaceOrLegacy()
     const { channels, memoryChannels } = await routineMemoryChannels(
         agent,
         target,
         (message) => notices.push(message),
         (error) => routineLog.warn({ err: error, sessionId: input.sessionId }, "[routine-agents] conversa: não foi possível conferir os canais arquivados"),
+        ns,
     )
     const { getAgentMemoryContext } = await import("@/features/engramind/server/memory-context")
     const memory = await getAgentMemoryContext(routineIdentityOf(agent.slug), channels, { target, focus: input.userText.slice(0, 1_000) })
@@ -118,6 +120,7 @@ export async function prepareRoutineChatTurn(input: PrepareTurnInput): Promise<P
             runId: "",
             sessionId: input.sessionId,
             allowed: memoryChannels,
+            ns,
             warn: (message) => routineLog.warn({ sessionId: input.sessionId }, `[routine-agents] conversa: ${message}`),
         })
         const internal: OpexTool[] = [...memoryTools, ...skills.tools]
@@ -136,7 +139,7 @@ export async function prepareRoutineChatTurn(input: PrepareTurnInput): Promise<P
             lookup: new Map(tools.map((tool) => [tool.name, tool])),
             instructions: routineChatInstructions({ memoryBlock: memory.block, skillsBlock: skillsCatalogBlock(skills.catalog), secrets: http ? secrets.list() : null }),
             history,
-            toolContext: { sessionId: input.sessionId, actorId: input.actorId, signal: input.signal, scope: input.scope, secrets },
+            toolContext: { sessionId: input.sessionId, actorId: input.actorId, signal: input.signal, scope: input.scope, secrets, routine: { agentId: String(agent._id), runId: null } },
             notices,
             hooks: {
                 // Internas (memória, skills) nunca pedem confirmação; as demais seguem o switch do agente (D4).

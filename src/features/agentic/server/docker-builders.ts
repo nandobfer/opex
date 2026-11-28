@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { getOpencodeClient, runOpencodeShell } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DOCKER_BUILDERS_COMMAND, parseBuildxLs, type DockerBuildersDto } from "../docker-builders"
 import { loadCentral } from "./centrals"
 

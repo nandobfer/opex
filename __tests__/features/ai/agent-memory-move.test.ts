@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+vi.mock('@/features/engramind/server/instance', async () => (await import('../../helpers/engramind-instance')).instanceMock())
 import { createFakeEngramind, type FakeEngramind } from '../../helpers/fake-engramind'
 
 /** Mover memória de lista (OPE-132): o serviço usa o `move_memory` do Engramind, audita e avisa as duas listas. */

@@ -53,6 +53,18 @@ describe('useEnvironmentEnvValues', () => {
     expect(result.current.data).toBeUndefined()
   })
 
+  it('OPE-211: sair da página (desmontar) tira os valores do cache; o tempo real do módulo não relê', async () => {
+    mocks.get.mockResolvedValue({ data: { success: true, data: values } })
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+    const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    const { result, unmount } = renderHook(() => useEnvironmentEnvValues('e1', true), { wrapper })
+    await waitFor(() => expect(result.current.data).toEqual(values))
+    await client.invalidateQueries({ queryKey: ['environments'] })
+    expect(mocks.get).toHaveBeenCalledTimes(1)
+    unmount()
+    expect(client.getQueryData(['environment-env-values', 'e1'])).toBeUndefined()
+  })
+
   it('fechado: não lê nada', () => {
     const client = new QueryClient()
     const wrapper = ({ children }: { children: ReactNode }) => <QueryClientProvider client={client}>{children}</QueryClientProvider>

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { buildIntegrationUpdateSchema } from '@/features/integrations/schemas/integration.schema'
-import { DEFAULT_CRON_JOBS, OPENCODE_SESSIONS_CLEANUP_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID, getIntegrationDef } from '@/lib/integrations/catalog'
+import { buildIntegrationUpdateSchema } from "@nandobfer/integracoes/modules/core/schemas"
+import { DEFAULT_CRON_JOBS, OPENCODE_SESSIONS_CLEANUP_JOB_ID, TASK_TAGS_CONCLUDED_JOB_ID } from "@/features/integrations/registry/jobs"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
 
 describe('buildIntegrationUpdateSchema', () => {
   it('aceita somente os campos da própria integração', () => {
@@ -69,7 +70,13 @@ describe('buildIntegrationUpdateSchema', () => {
     const schema = buildIntegrationUpdateSchema(getIntegrationDef('internal_api'))
     expect(schema.safeParse({ publicValues: { exportToken: 'a'.repeat(64) } }).success).toBe(false)
     expect(schema.safeParse({ secrets: { token: { action: 'clear' } } }).success).toBe(false)
-    expect(schema.safeParse({ debugMode: true }).success).toBe(true)
+    expect(schema.safeParse({ swaggerUrl: '' }).success).toBe(true)
+  })
+
+  it('o PATCH recusa ambiente e modo debug (OPE-212: o debug é sempre ativo)', () => {
+    const schema = buildIntegrationUpdateSchema(getIntegrationDef('pusher'))
+    expect(schema.safeParse({ debugMode: true }).success).toBe(false)
+    expect(schema.safeParse({ environment: 'interno' }).success).toBe(false)
   })
 
   it('segredo exige valor não vazio ao substituir', () => {

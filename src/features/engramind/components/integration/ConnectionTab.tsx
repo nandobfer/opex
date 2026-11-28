@@ -15,11 +15,10 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { DetailActions } from "@/features/integrations/components/detail/DetailActions"
-import { GeneralCard } from "@/features/integrations/components/detail/GeneralCard"
-import { ApiDocsCard } from "@/features/integrations/components/detail/ApiDocsCard"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
-import type { Draft } from "@/features/integrations/components/detail/draft"
+import { DetailActions } from "@nandobfer/integracoes/react"
+import { ApiDocsCard } from "@nandobfer/integracoes/react"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes"
+import type { Draft } from "@nandobfer/integracoes/react"
 import { connectionInputSchema, type ConnectionInput, type ConnectionValues } from "../../schemas/connection"
 import type { BootstrapStepDto, EngramindConnectionDto } from "../../types"
 import { useEngramindConnection, useEngramindEnvironmentOptions, useRunEngramindBootstrap, useSaveEngramindConnection } from "../../hooks/useEngramindConnection"
@@ -141,7 +140,6 @@ function ConnectionForm({ connection, onDirtyChange, data, draft, setDraft, dirt
                 }}
                 className="flex flex-col gap-6"
             >
-                <GeneralCard draft={draft} setDraft={setDraft} />
                 <ApiDocsCard data={data} draft={draft} setDraft={setDraft} dirty={dirty} onExplore={onExplore} />
                 <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
             </form>

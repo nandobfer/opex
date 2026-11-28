@@ -145,6 +145,8 @@ async function readState(): Promise<NonNullable<IEngramindState["relatedMemories
 /** Preenche o que falta (memória sem cálculo ou que falhou há mais de `RELATED_REFILL_MS`), em lotes. */
 export async function fillRelatedMemories(): Promise<void> {
     await engramindDb()
+    // Migração dos nomes dos canais (OPE-206): o preenchimento espera (as memórias estão mudando de canal).
+    if (await (await import("./instance")).isMemoryMaintenance()) return
     // O cache é lido ANTES da listagem: um documento gravado durante ela (webhook `memory.created`) não vira órfão.
     const cached = await EngramindRelatedMemory.find({}).select({ _id: 1 }).lean<{ _id: string }[]>()
     const listed = await listMemoryIds()
@@ -210,6 +212,8 @@ export async function onRelatedMemoryEvent(event: { type: string; memory_ids?: u
     if (!ids.length) return false
     const state = await readState()
     if (!state?.requestedAt) return false
+    // Durante a migração B os `move` disparam um evento por memória: o canal guardado é reescrito no fim dela.
+    if (await (await import("./instance")).isMemoryMaintenance()) return false
     if (event.type === "memory.deleted") for (const id of ids) await removeRelatedMemory(id)
     else await mapLimit(ids, RELATED_CONCURRENCY, async (id) => void (await computeRelated(id)))
     await publishEngramind({ type: RELATED_MEMORIES_EVENT_TYPE }, { live: false })
