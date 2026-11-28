@@ -315,6 +315,26 @@ descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** 
   (`previewService`), e o turno de correção não cita a lista.
 - **GitHub Action:** um turno curto do agente **commita** tudo (e faz o dump, se ligado); o app roda
   `scripts/preview-github.ts` da tentativa reservada (`remotePreviewCommands`).
+- **Saída do GitHub Actions na aba (OPE-214):** o script só espera o run em silêncio, então o
+  **servidor** acompanha o run pela **integração GitHub** (Integrações › GitHub; o token precisa de leitura
+  em Actions) e escreve no mesmo log do build (`createRunFollower`/`followGithubRun` em
+  `server/github-run-follow.ts`, formatação pura em `github-run-log.ts`):
+  - liga quando a saída do script traz a URL do run (`Prévia GitHub: …/actions/runs/<id>`) **do repositório
+    da central** (URL de outro repositório é ignorada); só no método GitHub Action — servidor e PC não mudam;
+  - consulta o run e os jobs a cada 5 s (com ETag) e escreve "aguardando um runner", o cabeçalho de cada job,
+    o início e o fim de cada etapa (duração, falha, pulada) e o **log de cada job** — incremental (linhas
+    completas) se a API já o entregar durante a execução, senão inteiro quando o job termina — sem o carimbo de
+    hora e com `##[group]`/`##[error]`/`##[warning]` em cores; nada é escrito duas vezes;
+  - no fim: "GitHub Actions concluído" ou o bloco **"GitHub Actions falhou"** com o job e a etapa que falharam,
+    as linhas `##[error]` e o final do log do job (`failureExcerpt`). Esse trecho também vai à frente do final
+    da saída no prompt de correção (`buildFixPrompt`);
+  - **ordem do log:** a saída do script depois da URL (download, publicação) fica retida até o acompanhamento
+    acabar, e o `exit` só é escrito depois dele (teto de 60 s após o fim do script, com aviso). Fica
+    comando → push/URL → GitHub Actions → publicação → exit; na retomada a seção recomeça e o
+    acompanhamento também;
+  - **melhor esforço:** token sem acesso, 404, limite de uso ou falhas de rede seguidas viram uma linha amarela no
+    próprio log ("Não foi possível acompanhar o GitHub Actions…") e o build segue pelo código de saída do
+    script. O link "Abrir a execução no GitHub" continua acima do log.
 - **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
   (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
   numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é

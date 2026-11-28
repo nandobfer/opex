@@ -122,7 +122,7 @@ export function BuildLogPanel({ workbenchId, build }: { workbenchId: string; bui
                     {empty && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                             <Hammer className="h-6 w-6" aria-hidden />
-                            <p>{running ? (build.method === "github" ? "Aguardando a saída do script da prévia…" : "Aguardando a saída do docker compose…") : "Este build não produziu saída."}</p>
+                            <p>{running ? (build.method === "github" ? "Aguardando a saída do script da prévia e do GitHub Actions…" : "Aguardando a saída do docker compose…") : "Este build não produziu saída."}</p>
                         </motion.div>
                     )}
                 </AnimatePresence>
