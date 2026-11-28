@@ -6,6 +6,8 @@
 
 export const LINE_SELECTOR = "[data-md-line]"
 export const LINE_ACTION_SELECTOR = "[data-md-line-action]"
+/** Controles do `Markdown` que não são conteúdo (citar/comentar a linha, copiar o bloco, ação da seleção). */
+export const MD_CONTROL_SELECTOR = `${LINE_ACTION_SELECTOR}, [data-md-code-copy], [data-md-selection-action]`
 
 /** Trecho selecionado: texto como aparece na tela, quantas linhas cobre e qual ocorrência na 1ª linha. */
 export interface MarkdownSelection {
@@ -53,11 +55,11 @@ export function countOccurrences(haystack: string, needle: string): number {
     return count
 }
 
-/** Nós de texto de `root`, sem os dos botões de ação (badge). */
-function textNodes(root: Node): Text[] {
+/** Nós de texto de `root`, sem os dos controles (botões de ação, badge, copiar o bloco). */
+export function textNodes(root: Node): Text[] {
     const doc = root.ownerDocument ?? document
     const walker = doc.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-        acceptNode: (node) => (node.parentElement?.closest(LINE_ACTION_SELECTOR) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+        acceptNode: (node) => (node.parentElement?.closest(MD_CONTROL_SELECTOR) ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
     })
     const nodes: Text[] = []
     for (let node = walker.nextNode(); node; node = walker.nextNode()) nodes.push(node as Text)
@@ -68,7 +70,7 @@ function textNodes(root: Node): Text[] {
 export function rangeText(range: Range): string {
     const container = range.commonAncestorContainer
     const scope = container.nodeType === Node.TEXT_NODE ? (container.parentNode ?? container) : container
-    if (container.nodeType === Node.TEXT_NODE && (container.parentElement?.closest(LINE_ACTION_SELECTOR) ?? null)) return ""
+    if (container.nodeType === Node.TEXT_NODE && (container.parentElement?.closest(MD_CONTROL_SELECTOR) ?? null)) return ""
     let text = ""
     for (const node of textNodes(scope)) {
         if (!range.intersectsNode(node)) continue

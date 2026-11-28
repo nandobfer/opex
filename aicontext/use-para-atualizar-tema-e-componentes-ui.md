@@ -502,6 +502,35 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   check `text-primary` por 2 s (`CODE_COPIED_MS`, troca com Framer Motion) e um `aria-live` anuncia
   "Copiado"; se nenhum caminho funcionar, toast de erro e o bloco segue intacto. O clique não propaga
   (cards clicáveis). Código inline não ganha botão.
+- **Copiar a seleção como Markdown** (OPE-220; `ui/markdown-copy.ts`, núcleo em `src/lib/markdown/copy.ts`):
+  selecionar e copiar (Ctrl+C, menu de contexto, "Copiar" do toque) qualquer trecho de um `Markdown` — todo
+  o app: chats, relato do rotineiro, tarefas, planos, portal, plugins — põe em `text/plain` o **Markdown-fonte
+  do trecho** e em `text/html` o HTML do trecho (colar formatado em editores ricos), ambos sem os controles
+  (citar/comentar a linha, badge, copiar o bloco, ação da seleção) e sem os atributos `data-md-*`. O plugin
+  `rehypeSourceOffsets` (`src/lib/markdown/rehype-source-offsets.ts`, antes do `rehypeLogicalLines`) grava em
+  cada elemento os offsets no fonte (`data-md-start`/`-end`), os do conteúdo sem marcadores
+  (`data-md-content-start`/`-end`) e a tag original (`data-md-tag`); o `pre` tem o conteúdo entre as cercas. A
+  raiz leva `data-md-root` e o fonte fica num `WeakMap` (`registerMarkdownSource`); um único listener `copy` no
+  documento vive enquanto houver um `Markdown` montado. Cada ponta da seleção é alinhada ao fonte dentro do
+  elemento anotado mais interno (caractere igual anda nos dois, espaço casa com espaço, o resto do fonte —
+  marcação, `\`, entidades, `> `, indentação — é pulado). Regras (decisões do dono no plano):
+  - **inline** (negrito, itálico, tachado, link, código inline) só leva a marcação quando está inteiro na
+    seleção; em parte, vai o texto puro do pedaço;
+  - **bloco** (título, item, citação) ganha o marcador quando a seleção cobre o conteúdo dele desde o começo até
+    o fim ou além: só "Tít" do começo de um título copia "Tít"; o título inteiro, "## Título";
+  - **bloco de código**: seleção toda dentro de um bloco copia o código puro (como o botão); cortando o bloco, o
+    lado cortado ganha a cerca (a de abertura com a linguagem), só com as linhas selecionadas;
+  - **tabela** cortada entre células vira linhas inteiras, com o cabeçalho e a linha delimitadora quando a
+    seleção começa depois deles; dentro de uma célula, sem pipes;
+  - **indentação**: o prefixo de contêiner (espaços de lista, `> ` de citação) que a primeira linha perdeu no
+    corte sai também das seguintes; imagem/mídia entra inteira (`![alt](url)`);
+  - **seleção mista** (Markdown e interface, ex.: várias mensagens com nome e horário): as partes renderizadas
+    em Markdown e o texto da tela entre elas como hoje (`Range.toString()`, sem as quebras que a cópia nativa
+    poria entre blocos), juntos por linha em branco.
+  Fora do `Markdown`, com o foco num `input`/`textarea`/`contenteditable`/editor, com o evento já tratado
+  (`defaultPrevented`) ou quando o alinhamento falha (texto renderizado sem par no fonte), a cópia segue a
+  nativa. O registrador do Vim (`vim-setup.ts`, `copiedSelection`) recebe o mesmo Markdown
+  (`selectionClipboard`).
 - **Citar a linha no campo do agente** (`src/components/agent-reply/`): `ReplyTargetProvider` dá às
   saídas de IA da subárvore a ação "Citar no campo de resposta", que insere `> linha` + linha em
   branco no cursor (`insertQuote`, `src/lib/markdown/quote.ts`), sem apagar o texto, e foca o campo.
