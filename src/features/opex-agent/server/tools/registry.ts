@@ -24,6 +24,7 @@ import { opencodeResourceTools, opencodeServiceTools } from "./opencode"
 import { aiSettingsTools, dashboardTools, prReviewTools } from "./misc"
 import { pluginTools } from "./plugins"
 import { previewTools } from "./previews"
+import { projectBootstrapTools } from "./project-bootstrap"
 import { routineAgentTools } from "./routine-agents"
 import { secretaryTools } from "./secretary"
 import { serviceTools } from "./services"
@@ -44,6 +45,7 @@ export const OPEX_TOOLS: readonly OpexTool[] = [
     ...timeTools,
     ...workbenchTools,
     ...centralTools,
+    ...projectBootstrapTools,
     ...githubTools,
     ...issueTools,
     ...integrationTools,

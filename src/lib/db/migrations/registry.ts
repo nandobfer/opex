@@ -22,6 +22,7 @@ import { migrateAiProviderApiKeys } from "./migrate-ai-provider-api-keys"
 import { ensurePluginIndexes } from "./ensure-plugin-indexes"
 import { ensureAgentFileIndexes } from "./ensure-agent-file-indexes"
 import { candidatadorCurriculoTools } from "./candidatador-curriculo-tools"
+import { seedProjectBootstrapCatalog } from "./project-bootstrap-catalog"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -49,4 +50,6 @@ registerMigrations(
     // OPE-210: catálogo dos arquivos dos agentes (`agent_files`) e o Candidatador no fluxo novo de currículo.
     { name: "ensure-agent-file-indexes", run: () => ensureAgentFileIndexes() },
     { name: "candidatador-curriculo-tools", run: () => candidatadorCurriculoTools() },
+    // OPE-215: carga inicial do catálogo de tecnologias do Agente de Bootstrap (uma vez, com marca).
+    { name: "project-bootstrap-catalog", run: () => seedProjectBootstrapCatalog() },
 )

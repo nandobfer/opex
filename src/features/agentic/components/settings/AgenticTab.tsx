@@ -14,6 +14,7 @@ import { agenticSettingsSchema, DEFAULT_AGENTIC_SETTINGS, type AgenticSettings }
 import { DeveloperMemoriesSection } from "../DeveloperMemoriesSection"
 import { AgentsSettingsSection } from "./AgentsSettingsSection"
 import { CentralsCard } from "./CentralsCard"
+import { ActiveBootstrapsCard } from "@/features/project-bootstrap/components/ActiveBootstrapsCard"
 import { DefaultSettingsSection } from "./DefaultSettingsSection"
 import { SettingsActions } from "./SettingsActions"
 
@@ -77,7 +78,12 @@ export function AgenticTab({ onDirtyChange }: { onDirtyChange: (dirty: boolean) 
 
             {tab === "memorias" && <DeveloperMemoriesSection />}
 
-            {tab === "centrais" && <CentralsCard />}
+            {tab === "centrais" && (
+                <div className="space-y-6">
+                    <ActiveBootstrapsCard />
+                    <CentralsCard />
+                </div>
+            )}
         </IntegrationTabs>
     )
 }

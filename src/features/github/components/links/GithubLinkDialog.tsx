@@ -10,8 +10,7 @@ import { Field } from "@/components/ui/field"
 import { FORM_GRID } from "@/components/ui/form-grid"
 import { SearchPicker } from "@/components/ui/search-picker"
 import { Switch } from "@/components/ui/switch"
-import { columnDotStyle } from "@/features/tasks/board"
-import { ColumnIconView } from "@/features/tasks/components/column-icons"
+import { BoardColumnPicker } from "@/features/tasks/components/BoardColumnPicker"
 import { useTaskBoard } from "@/features/tasks/hooks/useTaskBoard"
 import { repoLinkInputSchema, type RepoLinkInput, type RepoLinkValues } from "../../schemas"
 import type { GithubLinkDto } from "../../types"
@@ -48,8 +47,6 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
     const [repo, columnKey, closedColumnKey] = useWatch({ control: form.control, name: ["repo", "entryColumnKey", "closedColumnKey"] })
     const takenRepos = useMemo(() => new Set(links.filter((item) => item.id !== link?.id).map((item) => item.repo)), [links, link])
     const errors = form.formState.errors
-    const selectedColumn = columns.find((column) => column.key === columnKey)
-    const selectedClosedColumn = columns.find((column) => column.key === closedColumnKey)
 
     return (
         <Dialog open={open} onOpenChange={(next) => !next && !submitting && onClose()}>
@@ -88,80 +85,28 @@ export function GithubLinkDialog({ open, link, links, submitting, onSubmit, onCl
                         </Field>
 
                         <Field id="link-column" label="Coluna de entrada" error={errors.entryColumnKey?.message}>
-                            <SearchPicker
-                                trigger={
-                                    <FieldTrigger
-                                        id="link-column"
-                                        placeholder={columns.length ? "Escolha a coluna" : "Crie uma coluna no quadro"}
-                                        invalid={Boolean(errors.entryColumnKey)}
-                                        value={
-                                            selectedColumn ? (
-                                                <span className="flex items-center gap-2">
-                                                    <ColumnIconView icon={selectedColumn.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    {selectedColumn.label}
-                                                </span>
-                                            ) : undefined
-                                        }
-                                    />
-                                }
-                                items={columns}
-                                getKey={(item) => item.key}
-                                searchKeys={["label"]}
-                                renderItem={(item) => (
-                                    <span className="flex items-center gap-2">
-                                        <span className="h-2 w-2 rounded-full" style={columnDotStyle(item)} aria-hidden />
-                                        <ColumnIconView icon={item.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
-                                        {item.label}
-                                    </span>
-                                )}
-                                onPick={(item) => form.setValue("entryColumnKey", item.key, { shouldValidate: true, shouldDirty: true })}
+                            <BoardColumnPicker
+                                id="link-column"
+                                columns={columns}
+                                value={columnKey || null}
+                                onChange={(key) => form.setValue("entryColumnKey", key ?? "", { shouldValidate: true, shouldDirty: true })}
                                 loading={board.isLoading}
-                                matchTriggerWidth
+                                invalid={Boolean(errors.entryColumnKey)}
+                                placeholder={columns.length ? "Escolha a coluna" : "Crie uma coluna no quadro"}
                                 searchLabel="Buscar coluna"
-                                listLabel="Colunas"
-                                emptyText="Nenhuma coluna: crie uma no quadro de Tarefas"
-                                emptySearchText="Nenhuma coluna encontrada"
                             />
                         </Field>
 
                         <Field id="link-closed-column" label="Coluna de conclusão">
-                            <SearchPicker
-                                trigger={
-                                    <FieldTrigger
-                                        id="link-closed-column"
-                                        placeholder="Opcional"
-                                        invalid={Boolean(errors.closedColumnKey)}
-                                        value={
-                                            selectedClosedColumn ? (
-                                                <span className="flex items-center gap-2">
-                                                    <ColumnIconView icon={selectedClosedColumn.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
-                                                    {selectedClosedColumn.label}
-                                                </span>
-                                            ) : undefined
-                                        }
-                                    />
-                                }
-                                items={columns}
-                                getKey={(item) => item.key}
-                                searchKeys={["label"]}
-                                renderItem={(item) => (
-                                    <span className="flex items-center gap-2">
-                                        <span className="h-2 w-2 rounded-full" style={columnDotStyle(item)} aria-hidden />
-                                        <ColumnIconView icon={item.column.icon} className="h-3.5 w-3.5 text-muted-foreground" />
-                                        {item.label}
-                                    </span>
-                                )}
-                                onPick={(item) => form.setValue("closedColumnKey", item.key, { shouldValidate: true, shouldDirty: true })}
-                                matchTriggerWidth
+                            <BoardColumnPicker
+                                id="link-closed-column"
+                                columns={columns}
+                                value={closedColumnKey ?? null}
+                                onChange={(key) => form.setValue("closedColumnKey", key, { shouldValidate: true, shouldDirty: true })}
+                                invalid={Boolean(errors.closedColumnKey)}
+                                placeholder="Opcional"
                                 searchLabel="Buscar coluna de conclusão"
-                                listLabel="Colunas"
-                                emptyText="Nenhuma coluna: crie uma no quadro de Tarefas"
-                                emptySearchText="Nenhuma coluna encontrada"
-                                footer={
-                                    <button type="button" className="w-full rounded-sm px-2 py-1.5 text-left text-sm text-muted-foreground hover:bg-muted" onClick={() => form.setValue("closedColumnKey", null, { shouldValidate: true, shouldDirty: true })}>
-                                        Sem coluna de conclusão
-                                    </button>
-                                }
+                                noneLabel="Sem coluna de conclusão"
                             />
                         </Field>
 

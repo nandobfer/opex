@@ -4,10 +4,11 @@ import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/i
 
 /**
  * Abas da página "Inteligência Artificial": Provedores (padrão, omitida da URL) e uma aba por agente,
- * na ordem do catálogo de agentes (`AGENT_CATALOG`, OPE-122). Orçamentista e Catalogador fundem duas
- * features cada (uma seção por feature).
+ * na ordem do catálogo de agentes (`AGENT_CATALOG`, OPE-122), mais o Agente de Bootstrap no fim (OPE-215,
+ * fora do catálogo: sem item na sidebar). Orçamentista e Catalogador fundem duas features cada (uma
+ * seção por feature).
  */
-export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "agente-secretario", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor", "rotineiros"] as const
+export const AI_TABS = ["provedores", "agente-opex", "agente-maddox", "agente-secretario", "orcamentista", "catalogador", "refinar-tarefa", "desenvolvimento-agentico", "agente-arquiteto", "agente-adversario", "revisao-pr", "agente-mentor", "rotineiros", "agente-bootstrap"] as const
 export type AiTab = (typeof AI_TABS)[number]
 
 /**
