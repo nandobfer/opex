@@ -5,9 +5,9 @@ import { describe, expect, it } from 'vitest'
  * jobs entra e o exemplo de `tools/call` de cada ferramenta valida no Zod dela.
  */
 
-import { maddoxMcpCatalog, maddoxMcpDocsCatalog } from '@/features/maddox-agent/server/mcp-catalog'
-import { buildPublicApiSpec } from '@/features/public-api/openapi/spec'
-import { parseOpenApiSpec } from '@/features/integrations/openapi/parser'
+import { maddoxMcpCatalog, maddoxMcpDocsCatalog } from "@/features/maddox-agent/server/mcp-catalog"
+import { buildPublicApiSpec } from "@/features/public-api/openapi/spec"
+import { parseOpenApiSpec } from "@/lib/integrations/server"
 
 type Examples = Record<string, { value: { params?: { name: string; arguments: unknown } } }>
 type Raw = { paths: Record<string, { post: { requestBody: { content: { 'application/json': { examples: Examples } } } } }> }

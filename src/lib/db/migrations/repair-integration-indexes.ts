@@ -1,11 +1,11 @@
 import type { Types } from 'mongoose'
-import { CronJobState } from '@/lib/db/models/CronJobState'
-import { Integration } from '@/lib/db/models/Integration'
-import { IntegrationLog } from '@/lib/db/models/IntegrationLog'
-import { IntegrationStatus } from '@/lib/db/models/IntegrationStatus'
-import type { CronJobConfig } from '@/lib/integrations/catalog'
-import { nextRunAt, scheduleSignature, validateSchedule } from '@/lib/integrations/schedule'
-import { logger } from '@/lib/logger'
+import { CronJobState } from "@nandobfer/integracoes/mongoose"
+import { Integration } from "@nandobfer/integracoes/mongoose"
+import { IntegrationLog } from "@nandobfer/integracoes/mongoose"
+import { IntegrationStatus } from "@nandobfer/integracoes/mongoose"
+import type { CronJobConfig } from "@nandobfer/integracoes"
+import { nextRunAt, scheduleSignature, validateSchedule } from "@nandobfer/integracoes"
+import { logger } from "@/lib/logger"
 
 /**
  * Repara as coleções das integrações. Idempotente; roda a cada boot.

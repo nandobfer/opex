@@ -1,10 +1,10 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ publish: vi.fn() }))
-vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish }))
+vi.mock("@/features/agentic/server/hub", () => ({ publishWorkbenchEvent: mocks.publish }))
 
-import { runAgentTurn } from '@/features/agentic/server/runner'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { runAgentTurn } from "@/features/agentic/server/runner"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 type Raw = { type: string; data: Record<string, unknown> }
 
@@ -92,7 +92,8 @@ describe('runAgentTurn', () => {
     await vi.waitFor(() => expect(client.session.prompt).toHaveBeenCalled())
     controller.abort(new Error('Interrompido pelo usuário'))
     const result = await pending
-    expect(client.session.interrupt).toHaveBeenCalledWith({ sessionID: 's1' })
+    // OPE-216: a interrupção leva prazo (opções da requisição com o sinal).
+    expect(client.session.interrupt).toHaveBeenCalledWith({ sessionID: 's1' }, expect.objectContaining({ signal: expect.anything() }))
     expect(result).toMatchObject({ outcome: 'interrupted', text: 'a' })
   })
 })

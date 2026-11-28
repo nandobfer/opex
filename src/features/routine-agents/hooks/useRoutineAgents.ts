@@ -42,16 +42,43 @@ export function useSaveRoutineAgent() {
 export type RoutineStatusAction = "pause" | "resume" | "archive" | "unarchive"
 const STATUS_TOAST: Record<RoutineStatusAction, string> = { pause: "Agente pausado", resume: "Agente retomado", archive: "Agente arquivado", unarchive: "Agente desarquivado (pausado)" }
 
+/**
+ * Pausar/Retomar com resposta otimista (OPE-213): o status muda na hora no agente e nas listas em cache (pausado
+ * sem próximo disparo) e volta ao anterior se a chamada falhar. Arquivar/desarquivar seguem sem otimismo (o item
+ * sai ou entra na lista).
+ */
+function patchAgentStatus(queryClient: ReturnType<typeof useQueryClient>, id: string, action: RoutineStatusAction): () => void {
+    if (action !== "pause" && action !== "resume") return () => undefined
+    const patch = (agent: RoutineAgentDto): RoutineAgentDto => (action === "pause" ? { ...agent, status: "paused", nextFireAt: null } : { ...agent, status: "active" })
+    const previousAgent = queryClient.getQueryData<RoutineAgentDto>(routineKeys.agent(id))
+    const previousLists = queryClient.getQueriesData<RoutineAgentDto[]>({ queryKey: [...routineKeys.all, "list"] })
+    if (previousAgent) queryClient.setQueryData(routineKeys.agent(id), patch(previousAgent))
+    for (const [key, list] of previousLists) if (list) queryClient.setQueryData(key, list.map((agent) => (agent.id === id ? patch(agent) : agent)))
+    return () => {
+        if (previousAgent) queryClient.setQueryData(routineKeys.agent(id), previousAgent)
+        for (const [key, list] of previousLists) queryClient.setQueryData(key, list)
+    }
+}
+
 export function useRoutineAgentStatus() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: async ({ id, action }: { id: string; action: RoutineStatusAction }) => unwrapApi((await api.post<ApiResponse<RoutineAgentDto>>(`/routine-agents/${id}/status`, { action })).data),
+        onMutate: async ({ id, action }) => {
+            // Uma releitura em andamento (tempo real, revalidação) não pode sobrescrever o status otimista.
+            if (action === "pause" || action === "resume")
+                await Promise.all([queryClient.cancelQueries({ queryKey: routineKeys.agent(id) }), queryClient.cancelQueries({ queryKey: [...routineKeys.all, "list"] })])
+            return { rollback: patchAgentStatus(queryClient, id, action) }
+        },
         onSuccess: (agent, { action }) => {
             toast.success(STATUS_TOAST[action])
             queryClient.setQueryData(routineKeys.agent(agent.id), agent)
-            void queryClient.invalidateQueries({ queryKey: routineKeys.all })
         },
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível alterar o status do agente")),
+        onError: (error, _input, context) => {
+            context?.rollback()
+            toast.error(apiErrorMessage(error, "Não foi possível alterar o status do agente"))
+        },
+        onSettled: () => void queryClient.invalidateQueries({ queryKey: routineKeys.all }),
     })
 }
 

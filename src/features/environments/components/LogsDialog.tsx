@@ -2,7 +2,7 @@
 
 import { useEffect, useRef } from "react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
-import { IntegrationConsole, type IntegrationConsoleHandle } from "@/features/integrations/components/IntegrationConsole"
+import { IntegrationConsole, type IntegrationConsoleHandle } from "@nandobfer/integracoes/react"
 
 /** Logs dos serviços (últimas 200 linhas) num terminal. */
 export function LogsDialog({ title, output, onClose }: { title: string; output: string | null; onClose: () => void }) {

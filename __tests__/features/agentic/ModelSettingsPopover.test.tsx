@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
@@ -18,9 +20,10 @@ const MODELS = [
 ]
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: MODELS, isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as Record<string, unknown>), }))
 /** Busca simplificada: o gatilho e um botão por modelo (o popover da busca não interessa aqui). */
-vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   ModelSearchPicker: ({ trigger, models, onPick }: { trigger: React.ReactElement; models: { data: typeof MODELS }; onPick: (model: (typeof MODELS)[number]) => void }) => (
     <div>
       {trigger}
@@ -31,7 +34,7 @@ vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
       ))}
     </div>
   ),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 /** Select simplificado: um botão por opção (o portal do Radix Select não abre no DOM de teste). */
 vi.mock('@/components/ui/select', async () => {
   const React = await import('react')
@@ -51,6 +54,24 @@ vi.mock('@/components/ui/select', async () => {
     },
   }
 })
+vi.mock("@nandobfer/integracoes/modules/react/ui/select", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (async () => {
+  const React = await import('react')
+  const Ctx = React.createContext<(value: string) => void>(() => undefined)
+  return {
+    Select: ({ onValueChange, children }: { onValueChange: (value: string) => void; children: React.ReactNode }) => <Ctx.Provider value={onValueChange}>{children}</Ctx.Provider>,
+    SelectTrigger: () => null,
+    SelectValue: () => null,
+    SelectContent: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+    SelectItem: ({ value, children }: { value: string; children: React.ReactNode }) => {
+      const change = React.useContext(Ctx)
+      return (
+        <button type="button" onClick={() => change(value)}>
+          variante {children}
+        </button>
+      )
+    },
+  }
+})(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useSetWorkbenchModel: () => ({ mutate: mocks.setWorkbenchModel, ...mocks.pending }) }))
 vi.mock('@/features/agentic/hooks/useForks', () => ({ useSetForkModel: () => ({ mutate: mocks.setForkModel, isPending: false }) }))
 

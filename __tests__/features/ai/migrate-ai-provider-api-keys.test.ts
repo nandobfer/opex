@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ findOne: vi.fn(), updateOne: vi.fn(), warn: vi.fn() }))
-vi.mock('@/lib/db/models/Integration', () => ({ Integration: { findOne: (filter: { integrationId: string }) => ({ lean: () => mocks.findOne(filter.integrationId) }), updateOne: mocks.updateOne } }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ Integration: { findOne: (filter: { integrationId: string }) => ({ lean: () => mocks.findOne(filter.integrationId) }), updateOne: mocks.updateOne } }))
 vi.mock('@/lib/logger', () => ({ logger: { warn: mocks.warn, info: vi.fn(), error: vi.fn() } }))
 
 import { MIGRATED_API_KEY_NAME, migrateAiProviderApiKeys } from '@/lib/db/migrations/migrate-ai-provider-api-keys'

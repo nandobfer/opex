@@ -56,7 +56,7 @@ Conexão cacheada (`src/lib/db/connection.ts`), migrações idempotentes no `dbC
 ### 3. Integrações configuráveis (cópia do CRM/Smart Desk)
 
 Catálogo puro + resolvedor banco → `.env` → default, segredos AES-256-GCM
-(`INTEGRATIONS_ENCRYPTION_KEY`), teste de conexão, status em tempo real, modo debug com terminal e
+(`INTEGRATIONS_ENCRYPTION_KEY`), teste de conexão, status em tempo real, debug sempre ativo com terminal e
 explorador OpenAPI. Detalhes em `modules/integrations.md`.
 
 **Credenciais de serviços pessoais** (ex.: token do GitHub, chaves de IA) ficam como campo privado

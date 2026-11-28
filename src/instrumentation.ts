@@ -6,18 +6,24 @@
  * `/api/routines/scheduler-tick` executa o MESMO motor sob demanda. Numa prévia do Opex
  * (`OPEX_PREVIEW=1`, OPE-147) o `startCronScheduler` não liga o tick (banco compartilhado). Depois
  * sobe o kernel de plugins (OPE-172), que numa prévia não ativa código de servidor de plugin.
+ *
+ * Os `import()` ficam DENTRO do `if` de `NEXT_RUNTIME === "nodejs"` (padrão da documentação do Next): o
+ * Webpack também compila este arquivo para o runtime edge e só descarta o ramo inteiro quando a
+ * condição envolve o bloco; com um `return` antecipado, ele seguia os imports e falhava ao resolver
+ * `child_process`/`fs` da `@ai-sdk/mcp` no bundle edge.
  */
 export async function register() {
-    if (process.env.NEXT_RUNTIME !== "nodejs") return
+    if (process.env.NEXT_RUNTIME === "nodejs") {
+        // Central de integrações (`@nandobfer/integracoes`): o runtime do Opex é configurado no import.
+        const { startCronScheduler } = await import("@/lib/integrations/scheduler")
+        startCronScheduler()
 
-    const { startCronScheduler } = await import("@/features/integrations/scheduler/cron-scheduler")
-    startCronScheduler()
+        // Kernel de plugins (OPE-172): sobe sem bloquear o boot. Ver aicontext/modules/plugins.md.
+        const { startPluginKernel } = await import("@/features/plugins/server/boot")
+        void startPluginKernel()
 
-    // Kernel de plugins (OPE-172): sobe sem bloquear o boot. Ver aicontext/modules/plugins.md.
-    const { startPluginKernel } = await import("@/features/plugins/server/boot")
-    void startPluginKernel()
-
-    // Engramind (OPE-206): confere a rede das memórias e revoga tokens gravados de outro app (migração A), fora da prévia.
-    const { scheduleEngramindStartupCheck } = await import("@/features/engramind/server/memory-network")
-    scheduleEngramindStartupCheck()
+        // Engramind (OPE-206): confere a rede das memórias e revoga tokens gravados de outro app (migração A), fora da prévia.
+        const { scheduleEngramindStartupCheck } = await import("@/features/engramind/server/memory-network")
+        scheduleEngramindStartupCheck()
+    }
 }

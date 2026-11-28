@@ -1,9 +1,11 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from "react"
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { IntegrationDetailDto } from "@/features/integrations/types"
+import type { IntegrationDetailDto } from "@nandobfer/integracoes/modules/core/dto"
 
 const mocks = vi.hoisted(() => ({
     useIntegration: vi.fn(),
@@ -14,21 +16,21 @@ const mocks = vi.hoisted(() => ({
     toast: { success: vi.fn(), error: vi.fn(), info: vi.fn() },
 }))
 
-vi.mock("@/features/integrations/hooks/useIntegrationTestStream", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationTestStream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useIntegrationTestStream: () => ({ state: "idle", start: vi.fn(async () => {}), cancel: vi.fn() }),
-}))
-vi.mock("@/features/integrations/hooks/useIntegrationStatusLive", () => ({ useIntegrationStatusLive: vi.fn() }))
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationStatusLive", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useIntegrationStatusLive: vi.fn() }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("next/link", () => ({ default: ({ children, ...props }: { children: React.ReactNode }) => <a {...props}>{children}</a> }))
 vi.mock("sonner", () => ({ toast: mocks.toast }))
-vi.mock("@/features/integrations/hooks/useIntegrations", () => ({
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrations", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useIntegration: mocks.useIntegration,
     useUpdateIntegration: () => ({ mutateAsync: mocks.mutateAsync, isPending: false }),
     integrationErrorMessage: (_e: unknown, fallback: string) => fallback,
-}))
-vi.mock("@/features/integrations/hooks/useIntegrationDebugLogs", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/hooks/useIntegrationDebugLogs", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     useIntegrationDebugLogs: () => ({ mode: mocks.debugMode, loading: false, error: null, refresh: mocks.refresh }),
-}))
-vi.mock("@/features/integrations/components/explorer/IntegrationExplorer", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/explorer/IntegrationExplorer", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     IntegrationExplorer: ({ swaggerUrl, onBack }: { swaggerUrl: string; onBack: () => void }) => (
         <div data-testid="explorer">
             {swaggerUrl}
@@ -37,13 +39,13 @@ vi.mock("@/features/integrations/components/explorer/IntegrationExplorer", () =>
             </button>
         </div>
     ),
-}))
-vi.mock("@/features/integrations/components/IntegrationConsole", () => ({
+}))(importOriginal)) as Record<string, unknown>), }))
+vi.mock("@nandobfer/integracoes/modules/react/central/IntegrationConsole", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     SEARCH_HIGHLIGHT_LIMIT: 1000,
     IntegrationConsole: React.forwardRef(function Console() {
         return <div data-testid="console" />
     }),
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 vi.mock("framer-motion", () => {
     const MOTION_PROPS = new Set(["initial", "animate", "exit", "variants", "transition", "whileTap", "layout"])
     const passthrough = (tag: string) =>
@@ -62,16 +64,14 @@ vi.mock("framer-motion", () => {
     }
 })
 
-import { IntegrationDetailPage } from "@/features/integrations/components/IntegrationDetailPage"
-import { generateApiToken } from "@/features/integrations/components/TokenField"
-import { DEBUG_DIALOG_MEDIA_QUERY } from "@/features/integrations/components/detail/debug-toggle-context"
+import { IntegrationDetailPage } from "@nandobfer/integracoes/modules/react/central/IntegrationDetailPage"
+import { generateApiToken } from "@nandobfer/integracoes/modules/react/central/TokenField"
+import { DEBUG_DIALOG_MEDIA_QUERY } from "@nandobfer/integracoes/modules/react/central/detail/debug-toggle-context"
 
 const detail = (overrides: Partial<IntegrationDetailDto> = {}): IntegrationDetailDto => ({
     id: "pusher",
     name: "Pusher",
     description: "Eventos em tempo real",
-    environment: "externo",
-    debugMode: false,
     publicValues: { mode: "cluster", appId: "app-a", key: "key", cluster: "sa1", url: null, clientKey: null, clientCluster: null, clientUrl: null },
     secrets: { secret: { configured: true, source: "db", unreadable: false } },
     encryptionKeyConfigured: true,
@@ -162,8 +162,8 @@ describe("IntegrationDetailPage", () => {
         expect(screen.getByRole("button", { name: /Desfazer/ })).toBeTruthy()
     })
 
-    it("debug ligado: barra com tempo real e Atualizar, que busca os eventos novos", () => {
-        mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+    it("logs: barra com tempo real e Atualizar, que busca os eventos novos", () => {
+        mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
         openDebug()
         expect(screen.getByText("Tempo real")).toBeTruthy()
@@ -173,7 +173,7 @@ describe("IntegrationDetailPage", () => {
     })
 
     it("regressão: nenhum elemento da página usa projeção de layout (tela em branco ao navegar)", () => {
-        mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+        mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
         openDebug()
         expect(mocks.layoutTags).toEqual([])
@@ -191,7 +191,7 @@ describe("IntegrationDetailPage", () => {
                 disconnect() {}
             },
         )
-        mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+        mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
         const scroller = document.createElement("main")
         scroller.style.overflowY = "auto"
         scroller.style.paddingTop = "24px"
@@ -209,7 +209,7 @@ describe("IntegrationDetailPage", () => {
     })
 
     it("maximizar redimensiona só o Card (o aside fica como placeholder, terminal não remonta); Esc restaura", () => {
-        mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+        mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
         openDebug()
         const panel = screen.getByTestId("integration-debug-panel")
@@ -230,22 +230,24 @@ describe("IntegrationDetailPage", () => {
 
     it("sem Pusher, o indicador informa que não há tempo real", () => {
         mocks.debugMode = "manual"
-        mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+        mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
         render(<IntegrationDetailPage id="pusher" />)
         openDebug()
         expect(screen.getByText("Sem tempo real")).toBeTruthy()
     })
 
     describe("botão de debug no título (OPE-169)", () => {
-        const debugOn = () => mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: true }), isLoading: false, isError: false })
+        const debugOn = () => mocks.useIntegration.mockReturnValue({ data: detail(), isLoading: false, isError: false })
 
-        it("sem modo debug, o botão não aparece e a coluna não monta", () => {
+        it("o debug é sempre ativo: o botão aparece sem ligar nada e a coluna começa fechada", () => {
             render(<IntegrationDetailPage id="pusher" />)
-            expect(screen.queryByRole("button", { name: /logs de debug/ })).toBeNull()
+            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
             expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
+            expect(screen.queryByText(/Modo debug/)).toBeNull()
+            expect(screen.queryByText("Ambiente")).toBeNull()
         })
 
-        it("com modo debug, a coluna começa fechada e o botão alterna abrir/fechar com aria-expanded e aria-controls", () => {
+        it("a coluna começa fechada e o botão alterna abrir/fechar com aria-expanded e aria-controls", () => {
             debugOn()
             const { container } = render(<IntegrationDetailPage id="pusher" />)
             const button = screen.getByRole("button", { name: "Abrir logs de debug" })
@@ -291,22 +293,16 @@ describe("IntegrationDetailPage", () => {
             expect(reopened.style.position).toBe("")
         })
 
-        it("modo debug desligado (salvo) fecha a coluna aberta e tira o botão", () => {
+        it("salvar de novo (detalhe atualizado) não fecha a coluna aberta", () => {
             debugOn()
             const { rerender } = render(<IntegrationDetailPage id="pusher" />)
             openDebug()
             expect(screen.getByTestId("integration-debug-panel")).toBeTruthy()
 
-            mocks.useIntegration.mockReturnValue({ data: detail({ debugMode: false }), isLoading: false, isError: false })
+            mocks.useIntegration.mockReturnValue({ data: detail({ updatedAt: "2026-11-28T00:00:00.000Z" }), isLoading: false, isError: false })
             rerender(<IntegrationDetailPage id="pusher" />)
-            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
-            expect(screen.queryByRole("button", { name: /logs de debug/ })).toBeNull()
-
-            // Religado, continua fechado: o estado não deriva do modo debug.
-            debugOn()
-            rerender(<IntegrationDetailPage id="pusher" />)
-            expect(screen.queryByTestId("integration-debug-panel")).toBeNull()
-            expect(screen.getByRole("button", { name: "Abrir logs de debug" }).getAttribute("aria-expanded")).toBe("false")
+            expect(screen.getByTestId("integration-debug-panel")).toBeTruthy()
+            expect(screen.getByRole("button", { name: "Fechar logs de debug" }).getAttribute("aria-expanded")).toBe("true")
         })
 
         it("trocar de integração com os logs abertos volta para fechado", () => {
@@ -319,7 +315,6 @@ describe("IntegrationDetailPage", () => {
                 data: detail({
                     id: "storage_s3",
                     name: "Storage S3",
-                    debugMode: true,
                     publicValues: { endpoint: "http://minio:9000", publicEndpoint: null, region: "us-east-1", bucket: "default", signedUrlExpiresSeconds: 3600 },
                     secrets: {
                         accessKey: { configured: true, source: "db", unreadable: false },

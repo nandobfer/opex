@@ -5,9 +5,9 @@ import { Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FORM_GRID } from "@/components/ui/form-grid"
-import { ModelPickerField, VariantSelectField } from "@/features/ai/components/ModelFields"
-import { useAiModels } from "@/features/ai/hooks/useAi"
-import { FallbackModelsField } from "@/features/ai/components/model-picker/FallbackModelsField"
+import { ModelPickerField, VariantSelectField } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields"
+import { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import { FallbackModelsField } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField"
 import type { MaddoxAgentSettings } from "../../schemas"
 
 interface MaddoxModelCardProps {

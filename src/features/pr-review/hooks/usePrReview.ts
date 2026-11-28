@@ -10,7 +10,7 @@ import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/p
 import { withBasePath } from "@/lib/base-path"
 import { useEventStream } from "@/features/agentic/hooks/useEventStream"
 import type { TimelineState } from "@/features/agentic/timeline"
-import { AI_QUERY_KEY } from "@/features/ai/hooks/useAi"
+import { AI_QUERY_KEY } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { PR_REVIEW_UPDATED_EVENT, type PrReviewAction } from "../constants"
 import type { PrReviewListParams } from "../filters"
 import type { PrReviewSettings } from "../schemas"

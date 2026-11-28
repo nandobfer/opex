@@ -11,7 +11,7 @@ const mocks = vi.hoisted(() => ({
     findWebhook: vi.fn(),
 }))
 
-vi.mock("@/lib/integrations/config", () => ({
+vi.mock("@/lib/integrations/runtime", () => ({
     getIntegrationConfig: async () => ({ internalUrl: "http://evolution-api:8080", apiKey: "CHAVE", defaultInstance: "fernando-opex", webhookUrl: "http://opex:7000/api/evolution/webhook" }),
 }))
 vi.mock("@/features/evolution-api/server/client", () => ({

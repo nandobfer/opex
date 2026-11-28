@@ -1,6 +1,6 @@
 import { formatCost } from "@/features/adversarial-agent/components/ReviewBadges"
 import { formatTokens } from "@/features/time/format"
-import { getAiProvider, isAiProviderId } from "@/lib/ai/providers"
+import { getAiProvider, isAiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { ArchitectDiagramDto } from "./types"
 
 /** Custo da versão; quando o provedor não informa custo (provedores diretos), os tokens. */

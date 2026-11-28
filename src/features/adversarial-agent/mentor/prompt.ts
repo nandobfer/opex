@@ -1,4 +1,4 @@
-import type { JevQuestion } from "@/lib/ai/jev"
+import type { JevQuestion } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
 import { MENTOR_TARGET_LABELS, type MentorTarget } from "./constants"
 import type { WriterMemory } from "./operations"
 

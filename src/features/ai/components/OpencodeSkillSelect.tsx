@@ -9,8 +9,8 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import type { AiSkillDto } from "@/lib/ai/providers"
-import { useAiSkills, useRefreshAiSkills } from "../hooks/useAi"
+import type { AiSkillDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { useAiSkills, useRefreshAiSkills } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 
 /** Linha de uma skill na busca: nome, id e descrição. */
 function SkillOption({ skill }: { skill: AiSkillDto }) {

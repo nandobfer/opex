@@ -1,7 +1,15 @@
 import type { OptionTabsOption } from "@/components/ui/option-tabs"
-import { initialLimits } from "./limits-form"
-import { MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
-import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto } from "./types"
+import { initialLimits, limitsPendingDeploy } from "./limits-form"
+import { composeNotDeployed } from "./managed-compose"
+import { environmentLimitsText } from "./resource-limits"
+import { composeOverridesPendingDeploy, composeOverridesText } from "./service-overrides"
+import { EMPTY_COMPOSE_OVERRIDES, MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
+import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto, HostCapacityDto } from "./types"
+
+/** Capacidade das máquinas ainda desconhecida (lista não carregada). */
+export const NO_HOSTS: Record<Machine, HostCapacityDto | null> = { server: null, pc: null }
+/** "o servidor" / "o PC" nas ajudas dos limites. */
+export const MACHINE_SUBJECT: Record<Machine, string> = { server: "o servidor", pc: "o PC" }
 
 /** Regras de tela (puras) do módulo Ambientes. */
 
@@ -22,6 +30,37 @@ export function healthOf(env: Pick<EnvironmentDto, "services" | "deployedOn">): 
 }
 
 export const HEALTH_LABELS: Record<EnvironmentHealth, string> = { running: "No ar", partial: "Parcial", stopped: "Parado", never: "Nunca implantado" }
+
+/** Um item salvo e ainda não implantado (faixa de aviso do card): o texto e o detalhe do que está salvo. */
+export interface PendingDeployItem {
+    key: "limits" | "overrides" | "compose"
+    label: string
+    detail: string
+}
+
+/** Mudanças salvas que só valem no próximo deploy (limites, ajustes dos serviços, compose gerenciado novo). */
+export function pendingDeployItems(env: EnvironmentDto): PendingDeployItem[] {
+    const items: PendingDeployItem[] = []
+    if (limitsPendingDeploy(env)) items.push({ key: "limits", label: "limites", detail: `Limites salvos: ${environmentLimitsText(env.limits)}` })
+    if (composeOverridesPendingDeploy(env)) items.push({ key: "overrides", label: "ajustes dos serviços", detail: `Ajustes salvos: ${composeOverridesText(env.composeOverrides) || "sem ajustes"}` })
+    if (composeNotDeployed(env) && env.source.kind === "managed") {
+        const deployed = env.deployedComposeVersion ? `v${env.deployedComposeVersion}` : "nenhuma"
+        items.push({ key: "compose", label: `compose v${env.source.composeVersion} (implantado: ${deployed})`, detail: `Compose salvo v${env.source.composeVersion}; implantado: ${deployed}` })
+    }
+    return items
+}
+
+/** "limites, ajustes dos serviços e compose v4" (lista em português). */
+export function joinLabels(labels: readonly string[]): string {
+    if (labels.length <= 1) return labels[0] ?? ""
+    return `${labels.slice(0, -1).join(", ")} e ${labels.at(-1)}`
+}
+
+/** "2/3 no ar" (vazio sem containers). */
+export function runningText(services: readonly { state: string }[]): string {
+    if (!services.length) return ""
+    return `${services.filter((service) => service.state === "running").length}/${services.length} no ar`
+}
 
 /** Opções de máquina com o PC desabilitado (e o motivo) quando o túnel está fechado. */
 export function machineOptions(pcAvailable: boolean, pcReason: string | null): OptionTabsOption<Machine>[] {
@@ -55,6 +94,7 @@ export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: 
             buildOn: "server",
             runOn: "server",
             limits: initialLimits(null),
+            composeOverrides: EMPTY_COMPOSE_OVERRIDES,
         }
     return {
         name: env.name,
@@ -66,6 +106,7 @@ export function formValuesOf(env: EnvironmentDto | null, defaults: { centralId: 
         buildOn: env.buildOn,
         runOn: env.runOn,
         limits: initialLimits(env),
+        composeOverrides: env.composeOverrides ?? EMPTY_COMPOSE_OVERRIDES,
     }
 }
 

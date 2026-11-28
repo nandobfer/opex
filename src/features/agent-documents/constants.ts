@@ -36,9 +36,7 @@ export const AGENT_DOCUMENT_LIMITS = {
 export const PDF_MIN_SCALE_FLOOR = 0.5
 export const PDF_DEFAULT_MIN_SCALE = 0.8
 
-/** Validade das URLs (min): padrões da integração Gotenberg e teto técnico do SigV4 (7 dias). */
-export const URL_TTL_DEFAULT_MINUTES = 15
-export const URL_TTL_MAX_DEFAULT_MINUTES = 60
+/** Teto técnico (min) da validade das URLs assinadas pelo SigV4 (7 dias); os padrões vêm da integração Gotenberg. */
 export const URL_TTL_SIGV4_MAX_MINUTES = 10_080
 
 /** Tipos devolvidos como texto inline pelo `get_s3`. */

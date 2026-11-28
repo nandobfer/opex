@@ -1,5 +1,5 @@
 import { dynamicTool, isLoopFinished, streamText, type ModelMessage, type ToolSet } from "ai"
-import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@/lib/ai/stream"
+import { describeAiError, prepareModel, samplingOptions, type PreparedModel } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import { toolErrorMessage, type OpexTool, type OpexToolContext } from "@/features/opex-agent/server/tools/define"
 import { OWNER_SCOPE } from "@/features/opex-agent/server/scope"
 import { compactToolOutput, redactToolInput, stringifyForDisplay } from "@/features/opex-agent/server/tool-display"
@@ -12,9 +12,9 @@ import { isInvalidRoutineOpexProvider, ROUTINE_ENGINE_PROVIDER_INVALID_MESSAGE }
 import { routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
-import { missingCost } from "@/lib/ai/pricing/compute"
-import { tokenDetailsOf, tokensFromUsage } from "@/lib/ai/pricing/usage"
-import type { StepPricer } from "@/lib/ai/pricing/server"
+import { missingCost } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/compute"
+import { tokenDetailsOf, tokensFromUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/usage"
+import type { StepPricer } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server"
 
 /**
  * Motor **Opex** (OPE-130): o mesmo pipeline do Agente Opex (`prepareModel` + `streamText` da AI SDK),
@@ -79,7 +79,7 @@ export async function mcpToolsFor(ids: readonly string[], signal: AbortSignal, w
 
 /** Pricer do turno; falha inesperada vira "sem preço" (o turno segue), cancelamento propaga. */
 async function stepPricerFor(provider: string, model: string, signal: AbortSignal): Promise<StepPricer> {
-    const { createStepPricer } = await import("@/lib/ai/pricing/server")
+    const { createStepPricer } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server")
     try {
         return await createStepPricer({ provider, model, signal })
     } catch (error) {

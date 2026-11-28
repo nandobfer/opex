@@ -1,6 +1,6 @@
 import type { SessionInfo } from "@opencode/client"
 import { AdversarialReview, adversarialDb } from "@/features/adversarial-agent/server/models"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { dbConnect } from "@/lib/db"
 import { AgenticFork, AgenticWorkbench } from "@/lib/db/models/Agentic"
@@ -98,7 +98,7 @@ async function listAllSessions(client: OpencodeClient, timeoutMs: number): Promi
         } while (cursor)
     }
     await scan({})
-    const projects = await client.project.list({ signal: AbortSignal.timeout(timeoutMs) }).catch((error: unknown) => {
+    const projects = await client.project.list({}, { signal: AbortSignal.timeout(timeoutMs) }).catch((error: unknown) => {
         log.warn({ err: error }, "[opencode-session-retention] Não foi possível listar os projetos do OpenCode; segue só com a listagem padrão")
         return []
     })

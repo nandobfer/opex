@@ -36,7 +36,7 @@ vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mock
 
 vi.mock("node:timers/promises", () => ({ setTimeout: vi.fn(async () => undefined) }))
 vi.mock("ai", () => ({ dynamicTool: (tool: unknown) => tool }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ total: mocks.spent }] } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", () => ({ AiConsumption: { aggregate: async () => [{ total: mocks.spent }] } }))
 vi.mock("@/features/ai/server/agent-memory-context", () => ({ agentMemoryContext: async () => ({ block: "" }) }))
 vi.mock("@/features/ai/server/self-memory/settings", () => ({ selfMemoryEnabled: async () => true }))
 vi.mock("@/features/ai/server/self-memory/tools", () => ({ selfMemoryTools: () => mocks.memoryTools }))
@@ -52,7 +52,7 @@ vi.mock("@/features/secretary-agent/server/inbound", async (original) => {
     return { ...actual, recordDecision: mocks.decide }
 })
 vi.mock("@/features/secretary-agent/server/settings", () => ({ loadSecretarySettings: async () => ({ settings: mocks.settings }) }))
-vi.mock("@/lib/db/models/Ai", () => ({ AiUsageLog: { aggregate: async () => [] } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog", () => ({ AiUsageLog: { aggregate: async () => [] } }))
 vi.mock("@/features/secretary-agent/server/decide-subject", () => ({ decideSubject: mocks.decideSubject }))
 vi.mock("@/features/secretary-agent/server/ai", () => ({ secretaryInference: mocks.inference }))
 vi.mock("@/features/secretary-agent/server/media", () => ({ readTurnMedia: mocks.readMedia }))

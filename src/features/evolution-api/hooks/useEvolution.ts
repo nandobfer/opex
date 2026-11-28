@@ -6,7 +6,7 @@ import { toast } from "sonner"
 import { api, apiErrorMessage } from "@/lib/api"
 import { acquireChannel, releaseChannel } from "@/lib/pusher/client"
 import { appChannel } from "@/lib/pusher/channel-names"
-import { integrationDetailKey, integrationsListKey } from "@/features/integrations/hooks/useIntegrations"
+import { integrationDetailKey, integrationsListKey } from "@nandobfer/integracoes/react"
 import { EVOLUTION_INTEGRATION_ID, EVOLUTION_QUERY_KEY, EVOLUTION_UPDATED_EVENT } from "../constants"
 import type { EvolutionContactDto } from "../types"
 

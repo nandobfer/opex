@@ -1,10 +1,11 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
 const mocks = vi.hoisted(() => ({ usage: vi.fn() }))
-vi.mock("@/features/ai/server/provider-usage", () => ({ getProviderUsage: mocks.usage }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/server/provider-usage", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getProviderUsage: mocks.usage }))(importOriginal)) as Record<string, unknown>), }))
 
-import { GET } from "@/app/api/ai/providers/[provider]/usage/route"
+const { GET } = legacyRoute("ai", "providers/[provider]/usage")
 
 const call = (provider: string, query = "") =>
     GET(new NextRequest(`http://localhost/api/ai/providers/${provider}/usage${query}`), { params: Promise.resolve({ provider }) })
@@ -20,8 +21,8 @@ describe("GET /api/ai/providers/[provider]/usage", () => {
         expect(mocks.usage).toHaveBeenCalledWith("gemini", { from: "2026-10-10T00:00:00.000Z", to: "2026-10-11T23:59:59.999Z" })
     })
 
-    it("OpenCode, JEV e provedor desconhecido não consultam o banco", async () => {
-        for (const provider of ["opencode", "jev", "desconhecido"]) expect((await call(provider)).status).toBe(404)
+    it("provedor desconhecido não consulta o banco (OpenCode e JEV têm o próprio painel em providers/<id>/usage)", async () => {
+        for (const provider of ["desconhecido", "gemini-x"]) expect((await call(provider)).status).toBe(404)
         expect(mocks.usage).not.toHaveBeenCalled()
     })
 

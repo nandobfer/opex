@@ -32,12 +32,12 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@/lib/ai/stream', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({
   prepareModel: async () => ({ model: { id: 'modelo' }, takeStepCost: () => null, dispose: async () => {} }),
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
 }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: async () => {} }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: async () => {} }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', ABORTAR: 'ABORTAR', EXECUTAR: 'EXECUTAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
 vi.mock('@/lib/storage/s3', () => ({ getFileObject: vi.fn(), getUploadUrl: vi.fn(), headFile: vi.fn(), copyFile: vi.fn(), deleteFile: vi.fn(), storageErrorInfo: () => ({ kind: 'unavailable', httpStatus: null, code: null }) }))

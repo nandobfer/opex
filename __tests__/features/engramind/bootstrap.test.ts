@@ -17,8 +17,8 @@ const mocks = vi.hoisted(() => ({
   networkTargets: [] as string[],
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ ...mocks.config }), getIntegration: async () => ({ values: { ...mocks.config }, secretSources: { adminToken: mocks.config.adminToken ? 'db' : 'none', webhookSecret: mocks.config.webhookSecret ? 'db' : 'none' }, secretErrors: [] }) }))
-vi.mock('@/features/integrations/services/integration-service', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ ...mocks.config }), getIntegration: async () => ({ values: { ...mocks.config }, secretSources: { adminToken: mocks.config.adminToken ? 'db' : 'none', webhookSecret: mocks.config.webhookSecret ? 'db' : 'none' }, secretErrors: [] }) }))
+vi.mock('@/lib/integrations/server', () => ({
   IntegrationUpdateError: class extends Error {
     status = 400
   },

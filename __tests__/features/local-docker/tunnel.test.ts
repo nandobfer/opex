@@ -17,7 +17,7 @@ vi.mock('@/features/local-docker/server/models', () => {
 })
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publish }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: vi.fn() }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: vi.fn() }))
 vi.mock('@/features/local-docker/server/active', () => ({ isBuilderMachineActive: mocks.active, assertBuilderMachineActive: vi.fn() }))
 vi.mock('@/features/agentic/server/ports', () => ({ isPortInUse: mocks.portInUse }))
 

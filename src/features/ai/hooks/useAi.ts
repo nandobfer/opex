@@ -7,72 +7,15 @@ import { api, apiErrorMessage, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import { appChannel } from "@/lib/pusher/channel-names"
 import { acquireChannel, isPusherClientAvailable, releaseChannel } from "@/lib/pusher/client"
-import { AI_PROVIDERS, type AiProviderId, type AiProviderStatusDto } from "@/lib/ai/providers"
-import type { IntegrationListItemDto } from "@/features/integrations/types"
-import { useIntegrations } from "@/features/integrations/hooks/useIntegrations"
+import { AI_QUERY_KEY } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { AI_FEATURE_UPDATED_EVENT } from "../constants"
 import type { TaskSummarySettings, TaskTagsSettings, BudgetPreviewSettings, EstimateHoursSettings, TaskRefinementSettings, PluginVersionSummarySettings } from "../schemas"
-import type { AiAgentDto, AiModelDto, AiSkillDto, TaskSummarySettingsDto, TaskTagsSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, PluginVersionSummarySettingsDto } from "../types"
+import type { TaskSummarySettingsDto, TaskTagsSettingsDto, BudgetPreviewSettingsDto, EstimateHoursSettingsDto, TaskRefinementSettingsDto, PluginVersionSummarySettingsDto } from "../types"
 
-/** Consultas e mutações dos provedores e features de IA. */
+/** Consultas e mutações das features de IA do Opex (os provedores, modelos e agentes vêm da central `@nandobfer/integracoes`). */
 
-export const AI_QUERY_KEY = "ai"
 const key = (...parts: unknown[]) => [AI_QUERY_KEY, ...parts] as const
 const get = async <T,>(path: string) => unwrapApi((await api.get<ApiResponse<T>>(path)).data)
-
-/** Situação dos provedores de texto, derivada da lista de integrações (status ao vivo). Com
- * `includeAll`, inclui também o JEV (decisão estruturada) — usado pela feature "Tags de tarefas". */
-export function toProviderStatuses(integrations: readonly IntegrationListItemDto[], includeAll = false): AiProviderStatusDto[] {
-    return AI_PROVIDERS.filter((provider) => includeAll || provider.supportsTextGeneration).map((provider) => {
-        const item = integrations.find((integration) => integration.id === provider.integrationId)
-        const configured = item?.configured === true
-        return {
-            id: provider.id,
-            integrationId: provider.integrationId,
-            name: provider.name,
-            configured,
-            connected: configured && (item?.health.status === "ok" || item?.health.status === "warn"),
-        }
-    })
-}
-
-export function useAiProviderStatuses(includeAll = false) {
-    const query = useIntegrations()
-    return { ...query, providers: toProviderStatuses(query.data ?? [], includeAll) }
-}
-
-/** Modelos do provedor. `kind: "embedding"` lista os de embedding (Gemini e OpenAI; usado pelo Engramind). */
-export const useAiModels = (provider: AiProviderId | null, enabled = true, kind: "chat" | "embedding" = "chat") =>
-    useQuery({
-        queryKey: kind === "chat" ? key("models", provider) : key("models", provider, kind),
-        queryFn: () => get<AiModelDto[]>(`/ai/providers/${provider}/models${kind === "chat" ? "" : `?kind=${kind}`}`),
-        enabled: enabled && provider !== null,
-        staleTime: 2 * 60_000,
-        retry: false,
-    })
-
-/** Recarrega a lista ignorando o cache do servidor. */
-export function useRefreshAiModels(provider: AiProviderId) {
-    const queryClient = useQueryClient()
-    return () =>
-        queryClient
-            .fetchQuery({ queryKey: key("models", provider), queryFn: () => get<AiModelDto[]>(`/ai/providers/${provider}/models?refresh=1`) })
-            .catch((error: unknown) => toast.error(apiErrorMessage(error, "Não foi possível atualizar os modelos")))
-}
-
-export const useAiAgents = (enabled: boolean) => useQuery({ queryKey: key("agents"), queryFn: () => get<AiAgentDto[]>("/ai/agents"), enabled, staleTime: 2 * 60_000, retry: false })
-
-/** Skills instaladas no servidor OpenCode (sem o conteúdo). */
-export const useAiSkills = (enabled: boolean) => useQuery({ queryKey: key("skills"), queryFn: () => get<AiSkillDto[]>("/ai/skills"), enabled, staleTime: 2 * 60_000, retry: false })
-
-/** Recarrega a lista de skills ignorando o cache do servidor. */
-export function useRefreshAiSkills() {
-    const queryClient = useQueryClient()
-    return () =>
-        queryClient
-            .fetchQuery({ queryKey: key("skills"), queryFn: () => get<AiSkillDto[]>("/ai/skills?refresh=1") })
-            .catch((error: unknown) => toast.error(apiErrorMessage(error, "Não foi possível atualizar as skills")))
-}
 
 export const useTaskSummarySettings = () => useQuery({ queryKey: key("feature", "task-summary"), queryFn: () => get<TaskSummarySettingsDto>("/ai/features/task-summary") })
 

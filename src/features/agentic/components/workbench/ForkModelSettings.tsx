@@ -1,6 +1,6 @@
 "use client"
 
-import { useAiModels } from "@/features/ai/hooks/useAi"
+import { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { useSetWorkbenchModel } from "../../hooks/useAgentic"
 import { useSetForkModel } from "../../hooks/useForks"
 import type { ForkDto, WorkbenchDto } from "../../types"

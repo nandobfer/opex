@@ -8,6 +8,7 @@ import type { OpexLiveMessage, OpexMessageDto } from "../../types"
 import { VirtualStack } from "@/components/list/VirtualStack"
 import { AssistantMessage, UserMessage } from "./OpexMessageItem"
 import { useOpexScope } from "../OpexScopeProvider"
+import { backgroundLabel } from "@/features/agentic/background-label"
 
 export type ChatItem = { kind: "message"; message: OpexMessageDto } | { kind: "live"; live: OpexLiveMessage; streaming: boolean }
 
@@ -74,7 +75,7 @@ export function OpexMessageList({ items, onDecide, deciding, onRetry, busy }: Op
 
     const renderItem = (index: number) => {
         const item = items[index]!
-        if (item.kind === "live") return <AssistantMessage parts={item.live.parts} streaming={item.streaming} thinking={item.live.thinking} onDecide={onDecide} deciding={deciding} />
+        if (item.kind === "live") return <AssistantMessage parts={item.live.parts} streaming={item.streaming} thinking={item.live.thinking} waiting={backgroundLabel(item.live.background)} onDecide={onDecide} deciding={deciding} />
         const message = item.message
         if (message.role === "user") return <UserMessage message={message} />
         const text = index === lastAssistantIndex && message.status !== "complete" && !busy ? retryText(index) : null

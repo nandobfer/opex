@@ -12,8 +12,8 @@ import { toEngramindError } from '@/features/engramind/server/errors'
  */
 
 const holder = vi.hoisted(() => ({ fake: null as unknown as FakeEngramind, tokens: {} as Record<string, unknown>, appToken: undefined as string | undefined, updateFails: false }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ appToken: holder.appToken }) }))
-vi.mock('@/features/integrations/services/integration-service', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ appToken: holder.appToken }) }))
+vi.mock('@/lib/integrations/server', () => ({
   updateIntegration: async (_id: string, input: { secrets: { appToken?: { value: string } } }) => {
     if (holder.updateFails) throw new Error('mongo fora')
     holder.appToken = input.secrets.appToken?.value

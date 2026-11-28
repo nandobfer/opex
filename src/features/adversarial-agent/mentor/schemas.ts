@@ -1,6 +1,6 @@
 import { z } from "zod"
+import { aiProviderIdSchema, aiTextProviderIdSchema } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
 import { csvList, isoDate, objectIdCsv, pageQuery } from "@/lib/list/query"
-import { AI_PROVIDER_IDS, AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
 import { MEMORY_TEXT_MAX } from "@/features/ai/memory-text"
 import {
     DEFAULT_MENTOR_WRITER_INSTRUCTIONS,
@@ -50,7 +50,7 @@ export const mentorSettingsSchema = z
         }),
         /** Digestor: lê a transcrição e extrai os casos (modelo barato de contexto longo). */
         digest: z.object({
-            provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+            provider: aiTextProviderIdSchema.nullable(),
             ...modelFields,
             budgetUsd: z.number({ error: "Informe um valor" }).min(MENTOR_BUDGET_MIN, `Mínimo US$ ${MENTOR_BUDGET_MIN}`).max(MENTOR_BUDGET_MAX, `Máximo US$ ${MENTOR_BUDGET_MAX}`),
             compactThresholdChars: z
@@ -65,11 +65,11 @@ export const mentorSettingsSchema = z
                 .max(MENTOR_DIGEST_TIMEOUT_MAX, `Máximo ${MENTOR_DIGEST_TIMEOUT_MAX}`),
         }),
         /** Decide se vale gravar: JEV (pergunta `noul`) ou qualquer provedor de texto (JSON com a nota). */
-        decider: z.object({ provider: z.enum(AI_PROVIDER_IDS).nullable(), ...modelFields }),
+        decider: z.object({ provider: aiProviderIdSchema.nullable(), ...modelFields }),
         level: z.enum(MENTOR_LEVELS),
         /** Triador (OPE-97): escolhe a lista de destino de cada caso — JEV (pergunta `choice`) ou qualquer provedor de texto. */
         router: z.object({
-            provider: z.enum(AI_PROVIDER_IDS).nullable(),
+            provider: aiProviderIdSchema.nullable(),
             ...modelFields,
             instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),
         }),
@@ -77,7 +77,7 @@ export const mentorSettingsSchema = z
         targets: flags(MENTOR_TARGETS),
         /** Escreve as operações de cada caso: criar, atualizar, fundir ou arquivar. */
         writer: z.object({
-            provider: z.enum(AI_TEXT_PROVIDER_IDS).nullable(),
+            provider: aiTextProviderIdSchema.nullable(),
             ...modelFields,
             instructions: z.string().trim().max(8000, "Até 8.000 caracteres"),
         }),

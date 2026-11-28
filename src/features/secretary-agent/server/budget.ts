@@ -1,5 +1,5 @@
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
-import { AiUsageLog } from "@/lib/db/models/Ai"
+import { AiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
 import { SECRETARY_BUDGET_ORIGINS, SECRETARY_DECISION_CONSUMPTION_ORIGIN } from "../constants"
 import { startOfDayIn } from "../limits"
 

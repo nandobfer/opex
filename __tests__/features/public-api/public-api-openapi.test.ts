@@ -1,8 +1,8 @@
 import { existsSync } from 'fs'
 import { join } from 'path'
 import { describe, expect, it, vi } from 'vitest'
-import { parseOpenApiSpec } from '@/features/integrations/openapi/parser'
-import { findSpecUrlCandidates } from '@/features/integrations/openapi/spec-source'
+import { parseOpenApiSpec } from "@nandobfer/integracoes/modules/server/openapi/parser"
+import { findSpecUrlCandidates } from "@nandobfer/integracoes/modules/server/openapi/spec-source"
 import { buildPublicApiSpec, insufficientScopeResponse, PUBLIC_TOKEN_ROUTES, SECURITY_SCHEMES, tokenOperationSecurity } from '@/features/public-api/openapi/spec'
 import { publicRouteScope } from '@/features/public-api/routes'
 import { whoAmIResponseSchema } from '@/features/public-api/schemas'
@@ -12,7 +12,7 @@ import { GET as getSpec } from '@/app/api/openapi.json/route'
 // O catálogo do MCP do Agente Maddox é coberto em maddox-mcp-spec.test.ts; aqui, a rota sem ele.
 vi.mock('@/features/maddox-agent/server/mcp-catalog', () => ({ maddoxMcpDocsCatalog: async () => { throw new Error('fora deste teste') } }))
 import { GET as getDocs } from '@/app/api/docs/route'
-import { getIntegrationDef } from '@/lib/integrations/catalog'
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
 import { PUBLIC_API_SPEC_PATH } from '@/lib/public-api/paths'
 import packageJson from '../../../package.json'
 

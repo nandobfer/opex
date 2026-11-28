@@ -1,7 +1,7 @@
-import type { AiUsage } from "@/lib/ai/stream"
+import type { AiUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import type { BudgetPreviewSettings, EstimateHoursSettings, PluginVersionSummarySettings, TaskRefinementSettings, TaskSummarySettings, TaskTagsSettings } from "./schemas"
 
-export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@/lib/ai/providers"
+export type { AiAgentDto, AiModelDto, AiProviderStatusDto, AiSkillDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 /** Pode ser usada agora? Sem `available`, `reason` explica (botão desabilitado com o motivo). */
 export interface AiFeatureAvailability {

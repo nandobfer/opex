@@ -41,8 +41,8 @@ vi.mock("@/features/agentic/components/DeveloperMemoriesSection", () => ({ Devel
 vi.mock("@/features/agentic/components/settings/ColumnsCard", () => ({ ColumnsCard: ({ title }: { title: string }) => <div data-testid="columns-card">{title}</div> }))
 
 import { AgenticTab } from "@/features/agentic/components/settings/AgenticTab"
-import { useLocalTabs } from "@/features/integrations/components/tabs/useLocalTabs"
-import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
+import { useLocalTabs } from "@nandobfer/integracoes/react"
+import { useIntegrationTab } from "@nandobfer/integracoes/react"
 
 beforeEach(() => {
     window.history.replaceState({}, "", "/integracoes/ia?aba=desenvolvimento-agentico")

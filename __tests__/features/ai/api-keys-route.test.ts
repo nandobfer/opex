@@ -1,9 +1,10 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { NextRequest } from 'next/server'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), create: vi.fn(), update: vi.fn(), remove: vi.fn(), select: vi.fn(), primary: vi.fn() }))
-vi.mock('@/features/ai/server/api-keys', async (importOriginal) => ({
-  keyRingProvider: (await importOriginal<typeof import('@/features/ai/server/api-keys')>()).keyRingProvider,
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys", async (importOriginal) => ({
+  keyRingProvider: (await importOriginal<typeof import('@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys')>()).keyRingProvider,
   listAiApiKeys: mocks.list,
   createAiApiKey: mocks.create,
   updateAiApiKey: mocks.update,
@@ -12,10 +13,10 @@ vi.mock('@/features/ai/server/api-keys', async (importOriginal) => ({
   makePrimaryAiApiKey: mocks.primary,
 }))
 
-import { GET, POST } from '@/app/api/ai/providers/[provider]/keys/route'
-import { DELETE, PATCH } from '@/app/api/ai/providers/[provider]/keys/[keyId]/route'
-import { POST as PRIMARY } from '@/app/api/ai/providers/[provider]/keys/[keyId]/primary/route'
-import { PATCH as SELECTION } from '@/app/api/ai/providers/[provider]/keys/[keyId]/selection/route'
+const { GET, POST } = legacyRoute("ai", "providers/[provider]/keys")
+const { DELETE, PATCH } = legacyRoute("ai", "providers/[provider]/keys/[keyId]")
+const { POST: PRIMARY } = legacyRoute("ai", "providers/[provider]/keys/[keyId]/primary")
+const { PATCH: SELECTION } = legacyRoute("ai", "providers/[provider]/keys/[keyId]/selection")
 
 const url = (path: string) => `http://localhost/api/ai/providers/${path}`
 const json = (path: string, method: string, body: unknown) => new NextRequest(url(path), { method, body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } })

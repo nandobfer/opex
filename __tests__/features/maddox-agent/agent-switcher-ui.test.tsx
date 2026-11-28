@@ -44,7 +44,7 @@ vi.mock('@/features/opex-agent/hooks/useOpexSettings', async () => {
 })
 vi.mock('@/features/maddox-agent/hooks/useMaddoxSettings', () => ({ useMaddoxSettings: () => ({ data: { settings: { color: 'sky' } } }) }))
 vi.mock('@/features/maddox-agent/hooks/useMaddoxModels', () => ({ useMaddoxModels: () => ({ data: [], isLoading: false }) }))
-vi.mock('@/features/ai/components/model-picker/ModelOverridePicker', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelOverridePicker', () => ({
   ModelOverridePicker: ({ choice, onChange }: { choice: { model: string | null }; onChange: (input: { model: string | null; variant: string | null }) => void }) => (
     <button type="button" data-testid="session-model-picker" onClick={() => onChange({ model: 'openai/gpt', variant: null })}>
       {choice.model}

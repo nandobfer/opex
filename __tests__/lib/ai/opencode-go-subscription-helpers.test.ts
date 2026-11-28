@@ -2,11 +2,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { randomBytes } from 'crypto'
 
 const mocks = vi.hoisted(() => ({ load: vi.fn() }))
-vi.mock('@/lib/integrations/store', () => ({ loadStoredIntegration: mocks.load }))
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ loadStoredIntegration: mocks.load }))()) as Record<string, unknown>) }))
 
 import { encryptSecret } from '@/lib/crypto/secretBox'
-import { getAiProviderKeyById } from '@/lib/ai/api-keys'
-import { opencodeGoMonthlyAllowances } from '@/lib/ai/opencode-go-models'
+import { getAiProviderKeyById } from "@nandobfer/integracoes/modules/integrations/ia/ai/api-keys"
+import { opencodeGoMonthlyAllowances } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go-models"
 
 /** Peças da assinatura OpenCode Go (OPE-167) fora da feature: cota por modelo do catálogo e chave do chaveiro por id. */
 

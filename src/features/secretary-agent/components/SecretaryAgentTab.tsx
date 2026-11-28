@@ -7,7 +7,7 @@ import { Bell, Brain, ClipboardList, FlaskConical, ListFilter, MessagesSquare, S
 import { AgentSettingsTabs } from "@/features/ai/components/AgentSettingsTabs"
 import { SecretaryModelCard } from "./SecretaryModelCard"
 import { SecretaryMemories } from "./SecretaryMemories"
-import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { isOpexProviderId } from "@/features/opex-agent/constants"
 import { useEvolution, useEvolutionAction } from "@/features/evolution-api/hooks/useEvolution"
 import type { EvolutionContactDto, EvolutionInstancesDto } from "@/features/evolution-api/types"

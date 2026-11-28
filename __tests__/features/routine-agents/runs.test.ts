@@ -45,7 +45,7 @@ vi.mock('@/lib/db', () => ({
 }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: async (event: string, payload: Record<string, unknown>) => void holder.events.push({ event, payload }) }))
 const consumption = vi.hoisted(() => ({ record: vi.fn(async (...args: unknown[]) => void args) }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: consumption.record }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: consumption.record }))
 vi.mock('@/lib/db/models/RoutineAgent', () => ({
   get RoutineAgent() {
     return holder.agents

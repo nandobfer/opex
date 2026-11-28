@@ -39,6 +39,12 @@ describe('resposta ao vivo (applyLiveLine)', () => {
     expect(applyLiveLine(state, { type: 'turn-end', messageId: 'm1', status: 'complete', error: null })).toBeNull()
   })
 
+  it('Agente Maddox (OPE-216): a espera pelo trabalho em segundo plano entra e sai da resposta ao vivo', () => {
+    const waiting = applyLiveLine(live(), { type: 'background', subagents: 2, shells: 1, other: 0 })
+    expect(waiting?.background).toEqual({ subagents: 2, shells: 1, other: 0 })
+    expect(applyLiveLine(waiting, { type: 'background', subagents: 0, shells: 0, other: 0 })?.background).toBeNull()
+  })
+
   it('linhas sem turno ativo são ignoradas e o snapshot substitui o estado', () => {
     expect(applyLiveLine(null, { type: 'text-delta', text: 'x' })).toBeNull()
     expect(applyLiveLine(live(), { type: 'snapshot', status: 'idle', live: null })).toBeNull()

@@ -5,12 +5,12 @@ import { describe, expect, it } from 'vitest'
  * turno do OpenCode — até 5, sem repetir o modelo principal e sem repetidos, ordem preservada.
  */
 
-import { fallbackConflict, MAX_MODEL_FALLBACKS, normalizeFallbacks } from '@/features/ai/model-fallbacks'
-import { agentConfigSchema } from '@/features/agentic/schemas'
-import { DEFAULT_TASK_REFINEMENT_SETTINGS, taskRefinementSettingsSchema } from '@/features/ai/schemas'
-import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema } from '@/features/pr-review/schemas'
-import { DEFAULT_MADDOX_AGENT_SETTINGS, maddoxAgentSettingsSchema } from '@/features/maddox-agent/schemas'
-import { EMPTY_ROUTINE_LIMITS, routineAgentInputSchema, withRoutineEngineDefaults } from '@/features/routine-agents/schemas'
+import { fallbackConflict, MAX_MODEL_FALLBACKS, normalizeFallbacks } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
+import { agentConfigSchema } from "@/features/agentic/schemas"
+import { DEFAULT_TASK_REFINEMENT_SETTINGS, taskRefinementSettingsSchema } from "@/features/ai/schemas"
+import { DEFAULT_PR_REVIEW_SETTINGS, prReviewSettingsSchema } from "@/features/pr-review/schemas"
+import { DEFAULT_MADDOX_AGENT_SETTINGS, maddoxAgentSettingsSchema } from "@/features/maddox-agent/schemas"
+import { EMPTY_ROUTINE_LIMITS, routineAgentInputSchema, withRoutineEngineDefaults } from "@/features/routine-agents/schemas"
 
 const PRIMARY = 'anthropic/claude'
 const flash = { model: 'deepseek/flash', variant: null }

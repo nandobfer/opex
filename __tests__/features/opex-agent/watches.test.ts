@@ -36,12 +36,12 @@ vi.mock('ai', () => ({
     }
   },
 }))
-vi.mock('@/lib/ai/stream', () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   prepareModel: async () => ({ model: { id: 'modelo' }, takeStepCost: () => null, dispose: async () => {} }),
   samplingOptions: () => ({}),
   describeAiError: (error: unknown) => (error instanceof Error ? error.message : String(error)),
-}))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: async () => {} }))
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/consumption", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ recordAiConsumption: async () => {} }))()) as Record<string, unknown>) }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', ABORTAR: 'ABORTAR', EXECUTAR: 'EXECUTAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: mocks.publishToChannels }))
 vi.mock('@/lib/instance', () => ({ isPreviewInstance: () => mocks.preview, INSTANCE_ID: 'teste' }))
@@ -129,7 +129,7 @@ vi.mock('@/features/opex-agent/server/tools/registry', () => ({ enabledOpexTools
 vi.mock('@/features/opex-agent/server/client-tools/registry', () => ({ enabledClientOpexServerTools: () => [], findOpexClientServerTool: () => undefined }))
 vi.mock('@/features/opex-agent/server/skills/turn', () => ({ ownerSkillsForTurn: async () => ({ catalog: [], tools: [] }) }))
 // Tick do agendador real (`runSchedulerTick`): só os outros ganchos do tick ficam de fora.
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ schedulerEnabled: true, jobs: [], cronSecret: '' }), getInternalBaseUrl: async () => 'http://localhost' }))
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegrationConfig: async () => ({ schedulerEnabled: true, jobs: [], cronSecret: '' }), getInternalBaseUrl: async () => 'http://localhost' }))()) as Record<string, unknown>) }))
 vi.mock('@/features/local-docker/server/health', () => ({ runLocalDockerHealth: async () => {} }))
 vi.mock('@/features/environments/server/forwards', () => ({ runEnvironmentsTick: async () => {} }))
 vi.mock('@/features/routine-agents/server/tick', () => ({ runDueRoutineAgents: async () => {} }))
@@ -144,7 +144,7 @@ vi.mock('@/features/opex-agent/server/client-config', () => ({
 import { cancelOpexWatch, createOpexWatch, listOpexWatches, notifyWatchEvent, runDueOpexWatches } from '@/features/opex-agent/server/watches'
 import { watchDeployFinished, watchJobSettled, watchRoutineRunSettled, watchTargetDeleted, watchTaskMoved, watchWorkbenchChanged } from '@/features/opex-agent/server/watch-events'
 import { sendMessage } from '@/features/opex-agent/server/runner'
-import { runSchedulerTick } from '@/features/integrations/scheduler/cron-scheduler'
+import { runSchedulerTick } from "@nandobfer/integracoes/modules/server/scheduler"
 import type { OpexServerScope } from '@/features/opex-agent/server/scope'
 import type { OpexWatchInput } from '@/features/opex-agent/watches'
 // Modelos importados sob demanda pelo serviço: carregados aqui para a fábrica do mock popular o `store`.

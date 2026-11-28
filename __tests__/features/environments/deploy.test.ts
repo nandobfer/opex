@@ -1,3 +1,7 @@
+import { execSync } from 'node:child_process'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { HostResult } from '@/features/local-docker/server/shell'
 
@@ -54,12 +58,12 @@ const CONFIG = (bind: boolean) =>
   JSON.stringify({ services: { app: { build: { context: '.' }, environment: { CLERK_SECRET_KEY: 'sk_test_vazado' }, volumes: bind ? [{ type: 'bind', source: '/srv/app', target: '/app' }] : [] }, db: { image: 'mongo:7' } } })
 
 /** `envFiles`: arquivos de variáveis que o compose declara; `existing`: os que já existem na pasta. */
-function host(options: { bind?: boolean; fail?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string; config?: string } = {}) {
+function host(options: { bind?: boolean; fail?: string; failOutput?: string; images?: 'present' | 'missing'; tree?: 'clean' | 'dirty'; envFiles?: string[]; existing?: string[]; configOutput?: string; config?: string } = {}) {
   const calls: string[] = []
   const run = vi.fn(async (command: string, _timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
     calls.push(command)
     opts?.onOutput?.('ok\n')
-    if (options.fail && command.includes(options.fail)) return { exitCode: 1, output: 'erro' }
+    if (options.fail && command.includes(options.fail)) return { exitCode: 1, output: options.failOutput ?? 'erro' }
     if (command.includes('config --no-env-resolution --no-interpolate')) {
       const files = options.envFiles ?? []
       return { exitCode: 0, output: JSON.stringify({ services: { app: files.length ? { env_file: files.map((path) => ({ path, required: true })) } : {} } }) }
@@ -91,6 +95,7 @@ const input = (overrides: Partial<EnvironmentInput> = {}): EnvironmentInput => (
   buildOn: 'server',
   runOn: 'server',
   limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  composeOverrides: null,
   ...overrides,
 })
 
@@ -248,7 +253,9 @@ describe('"Ler compose" do formulário (OPE-193)', () => {
   it('central: compose da ref numa pasta temporária, os serviços escolhidos e os limites declarados (saída fora do log)', async () => {
     const run = vi.fn(async (): Promise<HostResult> => ({ exitCode: 0, output: `aviso\n${LIMITED}` }))
     const result = await readComposeServices({ kind: 'central', centralId: 'c1', ref: 'dev', composeFile: 'docker-compose.yml', services: ['app', 'db'], projectName: 'loja' }, {}, run)
-    expect(result).toEqual({ services: [{ name: 'app', hasBuild: true, declared: { memoryGb: 1, swapGb: null, cpus: 2 } }, { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null } }] })
+    expect(result.services.map(({ name, hasBuild, declared }) => ({ name, hasBuild, declared }))).toEqual([{ name: 'app', hasBuild: true, declared: { memoryGb: 1, swapGb: null, cpus: 2 } }, { name: 'db', hasBuild: false, declared: { memoryGb: null, swapGb: null, cpus: null } }])
+    // OPE-211: os dados de cada serviço vêm junto (o que o compose não declara fica null).
+    expect(result.services[1]!.values).toMatchObject({ image: 'mongo:7', command: null, ports: null })
     const [command, , options] = run.mock.calls[0] as unknown as [string, number, { redactedAs?: string }]
     expect(command).toContain("git -C '/home/u/loja' archive \"$sha\" -- 'docker-compose.yml'")
     expect(command).toContain("'dev^{commit}'")
@@ -607,5 +614,359 @@ describe('compose gerenciado (OPE-191)', () => {
     expect(calls).toContain('rm -rf "$HOME/opex-envs/minio"')
     expect(revisions.docs).toHaveLength(0)
     expect(envs.docs).toHaveLength(0)
+  })
+})
+
+describe('serviços do compose no deploy (OPE-211)', () => {
+  const service = (name: string, values: Partial<NonNullable<EnvironmentInput['composeOverrides']>['services'][number]> = {}) => ({
+    service: name,
+    image: null,
+    command: null,
+    entrypoint: null,
+    environment: null,
+    labels: null,
+    ports: null,
+    volumes: null,
+    restart: null,
+    healthcheck: null,
+    dependsOn: null,
+    ...values,
+  })
+
+  it('PC → Servidor com imagem própria no serviço com build: sem build, sem registry; o override fixa a imagem e tira o build', async () => {
+    const env = await createEnvironment(input({ buildOn: 'pc', ports: [], composeOverrides: { services: [service('app', { image: 'ghcr.io/loja/app:2' })], yaml: '' } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const deploy = deploys.docs[0]!
+    expect(deploy.status).toBe('success')
+    const log = String(deploy.log)
+    expect(log).not.toContain('▸ Build')
+    expect(log).not.toContain('Push das imagens')
+    expect(log).not.toContain('Registry no servidor')
+    expect(log).toContain('▸ Pull no servidor')
+    expect(log).toContain('Serviços: app imagem ghcr.io/loja/app:2')
+    expect(deploy.repositories).toBeUndefined()
+    const yaml = lastOverride(calls)
+    expect(yaml).toContain('    image: ghcr.io/loja/app:2\n    build: !reset null')
+    expect(yaml).not.toContain('opex-env/loja-app')
+    // O override é conferido (sem saída) antes de subir.
+    const check = run.mock.calls.find(([command]) => String(command).includes('config --quiet'))!
+    expect(String(check[0])).toContain('-f docker-compose.opex.yml')
+    expect(calls.indexOf(String(check[0]))).toBeLessThan(calls.findIndex((command) => command.includes('up -d')))
+    expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { image: 'ghcr.io/loja/app:2' })], yaml: '' })
+  })
+
+  it('mesma máquina: as imagens prontas são buscadas (pull) antes de subir; o build segue para os outros serviços', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { image: 'mongo:8' })], yaml: '' } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const pull = calls.findIndex((command) => command.includes(" pull 'db'"))
+    expect(pull).toBeGreaterThanOrEqual(0)
+    expect(pull).toBeLessThan(calls.findIndex((command) => command.includes('up -d')))
+    expect(String(deploys.docs[0]!.log)).toContain('▸ Pull das imagens prontas')
+    expect(String(deploys.docs[0]!.log)).toContain('▸ Build no servidor')
+  })
+
+  it('regressão (F3): serviço com imagem própria fica fora do comando de build; o outro com build continua', async () => {
+    const config = JSON.stringify({ services: { app: { build: { context: '.' } }, worker: { build: { context: './worker' } }, db: { image: 'mongo:7' } } })
+    const source = { kind: 'central' as const, centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: ['app', 'worker', 'db'], projectName: 'loja' }
+    const env = await createEnvironment(input({ source, composeOverrides: { services: [service('app', { image: 'ghcr.io/loja/app:2' })], yaml: '' } }), 'local')
+    const { run, calls } = host({ config })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const build = calls.find((command) => / build( |$)/.test(command) && command.includes('docker compose'))!
+    expect(build).toMatch(/ build 'worker'$/)
+    expect(build).not.toContain("'app'")
+    expect(build).not.toContain("'db'")
+  })
+
+  it('regressão: image: !reset null no YAML avançado mantém o build do serviço (não vira imagem própria)', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [], yaml: 'app:\n  image: !reset null\n' } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    expect(String(deploys.docs[0]!.log)).toContain('▸ Build no servidor')
+    expect(String(deploys.docs[0]!.log)).not.toContain('Pull das imagens prontas')
+    expect(lastOverride(calls)).not.toContain('build: !reset')
+  })
+
+  it('falha na conferência do override para antes de qualquer build; os ajustes não viram implantados', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { restart: 'always' })], yaml: '' } }), 'local')
+    const { run, calls } = host({ fail: 'config --quiet' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('failed')
+    expect(deploys.docs[0]!.error).toContain('Conferindo o override falhou')
+    expect(calls.some((command) => / build( |$)/.test(command) || command.includes('up -d'))).toBe(false)
+    expect(envs.docs[0]!.deployedComposeOverrides ?? null).toBeNull()
+  })
+
+  it('regressão: a saída da conferência nunca vai para o log (nem o valor do environment citado no erro)', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { environment: [{ key: 'SENHA', value: 'abc$xyz-secreto' }] })], yaml: '' } }), 'local')
+    const { run } = host({ fail: 'config --quiet', failOutput: 'linha 1 abc$xyz-secreto\ninvalid interpolation format for services.app.environment.SENHA: "abc$xyz-secreto"' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const deploy = deploys.docs[0]!
+    expect(String(deploy.log)).not.toContain('abc$xyz-secreto')
+    expect(String(deploy.error)).not.toContain('abc$xyz-secreto')
+    expect(String(deploy.error)).toContain('invalid interpolation format for services.app.environment.SENHA: "[valor oculto]"')
+    const check = run.mock.calls.find(([command]) => String(command).includes('config --quiet'))!
+    expect(check[2]).not.toHaveProperty('onOutput')
+  })
+
+  it('regressão: conferência que falha deixa no host o override sem os ajustes (Reiniciar, Derrubar e Levantar seguem funcionando)', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { restart: 'always' })], yaml: 'app:\n  ports: abc\n' } }), 'local')
+    const { run, calls } = host({ fail: 'config --quiet' })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('failed')
+    const last = lastOverride(calls)
+    expect(last).not.toContain('restart')
+    expect(last).not.toContain('ports: abc')
+    expect(last).toContain('env_file:')
+    // O override válido é regravado depois da conferência que falhou.
+    const check = calls.findIndex((command) => command.includes('config --quiet'))
+    expect(calls.findLastIndex((command) => command.includes('docker-compose.opex.yml') && command.includes('base64 -d'))).toBeGreaterThan(check)
+  })
+
+  /**
+   * Host em que os comandos dos arquivos gerados (override, `.env.opex` e as cópias do Opex) rodam de verdade no shell,
+   * numa pasta temporária no lugar da pasta do ambiente e com um `$HOME` temporário; o resto é o host simulado.
+   */
+  function fileHost(projectDir?: string, options: { slug?: string; config?: string } = {}) {
+    const root = mkdtempSync(join(tmpdir(), 'opex-deploy-files-'))
+    const home = join(root, 'home')
+    // Central e gerenciado: a pasta do ambiente é `"$HOME/opex-envs/<slug>"`; adotado: a pasta do projeto (trocada pela temporária).
+    const dir = projectDir ? join(root, 'projeto') : join(home, 'opex-envs', options.slug ?? 'loja')
+    mkdirSync(dir, { recursive: true })
+    mkdirSync(home, { recursive: true })
+    const base = host({ config: options.config })
+    const fail = { on: '' }
+    const touchesFiles = (command: string) => command.includes('base64 -d >') || command.includes('environments-deployed') || (command.startsWith('rm -f ') && command.includes('.env.opex'))
+    // Containers simulados: o override na pasta a cada `up -d` (tentado ou não).
+    const containers: string[] = []
+    const run = vi.fn(async (command: string, timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
+      if (command.includes(' up -d')) containers.push(existsSync(join(dir, 'docker-compose.opex.yml')) ? readFileSync(join(dir, 'docker-compose.opex.yml'), 'utf8') : '')
+      if (fail.on && command.includes(fail.on)) {
+        base.calls.push(command)
+        return { exitCode: 1, output: 'erro' }
+      }
+      if (touchesFiles(command)) {
+        base.calls.push(command)
+        try {
+          const output = execSync(projectDir ? command.split(projectDir).join(dir) : command, { shell: '/bin/sh', env: { ...process.env, HOME: home } }).toString()
+          return { exitCode: 0, output }
+        } catch {
+          return { exitCode: 1, output: 'erro' }
+        }
+      }
+      return base.run(command, timeout, opts)
+    })
+    const read = (path: string) => (existsSync(join(dir, path)) ? readFileSync(join(dir, path), 'utf8') : null)
+    return { run, calls: base.calls, fail, dir, home, read, containers, cleanup: () => rmSync(root, { recursive: true, force: true }) }
+  }
+
+  it('regressão: deploy que falha antes de subir volta o override do último deploy concluído (Derrubar e Levantar seguem com os ajustes implantados)', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { image: 'ghcr.io/loja/app:2', restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.error ?? null).toBeNull()
+      const deployed = files.read('docker-compose.opex.yml')!
+      expect(deployed).toContain('image: ghcr.io/loja/app:2')
+      // A cópia fica numa pasta só do Opex, fora da pasta do projeto.
+      expect(readFileSync(join(files.home, '.opex/environments-deployed', String(env._id), 'current/docker-compose.opex.yml'), 'utf8')).toBe(deployed)
+      expect(readdirSync(files.dir).sort()).toEqual(['.env.opex', 'docker-compose.opex.yml'])
+
+      // Nova configuração inválida: a conferência falha e o arquivo no host volta ao do deploy anterior.
+      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: 'app:\n  ports: abc\n' } }), 'local')
+      files.fail.on = 'config --quiet'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[1]!.status).toBe('failed')
+      expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+      expect(files.read('.env.opex')).toContain('TOKEN=')
+      expect(String(deploys.docs[1]!.log)).toContain('voltaram aos do último deploy concluído')
+      expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { image: 'ghcr.io/loja/app:2', restart: 'always' })], yaml: '' })
+
+      // Derrubar e Levantar usam o arquivo que ficou na pasta: o do deploy concluído.
+      files.fail.on = ''
+      await runEnvironmentAction(String(env._id), { action: 'down' }, 'local', files.run)
+      await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', files.run)
+      expect(files.calls.at(-1)).toContain('-f docker-compose.opex.yml')
+      expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão (F1): mover que falha antes de subir volta o override do deploy concluído; Levantar segue com ele', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.status).toBe('success')
+      const deployed = files.read('docker-compose.opex.yml')!
+      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = ' pull'
+      await runEnvironmentAction(String(env._id), { action: 'move', buildOn: 'server', runOn: 'pc' }, 'local', files.run)
+      await vi.waitFor(() => expect(deploys.docs[1]!.status).toBe('failed'))
+      expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+      expect(String(deploys.docs[1]!.log)).toContain('voltaram aos do último deploy concluído')
+      expect(envs.docs[0]!.deployedOn).toEqual({ buildOn: 'server', runOn: 'server' })
+      files.fail.on = ''
+      await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', files.run)
+      expect(files.containers.at(-1)).toBe(deployed)
+      expect(files.containers.at(-1)).not.toContain('restart: no')
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão (F2): compose gerenciado: a revisão nova que falha volta à implantada no docker-compose.yml; Levantar usa a implantada', async () => {
+    const MINIO = 'services:\n  minio:\n    image: minio/minio\n'
+    const files = fileHost(undefined, { slug: 'minio', config: JSON.stringify({ services: { minio: { image: 'minio/minio' } } }) })
+    try {
+      const env = await createEnvironment(input({ slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: MINIO, ports: [], env: [] }), 'local')
+      const { saveComposeRevision } = await import('@/features/environments/server/compose-revisions')
+      await saveComposeRevision(String(env._id), { content: `${MINIO}# v2\n` }, 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.status).toBe('success')
+      expect(files.read('docker-compose.yml')).toContain('# v2')
+      expect(readFileSync(join(files.home, '.opex/environments-deployed', String(env._id), 'current/docker-compose.yml'), 'utf8')).toContain('# v2')
+      await saveComposeRevision(String(env._id), { content: `${MINIO}# v3\n` }, 'local')
+      files.fail.on = 'config --format json'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[1]!.status).toBe('failed')
+      expect(files.read('docker-compose.yml')).toContain('# v2')
+      expect(files.read('docker-compose.yml')).not.toContain('# v3')
+      expect(String(deploys.docs[1]!.log)).toContain('compose gerenciado')
+      expect(envs.docs[0]!.deployedComposeVersion).toBe(2)
+      files.fail.on = ''
+      await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', files.run)
+      expect(files.read('docker-compose.yml')).toContain('# v2')
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão: saúde falha depois do up concluído: arquivos, containers e o estado implantado ficam os deste deploy (deploy falho)', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ healthUrl: 'http://localhost:4100/health', composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.status).toBe('success')
+      await updateEnvironment(String(env._id), input({ healthUrl: 'http://localhost:4100/health', composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = 'curl -fsS'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[1]!.status).toBe('failed')
+      const current = files.read('docker-compose.opex.yml')!
+      expect(current).toContain('restart: no')
+      // Os containers subiram com este override.
+      expect(files.containers.at(-1)).toBe(current)
+      expect(String(deploys.docs[1]!.log)).toContain('Os containers subiram com a configuração deste deploy e um passo seguinte falhou')
+      expect(readFileSync(join(files.home, '.opex/environments-deployed', String(env._id), 'current/docker-compose.opex.yml'), 'utf8')).toBe(current)
+      // O que consta como implantado é o que está no ar: sem pendência falsa.
+      expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { restart: 'no' })], yaml: '' })
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão: o próprio up falha (estado indeterminado): arquivos e estado implantado ficam os do último deploy e o log registra a deriva', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      const deployed = files.read('docker-compose.opex.yml')!
+      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = 'up -d'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[1]!.status).toBe('failed')
+      // A tentativa usou o override novo (containers talvez parcialmente recriados)...
+      expect(files.containers.at(-1)).toContain('restart: no')
+      // ...mas o estado gravado e os arquivos seguem coerentes entre si: os do último deploy concluído.
+      expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+      expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { restart: 'always' })], yaml: '' })
+      expect(String(deploys.docs[1]!.log)).toContain('O passo que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy')
+      expect(String(deploys.docs[1]!.log)).not.toContain('Os containers subiram com a configuração deste deploy')
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão: não conseguir guardar a cópia depois de subir não vira falha: o deploy conclui, coerente, e o log avisa', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      const first = files.read('docker-compose.opex.yml')!
+      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = 'mv "$s/pending" "$s/current"'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      const deploy = deploys.docs[1]!
+      expect(deploy.status).toBe('success')
+      expect(String(deploy.log)).toContain('Não foi possível guardar a cópia')
+      // Arquivos, containers e estado salvo ficam na configuração nova.
+      expect(files.read('docker-compose.opex.yml')).not.toBe(first)
+      expect(files.read('docker-compose.opex.yml')).toContain('restart: no')
+      expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { restart: 'no' })], yaml: '' })
+      // Sem cópia confiável, ela sai: a próxima falha não volta arquivos de outro deploy.
+      expect(existsSync(join(files.home, '.opex/environments-deployed', String(env._id)))).toBe(false)
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão: projeto adotado com .opex-deployed próprio: o deploy e a exclusão não tocam nele', async () => {
+    const files = fileHost('/home/u/proj')
+    try {
+      mkdirSync(join(files.dir, '.opex-deployed'))
+      writeFileSync(join(files.dir, '.opex-deployed', 'meu.txt'), 'do projeto\n')
+      const source = { kind: 'adopted', machine: 'server', workingDir: '/home/u/proj', configFiles: ['/home/u/proj/compose.yml'], projectName: 'proj', git: false, pullOnRedeploy: false } as const
+      const env = await createEnvironment(input({ source, composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.status).toBe('success')
+      expect(readdirSync(join(files.dir, '.opex-deployed'))).toEqual(['meu.txt'])
+      expect(existsSync(join(files.home, '.opex/environments-deployed', String(env._id), 'current/docker-compose.opex.yml'))).toBe(true)
+      await deleteEnvironment(String(env._id), { volumes: false }, 'local', files.run)
+      expect(readFileSync(join(files.dir, '.opex-deployed', 'meu.txt'), 'utf8')).toBe('do projeto\n')
+      expect(existsSync(join(files.home, '.opex/environments-deployed', String(env._id)))).toBe(false)
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('log sem os valores do environment; serviço fora do compose avisa e não bloqueia; o override não aparece no debug', async () => {
+    const env = await createEnvironment(
+      input({ composeOverrides: { services: [service('app', { environment: [{ key: 'API_KEY', value: 'valor-secreto' }] }), service('antigo', { restart: 'always' })], yaml: 'worker:\n  restart: always\n' } }),
+      'local',
+    )
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    const log = String(deploys.docs[0]!.log)
+    expect(deploys.docs[0]!.status).toBe('success')
+    expect(log).toContain('Serviços: app environment (1: API_KEY)')
+    expect(log).not.toContain('valor-secreto')
+    expect(log).toContain('Ajustes do serviço antigo ignorados: o serviço não está no compose.')
+    expect(log).toContain('Ajustes do serviço worker ignorados: o serviço não está no compose.')
+    expect(lastOverride(calls)).toContain('API_KEY: valor-secreto')
+    expect(run.mock.calls.filter(([command]) => String(command).includes('docker-compose.opex.yml') && String(command).includes('base64 -d')).at(-1)![2]).toMatchObject({ redactedAs: 'gravar docker-compose.opex.yml (conteúdo omitido)' })
+  })
+
+  it('compose gerenciado com build: o serviço com imagem própria implanta', async () => {
+    const env = await createEnvironment(
+      input({ slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: 'services:\n  app:\n    build: .\n', ports: [], composeOverrides: { services: [service('app', { image: 'ghcr.io/x/app:1' })], yaml: '' } }),
+      'local',
+    )
+    const { run } = host({ config: JSON.stringify({ services: { app: { build: { context: '.' } } } }) })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+  })
+
+  it('salvar audita o resumo dos ajustes (do environment, só as chaves)', async () => {
+    const env = await createEnvironment(input(), 'local')
+    await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { image: 'nginx:1.27', environment: [{ key: 'A', value: 'segredo-a' }] })], yaml: '' } }), 'local')
+    const audit = mocks.audit.mock.calls.at(-1)![0]
+    expect(audit.antes!.servicos).toBe('sem ajustes')
+    expect(audit.depois!.servicos).toBe('app imagem nginx:1.27, environment (1: A)')
+    expect(JSON.stringify(audit)).not.toContain('segredo-a')
   })
 })

@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { clearAiCatalogCache } from "@/lib/ai/catalog"
+import { clearAiCatalogCache } from "@nandobfer/integracoes/modules/integrations/ia/ai/catalog"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { addBackup, backupArchivePath, backupIndexPath, newBackupId, parseBackupIndex, type BackupMeta } from "../backups"

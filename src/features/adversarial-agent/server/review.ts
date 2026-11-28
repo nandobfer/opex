@@ -1,5 +1,5 @@
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeTokenUsage } from "@/lib/ai/opencode-events"
 import { runAgentTurn, type TurnResult } from "@/lib/ai/opencode-run"
 import { getLocalUser } from "@/lib/local-user"

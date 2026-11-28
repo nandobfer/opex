@@ -1,5 +1,5 @@
-import { streamAi } from "@/lib/ai/stream"
-import type { AiProviderId } from "@/lib/ai/providers"
+import { streamAi } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { loggerFor } from "@/lib/logger"
 import { OPEX_CLIENT_TITLE_CONSUMPTION_ORIGIN, OPEX_DEFAULT_TITLE, OPEX_SUMMARY_MAX, OPEX_TITLE_CONSUMPTION_ORIGIN, OPEX_TITLE_MAX } from "../constants"
 import { parseTitleOutput, fallbackTitle } from "../title"

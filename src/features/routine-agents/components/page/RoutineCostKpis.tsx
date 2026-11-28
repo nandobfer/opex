@@ -2,7 +2,8 @@
 
 import { KpiCard } from "@/components/metrics/KpiCard"
 import { formatMetricValue } from "@/components/metrics/format"
-import { formatBrl, formatUsd } from "@/features/ai-billing/money"
+import { COST_KIND_TONE } from "@/features/ai-billing/cost-tone"
+import { formatBrl, formatUsd } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import type { RoutineCostKpisDto, RoutineMoneyPair } from "../../types"
 
 const usd = (value: number) => formatMetricValue(value, "usd")
@@ -13,9 +14,9 @@ function marks(cost: RoutineCostKpisDto["totals"]): string {
     return list.length ? ` · ${list.join(" · ")}` : ""
 }
 
-/** Média (efetivo, com a tabela na dica). */
+/** Média (efetivo, com a tabela na dica); cor do efetivo (OPE-213). */
 function AverageKpi({ label, pair, basis }: { label: string; pair: RoutineMoneyPair; basis: string }) {
-    return <KpiCard label={label} value={pair.effectiveUsd} formatter={usd} hint={`Efetivo · tabela ${formatUsd(pair.listUsd)}`} footer={`${brlLine(pair.effectiveBrl)} · ${basis}`} />
+    return <KpiCard label={label} value={pair.effectiveUsd} formatter={usd} accentColor={COST_KIND_TONE.effective.color} hint={`Efetivo · tabela ${formatUsd(pair.listUsd)}`} footer={`${brlLine(pair.effectiveBrl)} · ${basis}`} />
 }
 
 /**
@@ -26,8 +27,8 @@ export function RoutineCostKpis({ cost }: { cost: RoutineCostKpisDto }) {
     const totals = cost.totals
     return (
         <>
-            <KpiCard label="Custo de tabela" value={totals.listUsd} formatter={usd} hint={`Quanto custaria pago por uso${marks(totals)}`} footer={brlLine(totals.listBrl)} />
-            <KpiCard label="Custo efetivo" value={totals.effectiveUsd} formatter={usd} hint={`Pelo plano da chave que respondeu${marks(totals)}`} footer={brlLine(totals.effectiveBrl)} />
+            <KpiCard label="Custo de tabela" value={totals.listUsd} formatter={usd} accentColor={COST_KIND_TONE.list.color} hint={`Quanto custaria pago por uso${marks(totals)}`} footer={brlLine(totals.listBrl)} />
+            <KpiCard label="Custo efetivo" value={totals.effectiveUsd} formatter={usd} accentColor={COST_KIND_TONE.effective.color} hint={`Pelo plano da chave que respondeu${marks(totals)}`} footer={brlLine(totals.effectiveBrl)} />
             <KpiCard label="Economia" value={totals.savingsUsd} formatter={usd} hint="Custo de tabela − custo efetivo" footer={brlLine(totals.savingsBrl)} />
             <AverageKpi label="Média por execução" pair={cost.perRun} basis={`${cost.runsWithCost} execução(ões)`} />
             <AverageKpi label="Média por dia" pair={cost.perCalendarDay} basis={`${cost.calendarDays} dia(s) corrido(s)`} />

@@ -1,6 +1,6 @@
 import { ok } from "@/lib/api/responses"
 import { DomainError, withRoute } from "@/lib/api/route"
-import { AiProviderError } from "@/lib/ai/errors"
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
 import { prepareTaskTags, runTaskTags } from "@/features/ai/server/task-tags"
 
 export const runtime = "nodejs"

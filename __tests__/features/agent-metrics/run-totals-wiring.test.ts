@@ -18,7 +18,7 @@ vi.mock('@/lib/db/models/AgentMetrics', () => {
     AgentMetricTracking: { find: () => ({ select: () => ({ lean: async () => [] }) }) },
   }
 })
-vi.mock('@/lib/db/models/AiConsumption', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption', () => ({
   // A agregação roda no banco: o mock devolve o `$group` já somado (o pipeline é conferido no caso da Taxa de cache).
   AiConsumption: { aggregate: async (pipeline: unknown) => (mocks.consumptionAggregate(pipeline), mocks.consumption) },
 }))

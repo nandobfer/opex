@@ -1,7 +1,7 @@
 "use client"
 
-import type { ModelVariantValue } from "@/features/ai/components/model-picker/ModelVariantFields"
-import { useAiModels } from "@/features/ai/hooks/useAi"
+import type { ModelVariantValue } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelVariantFields"
+import { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
 import { WORKBENCH_MODEL_ROLE_LABELS, type WorkbenchModelRole } from "../../constants"
 import { draftWorkbenchModels, type AdversaryAgent, type ModelOverride, type RefinerAgent } from "../../logic"
 import type { AgenticSettings } from "../../schemas"

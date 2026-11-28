@@ -1,4 +1,4 @@
-import { isSecondsSchedule, zonedWallTimeToDate, type Schedule } from "@/lib/integrations/schedule"
+import { isSecondsSchedule, zonedWallTimeToDate, type Schedule } from "@nandobfer/integracoes"
 
 /**
  * `consolidation.schedule` do Engramind (OPE-117; módulo PURO): o Engramind guarda uma expressão cron de

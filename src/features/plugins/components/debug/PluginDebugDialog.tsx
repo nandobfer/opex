@@ -1,8 +1,8 @@
 "use client"
 
 import { DialogClose, DialogDescription, DialogTitle } from "@/components/ui/dialog"
-import { DebugConsoleCloseButton } from "@/features/integrations/components/DebugConsoleCloseButton"
-import { DebugLogsDialog } from "@/features/integrations/components/DebugLogsDialog"
+import { DebugConsoleCloseButton } from "@nandobfer/integracoes/react"
+import { DebugLogsDialog } from "@nandobfer/integracoes/react"
 import { PluginDebugConsole } from "./PluginDebugConsole"
 
 /** Modal de logs de um plugin (lista de `/plugins`), igual ao da lista de integrações. */

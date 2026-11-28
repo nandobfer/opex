@@ -7,11 +7,11 @@ import { framerMotionMock } from "../../helpers/framer-motion"
 import { modelFavoritesMock } from "../../helpers/model-favorites"
 
 vi.mock("framer-motion", () => framerMotionMock())
-vi.mock("@/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock())
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock())
 
 import { AgentConfigFields } from "@/features/agentic/components/settings/AgentConfigFields"
 import type { AgentConfig } from "@/features/agentic/schemas"
-import type { AiAgentDto } from "@/lib/ai/providers"
+import type { AiAgentDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 const EMPTY: AgentConfig = { agent: null, model: null, variant: null, fallbacks: [] }
 const models = { data: [], isError: false, isLoading: false, error: null }

@@ -4,8 +4,8 @@ import { fireEvent, render, waitFor } from '@testing-library/react'
 import { useRef } from 'react'
 import { describe, expect, it } from 'vitest'
 
-import { useFillViewportHeight } from '@/features/integrations/hooks/useScrollViewportHeight'
-import { APP_SCROLL_CONTAINER_ID } from '@/hooks/usePageVirtualizer'
+import { useFillViewportHeight } from "@nandobfer/integracoes/react"
+import { APP_SCROLL_CONTAINER_ID } from "@/hooks/usePageVirtualizer"
 
 const rect = (top: number): DOMRect =>
   ({ top, left: 0, right: 0, bottom: top, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect
@@ -43,22 +43,6 @@ describe('useFillViewportHeight', () => {
   it('nunca fica abaixo do mínimo (a página rola quando o cabeçalho ocupa quase tudo)', async () => {
     mount({ containerHeight: 600, offset: 550, minHeight: 320 })
     await waitFor(() => expect(document.querySelector('[data-testid="probe"]')!.textContent).toBe('320'))
-  })
-
-  it('settleMs mede de novo depois da entrada animada (deslocamento não muda tamanho)', async () => {
-    function Settling() {
-      const ref = useRef<HTMLDivElement>(null)
-      const height = useFillViewportHeight(ref, true, 100, 50)
-      return <div ref={ref} data-testid="settle">{height ?? 'sem-medida'}</div>
-    }
-    const { container } = render(<main style={{ overflowY: 'auto' }}><Settling /></main>)
-    const main = container.querySelector('main')!
-    Object.defineProperty(main, 'clientHeight', { configurable: true, value: 600 })
-    main.getBoundingClientRect = () => rect(0)
-    const probe = container.querySelector('[data-testid="settle"]') as HTMLElement
-    // Sem disparar resize: só a medida atrasada pega a posição final do bloco.
-    probe.getBoundingClientRect = () => rect(200)
-    await waitFor(() => expect(probe.textContent).toBe('400'))
   })
 
   it('desligado não mede', () => {

@@ -111,7 +111,7 @@ describe("Abrir memórias depende da tela (OPE-207)", () => {
 })
 
 describe("altura do card: o restante da área visível (OPE-207)", () => {
-    function mountInMain(clientHeight: number) {
+    function mountInMain(clientHeight: number, resize = true) {
         const client = new QueryClient()
         const view = render(
             <main style={{ overflowY: "auto" }}>
@@ -127,7 +127,7 @@ describe("altura do card: o restante da área visível (OPE-207)", () => {
             const top = this === main ? 0 : 150
             return { top, left: 0, right: 0, bottom: top, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect
         })
-        fireEvent(window, new Event("resize"))
+        if (resize) fireEvent(window, new Event("resize"))
     }
     const heights = () => [screen.getByTestId("secretary-inbox"), screen.getByTestId("secretary-inbox-skeleton")].map((element) => element.style.height)
 
@@ -135,6 +135,11 @@ describe("altura do card: o restante da área visível (OPE-207)", () => {
         mountInMain(800)
         await waitFor(() => expect(heights()).toEqual(["650px", "650px"]))
         expect(screen.getByTestId("secretary-inbox").className).not.toContain("100dvh")
+    })
+
+    it("mede de novo depois da entrada animada da aba, sem precisar de resize", async () => {
+        mountInMain(800, false)
+        await waitFor(() => expect(heights()).toEqual(["650px", "650px"]))
     })
 
     it("tela baixa: fica no mínimo de 480 px (a página rola)", async () => {

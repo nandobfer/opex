@@ -1,5 +1,5 @@
 import { isSessionNotFoundError } from "@opencode/client"
-import type { OpencodeClient } from "./opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 /** Prazo de uma exclusão de sessão no OpenCode. */
 export const OPENCODE_SESSION_DELETE_TIMEOUT_MS = 15_000

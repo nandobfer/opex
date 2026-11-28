@@ -1,5 +1,5 @@
 import { Schema, model, models, type Document, type Model } from "mongoose"
-import type { IntegrationLogLevel } from "@/lib/integrations/log-format"
+import type { IntegrationLogLevel } from "@nandobfer/integracoes"
 
 /** Retenção dos logs de debug dos plugins (OPE-172), igual à das integrações. */
 export const PLUGIN_LOG_TTL_SECONDS = 48 * 60 * 60

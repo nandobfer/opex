@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegration } from "@/lib/integrations/config"
+import { getIntegration } from "@/lib/integrations/runtime"
 import { instanceAppOf } from "../channel-namespace"
 import { resetInstanceCache } from "./instance"
 import { BOOTSTRAP_APP_SLUG, ENGRAMIND_INTEGRATION_ID, ENGRAMIND_WEBHOOK_PATH } from "../constants"

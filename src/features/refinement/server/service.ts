@@ -3,10 +3,10 @@ import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { TaskRefinement, type ITaskRefinement } from "@/lib/db/models/Refinement"
 import { AgenticCentral } from "@/lib/db/models/Agentic"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
-import { listOpencodeSkillsAt, type SkillListAt } from "@/lib/ai/opencode-skill-list"
+import { listOpencodeSkillsAt, type SkillListAt } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list"
 import type { TaskRefinementSettings } from "@/features/ai/schemas"
 import { publishAppEvent } from "@/lib/pusher/channels"
 import { loggerFor } from "@/lib/logger"
@@ -337,6 +337,10 @@ function turnHooks(doc: ITaskRefinement) {
             },
             onText: (delta: string) => {
                 accumulated.text += delta
+            },
+            // A sessão acordou depois dos subagentes (OPE-216): a especificação sai do texto da execução final.
+            onSegment: () => {
+                accumulated.text = ""
             },
             onStep: async ({ costUsd, tokens }: { costUsd: number; tokens: { input: number; output: number; reasoning: number } }) => {
                 await TaskRefinement.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })

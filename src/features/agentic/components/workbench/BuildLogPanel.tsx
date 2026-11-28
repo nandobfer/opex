@@ -1,11 +1,11 @@
 "use client"
 
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { AnimatePresence, motion } from "framer-motion"
-import { ChevronDown, ChevronUp, ExternalLink, Hammer, Search, WifiOff, XCircle } from "lucide-react"
+import { ChevronDown, ChevronUp, Hammer, Search, WifiOff, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { IntegrationConsole, type ConsoleSearchResults, type IntegrationConsoleHandle } from "@/features/integrations/components/IntegrationConsole"
+import { IntegrationConsole, type ConsoleSearchResults, type IntegrationConsoleHandle } from "@nandobfer/integracoes/react"
 import { lastGithubRunUrl, type WorkbenchBuildDto } from "../../build-log"
 import { useBuildLogStream, type BuildLogSink } from "../../hooks/useBuilds"
 
@@ -13,21 +13,24 @@ import { useBuildLogStream, type BuildLogSink } from "../../hooks/useBuilds"
 const SCROLLBACK = 50_000
 
 /** Log de um build no terminal (xterm), com busca. Ao vivo enquanto o build roda. */
-export function BuildLogPanel({ workbenchId, build }: { workbenchId: string; build: WorkbenchBuildDto }) {
+export function BuildLogPanel({ workbenchId, build, onRunUrl }: { workbenchId: string; build: WorkbenchBuildDto; onRunUrl?: (url: string | null) => void }) {
     const consoleRef = useRef<IntegrationConsoleHandle>(null)
-    // GitHub Action: o script imprime a URL da execução; a última vira um atalho acima do log.
-    const [runUrl, setRunUrl] = useState<string | null>(null)
+    // GitHub Action: o script imprime a URL da execução; a última vira o link do selo "GitHub Action" do resumo.
+    const onRunUrlRef = useRef(onRunUrl)
+    useEffect(() => {
+        onRunUrlRef.current = onRunUrl
+    }, [onRunUrl])
     const sink = useMemo<BuildLogSink>(
         () => ({
             reset: (text) => {
                 consoleRef.current?.clear()
                 consoleRef.current?.write(text)
-                setRunUrl(lastGithubRunUrl(text))
+                onRunUrlRef.current?.(lastGithubRunUrl(text))
             },
             write: (text) => {
                 consoleRef.current?.write(text)
                 const found = lastGithubRunUrl(text)
-                if (found) setRunUrl(found)
+                if (found) onRunUrlRef.current?.(found)
             },
         }),
         [],
@@ -93,23 +96,6 @@ export function BuildLogPanel({ workbenchId, build }: { workbenchId: string; bui
                 </Button>
             </form>
             <AnimatePresence initial={false}>
-                {build.method === "github" && runUrl && (
-                    <motion.a
-                        key="run"
-                        href={runUrl}
-                        target="_blank"
-                        rel="noreferrer"
-                        initial={{ opacity: 0, height: 0 }}
-                        animate={{ opacity: 1, height: "auto" }}
-                        exit={{ opacity: 0, height: 0 }}
-                        transition={{ duration: 0.18 }}
-                        className="flex items-center gap-1.5 overflow-hidden text-xs text-primary hover:underline"
-                    >
-                        <ExternalLink className="h-3.5 w-3.5" aria-hidden /> Abrir a execução no GitHub
-                    </motion.a>
-                )}
-            </AnimatePresence>
-            <AnimatePresence initial={false}>
                 {running && view.loaded && !connected && (
                     <motion.p initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className="flex items-center gap-1.5 overflow-hidden text-xs text-warning">
                         <WifiOff className="h-3.5 w-3.5" aria-hidden /> Conexão com o log caiu; reconectando…
@@ -122,7 +108,7 @@ export function BuildLogPanel({ workbenchId, build }: { workbenchId: string; bui
                     {empty && (
                         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="absolute inset-0 flex flex-col items-center justify-center gap-2 p-6 text-center text-sm text-muted-foreground">
                             <Hammer className="h-6 w-6" aria-hidden />
-                            <p>{running ? (build.method === "github" ? "Aguardando a saída do script da prévia…" : "Aguardando a saída do docker compose…") : "Este build não produziu saída."}</p>
+                            <p>{running ? (build.method === "github" ? "Aguardando a saída do script da prévia e do GitHub Actions…" : "Aguardando a saída do docker compose…") : "Este build não produziu saída."}</p>
                         </motion.div>
                     )}
                 </AnimatePresence>

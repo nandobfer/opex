@@ -1,5 +1,5 @@
 import { createHostRunner } from "@/features/local-docker/server/shell"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { integrationDebug } from "@/lib/integrations/server"
 import { HOST_METRICS_SHELL_COMMAND, HOST_METRICS_SHELL_TIMEOUT_MS } from "../constants"
 
 /** Fallback sem o plugin: o comando fixo no shell do OpenCode (host), saída crua para o parser puro. */

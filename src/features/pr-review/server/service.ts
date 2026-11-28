@@ -3,7 +3,7 @@ import { pageInfo } from "@/lib/list/query"
 import { DomainError } from "@/lib/api/route"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { PrReview, type IPrReview } from "@/lib/db/models/PrReview"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermissionDto } from "@/lib/ai/opencode-events"
 import { runAgentTurn } from "@/lib/ai/opencode-run"
 import { publishAppEvent } from "@/lib/pusher/channels"
@@ -182,6 +182,10 @@ async function executeReview(id: string, controller: AbortController): Promise<v
                     },
                     onText: (delta: string) => {
                         text += delta
+                    },
+                    // A sessão acordou depois dos subagentes (OPE-216): vale o texto da execução final.
+                    onSegment: () => {
+                        text = ""
                     },
                     onStep: async ({ costUsd, tokens }) => {
                         await PrReview.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })

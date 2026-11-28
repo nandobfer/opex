@@ -11,7 +11,7 @@ type Row = { _id: Types.ObjectId; subject: string; provider: string; model: stri
 
 const mocks = vi.hoisted(() => ({ rows: [] as unknown[], writes: [] as unknown[], pricerCalls: 0 }))
 
-vi.mock('@/lib/db/models/AiConsumption', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption', () => ({
   AiConsumption: {
     find: () => ({ select: () => ({ lean: async () => (mocks.rows as Row[]).map((item) => ({ ...item })) }) }),
     bulkWrite: async (ops: { updateOne: { filter: { _id: Types.ObjectId }; update: { $set: { listCost: unknown } } } }[]) => {
@@ -24,7 +24,7 @@ vi.mock('@/lib/db/models/AiConsumption', () => ({
     },
   },
 }))
-vi.mock('@/lib/ai/pricing/server', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/pricing/server', () => ({
   createStepPricer: async ({ model }: { model: string }) => {
     mocks.pricerCalls++
     return {
@@ -33,7 +33,7 @@ vi.mock('@/lib/ai/pricing/server', () => ({
     }
   },
 }))
-vi.mock('@/features/ai-billing/server/billing-context', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/server/billing-context', () => ({
   buildBillingLookup: async () => ({
     key: (id: string) => (id === 'key_cred' ? { keyId: id, name: 'Créditos', provider: 'deepseek', billing: { mode: 'credits', faceValueUsd: 100, paidAmount: 50, paidCurrency: 'USD', startsAt: null, expiresAt: null, exhaustedAt: null } } : null),
     fx: () => 5,
@@ -99,6 +99,13 @@ describe('métricas com custo', () => {
     expect(metrics.days.find((day) => day.day === '2026-11-03')!.cost.listUsd).toBeNull()
     expect(metrics.breakdown.plans.map((item) => item.label)).toEqual(['DeepSeek · Sem chave identificada · Pago por uso', 'DeepSeek · Créditos · Créditos'])
     expect(metrics.breakdown.models).toEqual([expect.objectContaining({ key: 'deepseek/deepseek-flash', listUsd: 4 })])
+    // OPE-213: médias de tokens da lista — tokens ÷ execuções (todas) e tokens ÷ dias corridos.
+    expect(metrics.kpis).toMatchObject({ tokens: 450, tokensPerRun: 150, tokensPerDay: 113 })
+  })
+
+  it('OPE-213: sem execuções no período, as médias de tokens são null ("—"), nunca 0', () => {
+    const metrics = aggregateRoutineMetrics([], { from: new Date('2026-11-04T03:00:00Z'), to: new Date('2026-11-05T02:59:59Z') }, null)
+    expect(metrics.kpis).toMatchObject({ tokens: 0, tokensPerRun: null, tokensPerDay: null })
   })
 
   it('execução do motor Opex com tokens mas sem passos gravados: custo desconhecido (Parcial), nunca zero', () => {

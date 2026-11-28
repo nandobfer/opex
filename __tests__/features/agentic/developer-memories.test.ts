@@ -8,14 +8,14 @@ const mocks = vi.hoisted(() => ({
   ensureMcp: vi.fn(async () => ({ ok: true, error: null as string | null, skipped: [] as string[] })),
   mentorLearns: vi.fn<(centralId: string) => Promise<boolean>>(async () => false),
 }))
-vi.mock('@/features/adversarial-agent/server/mentor/hooks', () => ({ mentorLearnsOnDone: mocks.mentorLearns }))
-vi.mock('@/features/ai/server/agent-memory-context', () => ({ developerMemoryContext: mocks.context }))
-vi.mock('@/features/ai/server/self-memory/settings', () => ({ selfMemoryEnabled: mocks.selfEnabled }))
-vi.mock('@/features/ai/server/self-memory/mcp', () => ({ ensureAgentMemoryMcp: mocks.ensureMcp }))
-vi.mock('@/lib/logger', () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
+vi.mock("@/features/adversarial-agent/server/mentor/hooks", () => ({ mentorLearnsOnDone: mocks.mentorLearns }))
+vi.mock("@/features/ai/server/agent-memory-context", () => ({ developerMemoryContext: mocks.context }))
+vi.mock("@/features/ai/server/self-memory/settings", () => ({ selfMemoryEnabled: mocks.selfEnabled }))
+vi.mock("@/features/ai/server/self-memory/mcp", () => ({ ensureAgentMemoryMcp: mocks.ensureMcp }))
+vi.mock("@/lib/logger", () => ({ logger: { warn: vi.fn(), info: vi.fn(), error: vi.fn() } }))
 
-import { registerDeveloperMemoryMcpAt, syncDeveloperMemories, withDeveloperMemories } from '@/features/agentic/server/developer-memories'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { registerDeveloperMemoryMcpAt, syncDeveloperMemories, withDeveloperMemories } from "@/features/agentic/server/developer-memories"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 const makeClient = () => {
   const put = vi.fn(async () => undefined)

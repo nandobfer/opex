@@ -23,7 +23,7 @@ const mocks = vi.hoisted(() => ({
   info: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({
   getIntegrationConfig: async (id: string) => (id === 'engramind' ? (mocks.engramindConfigured ? { baseUrl: 'http://engramind:8000', adminToken: 'eng.tk' } : {}) : { apiKey: mocks.keys[id] }),
   getIntegration: async (id: string) => ({ version: `v-${id}-${mocks.keys[id] ?? 'none'}` }),
 }))

@@ -12,10 +12,10 @@ const mocks = vi.hoisted(() => ({
     model: null as unknown,
 }))
 
-vi.mock("@/lib/ai/catalog", () => ({ listAiModels: async () => [{ id: "m", inputModalities: mocks.modalities }] }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/catalog", () => ({ listAiModels: async () => [{ id: "m", inputModalities: mocks.modalities }] }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: { mediaBase64: mocks.mediaBase64 } }))
-vi.mock("@/lib/ai/consumption", () => ({ recordAiConsumption: mocks.consumption }))
-vi.mock("@/lib/ai/stream", () => ({
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/consumption", () => ({ recordAiConsumption: mocks.consumption }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/ai/stream", () => ({
     prepareModel: async () => ({ model: mocks.model, providerOptions: undefined, apiKeyId: "k1", takeStepCost: () => null, dispose: async () => undefined }),
 }))
 

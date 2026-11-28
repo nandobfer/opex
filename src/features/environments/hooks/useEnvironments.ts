@@ -41,6 +41,8 @@ export function useEnvironmentEnvValues(id: string | null, open: boolean) {
     useEffect(() => {
         if (!open) queryClient.removeQueries({ queryKey: ["environment-env-values"] })
     }, [open, queryClient])
+    // Sair da página de edição (desmontar) também tira os valores do cache.
+    useEffect(() => () => queryClient.removeQueries({ queryKey: ["environment-env-values"] }), [queryClient])
     return useQuery({
         queryKey,
         enabled: open && id !== null,
@@ -65,11 +67,13 @@ export function useSaveEnvironment(id: string | null) {
     })
 }
 
-/** "Ler compose" do formulário: serviços e limites declarados no compose da origem (sob demanda). */
+/**
+ * Leitura do compose da página Novo/Editar: serviços, limites e dados declarados no compose da origem. Sem
+ * toast: a leitura é automática e o erro aparece na própria seção, com "Tentar novamente".
+ */
 export const useReadComposeServices = () =>
     useMutation({
         mutationFn: async (input: ComposeServicesInput) => unwrapApi((await api.post<ApiResponse<ComposeServicesDto>>(`${base}/compose-services`, input)).data),
-        onError: (error) => toast.error(apiErrorMessage(error, "Não foi possível ler o compose")),
     })
 
 export function useAdoptProject() {

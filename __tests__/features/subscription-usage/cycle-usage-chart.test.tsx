@@ -3,7 +3,7 @@ import React from 'react'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { framerMotionMock } from '../../helpers/framer-motion'
-import type { CycleChartDto as GoChartDto } from '@/features/subscription-usage/types'
+import type { CycleChartDto as GoChartDto } from "@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/types"
 
 vi.mock('framer-motion', () => framerMotionMock())
 
@@ -40,9 +40,9 @@ vi.mock('@/components/ui/chart', async (importOriginal) => ({
   ChartContainer: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }))
 
-import { CycleUsageChart } from '@/features/subscription-usage/components/CycleUsageChart'
-import { CycleChartTooltip } from '@/features/subscription-usage/components/CycleChartTooltip'
-import * as chartStyle from '@/features/subscription-usage/components/chart-style'
+import { CycleUsageChart } from "@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/components/CycleUsageChart"
+import { CycleChartTooltip } from "@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/components/CycleChartTooltip"
+import * as chartStyle from '@nandobfer/integracoes/modules/integrations/ia/features/subscription-usage/components/chart-style'
 
 const NOW = Date.parse('2026-11-16T19:57:00.000Z')
 const CROSS = Date.parse('2026-12-01T09:34:56.000Z')

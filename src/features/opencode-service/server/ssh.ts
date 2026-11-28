@@ -1,8 +1,8 @@
 import { createHash } from "node:crypto"
 import { Client } from "ssh2"
 import { DomainError } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
 
 /**
  * SSH do servidor do app até a máquina do OpenCode — EXCEÇÃO à regra de Ambientes, restrita ao ciclo

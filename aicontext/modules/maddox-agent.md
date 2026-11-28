@@ -71,6 +71,10 @@ Página `/agente-maddox` (categoria **Agentes** da sidebar, OPE-122): Visão ger
   `exposeRawToolInput` ao `runAgentTurn`; mesas, forks e revisões continuam recebendo só o resumo
   cortado. O resumo cru do OpenCode nunca é usado nas ferramentas do Opex; no chat ao vivo
   (NDJSON) e em `opex_messages.parts` não ficam tokens, senhas nem headers/variáveis de MCP.
+- **Subagentes em segundo plano** (OPE-216): a resposta só termina com a sessão do OpenCode quieta; enquanto
+  o turno espera, a linha NDJSON `background` (`{ subagents, shells, other }`, `OpexLiveMessage.background`)
+  troca o "Pensando…" da resposta ao vivo por "Aguardando 2 subagentes em segundo plano…" (ver
+  `modules/agentic-dev.md`, "Subagentes e trabalho em segundo plano").
 - **Confirmação**: segue as permissões do OpenCode. Quando o OpenCode pede permissão
   (`permission.asked`), o card da chamada (`source.id`; sem ele, um card "Permissão · …") mostra
   **Confirmar/Cancelar** (linha NDJSON `tool-confirmation`); a resposta vai ao OpenCode

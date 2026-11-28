@@ -1,6 +1,7 @@
 "use client"
 
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
+import { Ban, CheckCircle2, Clock, Hourglass, Loader2, Moon, ShieldAlert, TimerOff, XCircle, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { ROUTINE_AGENT_STATUS_LABELS, ROUTINE_PROVISIONING_LABELS, ROUTINE_RUN_STATUS_LABELS, type RoutineAgentStatus, type RoutineProvisioningStatus, type RoutineRunStatus } from "../status"
 
@@ -20,12 +21,38 @@ const RUN_VARIANT: Record<RoutineRunStatus, Variant> = {
     expired: "secondary",
 }
 
+/** Ícone de cada status da execução (card da aba Execuções, OPE-213). */
+export const ROUTINE_RUN_STATUS_ICONS: Record<RoutineRunStatus, LucideIcon> = {
+    queued: Clock,
+    running: Loader2,
+    waiting: Hourglass,
+    hibernating: Moon,
+    awaiting_confirmation: ShieldAlert,
+    completed: CheckCircle2,
+    error: XCircle,
+    canceled: Ban,
+    expired: TimerOff,
+}
+
+/** Ícone do selo; o de Executando gira com Framer Motion (parado com movimento reduzido). */
+function StatusIcon({ icon: Icon, id, spin }: { icon: LucideIcon; id: string; spin?: boolean }) {
+    const reduceMotion = useReducedMotion()
+    const icon = <Icon className="h-3.5 w-3.5" data-status-icon={id} aria-hidden />
+    if (!spin) return icon
+    return (
+        <motion.span className="inline-flex" data-spinning={reduceMotion ? "false" : "true"} animate={reduceMotion ? { rotate: 0 } : { rotate: 360 }} transition={reduceMotion ? { duration: 0 } : { duration: 1, repeat: Infinity, ease: "linear" }}>
+            {icon}
+        </motion.span>
+    )
+}
+
 /** Troca de status animada (o rótulo muda com fade). */
-function AnimatedBadge({ id, label, variant }: { id: string; label: string; variant: Variant }) {
+function AnimatedBadge({ id, label, variant, icon: Icon, spin }: { id: string; label: string; variant: Variant; icon?: LucideIcon; spin?: boolean }) {
     return (
         <AnimatePresence mode="wait" initial={false}>
             <motion.span key={id} initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }} transition={{ duration: 0.15 }} className="inline-flex">
-                <Badge variant={variant} className="whitespace-nowrap">
+                <Badge variant={variant} className="gap-1 whitespace-nowrap">
+                    {Icon && <StatusIcon icon={Icon} id={id} spin={spin} />}
                     {label}
                 </Badge>
             </motion.span>
@@ -38,4 +65,6 @@ export const RoutineAgentStatusBadge = ({ status }: { status: RoutineAgentStatus
 /** Só aparece fora do "Provisionado" (o normal não precisa de selo). */
 export const RoutineProvisioningBadge = ({ status }: { status: RoutineProvisioningStatus }) => (status === "ok" ? null : <AnimatedBadge id={status} label={ROUTINE_PROVISIONING_LABELS[status]} variant={PROVISIONING_VARIANT[status]} />)
 
-export const RoutineRunStatusBadge = ({ status }: { status: RoutineRunStatus }) => <AnimatedBadge id={status} label={ROUTINE_RUN_STATUS_LABELS[status]} variant={RUN_VARIANT[status]} />
+export const RoutineRunStatusBadge = ({ status, withIcon = false }: { status: RoutineRunStatus; withIcon?: boolean }) => (
+    <AnimatedBadge id={status} label={ROUTINE_RUN_STATUS_LABELS[status]} variant={RUN_VARIANT[status]} icon={withIcon ? ROUTINE_RUN_STATUS_ICONS[status] : undefined} spin={withIcon && status === "running"} />
+)

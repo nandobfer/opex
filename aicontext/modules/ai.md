@@ -4,6 +4,53 @@ Chamadas a IA do app passam por uma camada única sobre a **Vercel AI SDK** (`ai
 são integrações configuradas na tela (sem `.env`) e cada feature que usa IA escolhe provedor, modelo
 e opções na própria aba da página "Inteligência Artificial".
 
+**O que é biblioteca e o que é do Opex (OPE-212).** A camada de provedores inteira vem do subpath `/ia` de
+`@nandobfer/integracoes`: o hub `ai`, os 8 provedores, os provedores customizados, o chaveiro com rodízio
+e plano de cobrança, as abas Configuração, Modelos e Consumo, os favoritos, os testadores, `prepareModel`
+e `streamAi`, os preços (DeepSeek, models.dev, Command Code, custo do Go), o billing, PTAX e models.dev e
+as rotinas `fx-ptax-daily`, `ai-subscription-days`, `opencode-go-usage-refresh` e `command-code-usage-refresh`.
+O código mora em `@nandobfer/integracoes/modules/integrations/ia/...` (os caminhos citados neste
+documento). Ficam no Opex, como **extensões** registradas em `src/features/integrations/registry/client.tsx`:
+as abas de agentes do hub (Opex, Maddox, Secretário, Orçamentista, Catalogador, Refinador, Desenvolvedor,
+Arquiteto, Adversário, Revisor, Mentor e Rotineiros, com os aliases de URL), a página `ia/centrais/:id`, as
+abas extras do OpenCode de sessão (Controles, Contas, Skills, Agentes, Comandos, Plugins e MCPs) e as rotas
+delas; o registro de features (`loadFeature`/`availability`, `src/features/ai/`), o runtime de agentes do
+OpenCode (`opencode-run`, `opencode-sessions`, `opencode-events`), o plugin opencode-quota, as memórias do
+Engramind e a memória própria. A biblioteca recebe do Opex os rótulos das origens de consumo
+(`configureIa`) e o gancho `onPrimaryKeyChanged` (a chave principal de Gemini, Anthropic, OpenAI e DeepSeek
+vai para o Engramind; `src/lib/integrations/runtime.ts`).
+
+## Provedor customizado (OpenAI compatible, OPE-212)
+
+- **Criar**: botão **Adicionar provedor customizado** na aba Provedores do hub. O diálogo pede o nome e a
+  URL base (`https://.../v1`) e, opcionalmente, modelos cadastrados à mão (id, rótulo e preço por milhão
+  de tokens de entrada e saída, em USD). O `slug` é gerado do nome e é único; podem existir vários.
+- **Dados**: o cadastro fica na coleção nova `ai_custom_providers` (`{ slug, name, baseUrl, manualModels }`);
+  a configuração e o chaveiro, como os dos outros provedores, em `integration_configs` com o id
+  `ai_custom_<slug>`. Excluir apaga o cadastro, a configuração e o chaveiro e **mantém o histórico de
+  consumo** (rotulado com o nome gravado).
+- **Página** `/integracoes/ia/custom-<slug>` (filho dinâmico do hub): Configuração (URL, Chaves de API com
+  rodízio e principal), Modelos (os de `GET {baseUrl}/models` mais os manuais; manual com o mesmo id
+  sobrepõe rótulo e preço), Consumo (custo pelo preço do modelo manual; sem preço, só os tokens), teste,
+  debug e auditoria (entidade `ProvedorIACustomizado`). Editar e excluir pedem confirmação.
+- **Teste**: `GET {baseUrl}/models` com cada chave em uso. 404 avisa (amarelo) e segue com a lista manual.
+- **Geração**: `@ai-sdk/openai-compatible`, pelo `prepareModel` (o provedor `custom-<slug>`), com failover
+  entre as chaves em uso como os demais.
+- **Seletores**: o `AiProviderId` é a união dos fixos com `` `custom-${string}` `` (`aiProviderIdSchema`,
+  `aiTextProviderIdSchema`, `aiProviderIdIn(lista)`, enum + padrão, que vira `pattern` no JSON Schema das
+  ferramentas). Os customizados aparecem em todos os seletores de provedor de texto, inclusive no Agente
+  Opex (`OPEX_PROVIDER_IDS` + customizados), no motor Opex dos rotineiros, no Secretário e no Arquiteto.
+- **API**: `GET/POST /api/ai/custom-providers`, `PATCH/DELETE /api/ai/custom-providers/[slug]` (catch-all
+  `src/app/api/ai/[...path]`); o resto (`keys`, `models`, `consumption`, teste) pelas rotas de sempre do
+  provedor e da integração `ai_custom_<slug>`.
+- **Tempo real**: `ai-custom-providers-updated` (`{ slug, action: "created" | "updated" | "deleted" }`) em
+  `private-app`; o canal `private-integration-ai_custom_<slug>` (logs e status) é aceito pelo `channel-auth`
+  (assíncrono) para o dono quando o provedor existe: os ids fora do registro fixo são resolvidos pela central
+  (`getDefinition`, que só consulta o banco para ids no padrão `ai_custom_`); inexistente recebe 403.
+- **User-Agent**: o Opex se identifica ao OpenCode Go e ao Command Code com
+  `configureIa({ userAgent: { name: "Opex", url: "https://github.com/nandobfer/opex" } })` (o mesmo `User-Agent` de
+  antes); sem essa configuração, a biblioteca usa a identidade neutra dela.
+
 ## Provedores
 
 | Provedor | Integração | Pacote | Configuração |
@@ -17,8 +64,8 @@ e opções na própria aba da página "Inteligência Artificial".
 | Command Code | `ai_command_code` | `@ai-sdk/openai-compatible` (+ `@ai-sdk/openai` Responses e `@ai-sdk/anthropic`, conforme o modelo) | Chaves do Studio do Command Code (a mesma da CLI; chaveiro, várias em uso com rodízio e uma principal); Provider API fixa `https://api.commandcode.ai/provider/v1` (OPE-190) |
 | JEV | `ai_jev` | — (HTTP TypeSafe) | Chaves de API da TypeSafe (chaveiro, várias em uso com rodízio e uma principal); URL fixa `https://api.typesafe.ai` |
 
-- Metadados puros (tela e servidor): `src/lib/ai/providers.ts` (`AI_PROVIDERS`, `AiModelDto`...).
-- **OpenCode** (`src/lib/ai/opencode.ts`): autenticação Basic `opencode:<senha>` em toda rota.
+- Metadados puros (tela e servidor): `@nandobfer/integracoes/modules/integrations/ia/ai/providers` (`AI_PROVIDERS`, `AiModelDto`...).
+- **OpenCode** (`@nandobfer/integracoes/modules/integrations/ia/ai/opencode`): autenticação Basic `opencode:<senha>` em toda rota.
   Catálogo pelas rotas HTTP do servidor — `GET /api/info` (exige versão 2.x), `GET /api/model`
   (modelos habilitados, id `provedor/modelo`, variantes, gratuitos = custo 0) e `GET /api/agent`
   (agentes primários e visíveis). Com diretório configurado, as consultas usam
@@ -28,28 +75,28 @@ e opções na própria aba da página "Inteligência Artificial".
   segredo chave privada, área de texto) — usados só pela aba Controles (`modules/opencode-resources.md`).
   Campo público opcional **"Arquivo de quota (opencode-quota)"** (`quotaExportPath`): export do plugin
   `opencode-quota` lido pelo painel de quota de `/desenvolvimento` (`modules/opencode-quota.md`).
-- **Gemini** (`src/lib/ai/gemini.ts`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
+- **Gemini** (`@nandobfer/integracoes/modules/integrations/ia/ai/gemini`): `GET v1beta/models` (header `x-goog-api-key`), só modelos de
   texto (`generateContent`, sem embedding/imagem/áudio); modelos com `thinking` aceitam os níveis
   `low`/`medium`/`high`.
-- **Anthropic** (`src/lib/ai/anthropic.ts`): `GET v1/models` (headers `x-api-key` e
+- **Anthropic** (`@nandobfer/integracoes/modules/integrations/ia/ai/anthropic`): `GET v1/models` (headers `x-api-key` e
   `anthropic-version: 2023-06-01`, paginado por `after_id`), do mais novo ao mais antigo. Variantes
   `low`/`medium`/`high` (`AI_REASONING_LEVELS`) em todos os modelos, exceto Claude 3.x anteriores ao
   3.7 (sem raciocínio).
-- **OpenAI** (`src/lib/ai/openai.ts`): `GET v1/models` (`Bearer`), só modelos de texto (`gpt-*`,
+- **OpenAI** (`@nandobfer/integracoes/modules/integrations/ia/ai/openai`): `GET v1/models` (`Bearer`), só modelos de texto (`gpt-*`,
   `o*`, `chatgpt-*`, sem embedding, áudio, imagem, realtime, transcrição, moderação, busca e
   `instruct`), mais novos primeiro. Variantes `low`/`medium`/`high` na série o e no GPT-5 em diante
   (exceto `-chat`).
-- **DeepSeek** (`src/lib/ai/deepseek.ts`): `GET /models` (`Bearer`). Variantes `low`/`medium`/`high`
+- **DeepSeek** (`@nandobfer/integracoes/modules/integrations/ia/ai/deepseek`): `GET /models` (`Bearer`). Variantes `low`/`medium`/`high`
   em todos, exceto o alias `deepseek-chat` (sem raciocínio).
-- **OpenCode Go** (`src/lib/ai/opencode-go.ts`, OPE-154): inferência pela API do gateway do plano
+- **OpenCode Go** (`@nandobfer/integracoes/modules/integrations/ia/ai/opencode-go`, OPE-154): inferência pela API do gateway do plano
   Go com a chave da assinatura, **sem sessão do OpenCode no host** e sem agente (provedor `opencode-go`,
   separado do `opencode` de sessão). Detalhes na seção "OpenCode Go" abaixo.
-- **Command Code** (`src/lib/ai/command-code.ts`, OPE-190): inferência pela Provider API do Command Code com a
+- **Command Code** (`@nandobfer/integracoes/modules/integrations/ia/ai/command-code`, OPE-190): inferência pela Provider API do Command Code com a
   chave do Studio, sem sessão no host e sem agente (provedor `command-code`). Detalhes na seção "Command Code"
   abaixo.
 - Configuração só pela tela (chaves de API do chaveiro nos provedores diretos, cifradas, sem `env`;
   seção "Chaves de API").
-- **JEV** (`src/lib/ai/jev.ts`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
+- **JEV** (`@nandobfer/integracoes/modules/integrations/ia/ai/jev`): modelo TypeSafe "System One" de **decisão estruturada** (não gera
   texto). Além do catálogo (`GET v1/models`, header `Authorization: Bearer <apiKey>`), expõe
   `askJevSystemOne` (`POST v1/systemone`): envia `state` + `questions` tipadas (`choice`, `score`,
   `noul`) e devolve `answers` tipadas. É usado por "Tags de tarefas" (um `noul` por tag) e por
@@ -62,23 +109,23 @@ e opções na própria aba da página "Inteligência Artificial".
   requisição; falhas de negócio posteriores não apagam o uso nem geram outra linha JEV. Falha de
   transporte sem métricas mantém tokens/custo `null`, nunca zero. Falha de telemetria é logada com
   Pino sem interromper a IA. Auditoria `UsoIA`, seguida do evento `jev-usage-updated` em `private-app`.
-- **Custo JEV** (`src/lib/ai/jev-usage.ts`): `inputTokens × 0,042 / 1.000.000` USD (tarifa oficial
+- **Custo JEV** (`@nandobfer/integracoes/modules/integrations/ia/ai/jev-usage`): `inputTokens × 0,042 / 1.000.000` USD (tarifa oficial
   de entrada; saída gratuita). Grava a tarifa aplicada (`inputPricePerMillionUsd`) e origem `api`;
   não arredonda por chamada nem recalcula custos antigos. Sem entrada conhecida, custo `null`;
   sem ambos os contadores, total `null`. Retenção continua em **90 dias**; a migração
   `ensure-ai-usage-indexes` garante índices, incluindo `provider + createdAt`, sem depender de autoIndex.
-- Catálogo com cache de 2 min por `version` da integração (`src/lib/ai/catalog.ts`); `?refresh=1`
+- Catálogo com cache de 2 min por `version` da integração (`@nandobfer/integracoes/modules/integrations/ia/ai/catalog`); `?refresh=1`
   ignora o cache. `?kind=embedding` lista os modelos de **embedding** (só Gemini — `embedContent` em
   `supportedGenerationMethods`, `listGeminiEmbeddingModels` — e OpenAI — ids com `embedding`,
   `listOpenaiEmbeddingModels`), com cache separado; outro provedor ou tipo → `422`. Usado pela "IA do
   Opex" do Engramind (`useAiModels(provider, true, "embedding")`). As URLs oficiais ficam em
-  `src/lib/ai/endpoints.ts` (puro, reexportadas por cada provedor).
+  `@nandobfer/integracoes/modules/integrations/ia/ai/endpoints` (puro, reexportadas por cada provedor).
 - **A chave principal do Gemini, Anthropic, OpenAI e DeepSeek pode alimentar o Engramind** (Redator e
   embedding, `modules/engramind.md`, "IA do Opex"; o Engramind aceita uma chave só, então as demais chaves
   em uso do rodízio não vão para ele): quando a chave **principal** muda (seção "Chaves de API"), o reenvio ao Engramind (`syncEngramindProviderKey`) é agendado depois da resposta. Falha no
   Engramind nunca desfaz nem bloqueia a gravação no Opex. O JEV não alimenta o Engramind. Situação do provedor: **configurado** (obrigatórios preenchidos,
   `isIntegrationConfigured`) e **conectado** (configurado + último teste verde ou amarelo).
-- **Conexão confirmada na hora** (`confirmAiProviderConnection`, `src/lib/ai/connection.ts`,
+- **Conexão confirmada na hora** (`confirmAiProviderConnection`, `@nandobfer/integracoes/modules/integrations/ia/ai/connection`,
   OPE-91): a disponibilidade das features (`availability`/`availabilityOf*`, `agenticAvailability`)
   e a validação ao salvar (`assertCatalog`, `assertAgentConfigs`) não recusam só pelo status
   gravado. Gravado conectado = segue sem rede; gravado desconectado (ex.: a verificação periódica
@@ -87,7 +134,7 @@ e opções na própria aba da página "Inteligência Artificial".
   segundo plano (um por vez por provedor). Falhou: o motivo traz a falha real (`… não está conectado
   (ECONNREFUSED): …`). Chamadas simultâneas compartilham o teste em andamento (por provedor e
   limite); depois, o sucesso vale 15 s e a falha só 1,5 s (a conexão que voltou vale logo).
-- Testes de conexão (`src/features/ai/server/testers.ts`): OpenCode = info + modelos + agentes
+- Testes de conexão (`@nandobfer/integracoes/modules/integrations/ia/features/ai/server/testers`): OpenCode = info + modelos + agentes
   (amarelo sem modelos); Gemini, Anthropic, OpenAI e DeepSeek = lista de modelos (amarelo sem
   modelos de texto); OpenCode Go = lista de modelos + conferência da chave (falha com chave recusada,
   mesmo com a lista respondendo); hub `ai` = testa cada provedor configurado
@@ -104,7 +151,7 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   (`{ id: "key_<hex>", name, secret (cifrado, secretBox), createdAt, updatedAt, createdBy }`),
   `activeApiKeyId` (a **principal**; um campo só, então nunca há duas principais) e `selectedApiKeyIds`
   (as **em uso**, com a principal). O conjunto em uso é lido sempre por `selectedApiKeysOf`
-  (`src/lib/integrations/config.ts`), normalizado: sem principal válida → nenhuma em uso ("Não
+  (biblioteca `@nandobfer/integracoes/server`), normalizado: sem principal válida → nenhuma em uso ("Não
   configurado"); a principal sempre entra, mesmo fora da lista (a versão antiga, que divide o banco com
   as prévias, só grava `activeApiKeyId`); ids que não existem mais saem; sem o campo (documentos de antes
   da OPE-179), o rodízio é só a principal; ordem estável por criação. Por isso **não há migração** do
@@ -115,7 +162,7 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   assinatura do Go soma as chaves em uso (OPE-180, `getAiProviderKeyPool`). Sem principal, o segredo não existe e o provedor fica **"Não configurado"**,
   com as features que dependem dele indisponíveis. Trocar a principal muda o `version` e derruba o
   cache do catálogo.
-- **Rodízio e troca de chave em falha** (`src/lib/ai/api-keys.ts` + puro `src/lib/ai/key-rotation.ts`):
+- **Rodízio e troca de chave em falha** (`@nandobfer/integracoes/modules/integrations/ia/ai/api-keys` + puro `@nandobfer/integracoes/modules/integrations/ia/ai/key-rotation`):
   - os clientes (`gemini.ts`, `anthropic.ts`, `openai.ts`, `deepseek.ts`, `opencode-go.ts` e `jev.ts`)
     pegam a ordem das chaves em uso por `requireAiProviderKeyOrder`, que começa na próxima chave do
     rodízio (cursor por provedor, em memória do processo) e avança o cursor. Sem chave: "X sem chave de
@@ -140,7 +187,7 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   sincronização com o Engramind no `updateIntegration` foi removido; agora quem dispara é o serviço
   das chaves. A rota `/keys/[keyId]/activate` ("uma em uso") foi **removida** na OPE-179, substituída
   por `/selection` e `/primary`; o card era o único consumidor.
-- **Regras** (`src/features/ai/server/api-keys.ts`):
+- **Regras** (`@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys`):
   - nome obrigatório, com no máximo 60 caracteres e único no provedor (sem diferenciar maiúsculas);
   - a **primeira** chave (ou a criada quando não há principal válida) vira principal e entra em uso; as
     demais entram fora de uso;
@@ -180,7 +227,7 @@ ficou de fora do rodízio. O OpenCode no host (`ai_opencode`) fica fora do chave
   Todo ato publica `ai-provider-keys-updated` (`{ provider }`) em `private-app`. O hook
   `useAiApiKeysRealtime` relê a lista, o status dos provedores, os modelos, o consumo e o detalhe da
   integração.
-- **Teste do provedor com várias chaves** (`checkEachKey` em `src/features/ai/server/testers.ts`): depois
+- **Teste do provedor com várias chaves** (`checkEachKey` em `@nandobfer/integracoes/modules/integrations/ia/features/ai/server/testers`): depois
   da listagem (com rodízio), cada chave em uso é conferida isoladamente (lista de modelos com ela; no Go,
   a conferência sem gerar). Se alguma falha, o resultado é aviso (amarelo): "2 de 3 chaves aceitas;
   falhou: “X” (…)". Com uma chave só, não há conferência extra.
@@ -252,8 +299,8 @@ motor Opex dos agentes rotineiros — `modules/routine-agents.md`, "Custos"):
   tabela (pago por uso), com aviso na tela e no item da chave ("Opex já usou US$ X de US$ Y").
 
 Gravação: `PATCH /api/ai/providers/[provider]/keys/[keyId]/billing` (`updateAiKeyBilling` em
-`src/features/ai/server/api-keys.ts`, o único caminho de gravação do chaveiro), schema Zod único (`aiKeyBillingSchema`,
-`src/features/ai-billing/schemas.ts`) na API e no formulário, gravado em `apiKeys[i].billing` com `setAt`, auditoria
+`@nandobfer/integracoes/modules/integrations/ia/features/ai/server/api-keys`, o único caminho de gravação do chaveiro), schema Zod único (`aiKeyBillingSchema`,
+`@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/schemas`) na API e no formulário, gravado em `apiKeys[i].billing` com `setAt`, auditoria
 `ChaveApiIA` com o plano antes/depois (nunca o segredo) e o evento `ai-provider-keys-updated`. O plano não muda a
 chave em uso (nada de reteste nem cache limpo). O DTO traz `billing` (sem `setAt`) e `billingNotices`
 (`server/key-notices.ts`; falha na leitura dos avisos não derruba a lista). Tela: ação **Plano de cobrança** (ícone de
@@ -261,7 +308,7 @@ recibo) em cada chave abre o `ApiKeyBillingDialog` (abas Pago por uso | Assinatu
 animada, campos em `FORM_GRID`); o item mostra o resumo do plano e os avisos. Alterar o plano recalcula o efetivo; o
 custo de tabela gravado nos passos não muda.
 
-### Custo de tabela (OPE-203, `src/lib/ai/pricing/`)
+### Custo de tabela (OPE-203, `@nandobfer/integracoes/modules/integrations/ia/ai/pricing/`)
 
 Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é `null` (nunca zero):
 
@@ -284,7 +331,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   falhou → a última cópia boa em memória e depois a do banco (`ai_price_catalogs`), com aviso no log; sem cópia →
   passos sem preço com o motivo; cancelamento propaga.
 
-## Geração (`src/lib/ai/stream.ts`)
+## Geração (`@nandobfer/integracoes/modules/integrations/ia/ai/stream`)
 
 - `streamAi(request)` é o **único ponto** das features: gera em streaming e nunca lança — falhas
   viram um evento `error` final. Eventos: `delta`, `reasoning` (uma vez, ao começar a raciocinar),
@@ -312,17 +359,24 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   mensagens pt-BR sem a chave (`opencode-go-errors.ts`).
 - Custo por passo: `prepareModel` devolve `takeStepCost(providerMetadata)` (OpenCode: metadados do
   passo; OpenCode Go: medidor da resposta; demais: `null`), usado por `streamAi`, pelo Agente Opex e
-  pelo motor Opex dos rotineiros (`src/lib/ai/provider-cost.ts`, puro).
+  pelo motor Opex dos rotineiros (`@nandobfer/integracoes/modules/integrations/ia/ai/provider-cost`, puro).
 - `streamAi` com o JEV termina em `error` (o JEV não gera texto).
 - **JEV**: não passa pelo `streamAi` (não gera texto); quem o usa chama `askJevSystemOne` direto.
 - Não há saída estruturada garantida pelo OpenCode: features que precisarem de JSON validam com Zod.
 - **Exceção — sessões longas**: o desenvolvimento agêntico usa o cliente oficial `@opencode/client`
-  (`src/lib/ai/opencode-client.ts` + eventos normalizados em `opencode-events.ts`) porque precisa
+  (`@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client` + eventos normalizados em `opencode-events.ts`) porque precisa
   retomar a mesma sessão, trocar agente/modelo entre etapas, responder permissões e perguntas,
   interromper e executar comandos de verificação. Ver `modules/agentic-dev.md`. O **refinamento de
   tarefas** (`modules/refinement.md`) usa o mesmo cliente e o mesmo **runner genérico de turno**
   (`src/lib/ai/opencode-run.ts`, compartilhado com a mesa).
-- **Medição de consumo** (`src/lib/ai/consumption.ts`, coleção `ai_consumption_logs`): uma linha por
+- **Trabalho em segundo plano** (OPE-216): o OpenCode do host roda na **v2.4.2** e o cliente
+  `@opencode/client` do Opex também (2.4.2). Desde a v2.3 o subagente roda em segundo plano e acorda a
+  sessão numa execução nova; o `runAgentTurn` só termina o turno com a sessão quieta (sem jobs em
+  `experimental.job.list`, sem entrega na `session.inbox` e sem a sessão rodando), publica o evento
+  `background` enquanto espera e devolve o texto da execução final; o gancho `onSegment` avisa quem
+  acumula o `onText`. O Parar cancela os jobs (`experimental.job.cancel`). Vale para todos os consumidores
+  do runner; detalhes em `modules/agentic-dev.md`, "Subagentes e trabalho em segundo plano".
+- **Medição de consumo** (`@nandobfer/integracoes/modules/integrations/ia/ai/consumption`, coleção `ai_consumption_logs`): uma linha por
   etapa/geração, prospectiva e **separada** dos acumuladores das features (`ai_usage_logs`), das
   mesas (`agentic_workbenches.usage`/`time_logs`) e dos refinamentos (`task_refinements.usage`) —
   nunca soma duas vezes o mesmo gasto. `streamAi` registra no `done` quando recebe
@@ -361,7 +415,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   uma chave em Integrações › …" antes de qualquer chamada. `createOpencodeGoModel` devolve
   `currentKeyId()` (a chave que respondeu), e `prepareModel` o expõe como `apiKeyId`: o consumo do Go é
   atribuído à chave.
-- **Endpoints** (`src/lib/ai/endpoints.ts`): base `https://opencode.ai/inference/go`; Chat Completions
+- **Endpoints** (`@nandobfer/integracoes/modules/integrations/ia/ai/endpoints`): base `https://opencode.ai/inference/go`; Chat Completions
   e Responses em `/openai/v1`, Messages em `/anthropic/v1`, Generate Content em `/google/v1beta`.
   Toda requisição leva `Authorization: Bearer <chave>`, `x-opencode-session` (obrigatório: sem ele o Go
   responde `400 MissingSessionID`) e o `User-Agent` próprio `OPENCODE_GO_USER_AGENT` (exigência do Go
@@ -402,7 +456,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
 - **Corrente de fallback por feature (OPE-181)**: todo turno do OpenCode por sessão (mesa, fork, Agente
   Adversário, Arquiteto com OpenCode, Revisor de PR, Refinador, rotineiros no motor OpenCode e Maddox)
   desiste do `retry-after` longo por cota (`DEFAULT_PROVIDER_LIMIT_POLICY`, padrão do `runAgentTurn`) e
-  segue a lista de **modelos de fallback** da própria configuração (`src/features/ai/model-fallbacks.ts`,
+  segue a lista de **modelos de fallback** da própria configuração (`@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks`,
   `FallbackModelsField`; ver `modules/agentic-dev.md`, "Modelos de fallback"). **Ficam fora**, por
   decisão registrada: as features one-shot pelo `streamAi` (Resumos de tarefas, Tags de tarefas, Prévia de
   orçamento, Estimar horas e Descritivo de versão de plugin) — chamada única, sem sessão nem novas
@@ -424,7 +478,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
 - **Integração** `ai_command_code` (filha de `ai`, `/integracoes/ia/command-code`): só o segredo `apiKey` no
   chaveiro (`keyRing: true`, sem `env`); abas Configuração, Modelos e Consumo. Fora do Engramind
   (`AI_API_KEY_ENGRAMIND_PROVIDERS`).
-- **Endpoints** (`src/lib/ai/endpoints.ts`): base `https://api.commandcode.ai/provider/v1` com `POST
+- **Endpoints** (`@nandobfer/integracoes/modules/integrations/ia/ai/endpoints`): base `https://api.commandcode.ai/provider/v1` com `POST
   /chat/completions`, `/responses` e `/messages`; toda chamada leva `Authorization: Bearer <chave>` e o
   `User-Agent` `COMMAND_CODE_USER_AGENT`. Mandar um modelo para o endpoint errado dá 400.
 - **Catálogo** (`command-code-models.ts`, puro): `GET /models` (rotas por modelo, `supported_endpoints`) e `GET
@@ -434,7 +488,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   a base é **sempre** a oficial (a chave nunca vai a outro host). Sem catálogo (nem cópia anterior), o prefixo
   `claude-` vai por Messages e o resto por Chat Completions, com aviso. Modelo que não atende nenhuma das três APIs
   (o `typesafe/jev`, só em `/systemone`) fica fora; nenhum outro é excluído. DTO: variantes = esforços do modelo
-  aceitos pela AI SDK (`AI_SDK_REASONING_LEVELS`, `src/lib/ai/reasoning-levels.ts`, compartilhado com o Go), `group`,
+  aceitos pela AI SDK (`AI_SDK_REASONING_LEVELS`, `@nandobfer/integracoes/modules/integrations/ia/ai/reasoning-levels`, compartilhado com o Go), `group`,
   contexto, tipos de entrada (arquivos do Agente Opex por modelo, `modelFileKinds`) e `free` (preço 0).
 - **Conferência da chave** (`verifyCommandCodeKey`): o catálogo é público, então o teste e a conexão na hora fazem
   `POST /chat/completions` com o modelo inexistente `__opex_probe__` — 401 = chave recusada; 403 com
@@ -454,7 +508,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   `/integracoes` e têm rotas próprias (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`;
   `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
-  link para a página; mais o card Geral do hub) e **uma aba por agente**, na ordem do fluxo de
+  link para a página; sem card Geral: não há ambiente nem modo debug) e **uma aba por agente**, na ordem do fluxo de
   trabalho e com o nome **sem a palavra "Agente"** — a mesma ordem, os mesmos nomes e os mesmos ícones
   da categoria **Agentes** da sidebar, todos do catálogo `AGENT_CATALOG`
   (`src/features/agent-metrics/catalog.ts`; lista das abas em `src/features/ai/tabs.ts`, OPE-122):
@@ -502,7 +556,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   OpenCode, Gemini, Anthropic, OpenAI, DeepSeek, OpenCode Go e Command Code (mais o JEV em Tags e Estimar prazos); só os
   conectados podem ser escolhidos. Agente Refinador, Agente Revisor e Agente Desenvolvedor são
   exclusivos do OpenCode.
-- **Campos de modelo compartilhados** (`src/features/ai/components/ModelFields.tsx`):
+- **Campos de modelo compartilhados** (`@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields`):
   `ModelPickerField` (busca do modelo com `ModelOption` — nome, id e selo "grátis" —, modelo salvo
   mostrado mesmo fora da lista e erro ao listar) e `VariantSelectField` ("Padrão do modelo" ou uma
   variante). Usados por `ProviderModelCard`, `OpexModelCard` (Agente Opex) e `MentorModelFields`
@@ -551,7 +605,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   filtros uma vez no topo, **Assinatura Command Code** (`CommandCodeSubscriptionCard`, lido da API da CLI — ver
   `modules/opencode-quota.md`, "Assinatura Command Code") e **Consumo do Command Code pelo Opex** (só tokens, sem a
   coluna Custo). Se a assinatura não for legível, o card avisa e o consumo do Opex continua abaixo.
-- **Chave por id** (`getAiProviderKeyById`, `src/lib/ai/api-keys.ts`): lê e decifra no servidor uma chave
+- **Chave por id** (`getAiProviderKeyById`, `@nandobfer/integracoes/modules/integrations/ia/ai/api-keys`): lê e decifra no servidor uma chave
   do chaveiro em uso ou não (filtro de chave da assinatura do Go); `null` se não existe ou não decifra.
 - **Filtro "Chave de API"** (OPE-155), nos painéis de consumo de Gemini, Anthropic, OpenAI, DeepSeek,
   OpenCode Go (OPE-156), Command Code (OPE-190) e JEV, ao lado do período (`UsageKeySelect`). Fica na URL (`usageKey`, `useUsageKeyFilter`) e a API
@@ -562,7 +616,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
     desconhecidas continuam `—`);
   - **Chaves removidas** (`removed`: id fora das chaves atuais).
 
-  O recorte (`usageKeyMatch`, `src/features/ai/usage-key-filter.ts`) vale para os cards (JEV), a
+  O recorte (`usageKeyMatch`, `@nandobfer/integracoes/modules/integrations/ia/features/ai/usage-key-filter`) vale para os cards (JEV), a
   tabela por recurso, a linha **Total** e o aviso de totais parciais. A cobertura ("Medição iniciada
   em") continua sendo a do provedor. Um id que não existe mais no provedor (ou valor inválido) na URL
   volta para "Todas". O painel do OpenCode (de sessão), que não usa chaveiro, não tem o filtro. No Go,
@@ -912,7 +966,7 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
 ## Modelos favoritos (estrela nas buscas de modelo, OPE-152)
 
 - **Onde aparece**: em toda busca de modelo de IA do app. Isso inclui:
-  - o `ModelPickerField` (`src/features/ai/components/ModelFields.tsx`), usado no campo "Modelo" das
+  - o `ModelPickerField` (`@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields`), usado no campo "Modelo" das
     abas de IA, no Agente Opex, no Agente Mentor, no Maddox, no embedding e no Redator/curador do
     Engramind (`OpexAiModelPicker`) e nos provedores diretos (`DirectModelFields`);
   - o `ModelSearchPicker` (`model-picker/ModelSearchPicker.tsx`), usado nos fallbacks do
@@ -948,7 +1002,7 @@ assinaturas), contexto com cache, serviço e migração: `modules/engramind.md`,
     inexistente devolve a lista.
   - Só uma mudança real grava auditoria (`ModelosFavoritos`, CRIAR/EXCLUIR), log e o evento
     `ai-model-favorites-updated` (`{ provider, model, action: "added" | "removed" }`) em `private-app`.
-- **Cliente**: `useAiModelFavorites` (`src/features/ai/hooks/useAiModelFavorites.ts`) lê a query
+- **Cliente**: `useAiModelFavorites` (`@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites`) lê a query
   `["ai-model-favorites"]`, compartilhada por todos os pickers. Favoritar num lugar reflete nos outros.
   - A mudança é **otimista**; se falhar, mostra um toast em pt-BR (não há toast de sucesso). Nem a
     resposta do servidor nem um snapshot antigo são gravados no cache: quando a **última** mutação em

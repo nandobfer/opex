@@ -2,22 +2,23 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({ getIntegrationConfig: vi.fn() }))
 
-vi.mock("@/lib/integrations/config", () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     getIntegration: vi.fn(),
     getIntegrationConfig: mocks.getIntegrationConfig,
-}))
-vi.mock("@/lib/integrations/debug", () => ({
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
     integrationDebug: () => ({ request: vi.fn(), response: vi.fn(), error: vi.fn() }),
-}))
+}))()) as Record<string, unknown>) }))
 vi.mock("pusher-js", () => ({ default: vi.fn() }))
 
 import { parsePusherClientUrls, parsePusherUrl } from "@/lib/pusher/url"
 import { buildPusherServerOptions } from "@/lib/pusher/server"
 import { buildPusherClientOptions } from "@/lib/pusher/client"
 import { getPusherPublicConfig } from "@/lib/pusher/public-config"
-import { findMissingConditionalField, getIntegrationDef, isPublicFieldVisible } from "@/lib/integrations/catalog"
-import { buildIntegrationUpdateSchema } from "@/features/integrations/schemas/integration.schema"
-import type { IntegrationConfigMap } from "@/lib/integrations/config"
+import { findMissingConditionalField, isPublicFieldVisible } from "@nandobfer/integracoes"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
+import { buildIntegrationUpdateSchema } from "@nandobfer/integracoes/modules/core/schemas"
+import type { IntegrationConfigMap } from "@/features/integrations/registry/config-map"
 
 type PusherValues = IntegrationConfigMap["pusher"]
 const base: PusherValues = { mode: "cluster", appId: "app", key: "key", secret: "secret", cluster: "sa1" }

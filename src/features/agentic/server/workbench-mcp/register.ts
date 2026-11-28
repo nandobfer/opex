@@ -1,6 +1,6 @@
 import mongoose from "mongoose"
 import { deriveSubkey } from "@/lib/crypto/secretBox"
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { logger } from "@/lib/logger"
 import type { RemoteMcpRegistration } from "@/features/ai/server/opencode-mcp"
 import { WORKBENCH_MCP_PATH, WORKBENCH_MCP_SERVER } from "../../workbench-context"

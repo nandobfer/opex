@@ -22,7 +22,7 @@ vi.mock('@/features/ai/server/settings', () => ({
   loadPluginVersionSummarySettings: async () => ({ settings: mocks.settings, isDefault: false, updatedAt: null }),
   availabilityOfPluginVersionSummary: async () => (mocks.available ? { available: true, reason: null } : { available: false, reason: 'Ative "Descritivo de versão de plugin"' }),
 }))
-vi.mock('@/lib/ai/stream', () => ({ streamAi: mocks.stream }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/stream', () => ({ streamAi: mocks.stream }))
 vi.mock('@/features/plugins/server/service', () => ({ publishPluginUpdated: mocks.publish }))
 vi.mock('@/lib/db/models/Plugin', () => {
   const lean = (value: unknown) => ({ lean: async () => value })

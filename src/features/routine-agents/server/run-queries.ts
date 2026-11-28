@@ -3,7 +3,7 @@ import { RoutineAgent, RoutineRun, RoutineRunStep } from "@/lib/db/models/Routin
 import { brasiliaParts } from "../recurrence"
 import type { RoutineRunStatus } from "../status"
 import type { RoutineAgentMetricsDto, RoutineCostDto, RoutineMoneyPair, RoutineRunDetailDto, RoutineRunDto } from "../types"
-import { emptyTotals, mergeTotals, type CostTotals } from "@/features/ai-billing/effective"
+import { emptyTotals, mergeTotals, type CostTotals } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/effective"
 import { computeRunCosts, costBreakdown, toCostDto, type RunCostData } from "./run-costs"
 import { loadRunDoc } from "./runs"
 import { loadAgentDoc, routineDb, routineLog, toRunDto, type RoutineRunDoc } from "./shared"
@@ -135,13 +135,17 @@ export function aggregateRoutineMetrics(runs: readonly MetricsRun[], range: { fr
     const calendarDays = days.size
     const activeDays = dayCosts.size
     const runIds = new Set(runs.map((run) => String(run._id)))
+    const tokens = runs.reduce((sum, run) => sum + (run.tokens ?? 0), 0)
     return {
         kpis: {
             runs: runs.length,
             completed: runs.filter((run) => run.status === "completed").length,
             errors: runs.filter((run) => run.status === "error").length,
             avgDurationMs: durations.length ? Math.round(durations.reduce((sum, ms) => sum + ms, 0) / durations.length) : null,
-            tokens: runs.reduce((sum, run) => sum + (run.tokens ?? 0), 0),
+            tokens,
+            // OPE-213: médias de tokens da lista; sem execuções no período não há base ("—", nunca 0).
+            tokensPerRun: runs.length ? Math.round(tokens / runs.length) : null,
+            tokensPerDay: runs.length && calendarDays ? Math.round(tokens / calendarDays) : null,
             costUsd: known.length ? known.reduce((sum, run) => sum + (run.costUsd ?? 0), 0) : null,
             // Soma parcial (OPE-133/m_b0b199d8): algum passo ou execução sem custo informado.
             costPartial: runs.some((run) => run.costPartial || typeof run.costUsd !== "number") && known.length > 0,

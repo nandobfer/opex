@@ -3,16 +3,16 @@ import { randomBytes } from 'crypto'
 
 const mocks = vi.hoisted(() => ({ loadStoredIntegration: vi.fn() }))
 
-vi.mock('@/lib/integrations/store', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/store", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   loadStoredIntegration: mocks.loadStoredIntegration,
   loadStoredIntegrations: vi.fn(),
   invalidateStoredIntegrations: vi.fn(),
   INTEGRATION_CACHE_TTL_MS: 30_000,
-}))
+}))(importOriginal)) as Record<string, unknown>), }))
 
 import { encryptSecret } from '@/lib/crypto/secretBox'
-import { getIntegration, getIntegrationConfig, getInternalBaseUrl } from '@/lib/integrations/config'
-import { DEFAULT_CRON_JOBS } from '@/lib/integrations/catalog'
+import { getIntegration, getIntegrationConfig, getInternalBaseUrl } from "@nandobfer/integracoes/modules/server/config"
+import { DEFAULT_CRON_JOBS } from "@/features/integrations/registry/jobs"
 
 const saved = { ...process.env }
 
@@ -31,7 +31,7 @@ afterEach(() => {
 const stored = (overrides: Record<string, unknown> = {}) => ({
   integrationId: 'pusher',
   environment: 'interno',
-  debugMode: true,
+  debugMode: false,
   publicValues: {},
   secretValues: {},
   ...overrides,
@@ -47,7 +47,6 @@ describe('getIntegrationConfig — precedência banco → .env → default', () 
     expect(integration.values.url).toBe('https://soketi.env')
     expect(integration.values.secret).toBe('secret-env')
     expect(integration.secretSources.secret).toBe('env')
-    expect(integration.environment).toBe('externo')
     expect(integration.stored).toBe(false)
   })
 
@@ -62,8 +61,9 @@ describe('getIntegrationConfig — precedência banco → .env → default', () 
     expect(integration.values.url).toBe('https://soketi.db')
     expect(integration.values.secret).toBe('secret-db')
     expect(integration.secretSources.secret).toBe('db')
-    expect(integration.environment).toBe('interno')
-    expect(integration.debugMode).toBe(true)
+    // Campos legados do documento (ambiente e modo debug) não são lidos nem expostos.
+    expect(integration).not.toHaveProperty('environment')
+    expect(integration).not.toHaveProperty('debugMode')
   })
 
   it('segredo limpo explicitamente (null) NÃO volta a usar o .env', async () => {

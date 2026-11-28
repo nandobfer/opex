@@ -307,7 +307,7 @@ transcrição sob demanda do áudio, que depende do recurso de transcrição do 
   `?aba=memorias&conversa=<id>` (contexto `SecretaryMemoriesLinkProvider`). A troca é imediata, sem ida ao servidor
   (`navigateInPage` no clique simples; o Voltar do navegador retorna à conversa; Ctrl/Cmd+clique abre como link).
 - **Layout**: card com a altura restante da área visível até o fim da página, medida a partir do topo do card
-  (`useInboxHeight` sobre `useFillViewportHeight`, igual no inbox, no skeleton e no erro; mínimo 480 px, abaixo disso
+  (`useInboxHeight`, no padrão do `useFillViewportHeight` e medindo de novo ao fim da entrada animada da aba; igual no inbox, no skeleton e no erro; mínimo 480 px, abaixo disso
   a página rola), lista à esquerda (340/380 px) e conversa à direita; no
   celular, uma de cada vez, com Voltar. A conversa aberta e os filtros ficam na URL (`conversa=<id>`, `busca`, `filtro`,
   `secretario`); a troca de conversa é animada e, sem nenhuma aberta, aparece "Selecione uma conversa".

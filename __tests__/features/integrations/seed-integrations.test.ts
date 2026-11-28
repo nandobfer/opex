@@ -3,12 +3,12 @@ import { randomBytes } from 'crypto'
 
 const mocks = vi.hoisted(() => ({ updateOne: vi.fn() }))
 
-vi.mock('@/lib/db/models/Integration', () => ({ Integration: { collection: { updateOne: mocks.updateOne } } }))
+vi.mock("@nandobfer/integracoes/modules/mongoose/core-models", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ Integration: { collection: { updateOne: mocks.updateOne } } }))(importOriginal)) as Record<string, unknown>), }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 
 import { seedIntegrationsFromEnv } from '@/lib/db/migrations/seed-integrations-from-env'
 import { decryptSecret } from '@/lib/crypto/secretBox'
-import { INTEGRATIONS } from '@/lib/integrations/catalog'
+import { INTEGRATIONS } from "@/features/integrations/registry/definitions"
 
 const saved = { ...process.env }
 
@@ -41,12 +41,12 @@ describe('seedIntegrationsFromEnv', () => {
     expect(JSON.stringify(pusher)).not.toContain('secret-env')
   })
 
-  it('leva os defaults do código, com debug desligado', async () => {
+  it('leva os defaults do código e os valores legados de ambiente/debug (compatibilidade)', async () => {
     await seedIntegrationsFromEnv()
     const pusher = insertFor('pusher')
     expect(pusher.publicValues).toMatchObject({ mode: 'cluster', cluster: 'sa1' })
     expect(pusher.debugMode).toBe(false)
-    expect(insertFor('internal_api')).toMatchObject({ environment: 'interno', publicValues: {}, secretValues: {} })
+    expect(insertFor('internal_api')).toMatchObject({ environment: 'externo', debugMode: false, publicValues: {}, secretValues: {} })
     expect(insertFor('crons').publicValues.jobs[0].schedule).toEqual({ type: 'interval', minutes: 5 })
   })
 

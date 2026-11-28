@@ -2,7 +2,7 @@ import { z } from "zod"
 import { colorValueSchema } from "@/lib/colors"
 import { DEFAULT_OPEX_TITLE_INSTRUCTIONS, OPEX_FILE_SIZE_MB_DEFAULT, OPEX_FILES_PER_MESSAGE_DEFAULT, OPEX_MESSAGE_MAX, OPEX_TITLE_MAX } from "@/features/opex-agent/constants"
 import { opexFilesSettingsSchema } from "@/features/opex-agent/schemas"
-import { addFallbackIssues, fallbackListSchema } from "@/features/ai/model-fallbacks"
+import { addFallbackIssues, fallbackListSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 import { DEFAULT_MADDOX_INSTRUCTIONS } from "./constants"
 
 /** Modelo do catálogo do OpenCode (`provedor/modelo`) e variante; sem escolha de provedor. */

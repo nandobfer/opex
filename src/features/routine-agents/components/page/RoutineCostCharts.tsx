@@ -8,7 +8,8 @@ import { EmptyChart } from "@/components/metrics/charts/EmptyChart"
 import { MultiLineChart } from "@/components/metrics/MultiLineChart"
 import { formatMetricValue } from "@/components/metrics/format"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { formatMoneyPair } from "@/features/ai-billing/money"
+import { COST_KIND_TONE } from "@/features/ai-billing/cost-tone"
+import { formatMoneyPair } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import type { RoutineAgentMetricsDto } from "../../types"
 
 type Dimension = "providers" | "models" | "plans"
@@ -27,8 +28,8 @@ export function RoutineCostByDayChart({ agentId, days }: { agentId: string; days
             <MultiLineChart
                 persistKey={`rotineiro:${agentId}:custo`}
                 series={[
-                    { key: "list", label: "Custo de tabela", defaultSelected: true, color: "var(--chart-info-1)" },
-                    { key: "effective", label: "Custo efetivo", defaultSelected: true, color: "var(--chart-positive-1)" },
+                    { key: "list", label: COST_KIND_TONE.list.label, defaultSelected: true, color: COST_KIND_TONE.list.color },
+                    { key: "effective", label: COST_KIND_TONE.effective.label, defaultSelected: true, color: COST_KIND_TONE.effective.color },
                 ]}
                 points={days.map((day) => ({ bucket: day.day, list: day.cost.listUsd, effective: day.cost.effectiveUsd }))}
                 format="usd"

@@ -1,6 +1,6 @@
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
-import { GITHUB_DEFAULT_API_URL } from "@/lib/integrations/catalog"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
+import { GITHUB_DEFAULT_API_URL } from "@nandobfer/integracoes/github"
 
 /**
  * Cliente da API REST do GitHub — SOMENTE servidor. Usa a URL e o token (PAT) salvos em
@@ -55,8 +55,10 @@ export async function githubBaseUrl(): Promise<string> {
     return (config.apiUrl || GITHUB_DEFAULT_API_URL).replace(/\/+$/, "")
 }
 
-/** Chama a API (`path` relativo ou URL absoluta da própria API) e devolve o JSON com metadados. */
-export async function githubRequestFull<T>(path: string, options: GithubRequestOptions = {}): Promise<GithubResponse<T>> {
+type GithubMeta = Omit<GithubResponse<unknown>, "data" | "notModified">
+
+/** Envia a requisição e traduz os erros em `GithubError` (pt-BR); 2xx/304 devolvem a resposta crua. */
+async function githubSend(path: string, options: GithubRequestOptions): Promise<{ response: Response; meta: GithubMeta }> {
     const config = await getIntegrationConfig("github")
     if (!config.token) throw new GithubError(GITHUB_NO_TOKEN_MESSAGE, "NOT_CONFIGURED")
     const base = (config.apiUrl || GITHUB_DEFAULT_API_URL).replace(/\/+$/, "")
@@ -95,11 +97,9 @@ export async function githubRequestFull<T>(path: string, options: GithubRequestO
     dbg.response(`${label}: HTTP ${response.status} em ${Date.now() - startedAt} ms`, { status: response.status, rateRemaining })
 
     const meta = { status: response.status, etag: response.headers.get("etag"), next: nextLink(response.headers.get("link")), rateRemaining }
-    if (response.status === 304) return { ...meta, data: null as T, notModified: true }
+    if (response.status === 304 || response.ok) return { response, meta }
 
     const body = (await response.json().catch(() => null)) as unknown
-    if (response.ok) return { ...meta, data: body as T, notModified: false }
-
     const detail = body && typeof body === "object" && typeof (body as { message?: unknown }).message === "string" ? (body as { message: string }).message : null
     if (response.status === 401) throw new GithubError("Token do GitHub inválido ou expirado: gere outro em Integrações › GitHub", "UNAUTHENTICATED", 401)
     if ((response.status === 403 || response.status === 429) && rateRemaining === 0) {
@@ -109,6 +109,22 @@ export async function githubRequestFull<T>(path: string, options: GithubRequestO
     if (response.status === 404) throw new GithubError("Não encontrado no GitHub (ou o token não tem acesso)", "NOT_FOUND", 404)
     if (response.status >= 500) throw new GithubError(`O GitHub respondeu HTTP ${response.status}`, "UNAVAILABLE", response.status)
     throw new GithubError(detail ? `O GitHub recusou: ${detail}` : `O GitHub recusou a requisição (HTTP ${response.status})`, "REJECTED", response.status)
+}
+
+/** Chama a API (`path` relativo ou URL absoluta da própria API) e devolve o JSON com metadados. */
+export async function githubRequestFull<T>(path: string, options: GithubRequestOptions = {}): Promise<GithubResponse<T>> {
+    const { response, meta } = await githubSend(path, options)
+    if (response.status === 304) return { ...meta, data: null as T, notModified: true }
+    return { ...meta, data: (await response.json().catch(() => null)) as T, notModified: false }
+}
+
+/**
+ * GET que devolve o corpo em texto (ex.: o log de um job do Actions, que responde com um redirect para
+ * o arquivo — o `fetch` segue o redirect). Mesmos erros de `githubRequestFull`.
+ */
+export async function githubRequestText(path: string, options: Pick<GithubRequestOptions, "signal" | "label"> = {}): Promise<string> {
+    const { response } = await githubSend(path, options)
+    return response.text()
 }
 
 export async function githubRequest<T>(path: string, options: GithubRequestOptions = {}): Promise<T> {

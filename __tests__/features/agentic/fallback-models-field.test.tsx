@@ -3,11 +3,11 @@
 import React from 'react'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { framerMotionMock } from '../../helpers/framer-motion'
+import { framerMotionMock } from "../../helpers/framer-motion"
 
 vi.mock('framer-motion', () => framerMotionMock())
 // Busca de modelos simplificada: o gatilho + um botão por modelo.
-vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ModelSearchPicker: ({ trigger, models, onPick }: { trigger: React.ReactElement; models: { data?: { id: string; name: string }[] }; onPick: (model: { id: string }) => void }) => (
     <div>
       {trigger}
@@ -20,9 +20,9 @@ vi.mock('@/features/ai/components/model-picker/ModelSearchPicker', () => ({
   ),
 }))
 
-import { AgentConfigFields } from '@/features/agentic/components/settings/AgentConfigFields'
-import { FallbackModelsField, describeFallbacks, fallbackIssue } from '@/features/ai/components/model-picker/FallbackModelsField'
-import type { AgentConfig } from '@/features/agentic/schemas'
+import { AgentConfigFields } from "@/features/agentic/components/settings/AgentConfigFields"
+import { FallbackModelsField, describeFallbacks, fallbackIssue } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField"
+import type { AgentConfig } from "@/features/agentic/schemas"
 
 const models = { data: [{ id: 'openai/gpt-5', name: 'GPT-5', variants: ['high'], group: 'OpenAI' }, { id: 'deepseek/v3', name: 'DeepSeek V3', variants: [], group: 'DeepSeek' }] as never, isLoading: false, isError: false, error: null }
 const agents = { data: [], isError: false, error: null }

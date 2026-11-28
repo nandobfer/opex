@@ -5,7 +5,7 @@ uma tarefa tem uma **mesa de trabalho**; cada **projeto** (repositório vinculad
 **central** que aponta o repositório na máquina do OpenCode. OpenCode, Docker das prévias e o Opex
 rodam na mesma máquina.
 
-Código: `src/features/agentic/` (domínio), `src/lib/ai/opencode-client.ts` (cliente oficial
+Código: `src/features/agentic/` (domínio), `@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client` (cliente oficial
 `@opencode/client`), `src/lib/ai/opencode-events.ts` (eventos normalizados, puro) e
 `src/lib/ai/opencode-run.ts` (runner genérico de um turno — compartilhado com o refinamento de
 tarefas, ver `modules/refinement.md`). O texto do turno (`result.text` e os pedaços do `onText`) separa
@@ -234,12 +234,13 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
   `~/.agents/skills/setup-preview-workflow/`. O Opex inclui os dois como referência funcional.
 - O runner autoriza **push da branch antes da aprovação**, sem abrir PR. Exige worktree limpo,
   branch da mesa e SHA imutável. Dispara `workflow_dispatch` na branch padrão; nenhum push/PR
-  dispara publicação de prévia. Workflow: suíte completa → build → artefato com checksum/manifest.
+  dispara publicação de prévia. Workflow: suíte completa (4 shards) em paralelo com o build → artefato
+  com checksum/manifest, baixado só quando o run inteiro termina com `success` (`modules/deployment.md`).
 - A porta permanece reservada no banco, dentro da faixa efetiva da central (`resolveCentralPorts`, também
   gravada em `min`/`max` do estado da tentativa). O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
-  e confirmação de publicação. A URL do run aparece no log da aba Build (atalho "Abrir a execução no
-  GitHub"); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
+  e confirmação de publicação. A URL do run aparece no log da aba Build e o selo **GitHub Action** do
+  resumo do build vira o link do run (nova aba) quando o log traz a URL (OPE-214); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
 - O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup (só
   quando ligado na central) e worktree, revalida porta e importa a imagem. Publica com override
   Compose por tentativa, `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta
@@ -315,6 +316,32 @@ descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** 
   (`previewService`), e o turno de correção não cita a lista.
 - **GitHub Action:** um turno curto do agente **commita** tudo (e faz o dump, se ligado); o app roda
   `scripts/preview-github.ts` da tentativa reservada (`remotePreviewCommands`).
+- **Saída do GitHub Actions na aba (OPE-214):** o script só espera o run em silêncio, então o
+  **servidor** acompanha o run pela **integração GitHub** (Integrações › GitHub; o token precisa de leitura
+  em Actions) e escreve no mesmo log do build (`createRunFollower`/`followGithubRun` em
+  `server/github-run-follow.ts`, formatação pura em `github-run-log.ts`):
+  - liga quando a saída do script traz a URL do run (`Prévia GitHub: …/actions/runs/<id>`) **do repositório
+    da central** (URL de outro repositório é ignorada); só no método GitHub Action — servidor e PC não mudam;
+  - consulta o run e os jobs a cada 5 s (com ETag) e escreve "aguardando um runner", o cabeçalho de cada job,
+    o início de cada etapa e, assim que ela termina, o **log da etapa** (`/actions/jobs/{id}/steps/{n}/logs`: o
+    log do job inteiro só existe com o job concluído, e o `preview.yml` tem um job só) seguido da linha de fim
+    (duração, falha, pulada) — sem o carimbo de hora e com `##[group]`/`##[error]`/`##[warning]` em cores; nada é
+    escrito duas vezes e a ordem do job é mantida (uma etapa cujo log ainda não saiu segura as seguintes). Se o
+    log por etapa não vier (6 consultas), uma linha cinza avisa, as etapas seguintes do job saem sem log e, quando
+    nenhuma etapa trouxe log, o log do job inteiro entra quando o job termina;
+  - só encerra depois de ver os jobs: run concluído com a lista de jobs ainda vazia (atraso da API) continua
+    consultando por até 6 consultas e, se nada aparecer, encerra com a linha "o GitHub não listou nenhum job";
+  - no fim: "GitHub Actions concluído" ou o bloco **"GitHub Actions falhou"** com o job e a etapa que falharam,
+    as linhas `##[error]` e o final do log do job (`failureExcerpt`). Esse trecho também vai à frente do final
+    da saída no prompt de correção (`buildFixPrompt`);
+  - **ordem do log:** a saída do script depois da URL (download, publicação) fica retida até o acompanhamento
+    acabar, e o `exit` só é escrito depois dele (teto de 60 s após o fim do script, com aviso). Fica
+    comando → push/URL → GitHub Actions → publicação → exit; na retomada a seção recomeça e o
+    acompanhamento também;
+  - **melhor esforço:** token sem acesso, 404, limite de uso ou falhas de rede seguidas viram uma linha amarela no
+    próprio log ("Não foi possível acompanhar o GitHub Actions…") e o build segue pelo código de saída do
+    script. O link do run continua no selo **GitHub Action** do resumo do build (acima da busca); sem URL no
+    log, o selo é só texto. Não há mais a linha "Abrir a execução no GitHub" entre a busca e o terminal.
 - **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
   (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
   numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é
@@ -1210,9 +1237,9 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   arrastar** (dnd-kit) — a ordem é a ordem de tentativa. Item repetido ou igual ao modelo principal é
   apontado no campo e recusado pelo schema (`agentConfigSchema.fallbacks`, `superRefine`).
 - **Peças compartilhadas (OPE-181)**: a lista, o limite e a validação ficam no módulo puro
-  `src/features/ai/model-fallbacks.ts` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
+  `@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks` (`modelChoiceSchema`, `fallbackListSchema`, `fallbackConflict`,
   `addFallbackIssues`, `normalizeFallbacks`; `agentic/schemas.ts` reexporta `MAX_MODEL_FALLBACKS`,
-  `modelChoiceSchema` e `ModelChoice`) e o campo em `src/features/ai/components/model-picker/FallbackModelsField.tsx`.
+  `modelChoiceSchema` e `ModelChoice`) e o campo em `@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/FallbackModelsField`.
   As mesmas peças servem ao Agente Adversário, ao Arquiteto (OpenCode), ao Revisor de PR, ao Refinador,
   aos agentes rotineiros (motor OpenCode) e ao Maddox; o `ProviderModelCard` mostra a lista com a prop
   `fallbacksName` (só com o OpenCode). Ao salvar, o `assertCatalog` também confere cada fallback no
@@ -1470,6 +1497,61 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   - Memória excluída (aviso de exclusão ou 404 depois) mostra "não está mais no Engramind"; falha de
     leitura mostra "Tentar novamente". Avisos antigos, sem a referência, continuam como texto.
 
+## Subagentes e trabalho em segundo plano (OPE-216)
+
+Desde a v2.3 do OpenCode **todo subagente roda em segundo plano**: a chamada volta na hora, a execução
+principal termina (`session.execution.succeeded`) e, quando o subagente acaba, o OpenCode entrega o
+resultado na caixa de entrada da sessão e a **acorda numa execução nova**. Desde a v2.3.1 um comando de
+terminal que estoura o tempo também vai para segundo plano. O Opex não impede os agentes de lançar
+subagentes: o turno **espera**.
+
+- **O turno só termina com a sessão quieta** (`runAgentTurn`, `lib/ai/opencode-run.ts`; pendências em
+  `lib/ai/opencode-background.ts`): no fim de execução com sucesso, o runner lê os jobs rodando da sessão
+  (`experimental.job.list` com `descendants: true` — o neto de um subagente ocioso conta —, por tipo: subagente,
+  comando, outros), a caixa de entrada
+  (`session.inbox.list`) e se a própria sessão voltou a rodar (`session.active`). Com algo pendente, a mesa
+  continua **rodando**, publica o evento `background` (`{ subagents, shells, other }`, gravado em
+  `agentic_events`) e acompanha a execução seguinte da mesma sessão (`session.execution.started`).
+  Sem nada pendente, termina como antes. Várias esperas no mesmo turno são aceitas.
+- **Resultado = texto da execução final**, a que roda depois de os subagentes reportarem (ex.: o plano), e
+  não o anúncio "fecho quando os resultados chegarem". Houve espera e nada foi escrito depois dela: o
+  resultado fica **vazio** (o texto anterior nunca é reaproveitado; no planejamento, a mesa falha com "O
+  planejador não devolveu um plano" e "Tentar de novo"). A Saída da IA continua mostrando tudo. Quem acumula
+  o `onText` (Refinador, Revisor de PR, rotineiros) zera o acumulado no gancho `onSegment`, chamado quando a
+  espera começa.
+- **Na tela**: com `background`, a linha "Trabalhando…" vira **"Aguardando 2 subagentes e 1 comando em
+  segundo plano…"** (`backgroundLabel`, `features/agentic/background-label.ts`), com ampulheta animada
+  (Framer Motion, desligada com movimento reduzido). Zerado ou fim do turno, a linha volta ao normal.
+- **Tempo limite, batimento e Parar valem durante a espera.** O Parar (e o tempo limite) cancelam também os
+  jobs da sessão (`experimental.job.cancel`; sem a API de jobs, interrompem as subsessões ativas) e, na
+  espera, o turno fecha na hora como interrompido — antes das chamadas ao OpenCode, para um host travado não
+  prender o Parar. Toda leitura e cancelamento novos têm prazo de 10 s (`BACKGROUND_REQUEST_TIMEOUT_MS`).
+- **Rede de segurança**: na espera o runner relê as pendências a cada 5 s (`BACKGROUND_POLL_MS`), uma leitura
+  por vez. Só as leituras do relógio contam para fechar: duas seguidas sem nada (e sem a sessão rodando)
+  fecham o turno; o evento `experimental.job.updated` só atualiza a contagem (dois subagentes que terminam
+  juntos não fecham a espera antes da entrega). O texto final vem do histórico (`recoverTurnText` com
+  `lastExecution`: as mensagens do assistente depois da última entrega sintética; sem entrega, vazio).
+  Sem conseguir ler as pendências, o turno termina como antes, com aviso.
+- **Reconectar**: sessão parada, mas com jobs rodando ou entrega pendente, conta como **em andamento**
+  (`probeAttachSession` → `running` com `background`); o acompanhamento começa na espera. O texto
+  recuperado do histórico é o da execução final.
+- **Host antigo** (sem `experimental.job`): os subagentes são as subsessões em toda a árvore de `parentID`
+  (até 4 níveis, descendo também pelos filhos ociosos) que estão em `session.active`; comandos em segundo
+  plano não são vistos.
+- **Trava do planejamento** (`afterTurn`, caso `planning`; `isPlanText` em `features/agentic/plan-text.ts`). É
+  heurística; o sinal principal é o resultado vazio do runner quando a execução final não escreveu nada.
+  Texto vazio é recusado. Texto com estrutura de plano (título Markdown ou lista numerada com 3+ itens) é
+  aceito. Sem estrutura, texto de **qualquer tamanho** que **anuncia** trabalho ainda por fazer ("assim que",
+  "quando os resultados chegarem", "fecho o plano", "disparei", "aguardo", "vou investigar"…) **não** vira
+  versão do plano: a mesa fica em erro ("O planejador não devolveu um plano: a resposta só anuncia o que
+  ainda vai fazer. Use Tentar de novo.") com **Tentar de novo**. Limites conhecidos: um plano sem estrutura
+  que use essas expressões é recusado; um anúncio sem nenhuma delas passa (o resultado vazio cobre o caso
+  da espera).
+- Vale para todos os turnos do OpenCode: mesa, forks, Refinador, Revisor de PR, Agente Adversário,
+  Arquiteto (faixa ao vivo do diagrama mostra a espera), Maddox (a resposta ao vivo mostra a espera, linha
+  NDJSON `background`) e rotineiros com motor OpenCode (um passo "Aguardando trabalho em segundo plano" por
+  espera).
+
 ## Chat durante a execução
 
 - Com o agente **executando**, a mesa (abas **Saída da IA** e **Plano**), o **fork ativo** e o
@@ -1569,6 +1651,13 @@ Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (a
 merge, reabrir, definir etapa/concluir manualmente, excluir).
 
 ## Testes
+
+Subagentes em segundo plano (OPE-216): `opencode-run-background.test.ts` (espera e texto final, sem pendência,
+caixa de entrada, comando de terminal, Parar e tempo limite na espera, rede de segurança, host sem API de jobs,
+leitura falha), `opencode-background.test.ts` (contagem, cancelamento, `probeAttachSession`),
+`opencode-events.test.ts`, `timeline.test.ts`, `Timeline.test.tsx`, `background-label.test.ts`,
+`plan-text.test.ts`, `workflow-plan-guard.test.ts`, `opex-agent/pure.test.ts` e `opex-ui.test.tsx` (Maddox) e
+`routine-agents/opencode-engine.test.ts`.
 
 Refinamento na mesa (OPE-137): `workflow-refinement.test.ts` (abertura em Refinando/Especificação pronta,
 mesma conversa, chat ao vivo, fila sem vaga, bloqueio do "Abrir mesa", abertura pela fila, estado final do

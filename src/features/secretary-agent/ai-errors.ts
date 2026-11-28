@@ -1,4 +1,4 @@
-import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 
 export class SecretaryDeliveryError extends Error {
     /** `paths`: só os caminhos dos campos que falharam (ex.: `blocks.0.key`), nunca os valores. */

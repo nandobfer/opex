@@ -2,7 +2,7 @@
 
 import { SidebarHoverNavItem } from "@/features/layout/components/sidebar/SidebarHoverNavItem"
 import type { SidebarPanelItemProps } from "@/features/layout/types"
-import { IntegrationActionDialogs, useIntegrationActionDialogs } from "../IntegrationActionDialogs"
+import { IntegrationActionDialogs, useIntegrationActionDialogs } from "@nandobfer/integracoes/react"
 import { IntegrationsNavPanelList } from "./IntegrationsNavPanelList"
 import { INTEGRATIONS_NAV_PANEL_WIDTH } from "./integrations-nav-layout"
 

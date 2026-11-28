@@ -10,12 +10,12 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock('nodemailer', () => ({ default: { createTransport: mocks.createTransport } }))
-vi.mock('@/lib/integrations/config', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })),
-}))
-vi.mock('@/lib/integrations/debug', () => ({
+}))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }),
-}))
+}))()) as Record<string, unknown>) }))
 vi.mock('@/lib/logger', () => ({ logger: { info: mocks.loggerInfo, warn: vi.fn(), error: vi.fn() } }))
 
 import { getSmtpConfig, isMockMode, sendEmail, verifyConnection } from '@/lib/email/mailer'

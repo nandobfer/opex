@@ -1,26 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import {
-  ATTACHMENT_CLEANUP_JOB_ID,
-  BUILDER_MACHINE_CLEANUP_JOB_ID,
-  OPEX_FILES_CLEANUP_JOB_ID,
-  OPENCODE_QUOTA_JOB_ID,
-  HOST_METRICS_JOB_ID,
-  DEFAULT_CRON_JOBS,
-  HEALTH_CHECK_JOB_ID,
-  IN_DEVELOPMENT_INTEGRATIONS,
-  INTEGRATIONS,
-  INTEGRATIONS_BASE_PATH,
-  INTEGRATION_IDS,
-  TASK_TAGS_CONCLUDED_JOB_ID,
-  cronJobIntegration,
-  defaultSwaggerUrl,
-  getInDevelopmentIntegration,
-  getIntegrationDef,
-  hasCustomIntegrationPath,
-  integrationPath,
-  isCardManagedField,
-  isIntegrationId,
-} from '@/lib/integrations/catalog'
+import { ATTACHMENT_CLEANUP_JOB_ID, BUILDER_MACHINE_CLEANUP_JOB_ID, OPEX_FILES_CLEANUP_JOB_ID, OPENCODE_QUOTA_JOB_ID, HOST_METRICS_JOB_ID, DEFAULT_CRON_JOBS, TASK_TAGS_CONCLUDED_JOB_ID, cronJobIntegration } from "@/features/integrations/registry/jobs"
+import { HEALTH_CHECK_JOB_ID, defaultSwaggerUrl, isCardManagedField } from "@nandobfer/integracoes"
+import { IN_DEVELOPMENT_INTEGRATIONS, INTEGRATIONS, INTEGRATIONS_BASE_PATH, INTEGRATION_IDS, getInDevelopmentIntegration, getIntegrationDef, hasCustomIntegrationPath, integrationPath, isIntegrationId } from "@/features/integrations/registry/definitions"
 
 describe('catálogo de integrações', () => {
   it('traz exatamente as integrações ativas', () => {
@@ -33,7 +14,8 @@ describe('catálogo de integrações', () => {
 
   it('Builder Machine: ativada pelo campo "Integração ativa" (nasce desligada), chave privada só pelo card, sem .env', () => {
     const def = getIntegrationDef('builder_machine')
-    expect(def).toMatchObject({ name: 'Builder Machine', defaultEnvironment: 'interno', streamsDebugOverPusher: true })
+    expect(def).toMatchObject({ name: 'Builder Machine', streamsDebugOverPusher: true })
+    expect(def).not.toHaveProperty('defaultEnvironment')
     expect(def.publicFields).toEqual([expect.objectContaining({ key: 'active', kind: 'boolean', defaultValue: false, label: 'Integração ativa' })])
     expect(def.secretFields).toEqual([{ key: 'sshPrivateKey', label: 'Chave privada do servidor', group: 'card' }])
     expect([...def.publicFields, ...def.secretFields].every((field) => !field.env)).toBe(true)
@@ -63,10 +45,9 @@ describe('catálogo de integrações', () => {
     expect(integrationPath('crons')).toBe('/integracoes/crons')
   })
 
-  it('API interna é interna, sem campos nem segredos e com documentação gerenciada', () => {
+  it('API interna: sem campos nem segredos e com documentação gerenciada', () => {
     const def = getIntegrationDef('internal_api')
     expect(def.name).toBe('API interna')
-    expect(def.defaultEnvironment).toBe('interno')
     expect(def.publicFields).toEqual([])
     expect(def.secretFields).toEqual([])
     expect(def.managedSwaggerPath).toBe('/api/openapi.json')
@@ -161,16 +142,15 @@ describe('catálogo de integrações', () => {
     expect(getIntegrationDef('ai_jev').secretFields).toEqual([expect.objectContaining({ key: 'apiKey', required: true })])
     expect(getIntegrationDef('ai_jev').publicFields).toEqual([])
     // OpenCode Go: só a chave oc_sk_… como segredo, sem campo público (a URL do gateway é fixa).
-    expect(getIntegrationDef('ai_opencode_go')).toMatchObject({ name: 'OpenCode Go', defaultEnvironment: 'externo', publicFields: [] })
+    expect(getIntegrationDef('ai_opencode_go')).toMatchObject({ name: 'OpenCode Go', source: 'library', publicFields: [] })
     // Command Code (OPE-190): só a chave do Studio no chaveiro, sem campo público (a URL da Provider API é fixa).
-    expect(getIntegrationDef('ai_command_code')).toMatchObject({ name: 'Command Code', defaultEnvironment: 'externo', publicFields: [], secretFields: [expect.objectContaining({ key: 'apiKey', keyRing: true })] })
+    expect(getIntegrationDef('ai_command_code')).toMatchObject({ name: 'Command Code', source: 'library', publicFields: [], secretFields: [expect.objectContaining({ key: 'apiKey', keyRing: true })] })
     expect(integrationPath('ai_command_code')).toBe('/integracoes/ia/command-code')
   })
 
   it('SMTP e Storage S3: campos, defaults e sem .env', () => {
     const smtp = getIntegrationDef('smtp')
     expect(smtp.name).toBe('SMTP')
-    expect(smtp.defaultEnvironment).toBe('interno')
     expect(integrationPath('smtp')).toBe('/integracoes/smtp')
     expect([...smtp.publicFields, ...smtp.secretFields].every((field) => !field.env)).toBe(true)
     expect(smtp.publicFields.find((field) => field.key === 'host')).toMatchObject({ required: true })
@@ -179,7 +159,6 @@ describe('catálogo de integrações', () => {
 
     const s3 = getIntegrationDef('storage_s3')
     expect(s3.name).toBe('Storage S3')
-    expect(s3.defaultEnvironment).toBe('interno')
     expect(integrationPath('storage_s3')).toBe('/integracoes/storage_s3')
     expect([...s3.publicFields, ...s3.secretFields].every((field) => !field.env)).toBe(true)
     expect(s3.publicFields.find((field) => field.key === 'endpoint')).toMatchObject({ kind: 'url', required: true })

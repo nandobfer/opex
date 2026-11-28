@@ -1,7 +1,7 @@
 import { isSessionNotFoundError } from "@opencode/client"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
-import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY } from "@/lib/ai/opencode-events"
 import { runAgentTurn, type TurnEvent, type TurnResult } from "@/lib/ai/opencode-run"
 import { getLocalUser } from "@/lib/local-user"
@@ -21,6 +21,7 @@ import { runDirectTurn } from "./direct-turn"
 import { sanitizeGraph, needsIdeaRepair, normalizeLegacyGraph } from "../sanitize"
 import { createGraphAssembler, emptyDraft, type AppliedOp, type GraphAssembler } from "../stream-parser"
 import { closeLive, emitOps, emitProgress, openLive } from "./live-hub"
+import { activeBackground } from "@/features/agentic/background-label"
 import { diagramPlanVersionOf } from "../plan-version"
 import { publishDiagrams } from "./publish"
 import { abortReasonOf, releaseDiagram } from "./registry"
@@ -268,6 +269,9 @@ export async function runDiagram(diagramId: string, controller: AbortController)
             if (event.type === "tool" && event.state === "running") {
                 emitProgress(diagramId, { tools: ++tools })
                 void ArchitectDiagram.updateOne(filter, { $inc: { "progress.tools": 1 }, $set: { "progress.lastTool": event.name.slice(0, 80) } }).catch((error: unknown) => log.warn({ err: errorText(error), diagramId }, "[architect] falha ao gravar o progresso"))
+            } else if (event.type === "background") {
+                // Subagentes/comandos em segundo plano (OPE-216): a faixa ao vivo mostra a espera.
+                emitProgress(diagramId, { background: activeBackground(event) })
             } else if (event.type === "text") {
                 live(graphAssembler.push(event.text))
                 if (!writing && graphAssembler.draft.nodes.length > (startGraph?.nodes.length ?? 0)) {

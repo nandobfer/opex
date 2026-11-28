@@ -5,14 +5,16 @@ import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { RefreshCw, Server } from "lucide-react"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
-import { Skeleton } from "@/components/ui/skeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { useClientePortal } from "@/features/orcamentos/portal/ClientePortalContext"
 import { PORTAL_ACTION_LABELS, type PortalEnvironmentAction } from "../constants"
 import type { PortalEnvironmentDto } from "../types"
-import { PortalEnvironmentRow } from "./PortalEnvironmentRow"
+import { EnvironmentCardSkeleton } from "../components/card/EnvironmentCardSkeleton"
+import { ENV_CARD_LIST_CLASS } from "../components/card/environment-card-layout"
+import { usePortLinkHost } from "../components/card/usePortLinkHost"
+import { PortalEnvironmentCard } from "./PortalEnvironmentCard"
 import { usePortalEnvironmentAction, usePortalEnvironments, usePortalEnvironmentsRealtime } from "./hooks"
 
 /** Ações que tiram o ambiente do ar por um tempo: pedem confirmação explícita. */
@@ -30,6 +32,7 @@ export function ClienteAmbientesPage() {
     const reduced = useReducedMotion()
     const [confirm, setConfirm] = useState<{ env: PortalEnvironmentDto; action: PortalEnvironmentAction } | null>(null)
     const items = query.data ?? []
+    const linkHost = usePortLinkHost(items[0]?.portLinkHost)
 
     const request = (env: PortalEnvironmentDto, next: PortalEnvironmentAction) => {
         if (CONFIRM[next]) setConfirm({ env, action: next })
@@ -50,17 +53,17 @@ export function ClienteAmbientesPage() {
             </header>
 
             {query.isLoading ? (
-                <Skeleton className="h-[240px] w-full" aria-label="Carregando ambientes" />
+                <EnvironmentCardSkeleton variant="portal" cards={2} />
             ) : query.error ? (
                 <ErrorState title="Não foi possível carregar os ambientes" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
             ) : items.length === 0 ? (
                 <EmptyState icon={Server} title="Nenhum ambiente" description="Os ambientes dos seus repositórios aparecerão aqui quando forem criados." actionLabel="Atualizar" onAction={() => void query.refetch()} />
             ) : (
-                <div className="divide-y rounded-lg border bg-card px-4">
+                <div className={ENV_CARD_LIST_CLASS}>
                     <AnimatePresence initial={false}>
                         {items.map((env) => (
                             <motion.div key={env.id} initial={reduced ? false : { opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={reduced ? { opacity: 0 } : { opacity: 0, y: -6 }} transition={{ duration: 0.18 }}>
-                                <PortalEnvironmentRow env={env} isAdmin={isAdmin} pending={action.isPending && action.variables?.id === env.id} onAction={(next) => request(env, next)} />
+                                <PortalEnvironmentCard env={env} isAdmin={isAdmin} linkHost={linkHost} pending={action.isPending && action.variables?.id === env.id} onAction={(next) => request(env, next)} />
                             </motion.div>
                         ))}
                     </AnimatePresence>

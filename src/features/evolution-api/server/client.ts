@@ -1,8 +1,8 @@
 
 import { z } from "zod"
 import { DomainError } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { debugFetch, integrationDebug } from "@/lib/integrations/server"
 import { EVOLUTION_INTEGRATION_ID } from "../constants"
 import {
     evolutionBase64Schema,

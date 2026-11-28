@@ -14,7 +14,7 @@ vi.mock('@/features/github/client', async (original) => ({
   githubPaginate: gh.githubPaginate,
   githubBaseUrl: async () => 'https://api.github.com',
 }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ token: 'tok', apiUrl: 'https://api.github.com' }) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ token: 'tok', apiUrl: 'https://api.github.com' }) }))
 vi.mock('@/features/agentic/server/centrals', () => ({ listCentrals: gh.listCentrals }))
 vi.mock('@/features/github/server/lookups', () => ({ listGithubRepos: async () => [{ fullName: 'sipal/crm', private: true, description: null }, { fullName: 'sipal/site', private: false, description: 'Site' }] }))
 vi.mock('@/lib/db', async (original) => ({ ...(await original<object>()), recordAudit: gh.recordAudit }))

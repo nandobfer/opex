@@ -12,7 +12,7 @@
  */
 
 import { NextResponse, type NextRequest } from "next/server"
-import { registerBuiltInJobs, runFastSchedulerTick, runSchedulerTick } from "@/features/integrations/scheduler/cron-scheduler"
+import { registerBuiltInJobs, runFastSchedulerTick, runSchedulerTick } from "@/lib/integrations/scheduler"
 import { verifySchedulerTickToken } from "@/features/routines/utils/cron-auth"
 import { logger } from "@/lib/logger"
 import { isPreviewInstance, PREVIEW_SCHEDULER_MESSAGE } from "@/lib/instance"

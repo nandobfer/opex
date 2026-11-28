@@ -116,7 +116,7 @@ export function ArchitectTab({ workbench }: { workbench: ArchitectWorkbench }) {
             return (
                 <>
                     {picker(diagram)}
-                    <ArchitectLiveWaiting phase={live.progress?.phase ?? diagram.phase} tools={live.progress?.tools ?? diagram.tools} connected={live.connected || live.graph === null} provider={diagram.provider} />
+                    <ArchitectLiveWaiting phase={live.progress?.phase ?? diagram.phase} tools={live.progress?.tools ?? diagram.tools} connected={live.connected || live.graph === null} provider={diagram.provider} background={live.progress?.background ?? null} />
                 </>
             )
         const depth = asDepth(diagram.depth)

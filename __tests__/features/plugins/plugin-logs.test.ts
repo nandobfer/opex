@@ -10,7 +10,7 @@ const mocks = vi.hoisted(() => ({ docs: [] as Array<Record<string, unknown>>, tr
 
 vi.mock('@/lib/db', () => ({ dbConnect: async () => undefined }))
 vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }), logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
-vi.mock('@/lib/integrations/debug', () => ({ chunkForPusher: (lines: unknown[]) => [lines] }))
+vi.mock('@/lib/integrations/server', () => ({ chunkForPusher: (lines: unknown[]) => [lines] }))
 vi.mock('@/lib/pusher/server', () => ({ getRawPusherServer: async () => ({ trigger: mocks.trigger }) }))
 vi.mock('@/lib/db/models/PluginLog', () => ({
   PluginLog: {

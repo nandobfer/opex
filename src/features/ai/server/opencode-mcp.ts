@@ -1,4 +1,4 @@
-import type { OpencodeClient } from "@/lib/ai/opencode-client"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { logger } from "@/lib/logger"
 
 /**
