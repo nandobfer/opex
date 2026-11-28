@@ -3,7 +3,8 @@
 import { AnimatePresence, motion } from "framer-motion"
 import { format } from "date-fns"
 import { ptBR } from "date-fns/locale"
-import { AlertTriangle, CheckCircle2, CircleSlash, Github, Loader2, Monitor, XCircle, type LucideIcon } from "lucide-react"
+import { useCallback, useState } from "react"
+import { AlertTriangle, CheckCircle2, CircleSlash, ExternalLink, Github, Loader2, Monitor, XCircle, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -36,6 +37,11 @@ const when = (iso: string) => format(new Date(iso), "dd/MM HH:mm", { locale: ptB
  */
 export function BuildLogView({ workbenchId, selectedId, onSelect }: { workbenchId: string; selectedId: string | null; onSelect: (id: string) => void }) {
     const query = useWorkbenchBuilds(workbenchId)
+    // URL do run do GitHub Action lida do log do build selecionado (BuildLogPanel); vale só para esse build.
+    const [runLink, setRunLink] = useState<{ buildId: string; url: string | null } | null>(null)
+    const reportRunUrl = useCallback((buildId: string, url: string | null) => {
+        setRunLink((current) => (current?.buildId === buildId && current.url === url ? current : { buildId, url }))
+    }, [])
     if (query.isPending) {
         return (
             <div className="flex flex-1 flex-col gap-3 p-4" aria-busy="true">
@@ -59,10 +65,11 @@ export function BuildLogView({ workbenchId, selectedId, onSelect }: { workbenchI
     const latest = builds[0]
     const selected = builds.find((build) => build.id === selectedId) ?? latest
     if (!selected || !latest) return null
+    const runUrl = runLink?.buildId === selected.id ? runLink.url : null
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-                <BuildSummary build={selected} />
+                <BuildSummary build={selected} runUrl={runUrl} />
                 {builds.length > 1 && (
                     <Select value={selected.id} onValueChange={(value) => value && onSelect(value)}>
                         <SelectTrigger className="w-52" aria-label="Build da prévia">
@@ -81,14 +88,14 @@ export function BuildLogView({ workbenchId, selectedId, onSelect }: { workbenchI
             </div>
             <AnimatePresence mode="wait" initial={false}>
                 <motion.div key={selected.id} initial={{ opacity: 0, x: 8 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -8 }} transition={{ duration: 0.18 }} className="flex min-h-0 flex-1 flex-col">
-                    <BuildLogPanel workbenchId={workbenchId} build={selected} />
+                    <BuildLogPanel workbenchId={workbenchId} build={selected} onRunUrl={(url) => reportRunUrl(selected.id, url)} />
                 </motion.div>
             </AnimatePresence>
         </div>
     )
 }
 
-function BuildSummary({ build }: { build: WorkbenchBuildDto }) {
+function BuildSummary({ build, runUrl }: { build: WorkbenchBuildDto; runUrl: string | null }) {
     return (
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
             <span className={cn("flex items-center gap-1.5 font-medium", BUILD_STATUS_STYLE[build.status].className)}>
@@ -96,11 +103,17 @@ function BuildSummary({ build }: { build: WorkbenchBuildDto }) {
                 {BUILD_STATUS_LABELS[build.status]}
             </span>
             {build.port !== null && <span>Porta {build.port}</span>}
-            {build.method === "github" && (
-                <span className="flex items-center gap-1">
-                    <Github className="h-3 w-3" aria-hidden /> GitHub Action
-                </span>
-            )}
+            {build.method === "github" &&
+                (runUrl ? (
+                    <a href={runUrl} target="_blank" rel="noreferrer" title="Abrir a execução no GitHub" aria-label="GitHub Action: abrir a execução no GitHub" className="flex items-center gap-1 text-primary hover:underline">
+                        <Github className="h-3 w-3" aria-hidden /> GitHub Action
+                        <ExternalLink className="h-3 w-3" aria-hidden />
+                    </a>
+                ) : (
+                    <span className="flex items-center gap-1">
+                        <Github className="h-3 w-3" aria-hidden /> GitHub Action
+                    </span>
+                ))}
             {build.local && (
                 <span className="flex items-center gap-1">
                     <Monitor className="h-3 w-3" aria-hidden /> Máquina local

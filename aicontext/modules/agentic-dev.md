@@ -238,8 +238,8 @@ padrão `preview.yml`) e serviço Compose (`previewService`, padrão `app`) no m
 - A porta permanece reservada no banco, dentro da faixa efetiva da central (`resolveCentralPorts`, também
   gravada em `min`/`max` do estado da tentativa). O GitHub não escolhe portas.
   Estado `remote-preview-<tentativa>.json` fora do worktree, na pasta do backup, guarda tentativa, SHA, runId
-  e confirmação de publicação. A URL do run aparece no log da aba Build (atalho "Abrir a execução no
-  GitHub"); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
+  e confirmação de publicação. A URL do run aparece no log da aba Build e o selo **GitHub Action** do
+  resumo do build vira o link do run (nova aba) quando o log traz a URL (OPE-214); reconexão retoma o mesmo job do script, que por sua vez retoma o run registrado. O agendador existente e a reconciliação de turnos continuam cobrindo reinícios.
 - O runner baixa o artefato daquela execução, valida SHA/tentativa/checksum, confere backup (só
   quando ligado na central) e worktree, revalida porta e importa a imagem. Publica com override
   Compose por tentativa, `--no-build --pull never`, mesma variável de porta/projeto/serviço. Porta
@@ -339,7 +339,8 @@ descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** 
     acompanhamento também;
   - **melhor esforço:** token sem acesso, 404, limite de uso ou falhas de rede seguidas viram uma linha amarela no
     próprio log ("Não foi possível acompanhar o GitHub Actions…") e o build segue pelo código de saída do
-    script. O link "Abrir a execução no GitHub" continua acima do log.
+    script. O link do run continua no selo **GitHub Action** do resumo do build (acima da busca); sem URL no
+    log, o selo é só texto. Não há mais a linha "Abrir a execução no GitHub" entre a busca e o terminal.
 - **Falha** (exit ≠ 0 que não seja terminal): o agente recebe o fim da saída num turno de correção
   (`buildFixPrompt`, que proíbe subir o build/rodar o script) e, com `{"ok": true}`, o app roda de novo
   numa nova seção do **mesmo** build — sem limite de correções. No GitHub Action a correção é

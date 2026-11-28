@@ -7,7 +7,8 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 
 /**
  * Aba "Build (N)": o resumo do build e o seletor (igual às abas Plano e Adversário) na mesma linha —
- * mais recente primeiro, só com 2+ builds — e o log do selecionado no terminal.
+ * mais recente primeiro, só com 2+ builds — e o log do selecionado no terminal. No GitHub Action
+ * (OPE-214), o link do run (lido do log) fica no selo "GitHub Action" do resumo.
  */
 
 const mocks = vi.hoisted(() => ({
@@ -15,6 +16,7 @@ const mocks = vi.hoisted(() => ({
   stream: { view: { loaded: true, end: 10, status: 'running', message: null }, connected: true, error: false, retry: vi.fn() } as Record<string, unknown>,
   streamCalls: [] as (string | null)[],
   written: [] as string[],
+  logs: {} as Record<string, string>,
 }))
 
 vi.mock('framer-motion', () => framerMotionMock())
@@ -22,7 +24,7 @@ vi.mock('@/features/agentic/hooks/useBuilds', () => ({
   useWorkbenchBuilds: () => mocks.query,
   useBuildLogStream: (_workbenchId: string, buildId: string | null, sink: { reset: (text: string) => void }) => {
     mocks.streamCalls.push(buildId)
-    React.useEffect(() => sink.reset(`log de ${buildId}`), [buildId, sink])
+    React.useEffect(() => sink.reset(mocks.logs[buildId ?? ''] ?? `log de ${buildId}`), [buildId, sink])
     return mocks.stream
   },
 }))
@@ -61,6 +63,7 @@ const build = (id: string, number: number, status: string, patch: Record<string,
 beforeEach(() => {
   mocks.streamCalls = []
   mocks.written = []
+  mocks.logs = {}
   mocks.stream = { view: { loaded: true, end: 10, status: 'running', message: null }, connected: true, error: false, retry: vi.fn() }
   mocks.query = { isPending: false, isError: false, data: [build('b1', 1, 'failed', { message: 'O build falhou' }), build('b2', 2, 'running')], refetch: vi.fn() }
 })
@@ -122,5 +125,47 @@ describe('BuildLogView', () => {
     render(<Harness />)
     fireEvent.click(screen.getByRole('button', { name: 'Tentar novamente' }))
     expect(retry).toHaveBeenCalled()
+  })
+})
+
+describe('BuildLogView — link do run no selo "GitHub Action" (OPE-214)', () => {
+  const RUN = 'https://github.com/org/app/actions/runs/42'
+  const badgeLink = () => screen.queryByText('GitHub Action')?.closest('a') ?? null
+
+  it('build GitHub com a URL no log: o selo é o link do run (nova aba) e não há mais a linha do atalho', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'running', { method: 'github' })] }
+    mocks.logs = { b1: `remote: Create a pull request\nPrévia GitHub: ${RUN}\n` }
+    render(<Harness />)
+    const link = badgeLink()
+    expect(link?.getAttribute('href')).toBe(RUN)
+    expect(link?.getAttribute('target')).toBe('_blank')
+    expect(link?.getAttribute('rel')).toBe('noreferrer')
+    expect(screen.queryByText(/Abrir a execução no GitHub/)).toBeNull()
+  })
+
+  it('build GitHub sem a URL ainda: o selo é só texto', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'running', { method: 'github' })] }
+    mocks.logs = { b1: 'remote: Create a pull request\n' }
+    render(<Harness />)
+    expect(screen.getByText('GitHub Action')).toBeTruthy()
+    expect(badgeLink()).toBeNull()
+  })
+
+  it('build local: sem selo e sem link, mesmo com uma URL de run no log', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'running', { method: 'local' })] }
+    mocks.logs = { b1: `${RUN}\n` }
+    render(<Harness />)
+    expect(screen.queryByText('GitHub Action')).toBeNull()
+    expect(document.querySelector('a')).toBeNull()
+  })
+
+  it('trocar para um build sem URL não herda o link do build anterior', () => {
+    mocks.query = { ...mocks.query, data: [build('b1', 1, 'failed', { method: 'github' }), build('b2', 2, 'running', { method: 'github' })] }
+    mocks.logs = { b2: `Prévia GitHub: ${RUN}\n`, b1: 'sem url\n' }
+    render(<Harness />)
+    expect(badgeLink()?.getAttribute('href')).toBe(RUN)
+    fireEvent.change(screen.getByRole('combobox', { name: 'Build da prévia' }), { target: { value: 'b1' } })
+    expect(screen.getByText('GitHub Action')).toBeTruthy()
+    expect(badgeLink()).toBeNull()
   })
 })
