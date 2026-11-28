@@ -1,9 +1,9 @@
 import { execSync } from 'node:child_process'
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
-import { restoreDeployedFilesCommand, saveDeployedFilesCommand } from '@/features/environments/commands'
+import { bootstrapDeployedFilesCommand, dropDeployedFilesCommand, promoteDeployedFilesCommand, restoreDeployedFilesCommand, stageDeployedFilesCommand } from '@/features/environments/commands'
 import { centralCheckoutCommand, cleanTreeCommand, composeCommand, ensureEnvFilesCommand, envFilesConfigCommand, parseCreatedEnvFiles, parseEnvFiles, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, parseSnapshotHost, registryImage, snapshotCommand, centralComposeConfigCommand, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
 import { composeBytes, limitLines, overrideYaml, parseComposeConfig, runOnPcProblem, selectServices } from '@/features/environments/compose-config'
 import { deploySteps, executionSteps, moveOrder } from '@/features/environments/pipeline'
@@ -292,30 +292,42 @@ describe('arquivos de variáveis do compose (OPE-175)', () => {
     }
   })
 
-  it('cópia do último deploy no shell (OPE-211): guardar, regravar, voltar; bootstrap não sobrescreve a cópia; a pasta continua limpa', () => {
-    const dir = mkdtempSync(join(tmpdir(), 'opex-deployed-'))
-    const sh = (command: string) => execSync(command, { shell: '/bin/sh', cwd: dir }).toString().trim()
+  it('cópias do último deploy no shell (OPE-211): fora da pasta do projeto; preparar, promover, voltar; bootstrap não sobrescreve', () => {
+    const root = mkdtempSync(join(tmpdir(), 'opex-deployed-'))
+    const dir = join(root, 'projeto')
+    const home = join(root, 'home')
+    mkdirSync(dir)
+    mkdirSync(home)
+    const sh = (command: string) => execSync(command, { shell: '/bin/sh', cwd: dir, env: { ...process.env, HOME: home } }).toString().trim()
     const target = { dir: `'${dir}'`, filesOn: 'server' as const }
     const read = (name: string) => (existsSync(join(dir, name)) ? readFileSync(join(dir, name), 'utf8') : null)
     try {
       sh('git init -q && git -c user.email=t@t -c user.name=t commit -q --allow-empty -m i')
       // Sem cópia: voltar não mexe em nada.
       writeFileSync(join(dir, 'docker-compose.opex.yml'), 'novo\n')
-      expect(sh(restoreDeployedFilesCommand(target))).toBe('')
+      expect(sh(restoreDeployedFilesCommand(target, 'e1'))).toBe('')
       expect(read('docker-compose.opex.yml')).toBe('novo\n')
       writeFileSync(join(dir, 'docker-compose.opex.yml'), 'implantado\n')
       writeFileSync(join(dir, '.env.opex'), 'A=1\n')
-      sh(saveDeployedFilesCommand(target))
+      sh(stageDeployedFilesCommand(target, 'e1'))
+      sh(promoteDeployedFilesCommand(target, 'e1'))
+      expect(readFileSync(join(home, '.opex/environments-deployed/e1/current/docker-compose.opex.yml'), 'utf8')).toBe('implantado\n')
+      // Nada vai para a pasta do projeto, que continua limpa.
+      expect(readdirSync(dir).filter((name) => name !== '.git').sort()).toEqual(['.env.opex', 'docker-compose.opex.yml'])
+      expect(sh(cleanTreeCommand(target))).toBe('clean')
+      // Deploy seguinte prepara a cópia dele e falha antes de subir: a pendente não vale e o bootstrap não troca a vigente.
       writeFileSync(join(dir, 'docker-compose.opex.yml'), 'quebrado\n')
       rmSync(join(dir, '.env.opex'))
-      // Bootstrap com a cópia já feita: não troca pelo arquivo quebrado.
-      sh(saveDeployedFilesCommand(target, { bootstrap: true }))
-      expect(sh(restoreDeployedFilesCommand(target))).toBe('restored')
+      sh(bootstrapDeployedFilesCommand(target, 'e1'))
+      sh(stageDeployedFilesCommand(target, 'e1'))
+      expect(sh(restoreDeployedFilesCommand(target, 'e1'))).toBe('restored')
       expect(read('docker-compose.opex.yml')).toBe('implantado\n')
       expect(read('.env.opex')).toBe('A=1\n')
-      expect(sh(cleanTreeCommand(target))).toBe('clean')
+      expect(existsSync(join(home, '.opex/environments-deployed/e1/pending'))).toBe(false)
+      sh(dropDeployedFilesCommand(target, 'e1'))
+      expect(existsSync(join(home, '.opex/environments-deployed/e1'))).toBe(false)
     } finally {
-      rmSync(dir, { recursive: true, force: true })
+      rmSync(root, { recursive: true, force: true })
     }
   })
 

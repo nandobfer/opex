@@ -28,8 +28,11 @@ import {
     removeGeneratedCommand,
     removeWorktreeCommand,
     restartCommand,
+    bootstrapDeployedFilesCommand,
+    dropDeployedFilesCommand,
+    promoteDeployedFilesCommand,
     restoreDeployedFilesCommand,
-    saveDeployedFilesCommand,
+    stageDeployedFilesCommand,
     startCommand,
     writeFileCommand,
     type ComposePlan,
@@ -205,7 +208,7 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     const overrides = composeOverridesOf(env.composeOverrides)
     // Ambiente implantado antes da cópia do último deploy existir: a cópia sai dos arquivos de agora, antes de regravá-los.
     if (env.deployedOn && env.deployedOn.buildOn === target.buildOn && env.deployedOn.runOn === target.runOn) {
-        await runStep(ctx, { label: "Cópia do último deploy", command: saveDeployedFilesCommand(plan, { bootstrap: true }), timeoutMs: 30_000 }, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} do último deploy (se ainda não guardados)` })
+        await runStep(ctx, { label: "Cópia do último deploy", command: bootstrapDeployedFilesCommand(plan, String(env._id)), timeoutMs: 30_000 }, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} do último deploy (se ainda não guardados)` })
     }
     const ownImages = ownImageServices(overrides)
     const composeVersion = env.source.kind === "managed" ? await writeManagedCompose(ctx, env, plan) : null
@@ -249,18 +252,34 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     return { services, envFiles, composeVersion, ownImages }
 }
 
-/** Guarda o override e o `.env.opex` do deploy que acabou de dar certo (a próxima falha volta a eles). */
-async function saveDeployedFiles(ctx: DeployContext, plan: ComposePlan): Promise<void> {
-    await runStep(ctx, { label: "Guardando os arquivos do deploy", command: saveDeployedFilesCommand(plan), timeoutMs: 30_000 }, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} deste deploy` })
+/** Progresso da execução: `cutover` = o passo que sobe os containers já começou (eles podem ter a configuração nova). */
+interface ExecutionProgress {
+    cutover: boolean
 }
 
 /**
- * Deploy que falhou (em qualquer passo antes do sucesso): o override e o `.env.opex` voltam aos do último deploy
+ * A cópia `pending` (os arquivos deste deploy) vira a do último deploy. Nunca derruba o deploy: os containers já
+ * estão com esta configuração. Se não der para guardar, as cópias saem (a próxima falha não volta arquivos de outro
+ * deploy) e o log avisa a condição.
+ */
+async function promoteDeployedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string): Promise<void> {
+    try {
+        const result = await ctx.run(promoteDeployedFilesCommand(plan, environmentId), 30_000, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} deste deploy` })
+        if (result.exitCode === 0) return
+    } catch (error) {
+        envLog.warn({ deployId: ctx.deployId, err: error instanceof Error ? error.message : String(error) }, "[environments] Não foi possível guardar a cópia dos arquivos do deploy")
+    }
+    await ctx.run(dropDeployedFilesCommand(plan, environmentId), 30_000).catch(() => undefined)
+    ctx.write(`\n\u001b[33mNão foi possível guardar a cópia do override e das variáveis extras deste deploy: os containers e os arquivos da pasta seguem com esta configuração, mas uma falha no próximo deploy não vai voltar os arquivos.\u001b[0m\n`)
+}
+
+/**
+ * Deploy que falhou antes de subir os containers: o override e o `.env.opex` voltam aos do último deploy
  * concluído, para Levantar, Reiniciar e Derrubar seguirem com a configuração implantada. Falhar aqui só avisa.
  */
-async function restoreDeployedFiles(ctx: DeployContext, plan: ComposePlan): Promise<void> {
+async function restoreDeployedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string): Promise<void> {
     try {
-        const result = await ctx.run(restoreDeployedFilesCommand(plan), 30_000, { redactedAs: `voltar ${OVERRIDE_FILE} e ${ENV_FILE} aos do último deploy` })
+        const result = await ctx.run(restoreDeployedFilesCommand(plan, environmentId), 30_000, { redactedAs: `voltar ${OVERRIDE_FILE} e ${ENV_FILE} aos do último deploy` })
         if (result.exitCode === 0 && result.output.includes("restored")) ctx.write(`\nOverride e variáveis extras voltaram aos do último deploy concluído.\n`)
     } catch (error) {
         envLog.warn({ deployId: ctx.deployId, err: error instanceof Error ? error.message : String(error) }, "[environments] Não foi possível voltar os arquivos do último deploy")
@@ -412,6 +431,7 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     let commit: string | null = null
     let tag: string | null = null
     let plan: ComposePlan | null = null
+    const progress: ExecutionProgress = { cutover: false }
     // Mesmo lugar do último deploy concluído: a falha volta os arquivos gerados aos dele (mover não tem o que voltar).
     const samePlace = Boolean(env.deployedOn && env.deployedOn.buildOn === target.buildOn && env.deployedOn.runOn === target.runOn)
     try {
@@ -422,6 +442,8 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         tag = commit ?? `t${Date.now()}`
         const version = await readVersion(ctx, plan)
         const { services, envFiles, composeVersion, ownImages } = await prepareCompose(ctx, env, settings, plan, access, target, tag)
+        // Antes de subir: a cópia destes arquivos fica pronta e só vira a do último deploy no fim.
+        await runStep(ctx, { label: "Cópia dos arquivos deste deploy", command: stageDeployedFilesCommand(plan, String(env._id)), timeoutMs: 30_000 }, { redactedAs: `copiar ${OVERRIDE_FILE} e ${ENV_FILE} deste deploy` })
         const buildServices = services.filter((service) => service.hasBuild && !ownImages.includes(service.name)).map((service) => service.name)
         const pullServices = target.buildOn === target.runOn ? services.filter((service) => ownImages.includes(service.name)).map((service) => service.name) : []
         if (target.buildOn !== target.runOn && buildServices.length) {
@@ -432,11 +454,11 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
         const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion, overrides: env.composeOverrides ?? null, pullServices }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
-        await runExecution(ctx, env, settings, plan, access, checkpoint)
-        await saveDeployedFiles(ctx, plan)
+        await runExecution(ctx, env, settings, plan, access, checkpoint, progress)
+        await promoteDeployedFiles(ctx, plan, String(env._id))
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
-        if (plan && samePlace) await restoreDeployedFiles(ctx, plan)
+        if (plan) await settleFailedFiles(ctx, plan, String(env._id), { samePlace, cutover: progress.cutover })
         await failDeploy(String(env._id), deployId, recorder, error, commit, tag)
     } finally {
         await recorder.stop()
@@ -444,14 +466,32 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     }
 }
 
+/**
+ * Arquivos depois de um deploy que falhou: antes de subir os containers, voltam aos do último deploy concluído;
+ * depois (os containers podem estar com a configuração nova), ficam os deste deploy, que viram a cópia, e o log
+ * registra a condição.
+ */
+async function settleFailedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string, state: { samePlace: boolean; cutover: boolean }): Promise<void> {
+    if (!state.cutover) {
+        if (state.samePlace) await restoreDeployedFiles(ctx, plan, environmentId)
+        return
+    }
+    ctx.write(`\n\u001b[33mOs containers já subiram com a configuração deste deploy: o override e as variáveis extras ficam os dele (não voltam aos do último deploy concluído).\u001b[0m\n`)
+    await promoteDeployedFiles(ctx, plan, environmentId)
+}
+
 /** Fase de execução (`executionSteps`) a partir do passo do ponto de retomada, que avança a cada passo. */
-async function runExecution(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, checkpoint: DeployCheckpoint): Promise<void> {
+async function runExecution(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, checkpoint: DeployCheckpoint, progress: ExecutionProgress = { cutover: false }): Promise<void> {
     const steps = executionSteps({ settings, plan, buildOn: env.buildOn, runOn: env.runOn, targets: access.targets, buildServices: checkpoint.buildServices, ports: env.ports, healthUrl: env.healthUrl, skipBuild: checkpoint.skipBuild, pullServices: checkpoint.pullServices ?? [], from: checkpoint.from, down: downCommand })
+    const upIndex = steps.findIndex((step) => step.label.startsWith("Sobe no "))
+    // Retomada a partir do passo que sobe (ou depois): os containers podem já ter subido.
+    if (checkpoint.step > 0 && upIndex >= 0 && checkpoint.step >= upIndex) progress.cutover = true
     await runSteps(ctx, steps, {
         start: checkpoint.step,
         failure: checkpoint.failure,
         jobIds: (index) => executionJobId(ctx.deployId, index),
         onStep: async (index, failure) => {
+            if (index === upIndex && !failure) progress.cutover = true
             await EnvironmentDeploy.updateOne({ _id: ctx.deployId }, { $set: { "checkpoint.step": index, "checkpoint.failure": failure } })
         },
     })
@@ -522,6 +562,7 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
     const checkpoint = deploy.checkpoint ?? null
     let plan: ComposePlan | null = null
     let samePlace = false
+    const progress: ExecutionProgress = { cutover: false }
     busy().add(envId)
     try {
         if (!checkpoint) throw new StepError(INTERRUPTED_BEFORE_EXECUTION)
@@ -534,11 +575,11 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
         envLog.info({ id: envId, deployId, step: checkpoint.step }, "[environments] Retomando deploy interrompido")
         plan = composePlanOf(env, settings)
         samePlace = Boolean(saved.deployedOn && saved.deployedOn.buildOn === env.buildOn && saved.deployedOn.runOn === env.runOn)
-        await runExecution(ctx, env, settings, plan, access, checkpoint)
-        await saveDeployedFiles(ctx, plan)
+        await runExecution(ctx, env, settings, plan, access, checkpoint, progress)
+        await promoteDeployedFiles(ctx, plan, envId)
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
-        if (plan && samePlace) await restoreDeployedFiles(ctx, plan)
+        if (plan) await settleFailedFiles(ctx, plan, envId, { samePlace, cutover: progress.cutover })
         await failDeploy(envId, deployId, recorder, error, checkpoint?.commit ?? deploy.commit, checkpoint?.tag ?? deploy.imageTag)
     } finally {
         busy().delete(envId)
@@ -603,6 +644,8 @@ export async function deleteEnvironment(id: string, options: { volumes: boolean 
     } else {
         await run(removeGeneratedCommand(plan), 30_000)
     }
+    // As cópias dos arquivos dos deploys ficam numa pasta só do Opex (nunca a do projeto).
+    await run(dropDeployedFilesCommand(plan, id), 30_000).catch(() => undefined)
     await Environment.deleteOne({ _id: id })
     await EnvironmentDeploy.deleteMany({ environmentId: id })
     await recordAudit({ userId: actorId, entidade: ENVIRONMENTS_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.EXCLUIR, antes: { nome: env.name, slug: env.slug, projeto: env.source.projectName }, depois: { volumesApagados: options.volumes } })

@@ -1,6 +1,6 @@
 import { posix } from "node:path"
 import { cancelForwardCommand, cancelReverseForwardCommand, forwardPortCommand, muxCommand, quote, reverseForwardCommand } from "@/features/local-docker/commands"
-import { COMPOSE_LABELS, DEPLOYED_DIR, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
+import { COMPOSE_LABELS, DEPLOYED_STORE, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
 import { appliedLimits, round2, type ResourceLimits } from "./resource-limits"
 import type { EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
@@ -231,26 +231,48 @@ export const ensureEnvDirCommand = (settings: EnvironmentsSettings, slug: string
 export const removeEnvDirCommand = (settings: EnvironmentsSettings, slug: string) => `rm -rf ${envDir(settings, slug)}`
 
 export function removeGeneratedCommand(plan: Pick<ComposePlan, "dir" | "filesOn">): string {
-    const command = `rm -rf ${plan.dir}/${OVERRIDE_FILE} ${plan.dir}/${ENV_FILE} ${plan.dir}/${DEPLOYED_DIR}`
+    const command = `rm -f ${plan.dir}/${OVERRIDE_FILE} ${plan.dir}/${ENV_FILE}`
     return plan.filesOn === "pc" ? muxCommand(command) : command
 }
 
 const GENERATED = `${OVERRIDE_FILE} ${ENV_FILE}`
 
 /**
- * Cópia do override e do `.env.opex` do último deploy concluído (OPE-211), gravada no sucesso. `bootstrap`
- * só copia quando ainda não há cópia (ambiente implantado antes desta cópia existir).
+ * Cópias do override e do `.env.opex` (OPE-211), numa pasta só do Opex, fora da pasta do projeto, na máquina
+ * dos arquivos: `current` (o último deploy concluído) e `pending` (o deploy em andamento, promovida no fim).
  */
-export function saveDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, options: { bootstrap?: boolean } = {}): string {
-    const save = `mkdir -p ${DEPLOYED_DIR} && for f in ${GENERATED}; do if [ -f "$f" ]; then cp -p "$f" ${DEPLOYED_DIR}/"$f"; else rm -f ${DEPLOYED_DIR}/"$f"; fi; done`
-    const command = `cd ${plan.dir} && umask 077 && ${options.bootstrap ? `if [ ! -d ${DEPLOYED_DIR} ]; then ${save}; fi` : save}`
-    return plan.filesOn === "pc" ? muxCommand(command) : command
+export const deployedStore = (environmentId: string) => `"$HOME/${DEPLOYED_STORE}/${environmentId.replace(/[^a-zA-Z0-9_-]/g, "")}"`
+
+const onFiles = (plan: Pick<ComposePlan, "filesOn">, command: string) => (plan.filesOn === "pc" ? muxCommand(command) : command)
+const copyInto = (plan: Pick<ComposePlan, "dir">, to: string) => `cd ${plan.dir} && for f in ${GENERATED}; do if [ -f "$f" ]; then cp -p "$f" ${to}/"$f"; fi; done`
+
+/** Ambiente implantado antes das cópias existirem: os arquivos de agora viram a cópia `current` (só se não houver). */
+export function bootstrapDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string): string {
+    const store = deployedStore(environmentId)
+    return onFiles(plan, `umask 077 && s=${store} && if [ ! -d "$s/current" ]; then mkdir -p "$s/current" && ${copyInto(plan, '"$s/current"')}; fi`)
 }
 
-/** Volta o override e o `.env.opex` aos do último deploy concluído (sem a cópia, não mexe em nada). */
-export function restoreDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">): string {
-    const command = `cd ${plan.dir} && if [ -d ${DEPLOYED_DIR} ]; then for f in ${GENERATED}; do if [ -f ${DEPLOYED_DIR}/"$f" ]; then cp -p ${DEPLOYED_DIR}/"$f" "$f"; else rm -f "$f"; fi; done; echo restored; fi`
-    return plan.filesOn === "pc" ? muxCommand(command) : command
+/** Cópia `pending` dos arquivos deste deploy, feita antes de subir os containers. */
+export function stageDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string): string {
+    const store = deployedStore(environmentId)
+    return onFiles(plan, `umask 077 && s=${store} && rm -rf "$s/pending" && mkdir -p "$s/pending" && ${copyInto(plan, '"$s/pending"')}`)
+}
+
+/** `pending` vira `current` (a anterior só sai depois da troca; se a troca falha, ela volta). */
+export function promoteDeployedFilesCommand(plan: Pick<ComposePlan, "filesOn">, environmentId: string): string {
+    const store = deployedStore(environmentId)
+    return onFiles(plan, `s=${store} && [ -d "$s/pending" ] && rm -rf "$s/old" && { [ ! -d "$s/current" ] || mv "$s/current" "$s/old"; } && if mv "$s/pending" "$s/current"; then rm -rf "$s/old"; else [ ! -d "$s/old" ] || mv "$s/old" "$s/current"; exit 1; fi`)
+}
+
+/** Sem cópia confiável (a promoção falhou): tira as cópias, e a próxima falha não volta arquivos de outro deploy. */
+export function dropDeployedFilesCommand(plan: Pick<ComposePlan, "filesOn">, environmentId: string): string {
+    return onFiles(plan, `rm -rf ${deployedStore(environmentId)}; true`)
+}
+
+/** Volta o override e o `.env.opex` aos da cópia `current` (sem a cópia, não mexe em nada). */
+export function restoreDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string): string {
+    const store = deployedStore(environmentId)
+    return onFiles(plan, `s=${store} && if [ -d "$s/current" ]; then cd ${plan.dir} && for f in ${GENERATED}; do if [ -f "$s/current/$f" ]; then cp -p "$s/current/$f" "$f"; else rm -f "$f"; fi; done; rm -rf "$s/pending"; echo restored; fi`)
 }
 
 /** Apaga só o `.env.opex` (ambiente sem variáveis extras: o do deploy anterior não pode valer). */
@@ -267,8 +289,8 @@ export function cleanTreeCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, env
     const command = envFiles.length
         ? // Arquivo de variáveis do compose vazio e não rastreado (o que o app cria quando falta) não suja a
           // pasta; os de fora da pasta já não entram no `git status` dela.
-          `cd ${plan.dir} && set -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' ':!${DEPLOYED_DIR}' && for f in ${envFiles.map(quote).join(" ")}; do case "$f" in "$PWD"/*) if [ -f "$f" ] && [ ! -s "$f" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then set -- "$@" ":!\${f#"$PWD"/}"; fi ;; esac; done; if [ -z "$(git status --porcelain -- "$@" 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
-        : `if [ -z "$(git -C ${plan.dir} status --porcelain -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' ':!${DEPLOYED_DIR}' 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
+          `cd ${plan.dir} && set -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' && for f in ${envFiles.map(quote).join(" ")}; do case "$f" in "$PWD"/*) if [ -f "$f" ] && [ ! -s "$f" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then set -- "$@" ":!\${f#"$PWD"/}"; fi ;; esac; done; if [ -z "$(git status --porcelain -- "$@" 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
+        : `if [ -z "$(git -C ${plan.dir} status --porcelain -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
     return plan.filesOn === "pc" ? muxCommand(command) : command
 }
 

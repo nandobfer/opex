@@ -33,8 +33,11 @@ export const REGISTRY_NAMESPACE = "opex-env"
 /** Arquivos gerados na pasta do ambiente. */
 export const OVERRIDE_FILE = "docker-compose.opex.yml"
 export const ENV_FILE = ".env.opex"
-/** Cópia do override e do `.env.opex` do último deploy concluído (restaurada quando um deploy falha). */
-export const DEPLOYED_DIR = ".opex-deployed"
+/**
+ * Cópias do override e do `.env.opex` do último deploy concluído (restauradas quando um deploy falha antes de
+ * subir), em `$HOME/<isto>/<id do ambiente>` na máquina dos arquivos: pasta só do Opex, nunca a do projeto.
+ */
+export const DEPLOYED_STORE = ".opex/environments-deployed"
 /** Compose gerenciado (OPE-191): a revisão vigente é gravada com este nome na pasta do ambiente a cada deploy. */
 export const MANAGED_COMPOSE_FILE = "docker-compose.yml"
 /** Tamanho máximo de uma revisão do compose gerenciado (bytes em UTF-8). */

@@ -348,14 +348,20 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
      o erro do deploy leva só a última linha, com os valores do environment, dos labels e do YAML avançado trocados por
      `[valor oculto]`. Na falha, o override é regravado **sem os ajustes** (passo "Override sem os ajustes (a
      conferência falhou)") e, em seguida, a regra do item 8 o volta ao do último deploy concluído, quando existe.
-  7. Sucesso: `deployedComposeOverrides` e a cópia dos arquivos gerados (passo "Guardando os arquivos do deploy": o
-     override e o `.env.opex` vão para `.opex-deployed/` na pasta do ambiente, fora da checagem de pasta limpa e apagada
-     junto com os arquivos gerados). Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
-  8. **Deploy que falha** (em qualquer passo antes do sucesso, inclusive a retomada; no mesmo lugar do último deploy,
-     não no mover): o override e o `.env.opex` voltam aos de `.opex-deployed/` ("Override e variáveis extras voltaram aos
-     do último deploy concluído"), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada. Ambiente
-     implantado antes dessa cópia existir ganha a cópia no começo do deploy seguinte (passo "Cópia do último deploy",
-     antes de regravar os arquivos). Sem cópia (nunca implantado), nada é restaurado.
+  7. **Cópias dos arquivos gerados** (o override e o `.env.opex`), numa pasta só do Opex, **fora da pasta do projeto**:
+     `$HOME/.opex/environments-deployed/<id do ambiente>/` na máquina dos arquivos (`deployedStore`, `DEPLOYED_STORE`), com
+     `current` (o último deploy concluído) e `pending` (o deploy em andamento). Antes de subir, o passo "Cópia dos arquivos
+     deste deploy" prepara a `pending`; no sucesso, ela vira a `current` (a anterior só sai depois da troca). Se a troca
+     falhar, o deploy **conclui assim mesmo** (containers, arquivos e `deployedComposeOverrides` ficam na configuração
+     nova), as cópias saem e o log avisa "Não foi possível guardar a cópia…". Apagar o ambiente apaga só essa pasta do
+     Opex, nunca nada da pasta do projeto. Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
+  8. **Deploy que falha antes de subir os containers** (antes do passo "Sobe no …", inclusive na retomada; no mesmo lugar
+     do último deploy, não no mover): o override e o `.env.opex` voltam aos da `current` ("Override e variáveis extras
+     voltaram aos do último deploy concluído"), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada.
+     **Falha a partir do passo que sobe** (os containers podem estar com a configuração nova): os arquivos ficam os deste
+     deploy, a `pending` vira a `current` e o log registra "Os containers já subiram com a configuração deste deploy…".
+     Ambiente implantado antes das cópias existirem ganha a `current` no começo do deploy seguinte (passo "Cópia do último
+     deploy", antes de regravar os arquivos). Sem cópia (nunca implantado), nada é restaurado.
 - **"Ler compose"** (`POST /api/environments/compose-services`) passa a devolver também `values` por serviço
   (`normalizeServiceValues`, `service-overrides.ts`): do JSON do `config --no-env-resolution --no-interpolate` (central e
   adotado; `${VAR}` volta como escrito) ou do YAML bruto da revisão vigente (gerenciado; formas curtas de portas com IP e
