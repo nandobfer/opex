@@ -25,11 +25,47 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
     deploy** (a mesma ação do Deploy, a ref salva); o detalhe do que está salvo fica no `title`.
   - **Containers** (`ContainerList`), um por linha, em colunas no `md` (Serviço · Situação · Portas · Recursos) e
     empilhados com rótulos abaixo: ponto e nome do serviço (o container no `title`), o `status` do Docker, as **portas**
-    (ver "Portas de cada container") e CPU/RAM em uso com o limite aplicado. Sem containers: "Nunca implantado: faça o
-    deploy…" ou "Nenhum container encontrado…".
+    (ver "Portas de cada container") e, na coluna **Recursos** (só no dono, 14rem), as quatro barras de uso CPU, RAM,
+    Swap e Disco (ver "Uso dos containers"). Sem containers: "Nunca implantado: faça o deploy…" ou "Nenhum container
+    encontrado…".
+  - **Uso do ambiente** (`EnvironmentUsageSummary`, só no dono e só com containers): faixa acima dos containers com as
+    mesmas quatro barras, somando os containers (`environmentUsage`).
   - **Rodapé**: o último deploy (ícone por status, "há 2 horas", ref @ commit; link para a página do log), "2/3 no ar"
     e, executando no PC, "Portas liberadas: 4100" (as repassadas ao servidor).
-  - Skeleton `EnvironmentCardSkeleton` com as mesmas classes (`environment-card-layout.ts`).
+  - Skeleton `EnvironmentCardSkeleton` com as mesmas classes (`environment-card-layout.ts`), inclusive a faixa de uso e as
+    4 barras por container no dono.
+- **Filtros da lista** (OPE-211, `EnvironmentsFiltersBar` sobre o `ListFilters`; regra pura `filterEnvironmentList` em
+  `filters.ts`; estado na URL com `useUrlFilters`, `ENVIRONMENT_FILTER_SCHEMA`): valem para os ambientes **e** os não
+  gerenciados, com o total ("N REGISTROS") das duas listas. O cartão aparece também enquanto a lista carrega.
+  - **Busca** (sem diferenciar maiúsculas nem acentos): nome, slug, projeto, serviços, containers, a pasta (adotado e não
+    gerenciado), o arquivo e a ref da central. Termo só numérico (`3000`, `:4100`) casa por **igualdade** com uma porta
+    interna ou publicada (`listen`) ou liberada (`env.ports`); `3000` não acha `30001`. Os não gerenciados levam
+    `services` e `ports` no DTO para isso.
+  - **Máquina** (Servidor/PC), **Situação** (No ar, Parcial, Parado, Nunca implantado; `healthOf`, e nos não gerenciados
+    pelo `running/containers`) e **Origem** (Central, Gerenciado, Adotado, Não gerenciado), em `CadastroSearchPicker`
+    múltiplos: E entre os filtros, OU dentro de cada um. "Não gerenciado" só vale para a lista dos não gerenciados.
+  - Grupos e card dos não gerenciados só com o que passou (contagem filtrada; grupo vazio some). Nada encontrado: "Nenhum
+    ambiente com estes filtros" com **Limpar filtros**.
+- **Uso dos containers** (OPE-211, `resource-usage.ts`, puro; `ServiceStatusDto.usage`, só no dono — o portal não
+  recebe): o % é sobre o **limite aplicado** no container; sem limite, sobre a **capacidade da máquina** onde ele roda
+  (`HostCapacityDto`). O detalhe da barra diz a base: "300 MiB de 1 GiB (limite)", "1,2 de 8 CPUs (servidor)".
+  - **CPU**: `CPUPerc` do `docker stats` (até N×100%) sobre as CPUs do limite ou da máquina, limitado a 100%.
+  - **RAM**: os bytes usados do `MemUsage` sobre o limite ou a RAM da máquina.
+  - **Swap**: lido sem `docker exec`, na própria máquina: o `docker inspect` dá o pid e o comando lê
+    `/proc/<pid>/cgroup` (linha `0::`) e `/sys/fs/cgroup<caminho>/memory.swap.current` (cgroup v2; vale no rootless).
+    No PC vai pela conexão mestra do túnel (`muxCommand`). Base: o swap além da RAM do limite ou o swap total da
+    máquina (`/proc/meminfo`). Sem swap (limite 0 ou máquina sem swap): "Sem swap". Não lido: "não lido".
+  - **Disco**: camada gravável (`docker ps --size`) + volumes nomeados que o container monta (`docker system df -v` e
+    os `Mounts` do `inspect`; bind mount não entra), sobre o disco onde o Docker guarda os dados (`df` do
+    `DockerRootDir`). Lento: `server/disk-usage.ts` guarda a leitura **por máquina no processo por 5 min**; a lista nunca
+    espera (vencido, lê em segundo plano, uma por vez, e devolve a anterior; a primeira vez mostra "lendo…"). Ao
+    terminar publica `environments` com `change: "usage"` e a tela relê. Falha só registra no log e espera a validade.
+    O `title` da barra mostra a hora da leitura.
+  - Parado: CPU, RAM e swap "parado"; o disco continua em barra.
+  - **Total do ambiente**: a soma; a base é a soma dos limites quando todos os containers (no ar) têm limite naquela
+    métrica, senão a máquina. Um volume montado por dois containers conta uma vez só no total (na linha de cada
+    container ele aparece).
+  - O `get_environment` do Agente Opex mostra o swap e o disco de cada serviço em texto.
 - **Portas de cada container** (OPE-211, `container-ports.ts`, puro): o snapshot junta o `{{.Ports}}` do `docker ps`
   (só no ar) com `{{json .Config.ExposedPorts}}` e `{{json .HostConfig.PortBindings}}` do `docker inspect` que já lia os
   limites (vale também parado; nenhum comando novo). `parseContainerPorts` tira as repetições (`0.0.0.0` e `::` da mesma

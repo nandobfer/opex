@@ -1,6 +1,7 @@
 import { BUILDER_STATUS_LABELS, builderNotices } from "./builder-view"
 import { limitsPendingDeploy } from "./limits-form"
 import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource-limits"
+import { formatUsageBytes } from "./resource-usage"
 import { visit } from "yaml"
 import { parseOverrideYaml } from "./override-yaml"
 import { MACHINE_LABELS, type ComposeOverrides, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
@@ -116,6 +117,9 @@ export function environmentDetailView(env: EnvironmentDto) {
             portas: service.ports,
             cpu: service.cpu,
             memoria: service.memory,
+            // Uso em números (OPE-211): swap do cgroup e o disco (camada + volumes) da leitura a cada 5 min.
+            swap: service.usage?.swapBytes != null ? formatUsageBytes(service.usage.swapBytes) : null,
+            disco: service.usage?.diskBytes != null ? formatUsageBytes(service.usage.diskBytes) : null,
             versao: service.version,
             limites: service.limits ? limitsText(service.limits) : null,
         })),

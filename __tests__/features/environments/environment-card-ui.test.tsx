@@ -32,8 +32,12 @@ const service = (overrides: Partial<EnvironmentDto['services'][number]> = {}): E
   memory: '120MiB / 8GiB',
   version: '1.44.0',
   limits: null,
+  usage: { cpuPercent: 1.5, memoryBytes: 120 * 1024 ** 2, swapBytes: 0, diskBytes: 2 * 1024 ** 3, volumes: [], diskCheckedAt: '2026-11-28T10:00:00.000Z' },
   ...overrides,
 })
+
+const GIB = 1024 ** 3
+const HOST = { cpus: 8, memoryGb: 8, swapGb: 4, disk: { totalBytes: 100 * GIB, usedBytes: 40 * GIB } }
 
 const deploy = (overrides: Partial<EnvironmentDeploySummaryDto> = {}): EnvironmentDeploySummaryDto => ({
   id: 'd1',
@@ -105,7 +109,6 @@ describe('card do ambiente (dono)', () => {
     const link = within(app).getByRole('link', { name: 'Abrir http://192.168.0.64:4100' })
     expect(link.getAttribute('href')).toBe('http://192.168.0.64:4100')
     expect(link.getAttribute('target')).toBe('_blank')
-    expect(app.textContent).toContain('CPU 1.5% · RAM 120MiB')
     fireEvent.click(within(app).getByRole('button', { name: 'Copiar o link http://192.168.0.64:4100' }))
     await waitFor(() => expect(writeText).toHaveBeenCalledWith('http://192.168.0.64:4100'))
     expect(mocks.toast.success).toHaveBeenCalledWith('Link copiado.')
@@ -208,11 +211,58 @@ describe('card do ambiente (dono)', () => {
     expect(screen.getByText('Portas liberadas: 4100')).toBeTruthy()
   })
 
-  it('skeleton com a estrutura do card (cabeçalho, containers e rodapé)', () => {
+  it('skeleton com a estrutura do card (cabeçalho, uso do ambiente, containers com 4 barras e rodapé)', () => {
     render(<EnvironmentCardSkeleton cards={2} containers={3} />)
     const skeleton = screen.getByTestId('environment-card-skeleton')
     expect(skeleton.children).toHaveLength(2)
     expect(skeleton.children[0]!.querySelectorAll('.md\\:grid')).toHaveLength(3)
+    expect(skeleton.children[0]!.querySelectorAll('[data-skeleton-usage-summary]')).toHaveLength(1)
+    // 4 da faixa + 4 por container.
+    expect(skeleton.children[0]!.querySelectorAll('[data-skeleton-usage-bar]')).toHaveLength(4 + 3 * 4)
+    cleanup()
+    render(<EnvironmentCardSkeleton variant="portal" cards={1} />)
+    expect(document.querySelectorAll('[data-skeleton-usage-bar]')).toHaveLength(0)
+  })
+
+  it('coluna Recursos: 4 barras por container, com o % e a base (limite ou servidor)', () => {
+    const limited = service({ limits: { memoryGb: 1, swapGb: null, cpus: 2 }, usage: { cpuPercent: 50, memoryBytes: 512 * 1024 ** 2, swapBytes: 0, diskBytes: GIB, volumes: [], diskCheckedAt: '2026-11-28T10:00:00.000Z' } })
+    render(<EnvironmentCard env={env({ services: [limited] })} pcAvailable linkHost="h" capacity={HOST} onIntent={vi.fn()} />)
+    const app = document.querySelector('[data-service="app"]') as HTMLElement
+    const bars = within(app).getAllByRole('progressbar')
+    expect(bars).toHaveLength(4)
+    const memory = app.querySelector('[data-usage-metric="memory"]') as HTMLElement
+    expect(memory.querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('50')
+    expect(memory.textContent).toContain('512 MiB de 1 GiB (limite)')
+    const cpu = app.querySelector('[data-usage-metric="cpu"]') as HTMLElement
+    expect(cpu.textContent).toContain('0,5 de 2 CPUs (limite)')
+    const disk = app.querySelector('[data-usage-metric="disk"]') as HTMLElement
+    expect(disk.textContent).toContain('1 GiB de 100 GiB (servidor)')
+  })
+
+  it('"Sem swap", "lendo…" e container parado como texto; sem a capacidade da máquina, "não lido"', () => {
+    const reading = service({ usage: { cpuPercent: 1, memoryBytes: GIB, swapBytes: null, diskBytes: null, volumes: [], diskCheckedAt: null } })
+    const stopped = service({ service: 'worker', container: 'loja-worker-1', state: 'exited', status: 'Exited (0)', listen: [] })
+    render(<EnvironmentCard env={env({ services: [reading, stopped] })} pcAvailable linkHost="h" capacity={{ ...HOST, swapGb: 0 }} onIntent={vi.fn()} />)
+    const app = document.querySelector('[data-service="app"]') as HTMLElement
+    expect(app.querySelector('[data-usage-metric="swap"]')!.textContent).toContain('Sem swap')
+    expect(app.querySelector('[data-usage-metric="disk"]')!.textContent).toContain('lendo…')
+    const worker = document.querySelector('[data-service="worker"]') as HTMLElement
+    expect(worker.querySelector('[data-usage-metric="cpu"]')!.textContent).toContain('parado')
+    expect(worker.querySelector('[data-usage-metric="disk"] [role="progressbar"]')).toBeTruthy()
+    cleanup()
+    render(<EnvironmentCard env={env()} pcAvailable linkHost="h" onIntent={vi.fn()} />)
+    expect(document.querySelector('[data-service="app"] [data-usage-metric="memory"]')!.textContent).toContain('não lido')
+  })
+
+  it('faixa "Uso do ambiente": a soma dos containers; some sem containers', () => {
+    render(<EnvironmentCard env={env()} pcAvailable linkHost="h" capacity={HOST} onIntent={vi.fn()} />)
+    const summary = screen.getByTestId('environment-usage-summary')
+    expect(within(summary).getAllByRole('progressbar')).toHaveLength(4)
+    expect(summary.querySelector('[data-usage-metric="memory"]')!.textContent).toContain('240 MiB de 8 GiB (servidor)')
+    expect(summary.querySelector('[data-usage-metric="disk"]')!.textContent).toContain('4 GiB de 100 GiB (servidor)')
+    cleanup()
+    render(<EnvironmentCard env={env({ services: [], deployedOn: null })} pcAvailable linkHost="h" capacity={HOST} onIntent={vi.fn()} />)
+    expect(screen.queryByTestId('environment-usage-summary')).toBeNull()
   })
 })
 

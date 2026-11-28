@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it, vi } from 'vitest'
 import { bootstrapDeployedFilesCommand, dropDeployedFilesCommand, promoteDeployedFilesCommand, restoreDeployedFilesCommand, stageDeployedFilesCommand } from '@/features/environments/commands'
-import { centralCheckoutCommand, cleanTreeCommand, composeCommand, ensureEnvFilesCommand, envFilesConfigCommand, parseCreatedEnvFiles, parseEnvFiles, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, parseSnapshotHost, registryImage, snapshotCommand, centralComposeConfigCommand, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
+import { centralCheckoutCommand, cleanTreeCommand, composeCommand, ensureEnvFilesCommand, envFilesConfigCommand, parseCreatedEnvFiles, parseEnvFiles, containerVersionsCommand, downCommand, ensureRegistryCommand, envFileContent, envFileFromProject, packageVersionCommand, parseCommit, parseContainerVersions, parseGitDirs, parsePackageVersion, parseSnapshot, parseSnapshotHost, parseDiskUsage, diskUsageCommand, registryImage, snapshotCommand, centralComposeConfigCommand, writeFileCommand, type ComposePlan, type DockerTarget } from '@/features/environments/commands'
 import { composeBytes, limitLines, overrideYaml, parseComposeConfig, runOnPcProblem, selectServices } from '@/features/environments/compose-config'
 import { deploySteps, executionSteps, moveOrder } from '@/features/environments/pipeline'
 import { DEFAULT_ENVIRONMENT_LIMITS, DEFAULT_ENVIRONMENTS_SETTINGS, environmentInputSchema, environmentLimitsSchema, placementProblem, type Machine } from '@/features/environments/schemas'
@@ -126,8 +126,8 @@ describe('descoberta e adoção', () => {
     expect(containers[0]).toMatchObject({ project: 'loja', cpu: '1.50%', memory: '120MiB / 8GiB', configFiles: ['/home/u/loja/docker-compose.yml'] })
     const git = parseGitDirs('yes\t/home/u/loja\n')
     expect(groupUnmanaged('server', containers, new Set(['app-go-1']), git)).toEqual([
-      { machine: 'server', projectName: 'loja', workingDir: '/home/u/loja', configFiles: ['/home/u/loja/docker-compose.yml'], git: true, containers: 2, running: 1 },
-      { machine: 'server', projectName: 'scratch', workingDir: '/tmp/scratch', configFiles: ['/tmp/scratch/compose.yml'], git: false, containers: 1, running: 1 },
+      { machine: 'server', projectName: 'loja', workingDir: '/home/u/loja', configFiles: ['/home/u/loja/docker-compose.yml'], git: true, containers: 2, running: 1, services: ['app', 'db'], ports: [3000, 4100] },
+      { machine: 'server', projectName: 'scratch', workingDir: '/tmp/scratch', configFiles: ['/tmp/scratch/compose.yml'], git: false, containers: 1, running: 1, services: ['web'], ports: [] },
     ])
   })
 
@@ -402,7 +402,7 @@ describe('limites de recursos (OPE-193)', () => {
     const [app, db] = parseSnapshot(output)
     expect(app!.limits).toEqual({ memoryGb: 4, swapGb: 2, cpus: 2 })
     expect(db!.limits).toEqual(NO_LIMITS)
-    expect(parseSnapshotHost(output)).toEqual({ cpus: 8, memoryGb: 16 })
+    expect(parseSnapshotHost(output)).toEqual({ cpus: 8, memoryGb: 16, swapGb: null, disk: null })
     expect(parseSnapshotHost('a\n---\nb')).toBeNull()
     const command = snapshotCommand('pc', 'opex-local')
     expect(command).toContain("docker --context opex-local ps -aq --filter label=com.docker.compose.project | xargs -r docker --context opex-local inspect -f '{{.Name}}")
@@ -425,6 +425,55 @@ describe('limites de recursos (OPE-193)', () => {
     expect(db!.listen).toEqual([{ container: 5432, protocol: 'tcp', published: null, hostIp: null }])
     expect(snapshotCommand('server', 'x')).toContain('{{json .Config.ExposedPorts}}')
     expect(snapshotCommand('server', 'x')).toContain('{{json .HostConfig.PortBindings}}')
+  })
+
+  it('snapshot (OPE-211): swap de cada container (cgroup), swap total e disco da máquina; ilegível vira null', () => {
+    const output = [
+      ['loja', 'app', 'loja-app-1', 'running', 'Up', '', '/home/u/loja', '/home/u/loja/docker-compose.yml', 'abc123'].join('\t'),
+      ['loja', 'db', 'loja-db-1', 'running', 'Up', '', '/home/u/loja', '/home/u/loja/docker-compose.yml', 'def456'].join('\t'),
+      '---',
+      ['loja-app-1', '1.00%', '100MiB / 4GiB'].join('\t'),
+      '---',
+      ['/loja-app-1', String(4 * 1024 ** 3), String(6 * 1024 ** 3), '2000000000', '0', '0', '{}', '{}'].join('\t'),
+      '---',
+      `8|${16 * 1024 ** 3}`,
+      '---',
+      ['loja-app-1', String(5 * 1024 ** 2)].join('\t'),
+      'loja-db-1\tilegivel',
+      '---',
+      `${4 * 1024 ** 3}|${500 * 1024 ** 3}|${100 * 1024 ** 3}`,
+    ].join('\n')
+    const [app, db] = parseSnapshot(output)
+    expect(app!.swapBytes).toBe(5 * 1024 ** 2)
+    expect(app!.limits).toEqual({ memoryGb: 4, swapGb: 2, cpus: 2 })
+    expect(db!.swapBytes).toBeNull()
+    expect(parseSnapshotHost(output)).toEqual({ cpus: 8, memoryGb: 16, swapGb: 4, disk: { totalBytes: 500 * 1024 ** 3, usedBytes: 100 * 1024 ** 3 } })
+    // Sem o bloco da máquina (ou sem swap/disco legíveis): só CPUs e RAM.
+    expect(parseSnapshotHost(output.split('\n---\n').slice(0, 4).join('\n---\n'))).toEqual({ cpus: 8, memoryGb: 16, swapGb: null, disk: null })
+    expect(parseSnapshotHost(output.replace(/^\d+\|\d+\|\d+$/m, '0||'))!).toMatchObject({ swapGb: 0, disk: null })
+    // As leituras da máquina rodam nela: no PC pela conexão mestra (os pids e o /proc são do PC).
+    expect(snapshotCommand('server', 'x')).toContain('/proc/$p/cgroup')
+    expect(snapshotCommand('server', 'x')).toContain('memory.swap.current')
+    expect(snapshotCommand('pc', 'ctx')).toMatch(/ssh -S .* '.*memory\.swap\.current/)
+  })
+
+  it('disco (OPE-211): camada gravável + volumes nomeados montados; bind mount não entra', () => {
+    const output = [
+      'loja-app-1\t41kB (virtual 1.47GB)',
+      'loja-db-1\t0B (virtual 400MB)',
+      '---',
+      JSON.stringify([{ Name: 'loja_dados', Size: '1.5GB' }, { Name: 'outro', Size: '9GB' }]),
+      '---',
+      `/loja-app-1\t${JSON.stringify([{ Type: 'bind', Source: '/srv' }, { Type: 'volume', Name: 'loja_dados' }])}`,
+      `/loja-db-1\t${JSON.stringify([{ Type: 'volume', Name: 'loja_dados' }])}`,
+    ].join('\n')
+    const disk = parseDiskUsage(output)
+    expect(disk.get('loja-app-1')).toEqual({ bytes: 41_000 + 1_500_000_000, volumes: [{ name: 'loja_dados', bytes: 1_500_000_000 }] })
+    expect(disk.get('loja-db-1')!.bytes).toBe(1_500_000_000)
+    // Sem o tamanho dos volumes (saída inválida): só a camada.
+    expect(parseDiskUsage(output.replace(/^\[.*\]$/m, 'xpto')).get('loja-app-1')!.bytes).toBe(41_000)
+    expect(diskUsageCommand('pc', 'ctx')).toContain('docker --context ctx ps -a --size')
+    expect(diskUsageCommand('server', 'x')).toContain("system df -v --format '{{json .Volumes}}'")
   })
 
   it('schema: swap sem RAM, serviços repetidos e os dois modos', () => {

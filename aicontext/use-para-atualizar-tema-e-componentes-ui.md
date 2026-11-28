@@ -406,6 +406,10 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - Listas de **nome e valor** (variáveis, environment, labels) usam `KeyValueRows` (`src/components/ui/key-value-rows.tsx`,
   controlado, com entrada/saída animadas e `KEY_VALUE_ROW` para o skeleton). Linhas de lista sem id próprio que animam
   entrada e saída usam `useRowIds(length)` do mesmo arquivo (chaves estáveis; `removeAt` antes de tirar a linha).
+- **Linhas de consumo** (CPU, RAM, swap, disco e afins) usam `UsageBars` (`src/components/metrics/UsageBars.tsx`,
+  OPE-211) sobre a `UsageBar`: lista de `{ key, label, percent, detail, ariaLabel }` ou `{ key, label, emptyText }` (linha
+  só com texto, ex.: "Sem swap", "lendo…"). Usada pelo painel "Servidor e quota" (`HostMetricsRows`) e pelos cards de
+  Ambientes; não monte as barras à mão.
 - **Copiar um valor** (link, token, comando) usa `CopyButton` (`src/components/ui/copy-button.tsx`, OPE-211): botão de
   ícone com `label` (rótulo acessível e `title`), `navigator.clipboard`, toast `successMessage` e o ícone de copiado
   animado que volta em 1,5 s (`resetMs={null}` mantém). O `SecretReveal` usa o mesmo botão; não escreva outro copiar.

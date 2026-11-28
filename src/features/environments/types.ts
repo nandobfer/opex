@@ -1,5 +1,6 @@
 import type { ContainerPortDto } from "./container-ports"
 import type { ResourceLimits } from "./resource-limits"
+import type { ContainerUsageDto } from "./resource-usage"
 import type { BuilderAction, ComposeOverrides, EnvironmentLimits, ServiceValues, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 export type DeployStatus = "running" | "success" | "failed"
@@ -19,6 +20,8 @@ export interface ServiceStatusDto {
     version: string | null
     /** Limites aplicados no container (`docker inspect`; `null` = não lidos). */
     limits: ResourceLimitsDto | null
+    /** Uso em números (OPE-211): CPU, RAM e swap do snapshot; disco da leitura a cada 5 min. Só no dono. */
+    usage: ContainerUsageDto
 }
 
 export interface EnvironmentDeploySummaryDto {
@@ -113,6 +116,9 @@ export interface UnmanagedProjectDto {
     git: boolean
     containers: number
     running: number
+    /** Serviços e portas (internas e publicadas) dos containers, para a busca da lista (OPE-211). */
+    services: string[]
+    ports: number[]
 }
 
 export interface EnvironmentsListDto {
@@ -144,6 +150,10 @@ export interface ComposeServicesDto {
 export interface HostCapacityDto {
     cpus: number
     memoryGb: number
+    /** Swap total da máquina (`0` = sem swap; `null`/ausente = não lido). */
+    swapGb?: number | null
+    /** Disco onde o Docker guarda os dados (`null`/ausente = não lido). */
+    disk?: { totalBytes: number; usedBytes: number } | null
 }
 
 export interface EnvironmentDeployDto extends EnvironmentDeploySummaryDto {

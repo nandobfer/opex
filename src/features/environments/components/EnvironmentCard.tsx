@@ -11,12 +11,13 @@ import { Button } from "@/components/ui/button"
 import { ItemNameLink } from "@/components/list/ItemNameLink"
 import { deployPath, environmentEditPath } from "../constants"
 import { useEnvironmentAction } from "../hooks/useEnvironments"
-import type { EnvironmentDto } from "../types"
+import type { EnvironmentDto, HostCapacityDto } from "../types"
 import { healthOf, pendingDeployItems, placementLabel, runningText, versionLabel } from "../view"
 import { ContainerList } from "./card/ContainerList"
 import { EnvironmentActionsMenu, type EnvironmentMenuAction } from "./card/EnvironmentActionsMenu"
 import { EnvironmentCardFrame } from "./card/EnvironmentCardFrame"
 import { EnvironmentStateDot } from "./card/EnvironmentStateDot"
+import { EnvironmentUsageSummary } from "./card/EnvironmentUsageSummary"
 import { PendingDeployNotice } from "./card/PendingDeployNotice"
 import { DeployMenu } from "./DeployMenu"
 import { EnvironmentVersionBadge } from "./EnvironmentStatus"
@@ -50,7 +51,7 @@ function LastDeploy({ env }: { env: EnvironmentDto }) {
 }
 
 /** Card de um ambiente na lista do dono: estado, containers com as portas, último deploy e as ações (OPE-211). */
-export function EnvironmentCard({ env, pcAvailable, linkHost, onIntent }: { env: EnvironmentDto; pcAvailable: boolean; linkHost: string; onIntent: (intent: CardIntent) => void }) {
+export function EnvironmentCard({ env, pcAvailable, linkHost, capacity = null, onIntent }: { env: EnvironmentDto; pcAvailable: boolean; linkHost: string; capacity?: HostCapacityDto | null; onIntent: (intent: CardIntent) => void }) {
     const router = useRouter()
     const action = useEnvironmentAction(env.id)
     const [logs, setLogs] = useState<string | null>(null)
@@ -115,7 +116,12 @@ export function EnvironmentCard({ env, pcAvailable, linkHost, onIntent }: { env:
                     </>
                 }
                 notice={pending.length ? <PendingDeployNotice items={pending} disabled={busy || Boolean(blocked)} reason={blocked} onDeploy={() => run({ action: "deploy", ref: "" })} /> : null}
-                containers={<ContainerList items={env.services} host={linkHost} variant="owner" emptyText={env.deployedOn ? "Nenhum container encontrado: faça Levantar ou um novo deploy." : "Nunca implantado: faça o deploy para subir os containers."} />}
+                containers={
+                    <>
+                        <EnvironmentUsageSummary services={env.services} context={{ machine: runOn, capacity }} />
+                        <ContainerList items={env.services} host={linkHost} variant="owner" usage={{ machine: runOn, capacity }} emptyText={env.deployedOn ? "Nenhum container encontrado: faça Levantar ou um novo deploy." : "Nunca implantado: faça o deploy para subir os containers."} />
+                    </>
+                }
                 footer={
                     <>
                         <LastDeploy env={env} />

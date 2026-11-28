@@ -11,6 +11,8 @@ import { withReach } from "../container-ports"
 import { composeBytes, composeContentProblem } from "../managed-compose"
 import { type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
 import { environmentLimitsOf, environmentLimitsText } from "../resource-limits"
+import { memoryUsedBytes, parsePercent, type ContainerUsageDto } from "../resource-usage"
+import { diskUsageFor } from "./disk-usage"
 import { composeOverridesText } from "../service-overrides"
 import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, HostCapacityDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
@@ -72,7 +74,23 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
     }
 }
 
-const toService = (item: ComposeContainer, reach: { runOn: Machine; forwarded: readonly number[] }): ServiceStatusDto => ({ service: item.service, container: item.name, state: item.state, status: item.status, ports: item.ports, listen: withReach(item.listen ?? [], reach), cpu: item.cpu, memory: item.memory, version: versionCache().get(item.id) ?? null, limits: item.limits })
+type DiskRead = ReturnType<typeof diskUsageFor>
+
+/** Uso em números do container (OPE-211): CPU e RAM do `docker stats`, swap do cgroup e o disco da última leitura. */
+export function usageOf(item: ComposeContainer, disk: DiskRead): ContainerUsageDto {
+    const running = item.state === "running"
+    const read = disk?.values.get(item.name) ?? null
+    return {
+        cpuPercent: running ? parsePercent(item.cpu) : null,
+        memoryBytes: running ? memoryUsedBytes(item.memory) : null,
+        swapBytes: running ? (item.swapBytes ?? null) : null,
+        diskBytes: read?.bytes ?? null,
+        volumes: read?.volumes ?? [],
+        diskCheckedAt: disk?.checkedAt ?? null,
+    }
+}
+
+const toService = (item: ComposeContainer, reach: { runOn: Machine; forwarded: readonly number[] }, disk: DiskRead): ServiceStatusDto => ({ service: item.service, container: item.name, state: item.state, status: item.status, ports: item.ports, listen: withReach(item.listen ?? [], reach), cpu: item.cpu, memory: item.memory, version: versionCache().get(item.id) ?? null, limits: item.limits, usage: usageOf(item, disk) })
 
 /** Versão do `package.json` por id de container (por processo): o id muda quando o compose recria o container. */
 const VERSIONS_KEY = Symbol.for("opex.environments.container-versions")
@@ -123,6 +141,8 @@ export function groupUnmanaged(machine: Machine, containers: ComposeContainer[],
                 git: Boolean(first.workingDir && gitDirs.has(first.workingDir)),
                 containers: items.length,
                 running: items.filter((item) => item.state === "running").length,
+                services: [...new Set(items.map((item) => item.service).filter(Boolean))].sort(),
+                ports: [...new Set(items.flatMap((item) => (item.listen ?? []).flatMap((port) => (port.published ? [port.container, port.published] : [port.container]))))].sort((a, b) => a - b),
             }
         })
         .sort((a, b) => a.projectName.localeCompare(b.projectName))
@@ -169,9 +189,14 @@ async function itemsOf(envs: IEnvironment[], byMachine: Record<Machine, ComposeC
     )
     // Deploy cujo processo morreu (ex.: o redeploy do próprio app): retomado em segundo plano.
     void import("./resume").then(({ scheduleDeployResume }) => scheduleDeployResume(run)).catch((error: unknown) => envLog.warn({ err: error }, "[environments] Falha ao retomar deploys interrompidos"))
+    // Disco dos containers: a última leitura (no máximo a cada 5 min, em segundo plano; nunca espera aqui).
+    const disk: Record<Machine, DiskRead> = {
+        server: byMachine.server.some((item) => projects.has(item.project)) ? diskUsageFor("server", access.targets.server.context, run) : null,
+        pc: byMachine.pc.some((item) => projects.has(item.project)) ? diskUsageFor("pc", access.targets.pc.context, run) : null,
+    }
     const items = envs.map((env) => {
         const on = env.deployedOn?.runOn ?? env.runOn
-        const services = byMachine[on].filter((item) => item.project === composeProjectOf(env)).map((item) => toService(item, { runOn: on, forwarded: env.ports }))
+        const services = byMachine[on].filter((item) => item.project === composeProjectOf(env)).map((item) => toService(item, { runOn: on, forwarded: env.ports }, disk[on]))
         return toEnvironmentDto(env, (env.lastDeployId && deploys.get(env.lastDeployId)) || null, services)
     })
     return { items, byMachine }

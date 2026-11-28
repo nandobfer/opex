@@ -3,6 +3,7 @@ import { cancelForwardCommand, cancelReverseForwardCommand, forwardPortCommand, 
 import { COMPOSE_LABELS, DEPLOYED_STORE, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
 import { parseContainerPorts, type ContainerPort } from "./container-ports"
 import { appliedLimits, round2, type ResourceLimits } from "./resource-limits"
+import { parseDockerBytes } from "./resource-usage"
 import type { EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
 /**
@@ -414,8 +415,24 @@ const docker = (machine: Machine, context: string) => (machine === "pc" ? `docke
 const LIMITS_FORMAT = ["{{.Name}}", "{{.HostConfig.Memory}}", "{{.HostConfig.MemorySwap}}", "{{.HostConfig.NanoCpus}}", "{{.HostConfig.CpuPeriod}}", "{{.HostConfig.CpuQuota}}", "{{json .Config.ExposedPorts}}", "{{json .HostConfig.PortBindings}}"].join(SEP)
 
 /**
- * Containers de projetos do compose, o uso de CPU/RAM, os limites aplicados (`docker inspect`) e a
- * capacidade da máquina (`docker info`), em blocos separados por uma linha `---`.
+ * Leituras na própria máquina dos containers (OPE-211): o swap de cada container no ar pelo cgroup v2 do
+ * processo (`/proc/<pid>/cgroup` → `memory.swap.current`, sem `docker exec`; vale no rootless) e, depois de
+ * `---`, o swap total da máquina e o disco onde o Docker guarda os dados (`total|usado`). No PC vai pela
+ * conexão mestra do túnel (os pids e o `/proc` são do PC).
+ */
+const HOST_READS = [
+    `docker ps -q --filter label=${COMPOSE_LABELS.project} | xargs -r docker inspect -f '{{.Name}} {{.State.Pid}}' 2>/dev/null | while read -r n p; do [ "$p" -gt 0 ] 2>/dev/null || continue; c=$(sed -n 's/^0:://p' /proc/$p/cgroup 2>/dev/null); f=/sys/fs/cgroup$c/memory.swap.current; [ -n "$c" ] && [ -r "$f" ] && printf '%s\\t%s\\n' "\${n#/}" "$(cat "$f")"; done`,
+    "echo ---",
+    `printf '%s|%s\\n' "$(awk '/^SwapTotal:/{print $2*1024}' /proc/meminfo 2>/dev/null)" "$(df -B1 --output=size,used "$(docker info -f '{{.DockerRootDir}}' 2>/dev/null)" 2>/dev/null | tail -n 1 | awk '{print $1"|"$2}')"`,
+    "true",
+].join("; ")
+
+const hostReads = (machine: Machine) => (machine === "pc" ? muxCommand(HOST_READS) : HOST_READS)
+
+/**
+ * Containers de projetos do compose, o uso de CPU/RAM, os limites aplicados (`docker inspect`), a
+ * capacidade da máquina (`docker info`) e as leituras da máquina (`HOST_READS`: swap por container,
+ * swap total e disco), em blocos separados por uma linha `---`.
  */
 export function snapshotCommand(machine: Machine, context: string): string {
     const cli = docker(machine, context)
@@ -427,6 +444,8 @@ export function snapshotCommand(machine: Machine, context: string): string {
         `${cli} ps -aq --filter label=${COMPOSE_LABELS.project} | xargs -r ${cli} inspect -f ${quote(LIMITS_FORMAT)} 2>/dev/null`,
         "echo ---",
         `${cli} info --format ${quote("{{.NCPU}}|{{.MemTotal}}")} 2>/dev/null`,
+        "echo ---",
+        `{ ${hostReads(machine)}; } 2>/dev/null`,
         "true",
     ].join("; ")
 }
@@ -448,6 +467,8 @@ export interface ComposeContainer {
     memory: string | null
     /** Limites aplicados (`null` = não lidos). */
     limits: ResourceLimits | null
+    /** Swap em uso pelo container (cgroup v2; `null` = parado ou não lido). */
+    swapBytes: number | null
 }
 
 const integer = (value: string | undefined) => {
@@ -456,7 +477,12 @@ const integer = (value: string | undefined) => {
 }
 
 export function parseSnapshot(output: string): ComposeContainer[] {
-    const [ps = "", stats = "", inspect = ""] = output.split(/^---$/m)
+    const [ps = "", stats = "", inspect = "", , swapBlock = ""] = output.split(/^---$/m)
+    const swap = new Map<string, number>()
+    for (const line of swapBlock.split("\n")) {
+        const [name, bytes] = line.trim().split(SEP)
+        if (name && bytes !== undefined && /^\d+$/.test(bytes.trim())) swap.set(name, Number(bytes))
+    }
     const usage = new Map<string, { cpu: string; memory: string }>()
     for (const line of stats.split("\n")) {
         const [name, cpu, memory] = line.trim().split(SEP)
@@ -479,15 +505,93 @@ export function parseSnapshot(output: string): ComposeContainer[] {
             const [project = "", service = "", name = "", state = "", status = "", ports = "", workingDir = "", configFiles = "", id = ""] = line.split(SEP)
             const stat = usage.get(name)
             const inspected = declared.get(name)
-            return { id: id.trim(), project, service, name, state, status, ports, listen: parseContainerPorts(ports, inspected?.exposed, inspected?.bindings), workingDir, configFiles: configFiles ? configFiles.split(",").filter(Boolean) : [], cpu: stat?.cpu ?? null, memory: stat?.memory ?? null, limits: limits.get(name) ?? null }
+            return { id: id.trim(), project, service, name, state, status, ports, listen: parseContainerPorts(ports, inspected?.exposed, inspected?.bindings), workingDir, configFiles: configFiles ? configFiles.split(",").filter(Boolean) : [], cpu: stat?.cpu ?? null, memory: stat?.memory ?? null, limits: limits.get(name) ?? null, swapBytes: swap.get(name) ?? null }
         })
         .filter((item) => item.project)
 }
 
-/** CPUs e memória da máquina (último bloco do snapshot; `null` = não lidos). */
-export function parseSnapshotHost(output: string): { cpus: number; memoryGb: number } | null {
-    const block = output.split(/^---$/m)[3] ?? ""
-    const line = block.split("\n").find((item) => item.includes("|"))
+export interface SnapshotHost {
+    cpus: number
+    memoryGb: number
+    /** Swap total da máquina (`0` = sem swap; `null` = não lido). */
+    swapGb: number | null
+    /** Disco onde o Docker guarda os dados (`null` = não lido). */
+    disk: { totalBytes: number; usedBytes: number } | null
+}
+
+/** Capacidade da máquina: CPUs e memória (`docker info`), swap total e disco (último bloco); `null` = não lidos. */
+export function parseSnapshotHost(output: string): SnapshotHost | null {
+    const blocks = output.split(/^---$/m)
+    const line = (blocks[3] ?? "").split("\n").find((item) => item.includes("|"))
     const [ncpu, total] = line?.trim().split("|") ?? []
-    return integer(ncpu) > 0 ? { cpus: integer(ncpu), memoryGb: round2(integer(total) / 1024 ** 3) } : null
+    if (!(integer(ncpu) > 0)) return null
+    const reads = (blocks[5] ?? "").split("\n").find((item) => item.includes("|"))
+    const [swapTotal = "", diskTotal = "", diskUsed = ""] = reads?.trim().split("|") ?? []
+    const number = (text: string) => (/^\d+$/.test(text.trim()) ? Number(text) : null)
+    const swapBytes = number(swapTotal)
+    const totalBytes = number(diskTotal)
+    const usedBytes = number(diskUsed)
+    return {
+        cpus: integer(ncpu),
+        memoryGb: round2(integer(total) / 1024 ** 3),
+        swapGb: swapBytes === null ? null : round2(swapBytes / 1024 ** 3),
+        disk: totalBytes && usedBytes !== null ? { totalBytes, usedBytes } : null,
+    }
+}
+
+/**
+ * Disco dos containers (OPE-211, lento: lido no máximo a cada 5 min, fora da lista): a camada gravável
+ * (`ps --size`), o tamanho dos volumes (`system df -v`) e os volumes nomeados que cada container monta.
+ */
+export function diskUsageCommand(machine: Machine, context: string): string {
+    const cli = docker(machine, context)
+    return [
+        `${cli} ps -a --size --filter label=${COMPOSE_LABELS.project} --format ${quote(`{{.Names}}${SEP}{{.Size}}`)} 2>/dev/null`,
+        "echo ---",
+        `${cli} system df -v --format ${quote("{{json .Volumes}}")} 2>/dev/null`,
+        "echo ---",
+        `${cli} ps -aq --filter label=${COMPOSE_LABELS.project} | xargs -r ${cli} inspect -f ${quote(`{{.Name}}${SEP}{{json .Mounts}}`)} 2>/dev/null`,
+        "true",
+    ].join("; ")
+}
+
+export interface ContainerDisk {
+    /** Camada gravável + volumes nomeados montados. */
+    bytes: number
+    volumes: { name: string; bytes: number }[]
+}
+
+const dockerBytes = parseDockerBytes
+
+/** Disco por nome de container (bind mount não entra: não é do Docker). */
+export function parseDiskUsage(output: string): Map<string, ContainerDisk> {
+    const [sizes = "", df = "", mounts = ""] = output.split(/^---$/m)
+    const volumeSizes = new Map<string, number>()
+    try {
+        const parsed: unknown = JSON.parse(df.trim() || "[]")
+        if (Array.isArray(parsed)) for (const item of parsed as { Name?: unknown; Size?: unknown }[]) if (typeof item.Name === "string") volumeSizes.set(item.Name, dockerBytes(String(item.Size ?? "")) ?? 0)
+    } catch {
+        // Sem o tamanho dos volumes: conta só a camada gravável.
+    }
+    const volumesOf = new Map<string, { name: string; bytes: number }[]>()
+    for (const line of mounts.split("\n")) {
+        const [name = "", json = ""] = line.trim().split(SEP)
+        if (!name || !json) continue
+        try {
+            const list: unknown = JSON.parse(json)
+            const named = Array.isArray(list) ? (list as { Type?: unknown; Name?: unknown }[]).filter((item) => item.Type === "volume" && typeof item.Name === "string").map((item) => String(item.Name)) : []
+            volumesOf.set(name.replace(/^\//, ""), [...new Set(named)].map((volume) => ({ name: volume, bytes: volumeSizes.get(volume) ?? 0 })))
+        } catch {
+            continue
+        }
+    }
+    const result = new Map<string, ContainerDisk>()
+    for (const line of sizes.split("\n")) {
+        const [name = "", size = ""] = line.trim().split(SEP)
+        const layer = dockerBytes(size.split("(")[0])
+        if (!name || layer === null) continue
+        const volumes = volumesOf.get(name) ?? []
+        result.set(name, { bytes: layer + volumes.reduce((total, item) => total + item.bytes, 0), volumes })
+    }
+    return result
 }
