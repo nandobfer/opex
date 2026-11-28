@@ -33,6 +33,17 @@ export function RoutineAgentPageSkeleton() {
                     <Skeleton className="h-7 w-1/3" />
                     <Skeleton className="h-4 w-2/3" />
                 </div>
+                {/* Ações da linha do título: Configurar, Pausar/Retomar (OPE-213), Conversar e Executar agora. */}
+                <div className="hidden shrink-0 gap-2 sm:flex" data-testid="routine-page-actions-skeleton">
+                    {[0, 1, 2, 3].map((index) => (
+                        <Skeleton key={index} className="h-9 w-24" />
+                    ))}
+                </div>
+            </div>
+            {/* Gatilhos e próxima execução (OPE-213). */}
+            <div className="flex gap-1.5" data-testid="routine-schedule-skeleton">
+                <Skeleton className="h-5 w-28 rounded-full" />
+                <Skeleton className="h-5 w-56 rounded-full" />
             </div>
             <Skeleton className="h-10 w-full" />
             <div className={ROUTINE_OVERVIEW_GRID}>
