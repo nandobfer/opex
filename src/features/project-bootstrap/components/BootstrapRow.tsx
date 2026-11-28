@@ -21,7 +21,8 @@ export function BootstrapRow({ bootstrap }: { bootstrap: ProjectBootstrapSummary
                 <p className="truncate text-xs text-muted-foreground">
                     {PROJECT_BOOTSTRAP_STEP_LABELS[bootstrap.step]}
                     {phase ? ` · ${phase}` : ""}
-                    {bootstrap.attempt > 1 ? ` · tentativa ${bootstrap.attempt}` : ""} · {formatDistanceToNow(new Date(bootstrap.updatedAt), { addSuffix: true, locale: ptBR })}
+                    {bootstrap.attempt > 1 ? ` · tentativa ${bootstrap.attempt}` : ""}
+                    {bootstrap.withEnvironment ? "" : " · sem ambiente"} · {formatDistanceToNow(new Date(bootstrap.updatedAt), { addSuffix: true, locale: ptBR })}
                 </p>
             </div>
             <BootstrapStatusBadge status={bootstrap.status} />

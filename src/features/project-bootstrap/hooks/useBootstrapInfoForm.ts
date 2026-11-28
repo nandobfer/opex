@@ -23,7 +23,7 @@ export function useBootstrapInfoForm(initialRepo: string) {
     const form = useForm<ProjectBootstrapStartInput, unknown, ProjectBootstrapStartValues>({
         resolver: zodResolver(projectBootstrapStartSchema),
         mode: "onChange",
-        defaultValues: { owner: parsed.owner ?? "", name: parsed.name, visibility: "private", context: "", directory: "", entryColumnKey: "", closedColumnKey: null },
+        defaultValues: { owner: parsed.owner ?? "", name: parsed.name, visibility: "private", context: "", directory: "", entryColumnKey: "", closedColumnKey: null, withEnvironment: true },
     })
     const prefill = useBootstrapPrefill()
     const owners = useRepoOwners()

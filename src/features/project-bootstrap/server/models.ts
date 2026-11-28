@@ -40,7 +40,9 @@ export interface IProjectBootstrap {
     heartbeatAt: Date | null
     /** Início do estado atual (o batimento conta a partir do mais recente dos dois). */
     stateAt: Date | null
-    result: { port: number; healthPath: string; hasServer: boolean; usesMongo: boolean; branch: string } | null
+    result: { port?: number | null; healthPath?: string | null; hasServer: boolean; usesMongo: boolean; branch: string } | null
+    /** Cria ambiente e container Docker (etapa 4). Registros antigos, sem o campo, valem como `true`. */
+    withEnvironment?: boolean
     created: { repoUrl: string | null; projectId: string | null; centralId: string | null; environmentId: string | null; deployId: string | null; port: number | null }
     /** A configuração do bootstrap (branch, backup, saúde) já foi aplicada na central. */
     centralConfiguredAt: Date | null
@@ -69,6 +71,7 @@ const ProjectBootstrapSchema = new Schema<IProjectBootstrap>(
         technologies: { type: [new Schema({ name: { type: String, required: true }, group: { type: String, required: true } }, { _id: false })], default: [] },
         entryColumnKey: { type: String, required: true },
         closedColumnKey: { type: String, default: null },
+        withEnvironment: { type: Boolean, default: true },
         step: { type: String, required: true, default: "provision" },
         status: { type: String, required: true, default: "running", index: true },
         phase: { type: String, default: null },

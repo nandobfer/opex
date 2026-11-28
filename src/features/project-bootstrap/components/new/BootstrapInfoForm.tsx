@@ -5,6 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { Info, Loader2, Rocket } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { FormToggleCard } from "@/components/ui/toggle-card"
 import { projectBootstrapPath } from "../../constants"
 import { useBootstrapInfoForm } from "../../hooks/useBootstrapInfoForm"
 import { useStartProjectBootstrap } from "../../hooks/useProjectBootstrap"
@@ -50,6 +51,24 @@ export function BootstrapInfoForm({ initialRepo }: { initialRepo: string }) {
                 </CardHeader>
                 <CardContent>
                     <ContextField form={form} groups={state.detected} />
+                </CardContent>
+            </Card>
+            <Card>
+                <CardHeader>
+                    <CardTitle className="text-base">Ambiente e deploy</CardTitle>
+                    <CardDescription>Se o projeto roda em container no Opex (etapa 4). Dá para mudar depois, enquanto o agente provisiona.</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <FormToggleCard
+                        bare
+                        control={form.control}
+                        name="withEnvironment"
+                        id="bootstrap-with-environment"
+                        label="Criar ambiente e container Docker"
+                        description="Desligue para projetos que não rodam em container (bibliotecas, plugins, CLIs): o bootstrap cria o repositório, o vínculo e a central e pula Ambiente e deploy."
+                        onLabel="Com ambiente"
+                        offLabel="Sem ambiente"
+                    />
                 </CardContent>
             </Card>
             <Card>

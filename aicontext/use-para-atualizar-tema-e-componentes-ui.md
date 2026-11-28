@@ -175,6 +175,9 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
 - Assistentes em etapas usam o `WizardStepper` de `src/components/wizard/`: etapas
   `{ id, label, icon }`, `maxReachable`, `pending` (campos pendentes por etapa, calculados com o
   schema Zod) e trilha animada. Troca de etapa com `AnimatePresence mode="wait"` (`tabSwap`).
+  Com `statuses` (progresso ao vivo, hoje só o bootstrap de projeto), cada etapa mostra o próprio estado (inclusive
+  `skipped`, tracejado e "não se aplica") e a trilha fica verde até a última etapa concluída ou pulada
+  (`resolvedTrackIndex` em `track.ts`) e roxa até a atual; sem `statuses`, uma barra roxa só.
 
 ## Qual padrão usar para cada tipo de conteúdo
 

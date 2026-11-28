@@ -9,14 +9,14 @@ import { DEFAULT_PROVIDER_LIMIT_POLICY, type OpencodeFormDto, type OpencodePermi
 import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { abortWorkbenchRun, clearWorkbenchActive, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
 import { skillPermissionRules } from "@/features/opencode-resources/skill-permissions"
-import { BOOTSTRAP_DEPLOY_POLL_MS, BOOTSTRAP_HEARTBEAT_MS, PROJECT_BOOTSTRAP_AUDIT_ENTITY, PROJECT_BOOTSTRAP_CONSUMPTION_ORIGIN, PROJECT_BOOTSTRAP_INSTRUCTIONS_KEY, PROJECT_BOOTSTRAP_STAGE_LABEL } from "../constants"
+import { BOOTSTRAP_DEPLOY_POLL_MS, BOOTSTRAP_HEARTBEAT_MS, DEFAULT_PROJECT_BOOTSTRAP_ENVIRONMENT_SKILLS, PROJECT_BOOTSTRAP_AUDIT_ENTITY, PROJECT_BOOTSTRAP_CONSUMPTION_ORIGIN, PROJECT_BOOTSTRAP_INSTRUCTIONS_KEY, PROJECT_BOOTSTRAP_STAGE_LABEL } from "../constants"
 import { bootstrapCentralConfig, bootstrapEnvironmentInput, freeEnvironmentSlug, withEnvironmentSlug } from "../environment-input"
 import { describeMissing } from "../host-checks"
 import { isBootstrapStale } from "../liveness"
 import { buildBootstrapInstructions, buildDeployFailedPrompt } from "../prompts"
 import { parseBootstrapResult } from "../result"
 import type { BootstrapResult } from "../schemas"
-import { missingSkillsMessage, resolveSkills, skillsToActivate } from "../skills"
+import { missingSkillsMessage, resolveSkills, sessionSkills, skillsToActivate } from "../skills"
 import type { BootstrapPhase } from "../steps"
 import { ensureHostDirectory, readBootstrapEnv, verifyDeliverables } from "./host"
 import { ProjectBootstrap, type IProjectBootstrap } from "./models"
@@ -198,19 +198,22 @@ async function prepareSession(activation: Activation, doc: IProjectBootstrap, at
         return { sessionId: doc.sessionId, instructions: "" }
     }
     await ensureHostDirectory(doc.directory)
+    // Sem ambiente, as skills que só valem com ambiente (ex.: bootstrap-docker) não são exigidas, ativadas nem liberadas.
+    const withEnvironment = doc.withEnvironment !== false
+    const wanted = sessionSkills(settings.skills, settings.environmentSkills ?? DEFAULT_PROJECT_BOOTSTRAP_ENVIRONMENT_SKILLS, withEnvironment)
     let hostSkills: { id: string; name: string }[]
     try {
-        hostSkills = (await listOpencodeSkillsAt(client, doc.directory, { want: settings.skills })).skills.map((skill) => ({ id: skill.id, name: skill.name }))
+        hostSkills = (await listOpencodeSkillsAt(client, doc.directory, { want: wanted })).skills.map((skill) => ({ id: skill.id, name: skill.name }))
     } catch (error) {
         await fail(activation, `Não foi possível listar as skills do OpenCode do host para preparar a sessão: ${errorText(error)}. Confira o OpenCode e use Tentar novamente.`)
         return null
     }
-    const skills = resolveSkills(hostSkills, settings.skills)
+    const skills = resolveSkills(hostSkills, wanted)
     if (skills.missing.length) {
         await fail(activation, missingSkillsMessage(skills.missing))
         return null
     }
-    const permissions = skillPermissionRules(hostSkills, settings.skills).rules
+    const permissions = skillPermissionRules(hostSkills, wanted).rules
     let sessionId = doc.sessionId
     if (sessionId) {
         const exists = await client.session
@@ -258,6 +261,7 @@ async function prepareSession(activation: Activation, doc: IProjectBootstrap, at
         technologies: doc.technologies,
         skills: skills.found.map((skill) => skill.name),
         instructions: settings.instructions,
+        withEnvironment,
     })
     return { sessionId, instructions }
 }
@@ -328,7 +332,7 @@ async function runProvisionTurn(activation: Activation, prompt: string, attach: 
         await fail(activation, result.message ?? "O agente não concluiu o provisionamento: use Tentar novamente para continuar a conversa.")
         return null
     }
-    const parsed = parseBootstrapResult(result.text || accumulated.text)
+    const parsed = parseBootstrapResult(result.text || accumulated.text, { withEnvironment: (await loadBootstrapDoc(activation.id)).withEnvironment !== false })
     if (!parsed.ok && parsed.reason === "missing") {
         // O agente parou para perguntar algo (ou encerrou sem concluir): aguarda a resposta do dono.
         await setOwned(activation, { status: "waiting", pendingForms: [], pendingPermissions: [], notice: "O agente encerrou o turno sem o resumo final: responda abaixo ou use Tentar novamente para pedir que ele conclua." })
@@ -345,16 +349,22 @@ async function runProvisionTurn(activation: Activation, prompt: string, attach: 
 async function afterTurn(activation: Activation, result: BootstrapResult): Promise<Continuation | null> {
     const doc = await loadBootstrapDoc(activation.id)
     // A branch é a decidida na etapa 1 (a padrão do existente ou `main`), mesmo que o agente diga outra.
-    const fixed: BootstrapResult = { ...result, branch: doc.branch }
+    // Sem ambiente (inclusive desligado depois de um resumo com porta), porta e health check não se aplicam.
+    const fixed: BootstrapResult = { ...result, branch: doc.branch, ...(doc.withEnvironment === false ? { port: null, healthPath: null } : {}) }
     if (!(await setOwned(activation, { step: "provision", phase: "verify", result: fixed, pendingForms: [], pendingPermissions: [], "created.port": fixed.port }))) return null
     publishWorkbenchEvent(activation.id, { type: "notice", level: "info", message: "Conferindo as entregas no host…" })
     let missing
     try {
         // Depois de um deploy com falha, o container do ambiente deste bootstrap pode seguir na porta: conta como próprio.
-        const { Environment } = await import("@/features/environments/server/models")
-        const environment = doc.created?.environmentId ? await Environment.findById(doc.created.environmentId).select({ slug: 1, source: 1 }).lean() : null
-        const composeProject = environment ? (environment.source?.projectName ?? environment.slug) : null
-        missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port: fixed.port, project: doc.name, repo: doc.repo, composeProject })
+        if (doc.withEnvironment === false || !fixed.port) {
+            // Sem ambiente: só o git (remoto, push, árvore limpa) e o `.env` ignorado, se existir.
+            missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, repo: doc.repo, withEnvironment: false })
+        } else {
+            const { Environment } = await import("@/features/environments/server/models")
+            const environment = doc.created?.environmentId ? await Environment.findById(doc.created.environmentId).select({ slug: 1, source: 1 }).lean() : null
+            const composeProject = environment ? (environment.source?.projectName ?? environment.slug) : null
+            missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port: fixed.port, project: doc.name, repo: doc.repo, composeProject })
+        }
     } catch (error) {
         await fail(activation, `${errorText(error)}: use Tentar novamente.`)
         return null
@@ -419,6 +429,15 @@ async function runLinkStep(activation: Activation): Promise<Continuation | null>
     return runDeployStep(activation)
 }
 
+/** Conclui sem a etapa 4 (projeto sem ambiente): nada de ambiente nem deploy; a trava do repositório é liberada. */
+async function completeWithoutEnvironment(activation: Activation, doc: IProjectBootstrap): Promise<null> {
+    if (!(await setOwned(activation, { status: "done", step: "done", phase: null, error: null, activeRepo: null, finishedAt: new Date() }))) return null
+    publishWorkbenchEvent(activation.id, { type: "notice", level: "success", message: "Projeto sem ambiente: a etapa Ambiente e deploy não se aplica. Bootstrap concluído." })
+    await recordAudit({ userId: actorId(), entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: activation.id, acao: AcaoAuditoria.ATUALIZAR, depois: { repositorio: doc.repo, concluido: true, semAmbiente: true, ambiente: doc.created?.environmentId ?? null } })
+    log.info({ bootstrapId: activation.id }, `${PROJECT_BOOTSTRAP_STAGE_LABEL} ${doc.repo}: concluído sem ambiente`)
+    return null
+}
+
 // ── Etapa 4: ambiente e deploy ────────────────────────────────────────────────
 
 async function waitDeploy(activation: Activation, deployId: string): Promise<{ status: string; error: string | null } | null> {
@@ -434,6 +453,9 @@ async function waitDeploy(activation: Activation, deployId: string): Promise<{ s
 }
 
 async function runDeployStep(activation: Activation): Promise<Continuation | null> {
+    const current = await loadBootstrapDoc(activation.id)
+    // Sem ambiente (escolha da etapa 1 ou desligado depois): vale também na retomada e no Tentar novamente da etapa 4.
+    if (current.withEnvironment === false) return completeWithoutEnvironment(activation, current)
     if (!(await setPhase(activation, "deploy", "environment"))) return null
     const doc = await loadBootstrapDoc(activation.id)
     const centralId = doc.created?.centralId

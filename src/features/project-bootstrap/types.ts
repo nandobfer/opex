@@ -44,6 +44,8 @@ export interface ProjectBootstrapDto {
     technologies: BootstrapTechnologyRef[]
     entryColumnKey: string
     closedColumnKey: string | null
+    /** Cria ambiente e container Docker (etapa 4). `false`: a etapa 4 é pulada. */
+    withEnvironment: boolean
     step: ProjectBootstrapStep
     status: ProjectBootstrapStatus
     phase: BootstrapPhase | null
@@ -76,6 +78,7 @@ export interface ProjectBootstrapSummaryDto {
     status: ProjectBootstrapStatus
     phase: BootstrapPhase | null
     attempt: number
+    withEnvironment: boolean
     startedAt: string
     updatedAt: string
     finishedAt: string | null

@@ -1,9 +1,10 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { AlertTriangle, Check, X, type LucideIcon } from "lucide-react"
+import { AlertTriangle, Check, SkipForward, X, type LucideIcon } from "lucide-react"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
+import { resolvedTrackIndex, trackPosition } from "./track"
 
 export interface WizardStep {
     id: string
@@ -12,7 +13,7 @@ export interface WizardStep {
 }
 
 /** Estado de uma etapa com progresso ao vivo (ex.: bootstrap de projeto). */
-export type WizardStepStatus = "idle" | "running" | "waiting" | "failed" | "done"
+export type WizardStepStatus = "idle" | "running" | "waiting" | "failed" | "done" | "skipped"
 
 interface WizardStepperProps {
     steps: ReadonlyArray<WizardStep>
@@ -29,7 +30,8 @@ interface WizardStepperProps {
     "aria-label"?: string
     /**
      * Estado de cada etapa (cor do círculo, ícone e barra): sem a prop, vale o comportamento clássico
-     * (concluídas antes da atual). Com ela, a trilha preenche até `trackIndex`.
+     * (concluídas antes da atual). Com ela, a trilha fica verde até a última etapa concluída ou pulada
+     * (em sequência desde a primeira) e roxa de lá até `trackIndex`.
      */
     statuses?: ReadonlyArray<WizardStepStatus>
     /** Progresso (0–1) de cada etapa, numa barra abaixo do rótulo (só com `statuses`). */
@@ -46,6 +48,7 @@ const STATUS_CIRCLE: Record<WizardStepStatus, string> = {
     waiting: "border-warning text-warning",
     failed: "border-destructive text-destructive",
     done: "border-success bg-success text-background",
+    skipped: "border-dashed border-muted-foreground/60 text-muted-foreground",
 }
 
 const STATUS_BAR: Record<WizardStepStatus, string> = {
@@ -54,9 +57,10 @@ const STATUS_BAR: Record<WizardStepStatus, string> = {
     waiting: "bg-warning",
     failed: "bg-destructive",
     done: "bg-success",
+    skipped: "bg-muted-foreground/40",
 }
 
-const STATUS_LABEL: Record<WizardStepStatus, string> = { idle: "", running: "em andamento", waiting: "aguardando você", failed: "falhou", done: "concluída" }
+const STATUS_LABEL: Record<WizardStepStatus, string> = { idle: "", running: "em andamento", waiting: "aguardando você", failed: "falhou", done: "concluída", skipped: "não se aplica" }
 
 /**
  * Stepper horizontal de assistentes (copiado do wizard "Gerar contrato" do Smart Desk, com as
@@ -71,18 +75,31 @@ const STATUS_LABEL: Record<WizardStepStatus, string> = { idle: "", running: "em 
 export function WizardStepper({ steps, current, maxReachable, pending, disabled = false, onStepClick, className, "aria-label": ariaLabel = "Etapas", statuses, progress: stepProgress, badges, trackIndex }: WizardStepperProps) {
     const track = statuses ? (trackIndex ?? current) : current
     const progress = steps.length > 0 ? (track + 0.5) / steps.length : 0
+    // Só com `statuses`: verde até a última concluída/pulada; a roxa segue por baixo até a atual.
+    const resolved = statuses ? trackPosition(resolvedTrackIndex(statuses), steps.length) : 0
 
     return (
         <nav aria-label={ariaLabel} className={cn("relative overflow-x-auto rounded-md border bg-card px-4 py-4 shadow-sm", className)}>
             <ol className="relative flex min-w-max items-start justify-between gap-3">
                 <div className="absolute inset-x-0 top-[18px] z-0 h-0.5 -translate-y-1/2 rounded-full bg-border" aria-hidden>
                     <motion.div
+                        data-testid="wizard-track"
                         className="h-full rounded-full bg-primary"
                         initial={false}
                         animate={{ scaleX: progress }}
                         style={{ originX: 0 }}
                         transition={{ duration: 0.3, ease: "easeOut" }}
                     />
+                    {statuses && (
+                        <motion.div
+                            data-testid="wizard-track-resolved"
+                            className="absolute inset-y-0 left-0 w-full rounded-full bg-success"
+                            initial={false}
+                            animate={{ scaleX: resolved }}
+                            style={{ originX: 0 }}
+                            transition={{ duration: 0.3, ease: "easeOut" }}
+                        />
+                    )}
                 </div>
 
                 {steps.map((step, index) => {
@@ -92,7 +109,7 @@ export function WizardStepper({ steps, current, maxReachable, pending, disabled 
                     const pendingFields = pending?.[index] ?? []
                     const pendingText = pendingFields.length === 1 ? `Campo pendente: ${pendingFields[0]}` : `Campos pendentes: ${pendingFields.join(", ")}`
                     const reachable = !disabled && index <= maxReachable
-                    const Icon = isDone ? Check : status === "failed" ? X : step.icon
+                    const Icon = isDone ? Check : status === "failed" ? X : status === "skipped" ? SkipForward : step.icon
                     const value = Math.max(0, Math.min(1, stepProgress?.[index] ?? 0))
                     const badge = badges?.[index] ?? null
 

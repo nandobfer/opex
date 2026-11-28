@@ -119,7 +119,7 @@ export const projectBootstrapTools = [
         group: "project-bootstrap",
         label: "Bootstraps de projeto",
         risk: "read",
-        description: "Bootstraps de projeto (repositório, etapa, estado e tentativa), do mais recente ao mais antigo. `active: true` traz só os em andamento, aguardando o dono ou com falha.",
+        description: "Bootstraps de projeto (repositório, etapa, estado, tentativa e se cria ambiente), do mais recente ao mais antigo. `active: true` traz só os em andamento, aguardando o dono ou com falha.",
         input: z.object({ active: z.boolean().optional() }),
         execute: async (input) => (await service()).listProjectBootstraps({ active: input.active === true }),
     }),
@@ -128,13 +128,13 @@ export const projectBootstrapTools = [
         group: "project-bootstrap",
         label: "Estado do bootstrap",
         risk: "read",
-        description: "Estado de um bootstrap: etapa, estado, erro, o que faltou na conferência, o resumo do agente, o que já foi criado (vínculo, central, ambiente, deploy) e as tentativas de deploy. Não inicia nem retoma nada.",
+        description: "Estado de um bootstrap: etapa, estado, erro, o que faltou na conferência, o resumo do agente, o que já foi criado (vínculo, central, ambiente, deploy) e as tentativas de deploy e `comAmbiente` (sem ambiente, a etapa 4 é pulada). Não inicia nem retoma nada.",
         input: z.object({ id }),
         execute: async (input) => {
             const { loadBootstrapDoc } = await import("@/features/project-bootstrap/server/runner")
             const { toBootstrapDto } = await service()
             const full = toBootstrapDto(await loadBootstrapDoc(input.id))
-            return { ...full, pendingForms: full.pendingForms.length, pendingPermissions: full.pendingPermissions.length }
+            return { ...full, comAmbiente: full.withEnvironment, pendingForms: full.pendingForms.length, pendingPermissions: full.pendingPermissions.length }
         },
     }),
 ]

@@ -15,6 +15,8 @@ export const projectBootstrapNewPath = (repo: string) => `${PROJECT_BOOTSTRAP_NE
 
 /** Skills do OpenCode do host usadas por padrão (instaladas em `~/.agents/skills`). */
 export const DEFAULT_PROJECT_BOOTSTRAP_SKILLS = ["bootstrap-agents-md", "bootstrap-aicontext", "bootstrap-docker"] as const
+/** Das skills padrão, as que só valem quando o bootstrap cria ambiente e container Docker. */
+export const DEFAULT_PROJECT_BOOTSTRAP_ENVIRONMENT_SKILLS = ["bootstrap-docker"] as const
 export const OPENCODE_SKILLS_HREF = "/integracoes/ia/opencode?aba=skills"
 
 /** Etapas do stepper (a primeira é o formulário; o bootstrap nasce já na segunda). */

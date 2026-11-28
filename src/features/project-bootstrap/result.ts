@@ -11,7 +11,8 @@ const BLOCK = /```json[ \t]+bootstrap-result[ \t]*\r?\n([\s\S]*?)```/g
 
 export type ParsedBootstrapResult = { ok: true; result: BootstrapResult } | { ok: false; reason: "missing" | "invalid"; detail?: string }
 
-export function parseBootstrapResult(text: string): ParsedBootstrapResult {
+/** Com ambiente, `port` e `healthPath` são obrigatórios; sem ambiente, são ignorados (gravados como `null`). */
+export function parseBootstrapResult(text: string, options: { withEnvironment: boolean } = { withEnvironment: true }): ParsedBootstrapResult {
     const blocks = [...text.matchAll(BLOCK)]
     const last = blocks.at(-1)
     if (!last) return { ok: false, reason: "missing" }
@@ -26,12 +27,16 @@ export function parseBootstrapResult(text: string): ParsedBootstrapResult {
         const issue = parsed.error.issues[0]
         return { ok: false, reason: "invalid", detail: issue ? `${issue.path.join(".") || "bloco"}: ${issue.message}` : "campos inválidos" }
     }
+    if (!options.withEnvironment) return { ok: true, result: { ...parsed.data, port: null, healthPath: null } }
+    if (parsed.data.port == null) return { ok: false, reason: "invalid", detail: "port: informe a porta anotada" }
+    if (parsed.data.healthPath == null) return { ok: false, reason: "invalid", detail: "healthPath: informe a rota de health check" }
     return { ok: true, result: parsed.data }
 }
 
-/** Formato do bloco, como vai nas instruções do agente. */
-export const BOOTSTRAP_RESULT_EXAMPLE = [
-    "```json bootstrap-result",
-    '{ "port": 4014, "healthPath": "/api/health", "hasServer": true, "usesMongo": true, "branch": "main" }',
-    "```",
-].join("\n")
+/** Formato do bloco, como vai nas instruções do agente (sem ambiente, sem porta nem health check). */
+export function bootstrapResultExample(withEnvironment: boolean): string {
+    const body = withEnvironment ? '{ "port": 4014, "healthPath": "/api/health", "hasServer": true, "usesMongo": true, "branch": "main" }' : '{ "hasServer": false, "usesMongo": false, "branch": "main" }'
+    return ["```json bootstrap-result", body, "```"].join("\n")
+}
+
+export const BOOTSTRAP_RESULT_EXAMPLE = bootstrapResultExample(true)

@@ -74,3 +74,14 @@ export function createdSummary(bootstrap: Pick<ProjectBootstrapDto, "created" | 
 
 /** Reconectar: etapa 2 parada com falha, com sessão e sem turno vivo neste processo. */
 export const canReconnect = (bootstrap: Pick<ProjectBootstrapDto, "step" | "status" | "sessionId" | "running">) => bootstrap.step === "provision" && bootstrap.status === "failed" && Boolean(bootstrap.sessionId) && !bootstrap.running
+
+/**
+ * Chave "Criar ambiente e container Docker" da página: aparece enquanto o bootstrap está aberto e antes de
+ * passar da etapa 4. Ligar de novo só na etapa 2; desligar não vale com o deploy em andamento.
+ */
+export function environmentToggleState(bootstrap: Pick<ProjectBootstrapDto, "step" | "status" | "withEnvironment">): { visible: boolean; disabled: boolean; reason: string | null } {
+    if (bootstrap.status === "done" || bootstrap.status === "cancelled" || bootstrap.step === "info" || bootstrap.step === "done") return { visible: false, disabled: true, reason: null }
+    if (!bootstrap.withEnvironment && bootstrap.step !== "provision") return { visible: true, disabled: true, reason: "Ligar o ambiente só vale enquanto o agente provisiona (etapa 2)." }
+    if (bootstrap.step === "deploy" && bootstrap.status === "running") return { visible: true, disabled: true, reason: "Há um deploy em andamento: aguarde ele terminar." }
+    return { visible: true, disabled: false, reason: null }
+}

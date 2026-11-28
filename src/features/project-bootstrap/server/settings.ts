@@ -31,6 +31,7 @@ export function normalizeProjectBootstrapSettings(input: ProjectBootstrapSetting
         ...input,
         agent: { ...input.agent, agent: input.agent.agent || null, variant: input.agent.variant || null },
         skills: [...new Set(input.skills.map((skill) => skill.trim()).filter(Boolean))],
+        environmentSkills: [...new Set(input.environmentSkills.map((skill) => skill.trim()).filter(Boolean))],
     }
 }
 

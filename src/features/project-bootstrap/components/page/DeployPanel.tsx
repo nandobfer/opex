@@ -1,6 +1,7 @@
 "use client"
 
 import { AnimatePresence, motion } from "framer-motion"
+import { SkipForward } from "lucide-react"
 import { DeployLog } from "@/features/environments/components/DeployLog"
 import { useProjectBootstrapAction } from "../../hooks/useProjectBootstrap"
 import type { ProjectBootstrapDto } from "../../types"
@@ -16,13 +17,20 @@ export function DeployPanel({ bootstrap }: { bootstrap: ProjectBootstrapDto }) {
     const rows = createdRows(bootstrap)
     const notice = stepNoticeView(bootstrap, "deploy")
     const deployId = bootstrap.created.deployId
+    // Sem ambiente (e sem nada criado antes de desligar): a etapa não se aplica.
+    if (!bootstrap.withEnvironment && !bootstrap.created.environmentId)
+        return (
+            <motion.p initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="flex items-center gap-2 rounded-md border border-dashed p-4 text-sm text-muted-foreground" data-testid="bootstrap-no-environment">
+                <SkipForward className="h-4 w-4 shrink-0" aria-hidden /> Este projeto não usa ambiente nem container no Opex.
+            </motion.p>
+        )
     return (
         <div className="space-y-4">
             <StepNotice tone={notice.tone} message={notice.message} onRetry={notice.retry ? () => action.mutate("retry") : undefined} retrying={action.isPending} />
             <ul className="space-y-2">
                 <ProgressRow
                     label="Ambiente"
-                    description={bootstrap.result ? `Build e execução no servidor · porta ${bootstrap.result.port} · ref ${bootstrap.branch}` : "Build e execução no servidor"}
+                    description={bootstrap.result?.port ? `Build e execução no servidor · porta ${bootstrap.result.port} · ref ${bootstrap.branch}` : "Build e execução no servidor"}
                     state={rows.environment}
                     href={bootstrap.created.environmentId ? `/ambientes/${bootstrap.created.environmentId}/editar` : null}
                 />

@@ -2,13 +2,14 @@
 
 import Link from "next/link"
 import { AnimatePresence, motion } from "framer-motion"
-import { Controller, type UseFormReturn } from "react-hook-form"
+import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { AlertTriangle, ExternalLink, RefreshCw, Sparkles, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { FieldTrigger } from "@/components/ui/field-trigger"
 import { SearchPicker } from "@/components/ui/search-picker"
 import { Skeleton } from "@/components/ui/skeleton"
+import { Switch } from "@/components/ui/switch"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import type { AiSkillDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
@@ -19,12 +20,17 @@ import type { ProjectBootstrapSettings } from "../../schemas"
 
 /**
  * Skills do OpenCode do host que o Agente de Bootstrap usa: a sessão libera só as escolhidas. O conteúdo
- * das skills é editado na aba Skills do OpenCode (ou pelas ferramentas de recursos do OpenCode).
+ * das skills é editado na aba Skills do OpenCode (ou pelas ferramentas de recursos do OpenCode). As marcadas
+ * "Só com ambiente" ficam fora (não exigidas, ativadas nem liberadas) quando o bootstrap não cria ambiente.
  */
 export function BootstrapSkillsCard({ form }: { form: UseFormReturn<ProjectBootstrapSettings> }) {
     const skills = useAiSkills(true)
     const refresh = useRefreshAiSkills()
     const list = skills.data ?? []
+    const environmentSkills = useWatch({ control: form.control, name: "environmentSkills" }) ?? []
+    const isEnvironmentOnly = (name: string) => environmentSkills.some((item) => item.toLowerCase() === name.toLowerCase())
+    const setEnvironmentOnly = (name: string, on: boolean) =>
+        form.setValue("environmentSkills", on ? [...environmentSkills.filter((item) => item.toLowerCase() !== name.toLowerCase()), name] : environmentSkills.filter((item) => item.toLowerCase() !== name.toLowerCase()), { shouldDirty: true, shouldValidate: true })
     return (
         <Card>
             <CardHeader>
@@ -93,9 +99,25 @@ export function BootstrapSkillsCard({ form }: { form: UseFormReturn<ProjectBoots
                                                                 </span>
                                                             )}
                                                         </span>
-                                                        <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" aria-label={`Tirar a skill ${name}`} onClick={() => field.onChange(selected.filter((item) => item !== name))}>
-                                                            <X className="h-3.5 w-3.5" aria-hidden />
-                                                        </Button>
+                                                        <span className="flex shrink-0 items-center gap-2">
+                                                            <span className="flex items-center gap-1.5 text-xs text-muted-foreground" title="Sem ambiente e container Docker, esta skill não é exigida, ativada nem liberada">
+                                                                <Switch role="switch" aria-checked={isEnvironmentOnly(name)} checked={isEnvironmentOnly(name)} onCheckedChange={(on) => setEnvironmentOnly(name, on)} aria-label={`Só com ambiente: ${name}`} />
+                                                                <span aria-hidden>Só com ambiente</span>
+                                                            </span>
+                                                            <Button
+                                                                type="button"
+                                                                variant="ghost"
+                                                                size="icon"
+                                                                className="h-7 w-7"
+                                                                aria-label={`Tirar a skill ${name}`}
+                                                                onClick={() => {
+                                                                    field.onChange(selected.filter((item) => item !== name))
+                                                                    if (isEnvironmentOnly(name)) setEnvironmentOnly(name, false)
+                                                                }}
+                                                            >
+                                                                <X className="h-3.5 w-3.5" aria-hidden />
+                                                            </Button>
+                                                        </span>
                                                     </motion.li>
                                                 )
                                             })}

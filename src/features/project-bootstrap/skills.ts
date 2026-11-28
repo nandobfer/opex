@@ -32,6 +32,16 @@ export const missingSkillsMessage = (missing: readonly string[]) =>
         ? `A skill "${missing[0]}" não está instalada no OpenCode do host: instale-a em Integrações › Inteligência Artificial › OpenCode › Skills ou tire-a da seleção do Agente de Bootstrap.`
         : `As skills ${missing.map((name) => `"${name}"`).join(", ")} não estão instaladas no OpenCode do host: instale-as em Integrações › Inteligência Artificial › OpenCode › Skills ou tire-as da seleção do Agente de Bootstrap.`
 
+/**
+ * Skills da sessão pelo modo do bootstrap: sem ambiente, as que só valem com ambiente saem (não são exigidas,
+ * ativadas nem liberadas). Com ambiente, todas as escolhidas.
+ */
+export function sessionSkills(skills: readonly string[], environmentSkills: readonly string[], withEnvironment: boolean): string[] {
+    if (withEnvironment) return [...skills]
+    const onlyWithEnvironment = new Set(environmentSkills.map((name) => name.toLowerCase()))
+    return skills.filter((name) => !onlyWithEnvironment.has(name.toLowerCase()))
+}
+
 /** Skills ainda não ativadas nesta sessão (outra sessão começa do zero). */
 export function skillsToActivate(active: { sessionId: string; ids: readonly string[] } | null, sessionId: string, wanted: readonly HostSkill[]): HostSkill[] {
     const done = active?.sessionId === sessionId ? new Set(active.ids) : new Set<string>()

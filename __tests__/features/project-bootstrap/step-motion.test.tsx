@@ -20,6 +20,7 @@ vi.mock('@/features/project-bootstrap/hooks/useProjectBootstrap', () => ({
     useProjectBootstrapRealtime: () => undefined,
     useProjectBootstrap: () => ({ data: BOOTSTRAP, isLoading: false, isError: false }),
     useProjectBootstrapAction: () => ({ mutate: vi.fn(), isPending: false }),
+    useSetBootstrapEnvironment: () => ({ mutate: vi.fn(), isPending: false }),
 }))
 vi.mock('@/features/project-bootstrap/components/page/ProvisionPanel', () => ({ ProvisionPanel: () => <div>conversa</div> }))
 vi.mock('@/features/project-bootstrap/components/BootstrapPageHeader', () => ({ BootstrapPageHeader: () => null }))

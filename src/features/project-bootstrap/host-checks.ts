@@ -74,9 +74,21 @@ export const DELIVERABLE_LABELS: Record<Deliverable, string> = {
     portFree: "a porta livre: outro container ou processo já escuta nela",
 }
 
-export interface VerificationTarget {
+/** Entregas exigidas pelo modo: sem ambiente, nada de compose, porta nem `.env` (só o `.env`, se existir, ignorado). */
+export function requiredDeliverables(withEnvironment: boolean): Deliverable[] {
+    return withEnvironment ? [...DELIVERABLES] : ["git", "origin", "push", "clean", "envIgnored"]
+}
+
+interface BaseVerificationTarget {
     directory: string
     branch: string
+}
+
+/** Sem ambiente: só o git (remoto, push, árvore limpa) e o `.env` ignorado quando existe. */
+export type VerificationTarget = (BaseVerificationTarget & { withEnvironment: false }) | EnvironmentVerificationTarget
+
+export interface EnvironmentVerificationTarget extends BaseVerificationTarget {
+    withEnvironment?: true
     port: number
     /** Nome do repositório: o rótulo esperado da reserva em `/home/used_ports`. */
     project: string
@@ -95,18 +107,23 @@ const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$
  * não está ocupada por outro container ou processo (um container deste diretório pode usá-la).
  */
 export function verificationCommand(target: VerificationTarget): string {
-    const { directory, branch, port, project, composeProject } = target
-    const dir = shq(directory)
-    const ref = shq(`refs/heads/${branch}`)
-    const reservation = shq(`^[[:space:]]*${port}[[:space:]]*->[[:space:]]*${escapeRegex(project)}([[:space:]]|$)`)
-    const published = shq(`:${port}->`)
-    return [
+    const dir = shq(target.directory)
+    const ref = shq(`refs/heads/${target.branch}`)
+    const git = [
         `cd ${dir} 2>/dev/null || { echo GIT=missing; exit 0; }`,
         `git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git remote get-url origin >/dev/null 2>&1 && echo GIT=ok || echo GIT=missing`,
         `echo "ORIGIN=$(git remote get-url origin 2>/dev/null | sed -E 's#//[^@/]*@#//#')"`,
         `LOCAL=$(git rev-parse HEAD 2>/dev/null); REMOTE=$(git ls-remote origin ${ref} 2>/dev/null | cut -f1)`,
         `[ -n "$LOCAL" ] && [ "$LOCAL" = "$REMOTE" ] && echo PUSH=ok || echo PUSH=missing`,
         `[ -z "$(git status --porcelain 2>/dev/null)" ] && echo CLEAN=ok || echo CLEAN=missing`,
+    ]
+    // Sem ambiente: o `.env` é opcional; se existir, precisa estar ignorado. Nada de compose, porta nem Docker.
+    if (target.withEnvironment === false) return [...git, `[ ! -e .env ] || git check-ignore -q .env 2>/dev/null && echo ENVIGNORED=ok || echo ENVIGNORED=missing`].join("\n")
+    const { port, project, composeProject } = target
+    const reservation = shq(`^[[:space:]]*${port}[[:space:]]*->[[:space:]]*${escapeRegex(project)}([[:space:]]|$)`)
+    const published = shq(`:${port}->`)
+    return [
+        ...git,
         `[ -f .env ] && echo ENV=ok || echo ENV=missing`,
         `git check-ignore -q .env 2>/dev/null && echo ENVIGNORED=ok || echo ENVIGNORED=missing`,
         `[ -f docker-compose.yml ] && echo COMPOSE=ok || echo COMPOSE=missing`,
@@ -123,8 +140,8 @@ export function verificationCommand(target: VerificationTarget): string {
 const MARKERS: Record<Exclude<Deliverable, "origin">, string> = { git: "GIT", push: "PUSH", clean: "CLEAN", env: "ENV", envIgnored: "ENVIGNORED", compose: "COMPOSE", port: "PORT", portFree: "PORTFREE" }
 
 /** O que faltou (vazio = tudo entregue). Marcador ausente conta como faltando; o remoto precisa ser `repo`. */
-export function missingDeliverables(output: string, repo: string): Deliverable[] {
-    return DELIVERABLES.filter((item) => (item === "origin" ? repoFromRemote(marker(output, "ORIGIN") ?? "") !== repo.toLowerCase() : marker(output, MARKERS[item]) !== "ok"))
+export function missingDeliverables(output: string, repo: string, withEnvironment = true): Deliverable[] {
+    return requiredDeliverables(withEnvironment).filter((item) => (item === "origin" ? repoFromRemote(marker(output, "ORIGIN") ?? "") !== repo.toLowerCase() : marker(output, MARKERS[item]) !== "ok"))
 }
 
 export const describeMissing = (missing: readonly Deliverable[]) => missing.map((item) => DELIVERABLE_LABELS[item])

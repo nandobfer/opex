@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton"
 
-/** Carregamento da página do bootstrap: cabeçalho, stepper de 5 etapas e o painel da etapa. */
+/** Carregamento da página do bootstrap: cabeçalho, stepper de 5 etapas, a chave do ambiente e o painel da etapa. */
 export function ProjectBootstrapPageSkeleton() {
     return (
         <div className="flex min-w-0 flex-col gap-6" aria-busy="true" aria-label="Carregando o bootstrap">
@@ -18,6 +18,7 @@ export function ProjectBootstrapPageSkeleton() {
                     </div>
                 ))}
             </div>
+            <Skeleton className="h-16 w-full rounded-xl" data-testid="bootstrap-environment-toggle-skeleton" />
             <Skeleton className="h-[60vh] min-h-[24rem] w-full rounded-md" />
         </div>
     )

@@ -27,7 +27,7 @@ export async function verifyDeliverables(input: VerificationTarget & { repo: str
     const target = host ?? (await openHost())
     const result = await target.run(verificationCommand(input), 60_000, { quiet: true, retryOnLost: true })
     if (result.exitCode !== 0) throw new DomainError(502, "Não foi possível conferir as entregas no host do OpenCode", "BOOTSTRAP_VERIFY_FAILED")
-    return missingDeliverables(result.output, input.repo)
+    return missingDeliverables(result.output, input.repo, input.withEnvironment !== false)
 }
 
 /** `.env` produzido pelo agente (o conteúdo nunca vai para log, evento ou auditoria). */

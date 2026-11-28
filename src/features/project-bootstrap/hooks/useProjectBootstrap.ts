@@ -88,6 +88,29 @@ export function useProjectBootstrapAction(id: string) {
     })
 }
 
+/** Liga/desliga o ambiente e deploy: resposta otimista na chave, revertida com toast se o servidor recusar. */
+export function useSetBootstrapEnvironment(id: string) {
+    const client = useQueryClient()
+    const set = useSetBootstrap(id)
+    return useMutation({
+        mutationFn: async (enabled: boolean) => unwrapApi((await api.post<ApiResponse<ProjectBootstrapDto>>(`/project-bootstraps/${id}/environment`, { enabled })).data),
+        onMutate: async (enabled) => {
+            await client.cancelQueries({ queryKey: bootstrapKey(id) })
+            const previous = client.getQueryData<ProjectBootstrapDto>(bootstrapKey(id))
+            if (previous) client.setQueryData<ProjectBootstrapDto>(bootstrapKey(id), { ...previous, withEnvironment: enabled })
+            return { previous }
+        },
+        onSuccess: (dto) => {
+            set(dto)
+            toast.success(dto.withEnvironment ? "Ambiente e deploy ligados" : "Ambiente e deploy desligados")
+        },
+        onError: (error, _enabled, context) => {
+            if (context?.previous) client.setQueryData(bootstrapKey(id), context.previous)
+            toast.error(apiErrorMessage(error, "Não foi possível mudar o ambiente do bootstrap"))
+        },
+    })
+}
+
 export function useSendBootstrapMessage(id: string) {
     const set = useSetBootstrap(id)
     return useMutation({

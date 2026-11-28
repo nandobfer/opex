@@ -8,7 +8,7 @@ import { asReconnectOutcome } from "@/features/agentic/reconnect"
 import { isWorkbenchActive, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
 import { AGENTIC_CODE_ROOT } from "@/features/agentic/constants"
 import { ACTIVE_BOOTSTRAP_STATUSES, PROJECT_BOOTSTRAP_AUDIT_ENTITY, type ProjectBootstrapAction, type ProjectBootstrapStatus, type ProjectBootstrapStep } from "../constants"
-import { buildBootstrapPrompt, buildCompletePrompt, buildMissingPrompt, buildResumePrompt } from "../prompts"
+import { buildBootstrapPrompt, buildCompletePrompt, buildEnvironmentChangePrompt, buildMissingPrompt, buildResumePrompt } from "../prompts"
 import { repoFullName } from "../repo-name"
 import type { ProjectBootstrapStartValues } from "../schemas"
 import type { BootstrapPhase } from "../steps"
@@ -59,6 +59,7 @@ export function toBootstrapDto(doc: IProjectBootstrap): ProjectBootstrapDto {
         technologies: doc.technologies ?? [],
         entryColumnKey: doc.entryColumnKey,
         closedColumnKey: doc.closedColumnKey ?? null,
+        withEnvironment: doc.withEnvironment !== false,
         step: doc.step as ProjectBootstrapStep,
         status: visibleStatus(doc),
         phase: (doc.phase as BootstrapPhase | null) ?? null,
@@ -89,6 +90,7 @@ function toSummary(doc: IProjectBootstrap): ProjectBootstrapSummaryDto {
         status: visibleStatus(doc),
         phase: (doc.phase as BootstrapPhase | null) ?? null,
         attempt: doc.attempt ?? 1,
+        withEnvironment: doc.withEnvironment !== false,
         startedAt: iso(doc.startedAt) ?? new Date().toISOString(),
         updatedAt: iso(doc.updatedAt) ?? new Date().toISOString(),
         finishedAt: iso(doc.finishedAt),
@@ -166,6 +168,7 @@ export async function startProjectBootstrap(input: ProjectBootstrapStartValues, 
             technologies,
             entryColumnKey: input.entryColumnKey,
             closedColumnKey: input.closedColumnKey,
+            withEnvironment: input.withEnvironment !== false,
             step: "provision",
             status: "running",
             phase: "turn",
@@ -183,7 +186,7 @@ export async function startProjectBootstrap(input: ProjectBootstrapStartValues, 
         entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY,
         entidadeId: id,
         acao: AcaoAuditoria.CRIAR,
-        depois: { repositorio: repo, modo: mode === "new" ? "novo" : "existente", visibilidade: visibility, branch, diretorio: input.directory, tecnologias: technologies.map((tech) => tech.name) },
+        depois: { repositorio: repo, modo: mode === "new" ? "novo" : "existente", visibilidade: visibility, branch, diretorio: input.directory, comAmbiente: input.withEnvironment !== false, tecnologias: technologies.map((tech) => tech.name) },
     })
     log.info({ bootstrapId: id, repo, mode }, "[project-bootstrap] bootstrap iniciado")
     await startActivation(id, { kind: "turn", prompt: buildBootstrapPrompt({ owner: input.owner, name: input.name, context: input.context, technologies }), userText: input.context }, { previous: null })
@@ -281,6 +284,45 @@ export async function sendProjectBootstrapMessage(id: string, text: string, acto
     }
     // Só o tamanho: a mensagem pode trazer uma credencial que o agente pediu (nunca segredos na auditoria).
     await recordAudit({ userId: actorId, entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { repositorio: doc.repo, mensagemCaracteres: text.length } })
+    return toBootstrapDto(await load(id))
+}
+
+/**
+ * Liga ou desliga o ambiente e deploy de um bootstrap aberto. Na etapa 2 com o turno vivo, o aviso entra no
+ * turno; parada e com o resumo já entregue, a conferência roda de novo no modo novo. Na etapa 4 parada,
+ * desligar conclui sem deploy (o ambiente já criado fica). Ligar de novo só na etapa 2.
+ */
+export async function setProjectBootstrapEnvironment(id: string, enabled: boolean, actorId: string): Promise<ProjectBootstrapDto> {
+    const doc = await load(id)
+    assertOpen(doc)
+    const current = doc.withEnvironment !== false
+    if (current === enabled) return toBootstrapDto(doc)
+    if (enabled && doc.step !== "provision") throw new DomainError(409, "Ligar o ambiente só vale enquanto o agente provisiona (etapa 2)", "BOOTSTRAP_ENVIRONMENT_LOCKED")
+    if (doc.step === "deploy" && doc.status === "running") throw new DomainError(409, "Há um deploy em andamento: aguarde ele terminar para mudar o ambiente", "BOOTSTRAP_ENVIRONMENT_LOCKED")
+    await ProjectBootstrap.updateOne({ _id: doc._id }, { $set: { withEnvironment: enabled } })
+    await recordAudit({ userId: actorId, entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, antes: { comAmbiente: current }, depois: { repositorio: doc.repo, comAmbiente: enabled, etapa: doc.step } })
+    await prepareHub(id)
+    publishWorkbenchEvent(id, { type: "notice", level: "info", message: enabled ? "Ambiente e deploy ligados pelo dono." : "Ambiente e deploy desligados pelo dono: a etapa 4 não se aplica." })
+    const live = isWorkbenchActive(id)
+    if (doc.step === "provision") {
+        if (live && doc.phase === "turn") {
+            const { steerAgentTurn } = await import("@/lib/ai/opencode-run")
+            const text = buildEnvironmentChangePrompt(enabled)
+            const delivered = await steerAgentTurn(id, text).catch((error: unknown) => {
+                log.warn({ err: errorText(error), bootstrapId: id }, "[project-bootstrap] aviso do ambiente recusado pelo OpenCode")
+                return false
+            })
+            if (delivered) publishWorkbenchEvent(id, { type: "user", text })
+            else publishWorkbenchEvent(id, { type: "notice", level: "warn", message: "O agente não recebeu o aviso agora: a próxima tentativa já sai no modo novo." })
+        } else if (!live && doc.status !== "running" && doc.result) {
+            // O agente já entregou o resumo: confere de novo no modo novo (ex.: só faltavam as entregas de Docker).
+            await startActivation(id, { kind: "verify" })
+        }
+    } else if (!enabled && !live && doc.step !== "link") {
+        // Etapa 4 parada: conclui sem deploy.
+        await startActivation(id, { kind: "deploy" })
+    }
+    await publishProjectBootstrap(id)
     return toBootstrapDto(await load(id))
 }
 

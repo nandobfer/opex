@@ -10,7 +10,7 @@ import type { BootstrapResult } from "./schemas"
  */
 
 /** Caminho conferido pela saúde: a rota de health check ou, sem servidor, a página de entrada. */
-export const bootstrapHealthPath = (result: Pick<BootstrapResult, "hasServer" | "healthPath">) => (result.hasServer ? result.healthPath : "/")
+export const bootstrapHealthPath = (result: Pick<BootstrapResult, "hasServer" | "healthPath">) => (result.hasServer && result.healthPath ? result.healthPath : "/")
 
 export const bootstrapHealthUrl = (result: Pick<BootstrapResult, "hasServer" | "healthPath" | "port">) => `http://localhost:${result.port}${bootstrapHealthPath(result)}`
 
@@ -31,7 +31,7 @@ export function bootstrapEnvironmentInput(source: BootstrapEnvironmentSource, en
         slug,
         source: { kind: "central", centralId: source.centralId, ref: source.result.branch, composeFile: "docker-compose.yml", services: [], projectName: slug.replace(/-+$/, "") },
         env: entries.slice(0, 100).map((entry) => ({ key: entry.key, value: entry.value })),
-        ports: [source.result.port],
+        ports: source.result.port ? [source.result.port] : [],
         healthUrl: bootstrapHealthUrl(source.result),
         buildOn: "server",
         runOn: "server",
@@ -56,11 +56,14 @@ export function freeEnvironmentSlug(base: string, taken: ReadonlySet<string>): s
 /** Troca o slug e o projeto do compose do ambiente (mesmo valor nos dois). */
 export const withEnvironmentSlug = (input: EnvironmentInput, slug: string): EnvironmentInput => ({ ...input, slug, source: { ...input.source, projectName: slug } } as EnvironmentInput)
 
-/** Central nova com os padrões, a branch do push como base e destino do PR e o backup só com MongoDB. */
-export function bootstrapCentralConfig(config: CentralConfig, result: Pick<BootstrapResult, "branch" | "usesMongo" | "hasServer" | "healthPath">): CentralConfig {
+/**
+ * Central nova com os padrões, a branch do push como base e destino do PR e o backup só com MongoDB. Sem
+ * ambiente (sem porta), o caminho de saúde da central fica no padrão.
+ */
+export function bootstrapCentralConfig(config: CentralConfig, result: Pick<BootstrapResult, "branch" | "usesMongo" | "hasServer" | "healthPath" | "port">): CentralConfig {
     return {
         ...config,
         git: { ...config.git, baseBranch: result.branch, prTargetBranch: result.branch },
-        environment: { ...config.environment, backupDatabase: result.usesMongo, healthPath: bootstrapHealthPath(result) },
+        environment: { ...config.environment, backupDatabase: result.usesMongo, ...(result.port ? { healthPath: bootstrapHealthPath(result) } : {}) },
     }
 }

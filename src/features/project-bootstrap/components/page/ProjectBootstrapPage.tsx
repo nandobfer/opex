@@ -18,6 +18,7 @@ import { BootstrapPageHeader } from "../BootstrapPageHeader"
 import { BOOTSTRAP_WIZARD_STEPS } from "../steps-meta"
 import { DeployPanel } from "./DeployPanel"
 import { DonePanel } from "./DonePanel"
+import { EnvironmentToggle } from "./EnvironmentToggle"
 import { InfoPanel } from "./InfoPanel"
 import { LinkPanel } from "./LinkPanel"
 import { ProjectBootstrapPageSkeleton } from "./ProjectBootstrapPageSkeleton"
@@ -79,6 +80,7 @@ export function ProjectBootstrapPage({ id }: { id: string }) {
                 trackIndex={bootstrap.status === "cancelled" ? stepIndex(bootstrap.step) : active}
                 aria-label="Etapas do bootstrap"
             />
+            <EnvironmentToggle bootstrap={bootstrap} />
             <Card>
                 <CardHeader className="pb-3">
                     <CardTitle className="flex items-center justify-between gap-2 text-base">

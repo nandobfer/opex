@@ -91,6 +91,7 @@ vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list',
     },
 }))
 vi.mock('@/lib/ai/opencode-run', () => ({
+    steerAgentTurn: vi.fn(async () => true),
     runAgentTurn: vi.fn(async (_client: unknown, request: { text: string; attach?: boolean }) => {
         mocks.calls.push(request.attach ? 'attach' : 'turn')
         mocks.turns.push({ text: request.text, attach: request.attach === true })
@@ -149,7 +150,7 @@ vi.mock('@/features/environments/server/deploy', () => {
 })
 
 import { resumeIfStale, startActivation } from '@/features/project-bootstrap/server/runner'
-import { cancelProjectBootstrap, retryProjectBootstrap, sendProjectBootstrapMessage, startProjectBootstrap } from '@/features/project-bootstrap/server/service'
+import { cancelProjectBootstrap, retryProjectBootstrap, sendProjectBootstrapMessage, setProjectBootstrapEnvironment, startProjectBootstrap } from '@/features/project-bootstrap/server/service'
 
 type Store = ReturnType<typeof createFakeCollection> & { exists: (filter: Record<string, unknown>) => Promise<unknown> }
 
@@ -535,5 +536,102 @@ describe('achados da revisão (rodada 3)', () => {
         const rejected = results.find((item) => item.status === 'rejected') as PromiseRejectedResult
         expect(rejected.reason).toMatchObject({ status: 409, code: 'BOOTSTRAP_ALREADY_RUNNING' })
         expect(docs().filter((row) => row.repo === 'org/app')).toHaveLength(1)
+    })
+})
+
+describe('ambiente e deploy opcionais (v5)', () => {
+    const LIBRARY_BLOCK = '```json bootstrap-result\n{"hasServer":false,"usesMongo":false,"branch":"main"}\n```'
+    const DEPLOYED = { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: null }
+    const LIBRARY_RESULT = { port: null, healthPath: null, hasServer: false, usesMongo: false, branch: 'main' }
+
+    it('fim do turno sem ambiente: confere só o git, amarra e conclui sem criar ambiente nem deploy', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        // A skill só com ambiente nem precisa estar instalada.
+        mocks.hostSkills = []
+        mocks.turnText = `Pronto.\n${LIBRARY_BLOCK}`
+        const id = seed({ withEnvironment: false, activeRepo: 'org/app' })
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expectBefore('verify', 'link')
+        expect(mocks.calls).toContain('central')
+        expect(mocks.calls).not.toContain('environment')
+        expect(mocks.calls).not.toContain('deploy')
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toEqual({ directory: '/home/u/code/app', branch: 'main', repo: 'org/app', withEnvironment: false })
+        expect(mocks.client.session.skill).not.toHaveBeenCalled()
+        expect(current(id)).toMatchObject({ status: 'done', step: 'done', activeRepo: null, result: { port: null } })
+    })
+
+    it('com ambiente, a skill só com ambiente continua exigida (falha fechada)', async () => {
+        mocks.hostSkills = []
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('bootstrap-docker') })
+    })
+
+    it('retomada na etapa 4 com o ambiente desligado conclui sem deploy', async () => {
+        const id = seed({ withEnvironment: false, step: 'deploy', phase: 'environment', result: LIBRARY_RESULT, created: DEPLOYED, heartbeatAt: new Date(0), stateAt: new Date(0) })
+        expect(await resumeIfStale(current(id) as never)).toBe(true)
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'done', step: 'done' })
+    })
+
+    it('Tentar novamente na etapa 4 com o ambiente desligado conclui sem deploy', async () => {
+        const id = seed({ withEnvironment: false, step: 'deploy', status: 'failed', phase: 'deploy', result: LIBRARY_RESULT, created: DEPLOYED })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'done', step: 'done' })
+    })
+
+    it('desligar na etapa 2 com o turno vivo manda o aviso ao agente e grava a escolha com auditoria', async () => {
+        const { steerAgentTurn } = await import('@/lib/ai/opencode-run')
+        const id = seed({ sessionId: 'sess-1' })
+        mocks.active.set(id, new AbortController())
+        await setProjectBootstrapEnvironment(id, false, 'local')
+        mocks.active.delete(id)
+        expect(vi.mocked(steerAgentTurn)).toHaveBeenCalledWith(id, expect.stringContaining('DESLIGOU'))
+        expect(current(id).withEnvironment).toBe(false)
+        expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ antes: { comAmbiente: true }, depois: expect.objectContaining({ comAmbiente: false }) }))
+    })
+
+    it('desligar na etapa 2 parada com o resumo já entregue confere de novo sem as pendências de Docker e conclui', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        const id = seed({ status: 'failed', missing: ['o docker-compose.yml'], result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' } })
+        await setProjectBootstrapEnvironment(id, false, 'local')
+        await settle()
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toMatchObject({ withEnvironment: false })
+        expectBefore('verify', 'link')
+        expect(mocks.calls).not.toContain('deploy')
+        expect(current(id)).toMatchObject({ status: 'done', result: { port: null } })
+    })
+
+    it('desligar na etapa 4 com falha conclui sem deploy; o ambiente já criado fica', async () => {
+        const id = seed({ step: 'deploy', status: 'failed', phase: 'deploy', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { ...DEPLOYED, environmentId: 'e'.repeat(24), port: 4014 } })
+        await setProjectBootstrapEnvironment(id, false, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'done', created: { environmentId: 'e'.repeat(24) } })
+    })
+
+    it('recusa (409) concluído, cancelado, deploy em andamento e ligar fora da etapa 2', async () => {
+        const done = seed({ status: 'done', step: 'done' })
+        await expect(setProjectBootstrapEnvironment(done, false, 'local')).rejects.toMatchObject({ status: 409 })
+        const cancelled = seed({ status: 'cancelled' })
+        await expect(setProjectBootstrapEnvironment(cancelled, false, 'local')).rejects.toMatchObject({ status: 409 })
+        const deploying = seed({ step: 'deploy', status: 'running', phase: 'deploy' })
+        await expect(setProjectBootstrapEnvironment(deploying, false, 'local')).rejects.toMatchObject({ status: 409, code: 'BOOTSTRAP_ENVIRONMENT_LOCKED' })
+        const linking = seed({ step: 'link', status: 'failed', withEnvironment: false })
+        await expect(setProjectBootstrapEnvironment(linking, true, 'local')).rejects.toMatchObject({ status: 409, code: 'BOOTSTRAP_ENVIRONMENT_LOCKED' })
+        expect(current(linking).withEnvironment).toBe(false)
+    })
+
+    it('o início grava a escolha da etapa 1', async () => {
+        const input = { owner: 'org', name: 'app', visibility: 'private' as const, context: 'Plugin', directory: '/home/u/code/app', entryColumnKey: 'todo', closedColumnKey: null, withEnvironment: false }
+        const dto = await startProjectBootstrap(input, 'local')
+        mocks.active.clear()
+        expect(dto.withEnvironment).toBe(false)
+        expect(docs().find((row) => row.repo === 'org/app')).toMatchObject({ withEnvironment: false })
     })
 })
