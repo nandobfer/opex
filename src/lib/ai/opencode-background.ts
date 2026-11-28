@@ -32,7 +32,29 @@ interface RawJob {
     status?: unknown
 }
 
-type JobApi = { list: (input: { sessionID: string; status: "running" }) => Promise<readonly RawJob[]>; cancel: (input: { id: string }) => Promise<unknown> }
+type RequestOptions = { signal?: AbortSignal }
+type JobApi = {
+    list: (input: { sessionID: string; status: "running"; descendants?: boolean }, options?: RequestOptions) => Promise<readonly RawJob[]>
+    cancel: (input: { id: string }, options?: RequestOptions) => Promise<unknown>
+}
+
+/** Prazo de cada leitura/cancelamento: um host que não responde não prende a espera nem o Parar. */
+export const BACKGROUND_REQUEST_TIMEOUT_MS = 10_000
+/** Profundidade máxima da árvore de subsessões lida sem a API de jobs (subagente que dispara subagentes). */
+const MAX_TREE_DEPTH = 4
+
+/**
+ * Chamada ao OpenCode com prazo: o sinal vai nas opções da requisição e, se o cliente o ignorar, a corrida
+ * contra o relógio rejeita do mesmo jeito.
+ */
+function timed<T>(call: (options: RequestOptions) => Promise<T>, ms = BACKGROUND_REQUEST_TIMEOUT_MS): Promise<T> {
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const deadline = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error("O OpenCode não respondeu a tempo")), ms)
+        timer.unref?.()
+    })
+    return Promise.race([call({ signal: AbortSignal.timeout(ms) }), deadline]).finally(() => clearTimeout(timer))
+}
 
 /** API de jobs do OpenCode 2.4 (`experimental.job`); ausente num host/cliente antigo. */
 function jobApi(client: OpencodeClient): JobApi | null {
@@ -44,15 +66,51 @@ function jobApi(client: OpencodeClient): JobApi | null {
 async function runningJobs(client: OpencodeClient, sessionId: string): Promise<RawJob[] | null> {
     const api = jobApi(client)
     if (!api) return null
-    const jobs = await api.list({ sessionID: sessionId, status: "running" })
-    return Array.isArray(jobs) ? jobs.filter((job) => job.status === undefined || job.status === "running") : []
+    // `descendants`: o subagente que dispara os próprios subagentes fica ocioso, mas o neto ainda vai acordá-lo.
+    const jobs = await timed((options) => api.list({ sessionID: sessionId, status: "running", descendants: true }, options))
+    const byId = new Map<unknown, RawJob>()
+    for (const job of Array.isArray(jobs) ? jobs : []) {
+        if (job.status !== undefined && job.status !== "running") continue
+        byId.set(job.id ?? Symbol(), job)
+    }
+    return [...byId.values()]
 }
 
-/** Subsessões (subagentes) da sessão que estão em execução agora — o caminho dos hosts sem a API de jobs. */
+/** A sessão está em execução agora (`session.active`)? Falha ou sem resposta = não. */
+export async function sessionIsActive(client: OpencodeClient, sessionId: string): Promise<boolean> {
+    try {
+        if (typeof client.session.active !== "function") return false
+        const active = await timed((options) => client.session.active(options))
+        return Boolean(active && (active as Record<string, unknown>)[sessionId])
+    } catch {
+        return false
+    }
+}
+
+/**
+ * Subsessões (subagentes) da sessão, em toda a árvore (filhos, netos…), que estão em execução agora — o caminho
+ * dos hosts sem a API de jobs. Desce também pelos filhos ociosos: um neto ainda rodando vai acordar o filho.
+ */
 async function activeChildren(client: OpencodeClient, sessionId: string): Promise<string[]> {
-    const [children, active] = await Promise.all([client.session.list({ parentID: sessionId, limit: 100 }), client.session.active()])
-    const running = (active ?? {}) as Record<string, unknown>
-    return (children?.data ?? []).map((child) => child.id).filter((id) => Boolean(running[id]))
+    const active = (await timed((options) => client.session.active(options))) as Record<string, unknown> | null
+    const running = active ?? {}
+    const found: string[] = []
+    const visited = new Set<string>([sessionId])
+    let level = [sessionId]
+    for (let depth = 0; depth < MAX_TREE_DEPTH && level.length; depth++) {
+        const lists = await Promise.all(level.map((parentID) => timed((options) => client.session.list({ parentID, limit: 100 }, options))))
+        const next: string[] = []
+        for (const children of lists) {
+            for (const child of children?.data ?? []) {
+                if (visited.has(child.id)) continue
+                visited.add(child.id)
+                if (running[child.id]) found.push(child.id)
+                next.push(child.id)
+            }
+        }
+        level = next
+    }
+    return found
 }
 
 /** Lê o que ainda está em andamento na sessão. Nunca lança. */
@@ -82,7 +140,7 @@ export async function sessionBackgroundWork(client: OpencodeClient, sessionId: s
         }
     }
     try {
-        const inbox = await client.session.inbox.list({ sessionID: sessionId })
+        const inbox = await timed((options) => client.session.inbox.list({ sessionID: sessionId }, options))
         work.inbox = Array.isArray(inbox) ? inbox.length : 0
         work.ok = true
     } catch {
@@ -96,13 +154,13 @@ export async function cancelBackgroundWork(client: OpencodeClient, sessionId: st
     try {
         const api = jobApi(client)
         if (api) {
-            const jobs = await api.list({ sessionID: sessionId, status: "running" })
-            const ids = (Array.isArray(jobs) ? jobs : []).map((job) => job.id).filter((id): id is string => typeof id === "string")
-            await Promise.all(ids.map((id) => api.cancel({ id }).catch(() => undefined)))
+            const jobs = await runningJobs(client, sessionId)
+            const ids = (jobs ?? []).map((job) => job.id).filter((id): id is string => typeof id === "string")
+            await Promise.all(ids.map((id) => timed((options) => api.cancel({ id }, options)).catch(() => undefined)))
             return ids.length
         }
         const children = await activeChildren(client, sessionId)
-        await Promise.all(children.map((id) => client.session.interrupt({ sessionID: id }).catch(() => undefined)))
+        await Promise.all(children.map((id) => timed((options) => client.session.interrupt({ sessionID: id }, options)).catch(() => undefined)))
         return children.length
     } catch {
         return 0

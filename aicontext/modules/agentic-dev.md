@@ -1507,36 +1507,46 @@ subagentes: o turno **espera**.
 
 - **O turno só termina com a sessão quieta** (`runAgentTurn`, `lib/ai/opencode-run.ts`; pendências em
   `lib/ai/opencode-background.ts`): no fim de execução com sucesso, o runner lê os jobs rodando da sessão
-  (`experimental.job.list`, por tipo: subagente, comando, outros), a caixa de entrada
+  (`experimental.job.list` com `descendants: true` — o neto de um subagente ocioso conta —, por tipo: subagente,
+  comando, outros), a caixa de entrada
   (`session.inbox.list`) e se a própria sessão voltou a rodar (`session.active`). Com algo pendente, a mesa
   continua **rodando**, publica o evento `background` (`{ subagents, shells, other }`, gravado em
   `agentic_events`) e acompanha a execução seguinte da mesma sessão (`session.execution.started`).
   Sem nada pendente, termina como antes. Várias esperas no mesmo turno são aceitas.
 - **Resultado = texto da execução final**, a que roda depois de os subagentes reportarem (ex.: o plano), e
-  não o anúncio "fecho quando os resultados chegarem"; sem texto na execução final, vale o texto inteiro.
-  A Saída da IA continua mostrando tudo. Quem acumula o `onText` (Refinador, Revisor de PR, rotineiros)
-  zera o acumulado no gancho `onSegment`.
+  não o anúncio "fecho quando os resultados chegarem". Houve espera e nada foi escrito depois dela: o
+  resultado fica **vazio** (o texto anterior nunca é reaproveitado; no planejamento, a mesa falha com "O
+  planejador não devolveu um plano" e "Tentar de novo"). A Saída da IA continua mostrando tudo. Quem acumula
+  o `onText` (Refinador, Revisor de PR, rotineiros) zera o acumulado no gancho `onSegment`, chamado quando a
+  espera começa.
 - **Na tela**: com `background`, a linha "Trabalhando…" vira **"Aguardando 2 subagentes e 1 comando em
   segundo plano…"** (`backgroundLabel`, `features/agentic/background-label.ts`), com ampulheta animada
   (Framer Motion, desligada com movimento reduzido). Zerado ou fim do turno, a linha volta ao normal.
 - **Tempo limite, batimento e Parar valem durante a espera.** O Parar (e o tempo limite) cancelam também os
   jobs da sessão (`experimental.job.cancel`; sem a API de jobs, interrompem as subsessões ativas) e, na
-  espera, o turno fecha na hora como interrompido.
-- **Rede de segurança**: na espera o runner relê as pendências a cada 5 s (`BACKGROUND_POLL_MS`); duas
-  leituras seguidas sem nada (e sem a sessão rodando) fecham o turno com o texto do histórico
-  (`recoverTurnText` com `lastExecution`: as mensagens do assistente depois da última entrega sintética).
+  espera, o turno fecha na hora como interrompido — antes das chamadas ao OpenCode, para um host travado não
+  prender o Parar. Toda leitura e cancelamento novos têm prazo de 10 s (`BACKGROUND_REQUEST_TIMEOUT_MS`).
+- **Rede de segurança**: na espera o runner relê as pendências a cada 5 s (`BACKGROUND_POLL_MS`), uma leitura
+  por vez. Só as leituras do relógio contam para fechar: duas seguidas sem nada (e sem a sessão rodando)
+  fecham o turno; o evento `experimental.job.updated` só atualiza a contagem (dois subagentes que terminam
+  juntos não fecham a espera antes da entrega). O texto final vem do histórico (`recoverTurnText` com
+  `lastExecution`: as mensagens do assistente depois da última entrega sintética; sem entrega, vazio).
   Sem conseguir ler as pendências, o turno termina como antes, com aviso.
 - **Reconectar**: sessão parada, mas com jobs rodando ou entrega pendente, conta como **em andamento**
   (`probeAttachSession` → `running` com `background`); o acompanhamento começa na espera. O texto
   recuperado do histórico é o da execução final.
-- **Host antigo** (sem `experimental.job`): os subagentes são as subsessões (`session.list({ parentID })`)
-  que estão em `session.active`; comandos em segundo plano não são vistos.
-- **Trava do planejamento** (`afterTurn`, caso `planning`; `isPlanText` em `features/agentic/plan-text.ts`):
-  texto curto (< 300 caracteres) que **anuncia** trabalho ainda por fazer ("assim que", "quando os
-  resultados chegarem", "fecho o plano", "disparei", "vou investigar"…) e não tem título Markdown nem lista
-  numerada (3+ itens) **não** vira versão do plano: a mesa fica em erro ("O planejador não devolveu um
-  plano: a resposta só anuncia o que ainda vai fazer. Use Tentar de novo.") com **Tentar de novo**. Texto
-  vazio continua recusado; texto curto que não anuncia nada ("nada a alterar") segue aceito.
+- **Host antigo** (sem `experimental.job`): os subagentes são as subsessões em toda a árvore de `parentID`
+  (até 4 níveis, descendo também pelos filhos ociosos) que estão em `session.active`; comandos em segundo
+  plano não são vistos.
+- **Trava do planejamento** (`afterTurn`, caso `planning`; `isPlanText` em `features/agentic/plan-text.ts`). É
+  heurística; o sinal principal é o resultado vazio do runner quando a execução final não escreveu nada.
+  Texto vazio é recusado. Texto com estrutura de plano (título Markdown ou lista numerada com 3+ itens) é
+  aceito. Sem estrutura, texto de **qualquer tamanho** que **anuncia** trabalho ainda por fazer ("assim que",
+  "quando os resultados chegarem", "fecho o plano", "disparei", "aguardo", "vou investigar"…) **não** vira
+  versão do plano: a mesa fica em erro ("O planejador não devolveu um plano: a resposta só anuncia o que
+  ainda vai fazer. Use Tentar de novo.") com **Tentar de novo**. Limites conhecidos: um plano sem estrutura
+  que use essas expressões é recusado; um anúncio sem nenhuma delas passa (o resultado vazio cobre o caso
+  da espera).
 - Vale para todos os turnos do OpenCode: mesa, forks, Refinador, Revisor de PR, Agente Adversário,
   Arquiteto (faixa ao vivo do diagrama mostra a espera), Maddox (a resposta ao vivo mostra a espera, linha
   NDJSON `background`) e rotineiros com motor OpenCode (um passo "Aguardando trabalho em segundo plano" por

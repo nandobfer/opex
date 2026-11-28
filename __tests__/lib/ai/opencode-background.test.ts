@@ -7,13 +7,14 @@ import type { OpencodeClient } from '@nandobfer/integracoes/modules/integrations
 
 vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: vi.fn(async () => {}) }))
 
-function client(parts: { jobs?: unknown[] | Error; children?: string[]; active?: Record<string, unknown>; inbox?: unknown[] | Error; info?: unknown }) {
+function client(parts: { jobs?: unknown[] | Error; children?: string[]; tree?: Record<string, string[]>; active?: Record<string, unknown>; inbox?: unknown[] | Error; info?: unknown }) {
   const reject = (value: unknown) => (value instanceof Error ? Promise.reject(value) : Promise.resolve(value))
   return {
     session: {
       get: vi.fn(async () => parts.info ?? { id: 's1', time: { idle: 1 }, outcome: 'succeeded' }),
       active: vi.fn(async () => parts.active ?? {}),
-      list: vi.fn(async () => ({ data: (parts.children ?? []).map((id) => ({ id })) })),
+      // Árvore de subsessões por `parentID` (sem `tree`, `children` são os filhos de s1).
+      list: vi.fn(async ({ parentID }: { parentID: string }) => ({ data: ((parts.tree ?? { s1: parts.children ?? [] })[parentID] ?? []).map((id) => ({ id })) })),
       interrupt: vi.fn(async () => ({ interrupted: true })),
       inbox: { list: vi.fn(async () => reject(parts.inbox ?? [])) },
     },
@@ -26,6 +27,19 @@ describe('sessionBackgroundWork', () => {
     const work = await sessionBackgroundWork(client({ jobs: [{ id: 'a', kind: 'subagent' }, { id: 'b', kind: 'subagent' }, { id: 'c', kind: 'shell' }, { id: 'd', kind: 'image' }], inbox: [{}] }), 's1')
     expect(work).toEqual({ subagents: 2, shells: 1, other: 1, inbox: 1, ok: true })
     expect(hasBackgroundWork(work)).toBe(true)
+  })
+
+  it('F3: lista os jobs dos descendentes (o neto que ainda roda conta)', async () => {
+    const fake = client({ jobs: [{ id: 'neto', kind: 'subagent', sessionID: 'filho' }] })
+    const work = await sessionBackgroundWork(fake, 's1')
+    expect(work.subagents).toBe(1)
+    const list = (fake as unknown as { experimental: { job: { list: ReturnType<typeof vi.fn> } } }).experimental.job.list
+    expect(list).toHaveBeenCalledWith({ sessionID: 's1', status: 'running', descendants: true }, expect.anything())
+  })
+
+  it('F3: sem a API de jobs, desce pela árvore e conta o neto ativo sob um filho ocioso', async () => {
+    const work = await sessionBackgroundWork(client({ tree: { s1: ['filho'], filho: ['neto'] }, active: { neto: { type: 'running' } } }), 's1')
+    expect(work.subagents).toBe(1)
   })
 
   it('sem a API de jobs, conta só os subagentes filhos que est\u00e3o ativos', async () => {
@@ -52,7 +66,7 @@ describe('cancelBackgroundWork', () => {
   it('sem a API de jobs, interrompe os subagentes ativos', async () => {
     const fake = client({ children: ['c1'], active: { c1: { type: 'running' } } })
     expect(await cancelBackgroundWork(fake, 's1')).toBe(1)
-    expect(fake.session.interrupt).toHaveBeenCalledWith({ sessionID: 'c1' })
+    expect(fake.session.interrupt).toHaveBeenCalledWith({ sessionID: 'c1' }, expect.anything())
   })
 })
 

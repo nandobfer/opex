@@ -7,6 +7,12 @@ describe('isPlanText (OPE-216)', () => {
     expect(isPlanText('Vou investigar o runner e volto com o plano.')).toBe(false)
   })
 
+  it('anúncio longo sem estrutura de plano também é recusado', () => {
+    const long = `${'Estou levantando o fluxo do runner, das sessões e das permissões do OpenCode em paralelo. '.repeat(5)}Disparei dois subagentes e fecho o plano assim que os resultados chegarem.`
+    expect(long.length).toBeGreaterThan(300)
+    expect(isPlanText(long)).toBe(false)
+  })
+
   it('recusa texto vazio; texto curto que não anuncia nada segue aceito', () => {
     expect(isPlanText('   ')).toBe(false)
     expect(isPlanText('Nada a alterar: a correção já está na main.')).toBe(true)

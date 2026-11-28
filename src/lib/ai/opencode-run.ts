@@ -18,7 +18,7 @@ import {
     type OpencodeTokenUsage,
     type ProviderLimitPolicy,
 } from "@/lib/ai/opencode-events"
-import { cancelBackgroundWork, hasBackgroundWork, sameBackgroundCounts, sessionBackgroundWork, type BackgroundWork } from "@/lib/ai/opencode-background"
+import { BACKGROUND_REQUEST_TIMEOUT_MS, cancelBackgroundWork, hasBackgroundWork, sameBackgroundCounts, sessionBackgroundWork, sessionIsActive, type BackgroundWork } from "@/lib/ai/opencode-background"
 import { SCHEDULE_TIMEZONE } from "@nandobfer/integracoes"
 
 /**
@@ -119,8 +119,8 @@ export interface TurnHooks {
     onStep?: (usage: { costUsd: number; tokens: OpencodeTokenUsage; stepId?: string }) => void | Promise<void>
     onMoved?: (directory: string) => void | Promise<void>
     /**
-     * Começou uma execução nova da sessão depois da espera pelo trabalho em segundo plano (OPE-216): quem
-     * acumula o `onText` zera o acumulado, porque o resultado do turno é o texto da execução final.
+     * Começou a espera pelo trabalho em segundo plano (OPE-216): quem acumula o `onText` zera o acumulado, porque
+     * o resultado do turno é o texto da execução final (a que vem depois da espera).
      */
     onSegment?: () => void | Promise<void>
     heartbeat?: () => void | Promise<void>
@@ -165,9 +165,9 @@ const message = (error: unknown) => (error instanceof Error ? error.message : St
  * `lastExecution` (OPE-216): só as mensagens depois da última entrega sintética (o resultado de um
  * subagente que acordou a sessão), ou seja, o texto da execução final do turno.
  */
-async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceMs: number, options: { lastExecution?: boolean } = {}): Promise<string> {
+async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceMs: number, options: { lastExecution?: boolean; requireBoundary?: boolean } = {}): Promise<string> {
     try {
-        const response = await client.message.list(options.lastExecution ? { sessionID: sessionId, order: "desc", limit: 100 } : { sessionID: sessionId, type: "assistant", order: "desc", limit: 50 })
+        const response = await client.message.list(options.lastExecution ? { sessionID: sessionId, order: "desc", limit: 100 } : { sessionID: sessionId, type: "assistant", order: "desc", limit: 50 }, { signal: AbortSignal.timeout(BACKGROUND_REQUEST_TIMEOUT_MS) })
         const all = [...(response.data ?? [])].reverse()
         let since = all
         if (options.lastExecution && sinceMs > 0) {
@@ -176,6 +176,8 @@ async function recoverTurnText(client: OpencodeClient, sessionId: string, sinceM
             recent.forEach((item, index) => {
                 if (item.type === "synthetic") boundary = index
             })
+            // `requireBoundary`: sem a entrega do resultado, a sessão não acordou — não há execução final.
+            if (boundary < 0 && options.requireBoundary) return ""
             since = boundary >= 0 ? recent.slice(boundary + 1) : recent
         }
         const items = since.filter((item) => item.type === "assistant")
@@ -403,6 +405,10 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
     let waiting = false
     let shown = { subagents: 0, shells: 0, other: 0 }
     let quietReads = 0
+    // Uma releitura por vez: eventos `job` seguidos e o relógio não empilham leituras.
+    let polling = false
+    // Houve espera neste turno: o texto anterior a ela não é o resultado (é o anúncio).
+    let waited = false
     let waitPoll: ReturnType<typeof setInterval> | null = null
     // A espera fechou pelas leituras, sem ver a sessão acordar (ex.: SSE caiu no meio): o texto final vem do histórico.
     let quietFinish = false
@@ -420,38 +426,48 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         showBackground({ subagents: 0, shells: 0, other: 0 })
     }
     /** Só a própria sessão em execução conta como pendência: ela acordou e a execução nova vem pelo SSE. */
-    const ownRunning = async () => {
+    const ownRunning = () => sessionIsActive(client, sessionId)
+    /**
+     * Relê as pendências na espera. Só a leitura do relógio (`fromTimer`, a cada `BACKGROUND_POLL_MS`) conta para
+     * fechar a espera: o evento `job` apenas atualiza a contagem exibida (dois subagentes que terminam juntos não
+     * fecham o turno antes de o OpenCode entregar o resultado).
+     */
+    const pollWaiting = async (fromTimer: boolean) => {
+        if (!waiting || finished || interruptRequested || polling) return
+        polling = true
         try {
-            const active = typeof client.session.active === "function" ? await client.session.active() : null
-            return Boolean(active && (active as Record<string, unknown>)[sessionId])
-        } catch {
-            return false
-        }
-    }
-    const pollWaiting = async () => {
-        if (!waiting || finished || interruptRequested) return
-        const work = await sessionBackgroundWork(client, sessionId)
-        if (!waiting || finished) return
-        if (work.ok && (hasBackgroundWork(work) || (await ownRunning()))) {
-            quietReads = 0
-            // A caixa de entrada não entra na contagem exibida (é o resultado já a caminho da sessão).
-            if (hasBackgroundWork({ ...work, inbox: 0 })) showBackground(work)
-            return
-        }
-        // O job acabou e a sessão não acordou: depois de leituras seguidas sem nada, o turno fecha com o texto que tem.
-        if (++quietReads >= QUIET_READS_TO_FINISH) {
-            quietFinish = true
-            stopWaiting()
-            finish({ outcome: "succeeded", message: null })
+            const work = await sessionBackgroundWork(client, sessionId)
+            if (!waiting || finished || interruptRequested) return
+            if (work.ok && (hasBackgroundWork(work) || (await ownRunning()))) {
+                quietReads = 0
+                // A caixa de entrada não entra na contagem exibida (é o resultado já a caminho da sessão).
+                if (hasBackgroundWork({ ...work, inbox: 0 })) showBackground(work)
+                return
+            }
+            if (!fromTimer || !waiting || finished || interruptRequested) return
+            // O job acabou e a sessão não acordou: depois de leituras seguidas sem nada, o turno fecha.
+            if (++quietReads >= QUIET_READS_TO_FINISH) {
+                quietFinish = true
+                stopWaiting()
+                finish({ outcome: "succeeded", message: null })
+            }
+        } finally {
+            polling = false
         }
     }
     const enterWaiting = (work: BackgroundWork) => {
         waiting = true
+        waited = true
         quietReads = 0
+        // O texto que vier daqui em diante é o da execução seguinte (a final, se não houver outra espera).
+        segmentStart = text.length
+        lastTextBlock = null
+        // Quem acumula o `onText` descarta o texto anterior (o anúncio): o resultado é o que vier depois.
+        void Promise.resolve(hooks.onSegment?.()).catch(() => undefined)
         // Só a entrega pendente ou a própria sessão rodando: não há contagem a exibir (a execução nova já vem).
         if (hasBackgroundWork({ ...work, inbox: 0 })) showBackground(work)
         if (!waitPoll) {
-            waitPoll = setInterval(() => void pollWaiting().catch(() => undefined), BACKGROUND_POLL_MS)
+            waitPoll = setInterval(() => void pollWaiting(true).catch(() => undefined), BACKGROUND_POLL_MS)
             waitPoll.unref?.()
         }
     }
@@ -563,15 +579,10 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
                 break
             case "start":
                 // A sessão acordou com o resultado do trabalho em segundo plano: começa a execução final (o resultado do turno).
-                if (waiting) {
-                    stopWaiting()
-                    segmentStart = text.length
-                    lastTextBlock = null
-                    await hooks.onSegment?.()
-                }
+                if (waiting) stopWaiting()
                 break
             case "job":
-                if (waiting) await pollWaiting()
+                if (waiting) await pollWaiting(false)
                 break
             case "end":
                 // Desistência por limite: o fim (interrompido) que vier é o da interrupção pedida aqui.
@@ -630,14 +641,15 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         if (request.signal.aborted) userStop = true
         if (interruptRequested || finished) return
         interruptRequested = true
-        // Parar também encerra os subagentes e comandos em segundo plano da sessão (OPE-216).
-        await Promise.all([client.session.interrupt({ sessionID: sessionId }).catch(() => undefined), cancelBackgroundWork(client, sessionId)])
+        // A folga e o fim na espera vêm antes das chamadas: um host que não responde não prende o Parar.
+        setTimeout(() => finish({ outcome: "interrupted", message: reason }), INTERRUPT_GRACE_MS).unref?.()
         // Na espera não há execução para o OpenCode encerrar: o turno fecha na hora.
         if (waiting) {
             stopWaiting()
             finish({ outcome: "interrupted", message: reason })
         }
-        setTimeout(() => finish({ outcome: "interrupted", message: reason }), INTERRUPT_GRACE_MS).unref?.()
+        // Parar também encerra os subagentes e comandos em segundo plano da sessão (OPE-216).
+        await Promise.all([client.session.interrupt({ sessionID: sessionId }, { signal: AbortSignal.timeout(BACKGROUND_REQUEST_TIMEOUT_MS) }).catch(() => undefined), cancelBackgroundWork(client, sessionId)])
     }
     const onAbort = () => void interrupt(request.signal.reason instanceof Error ? request.signal.reason.message : "Interrompido")
     request.signal.addEventListener("abort", onAbort, { once: true })
@@ -680,12 +692,13 @@ export async function runAgentTurn(client: OpencodeClient, request: TurnRequest,
         }
         const end = await ended
         if (waiting) stopWaiting()
-        // Resultado = texto da execução final (depois da espera pelo segundo plano); vazio, vale o texto inteiro.
+        // Resultado = texto da execução final (depois da espera pelo segundo plano). Com espera e sem texto depois
+        // dela, o resultado fica vazio: o texto anterior é o anúncio ("fecho quando chegarem"), nunca o resultado.
         const finalText = text.slice(segmentStart).replace(/^\s+/, "")
-        let resultText = finalText.trim() ? finalText : text
-        // Reconectado: o texto pode ter começado antes de reatar; recupera a execução final do histórico.
+        let resultText = finalText.trim() ? finalText : waited ? "" : text
+        // Reconectado (ou espera fechada sem ver a sessão acordar): recupera a execução final do histórico.
         if ((attach || quietFinish) && end.outcome === "succeeded") {
-            const recovered = await recoverTurnText(client, sessionId, startedAt, { lastExecution: true })
+            const recovered = await recoverTurnText(client, sessionId, startedAt, { lastExecution: true, requireBoundary: quietFinish })
             if (recovered) resultText = recovered
         }
         const durationMs = Date.now() - beginAt
