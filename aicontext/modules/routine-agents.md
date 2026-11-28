@@ -32,7 +32,7 @@ modelos em `src/lib/db/models/RoutineAgent.ts` (`routine_agents`, `routine_runs`
 | D14 | **Gravação por chave**: `remember` aceita `canal`, `chave`, `titulo` e `tags`; com `chave` é idempotente (upsert do Engramind: a mesma chave atualiza a entrada, `criada: false`). `update_memory` edita por id com a versão lida. |
 | D15 | **Leitura completa**: `list_my_memories` aceita `canal`, `chave` e `formato` (`completo`/`titulos`), devolve o texto inteiro e pagina por cursor, avisando `parcial: true` quando há mais. Desde a OPE-209, o uso normal é por `chave`, começando pela memória `indice` do canal; listar o canal inteiro é exceção. |
 | D16 | O catálogo do Indexador fica em `experiencia/desenvolvimento` com chave `catalogo-<dono>-<repo>`; as 18 memórias de catálogo em prosa (sem chave) do canal próprio foram arquivadas (`scripts/routine-indexador-cleanup.ts`, reversível). |
-| D18 | `/agentes-rotineiros` mostra **uma linha por agente** (card na largura inteira: identificação, 4 KPIs e "Execuções por dia") com os filtros padrão `ListFilters`: busca, status, motor e período, na URL. |
+| D18 | `/agentes-rotineiros` mostra **um item por agente** (card na largura inteira; desde a OPE-213 a identificação fica em linha própria acima, com gatilhos, próxima execução e Pausar/Retomar, e embaixo os 12 KPIs e "Execuções por dia") com os filtros padrão `ListFilters`: busca, status, motor e período, na URL. |
 | D19 | No cabeçalho da página de agente, **"Configurar" e as ações ficam na linha do título**, sempre juntos (sem quebrar entre si); a descrição longa fica abaixo, na largura inteira, sem aumentar a distância entre título e descrição (escolha do dono na implementação, no lugar de cortar a descrição em 2 linhas). |
 | D20 | O "Configurar" da página do agente rotineiro **abre o editor ali mesmo** (`?configurar=1`), sem navegar para a integração. |
 | D21 | Na lista da aba Rotineiros da integração, o **nome do agente é um link** para `/agentes-rotineiros/[id]`. |
@@ -453,13 +453,22 @@ Roda só no Opex original (na prévia o agendador fica desligado).
 ## Páginas
 
 - `/agentes-rotineiros` (item **"Rotineiros"** da categoria Agentes, entrada `rotineiros` do
-  `AGENT_CATALOG`, D18): uma linha por agente não arquivado (`RoutineAgentRow`, grade de
-  `routine-agents-layout.ts` compartilhada com o skeleton):
-  - identificação (link para a página do agente): nome, selos de status e provisionamento, objetivo inteiro
-    (quebra a linha, sem corte), motor e modelo, última execução e próximo disparo;
-  - KPIs Execuções, Concluídas, Com erro, Tokens, **Custo efetivo** e **Custo de tabela** (OPE-203, US$ no valor
-    e o R$/parcial/estimado na dica; sem custo "—"), e o gráfico "Execuções por dia" (`UsageByDateChart`
-    compacto) do período escolhido; sem execuções → "Sem execuções no período.";
+  `AGENT_CATALOG`, D18): um item por agente não arquivado (`RoutineAgentRow`, classes de
+  `routine-agents-layout.ts` compartilhadas com o skeleton `RoutineAgentsSkeleton`):
+  - **linha 1, identificação na largura inteira** (OPE-213): o nome é o link para a página do agente
+    (`ItemNameLink`), selos de status e provisionamento, objetivo inteiro (quebra a linha, sem corte), motor e
+    modelo, última execução, os **gatilhos e a próxima execução** (`RoutineScheduleIndicators`, ver abaixo) e, à
+    direita, **Pausar/Retomar** (`RoutinePauseToggle`);
+  - **linha 2, na largura inteira** (`ROUTINE_ROW_BODY`; KPIs e gráfico lado a lado a partir de `xl`), **12 KPIs** em
+    duas fileiras de seis (`routineRowKpis`, puro, em `routine-row-kpis.ts`): Execuções, Concluídas, Com erro, Tokens,
+    **Tokens por execução** (tokens ÷ execuções) e **Tokens por dia** (tokens ÷ dias corridos; `kpis.tokensPerRun` e
+    `kpis.tokensPerDay` da mesma agregação); **Custo efetivo**, **Média por execução (efetivo)**, **Média por dia
+    (efetivo)**, **Custo de tabela**, **Média por execução (tabela)** e **Média por dia (tabela)** — US$ no valor, o
+    R$, a base ("N execução(ões) com custo" / "N dia(s) corrido(s)") e parcial/estimado na dica; sem dado "—", nunca
+    0. Médias com o critério da Visão geral (`cost.perRun` = custo ÷ execuções com custo; `cost.perCalendarDay` =
+    custo ÷ dias corridos do período), recalculadas com o período do filtro. Efetivo e tabela com cores diferentes
+    (`COST_KIND_TONE`). E o gráfico "Execuções por dia" (`UsageByDateChart` compacto) do período escolhido; sem
+    execuções → "Sem execuções no período.";
   - filtros (`RoutineAgentsFilters`, `ListFilters`; regras puras em `list-filters.ts`, estado na URL):
     busca por nome/objetivo (fuse.js), Status (Ativo, Pausado, Provisionando, Com erro de provisionamento —
     o provisionamento incompleto vence o status do agente), Motor (Todos/Opex/OpenCode) e Período
@@ -479,8 +488,29 @@ Roda só no Opex original (na prévia o agendador fica desligado).
   com erro, tempo médio, tokens e os seis de custo da OPE-203, ver "Custos") e os gráficos (`GET /api/routine-agents/[id]/metrics?periodo=`):
   "Custo por dia" (largura toda), "Execuções por dia", "Tokens por dia" e "Divisão do custo";
   à direita a conversa com o agente, recolhível (ver "Conversa com o agente"). O carregamento da página
-  (`RoutineAgentPageSkeleton`) tem o cabeçalho, as abas e as duas colunas. **Execuções** (lista ao vivo; a linha
-  inteira é o link para a página da execução, ver abaixo), **Entradas**, **Memórias** e **Segredos**.
+  (`RoutineAgentPageSkeleton`) tem o cabeçalho com as ações, a faixa dos gatilhos, as abas e as duas colunas.
+  **Pausar/Retomar** (OPE-213) também fica na linha do título, e os **gatilhos e a próxima execução** ficam acima das
+  abas (espaço `notice` do `AgentPageFrame`), visíveis em todas. **Execuções** (lista ao vivo de cards, ver "Card da
+  execução" abaixo), **Entradas**, **Memórias** e **Segredos**.
+- **Gatilhos e próxima execução** (OPE-213, pedido do dono em 27/11/2026; `routineScheduleSummary`, puro, em
+  `schedule-summary.ts`): um chip por gatilho **ligado** com o ícone do tipo e o texto de `describeTrigger` (dica: o
+  próximo horário daquele gatilho); sem gatilhos ligados, "Só manual". Próxima execução: ativo com horário →
+  "Próxima execução dd/MM/yyyy HH:mm (em 2 horas)" (o relativo se atualiza a cada minuto); pausado → "Pausado: sem
+  disparos"; ativo sem horário → "Sem disparo agendado". **Pausar/Retomar** usa `useRoutineAgentStatus` com resposta
+  otimista (status no cache do agente e das listas, pausado sem próximo disparo; reverte com toast na falha) e não
+  aparece para agente arquivado.
+- **Card da execução** (OPE-213, aba Execuções, `RoutineRunCard`; regras puras em `runs/run-card.ts`): um card por
+  execução, mais recentes primeiro, `VirtualStack` (inteira até 50, virtualizada acima), ao vivo pelo tempo real. Mostra
+  a situação com cor e ícone (`ROUTINE_RUN_STATUS_ICONS`), **"Execução #N" como link** para a página da execução (sem
+  botão "Abrir", regra da OPE-172 confirmada pelo dono), a origem gravada (só as que existem; não há origem
+  "retomada"), motor · modelo, início e, terminada, término e duração; "Pedido:" quando houver; o **início do relato**
+  em texto simples (`reportExcerpt`, sem marcação do Markdown) cortado em 3 linhas, sem bloco quando não há relato;
+  Erro com o motivo; Aguardando confirmação com o resumo do pendente e o link **Responder** (abre a página da execução,
+  sem Confirmar/Recusar no card); Hibernada com a próxima verificação e o motivo; tokens e os custos efetivo e de
+  tabela nas suas cores (`*` = parcial; R$ e estimado na dica; sem custo "—"). Executando e Esperando ficam
+  **destacados** (borda e ponto pulsante, sem pulso com movimento reduzido). **Cancelar** só nos status não finais, com
+  a mesma confirmação da página da execução. Skeleton no formato do card. Decisões do dono de 27/11/2026: destaque =
+  em execução (Executando/Esperando); Responder abre a página; relato pelo início; título é o link.
 - **Página da execução** (OPE-208, no lugar da gaveta `?execucao=`, decisão do dono):
   `/agentes-rotineiros/[id]/execucoes/[runId]` (`routineRunPath`), `RoutineRunPage`. Cabeçalho `AgentPageHeader` com a
   seta **Voltar para as execuções** (`routineRunsHref`: a página do agente com `?aba=execucoes`), o título "Execução #N",
@@ -554,9 +584,12 @@ Roda só no Opex original (na prévia o agendador fica desligado).
 - **Telas**: Visão geral com os KPIs "Custo de tabela", "Custo efetivo", "Economia", "Média por execução", "Média por
   dia" (dias corridos) e "Média por dia ativo" (dias com execução) — valor em US$, R$ no rodapé ("R$ indisponível" sem
   PTAX) —, os avisos do custo, o gráfico "Custo por dia" (séries tabela e efetivo) e "Divisão do custo" (abas
-  Provedor, Modelo e Chave/plano). Linha da execução com as colunas tabela e efetivo (`*` = parcial; R$ na dica) e o
+  Provedor, Modelo e Chave/plano). Card da execução com os valores tabela e efetivo (`*` = parcial; R$ na dica) e o
   detalhe com tabela, efetivo, economia, custo por modelo e avisos. Skeletons com as mesmas quantidades
-  (`ROUTINE_OVERVIEW_KPI_COUNT` = 11, `ROUTINE_OVERVIEW_CHART_COUNT` = 4, `ROUTINE_ROW_KPI_COUNT` = 6).
+  (`ROUTINE_OVERVIEW_KPI_COUNT` = 11, `ROUTINE_OVERVIEW_CHART_COUNT` = 4, `ROUTINE_ROW_KPI_COUNT` = 12). **Cores** (OPE-213, decisão do dono em 27/11/2026): custo de tabela em
+  `var(--chart-info-1)` e custo efetivo em `var(--chart-positive-1)` (`COST_KIND_TONE`, `src/features/ai-billing/cost-tone.ts`,
+  as mesmas séries do "Custo por dia") nos KPIs da lista, nos da Visão geral (prop `accentColor` do `KpiCard`: tabela,
+  efetivo e as médias, que mostram o efetivo; Economia neutra) e no card da execução; a página da execução não muda.
 - **Tempo real**: além de `routine-run-updated`, `useRoutineRealtime` relê execuções, detalhe e métricas em
   `ai-provider-keys-updated` (plano alterado), `ai-billing-updated` (PTAX ou uso das assinaturas gravados) e
   `ai-consumption-updated` com `origin: routine-agent` (uma vez por rajada de 5 s).

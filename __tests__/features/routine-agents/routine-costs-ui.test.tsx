@@ -21,14 +21,15 @@ vi.mock('@/components/metrics/MultiLineChart', () => ({
 vi.mock('@/components/metrics/charts/RankedBarsCard', () => ({ RankedBarsCard: ({ data, ariaLabel }: { data: { label: string }[]; ariaLabel: string }) => <div data-testid="ranked" aria-label={ariaLabel}>{data.map((row) => row.label).join('|')}</div> }))
 
 import { RoutineOverviewTab } from '@/features/routine-agents/components/page/RoutineOverviewTab'
-import { RoutineRunRow } from '@/features/routine-agents/components/runs/RoutineRunRow'
+import { RoutineRunCard } from '@/features/routine-agents/components/runs/RoutineRunCard'
+import { COST_KIND_TONE } from '@/features/ai-billing/cost-tone'
 import { ROUTINE_OVERVIEW_CHART_COUNT, ROUTINE_OVERVIEW_KPI_COUNT } from '@/features/routine-agents/components/page/routine-agents-layout'
 
 const totals = (extra: Partial<RoutineCostDto> = {}): RoutineCostDto => ({ listUsd: 4, listBrl: 20, effectiveUsd: 1, effectiveBrl: 5, savingsUsd: 3, savingsBrl: 15, partial: false, brlPartial: false, missingPrices: [], estimated: false, notices: [], ...extra })
 const pair = { listUsd: 2, effectiveUsd: 0.5, listBrl: 10, effectiveBrl: 2.5 }
 
 const metrics = (cost: RoutineCostDto = totals()): RoutineAgentMetricsDto => ({
-  kpis: { runs: 2, completed: 2, errors: 0, avgDurationMs: 1000, tokens: 400, costUsd: null, costPartial: false },
+  kpis: { runs: 2, completed: 2, errors: 0, avgDurationMs: 1000, tokens: 400, tokensPerRun: 200, tokensPerDay: 400, costUsd: null, costPartial: false },
   days: [{ day: '2026-11-04', runs: 2, completed: 2, errors: 0, tokens: 400, costUsd: null, cost: { listUsd: 4, effectiveUsd: 1, listBrl: 20, effectiveBrl: 5 } }],
   cost: { totals: cost, perRun: pair, perCalendarDay: pair, perActiveDay: pair, runsWithCost: 2, calendarDays: 1, activeDays: 1 },
   breakdown: {
@@ -54,6 +55,16 @@ describe('Visão geral: custos (OPE-203)', () => {
     const chart = screen.getByTestId('lines-Custo por dia')
     expect(chart.getAttribute('data-series')).toBe('list,effective')
     expect(JSON.parse(chart.getAttribute('data-points')!)).toEqual([{ bucket: '2026-11-04', list: 4, effective: 1 }])
+  })
+
+  it('OPE-213: KPIs de tabela e efetivo com cores diferentes (as do gráfico); médias na cor do efetivo; economia neutra', () => {
+    const { container } = render(<RoutineOverviewTab agentId="a1" params={{}} />)
+    const accentOf = (label: string) => screen.getByText(label).closest('p')!.querySelector('[data-accent]')?.getAttribute('data-accent') ?? null
+    expect(accentOf('Custo de tabela')).toBe(COST_KIND_TONE.list.color)
+    expect(accentOf('Custo efetivo')).toBe(COST_KIND_TONE.effective.color)
+    expect(accentOf('Média por execução')).toBe(COST_KIND_TONE.effective.color)
+    expect(accentOf('Economia')).toBeNull()
+    expect(container.querySelector('[data-testid="lines-Custo por dia"]')).toBeTruthy()
   })
 
   it('divisão por provedor, modelo e chave/plano', () => {
@@ -84,33 +95,36 @@ describe('Visão geral: custos (OPE-203)', () => {
   })
 })
 
-describe('linha da execução (OPE-203)', () => {
+describe('card da execução: custos (OPE-203, OPE-213)', () => {
   const run = (extra: Partial<RoutineRunDto> = {}): RoutineRunDto => ({
     id: 'r1', agentId: 'a1', agentName: 'A', seq: 3, status: 'completed', origin: 'manual', request: 'x', hasPayload: false, engine: 'opex', model: 'deepseek-flash',
     queuedAt: '2026-11-04T15:00:00.000Z', startedAt: null, finishedAt: null, activeMs: 1000, waitingMs: 0, tokens: 10, costUsd: null, costPartial: false,
     cost: totals(), hibernation: null, pendingAction: null, report: null, error: null, warnings: [], delayMs: null, ...extra,
   })
 
-  it('mostra o custo de tabela e o efetivo, com o R$ na dica', () => {
-    const { container } = render(<RoutineRunRow run={run()} />)
+  it('mostra o custo de tabela e o efetivo, com o R$ na dica e cada um na sua cor', () => {
+    const { container } = render(<RoutineRunCard run={run()} />)
     const list = container.querySelector('[data-cost="list"]')!
     const effective = container.querySelector('[data-cost="effective"]')!
     expect(list.textContent).toContain('4,00')
     expect(effective.textContent).toContain('1,00')
     expect(list.getAttribute('title')).toMatch(/R\$\s20,00/)
+    expect((container.querySelector('[data-cost-value="list"]') as HTMLElement).style.color).toBe(COST_KIND_TONE.list.color)
+    expect((container.querySelector('[data-cost-value="effective"]') as HTMLElement).style.color).toBe(COST_KIND_TONE.effective.color)
   })
 
-  it('OPE-208: a linha inteira é o link para a página da execução (a gaveta saiu)', () => {
-    render(<RoutineRunRow run={run()} />)
-    const link = screen.getByRole('link', { name: 'Abrir a execução #3' })
+  it('OPE-208/OPE-213: o título "Execução #N" é o link para a página da execução', () => {
+    render(<RoutineRunCard run={run()} />)
+    const link = screen.getByRole('link', { name: 'Execução #3' })
     expect(link.getAttribute('href')).toBe('/agentes-rotineiros/a1/execucoes/r1')
   })
 
   it('motor OpenCode: "—" com a dica de fora do escopo; parcial marcado', () => {
-    const { container, unmount } = render(<RoutineRunRow run={run({ engine: 'opencode', cost: null })} />)
+    const { container, unmount } = render(<RoutineRunCard run={run({ engine: 'opencode', cost: null })} />)
     expect(container.querySelector('[data-cost="list"]')!.getAttribute('title')).toContain('fora desta versão')
+    expect(container.querySelector('[data-cost-value="list"]')!.textContent).toBe('—')
     unmount()
-    const partial = render(<RoutineRunRow run={run({ cost: totals({ partial: true, effectiveUsd: null, effectiveBrl: null }) })} />)
-    expect(partial.container.querySelector('[data-cost="effective"]')!.textContent).toBe('—*')
+    const partial = render(<RoutineRunCard run={run({ cost: totals({ partial: true, effectiveUsd: null, effectiveBrl: null }) })} />)
+    expect(partial.container.querySelector('[data-cost-value="effective"]')!.textContent).toBe('—*')
   })
 })

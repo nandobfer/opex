@@ -184,7 +184,19 @@ export interface RoutineEntryDto {
 }
 
 export interface RoutineAgentMetricsDto {
-    kpis: { runs: number; completed: number; errors: number; avgDurationMs: number | null; tokens: number; costUsd: number | null; costPartial: boolean }
+    kpis: {
+        runs: number
+        completed: number
+        errors: number
+        avgDurationMs: number | null
+        tokens: number
+        /** Tokens ÷ execuções do período (OPE-213); `null` sem execuções. */
+        tokensPerRun: number | null
+        /** Tokens ÷ dias corridos do período (OPE-213); `null` sem execuções. */
+        tokensPerDay: number | null
+        costUsd: number | null
+        costPartial: boolean
+    }
     days: { day: string; runs: number; completed: number; errors: number; tokens: number; costUsd: number | null; cost: RoutineMoneyPair }[]
     /** Custos de tabela e efetivo do período (OPE-203). */
     cost: RoutineCostKpisDto
