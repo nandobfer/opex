@@ -22,6 +22,42 @@ interface GithubRepo {
     full_name: string
     private: boolean
     default_branch: string
+    /** Permissões do token no repositório (ausente = desconhecido). */
+    permissions?: { admin?: boolean; maintain?: boolean; push?: boolean; pull?: boolean }
+}
+
+interface GithubOrgMembership {
+    state: "active" | "pending"
+    role: "admin" | "member" | "billing_manager"
+}
+
+/** Política de criação de repositórios da organização (campos ausentes = sem restrição conhecida). */
+interface GithubOrg {
+    members_can_create_repositories?: boolean | null
+    members_can_create_public_repositories?: boolean | null
+    members_can_create_private_repositories?: boolean | null
+}
+
+/**
+ * O token pode criar um repositório nesta organização com essa visibilidade? Dono (admin) sempre pode;
+ * membro pendente nunca; membro comum segue a política da organização. Devolve o motivo quando não pode.
+ */
+async function orgCreationBlock(org: string, visibility: "private" | "public" | undefined): Promise<string | null> {
+    let membership: GithubOrgMembership
+    try {
+        membership = await githubRequest<GithubOrgMembership>(`/user/memberships/orgs/${encodeURIComponent(org)}`, { label: "bootstrap: papel na organização" })
+    } catch (error) {
+        if (error instanceof GithubError && (error.code === "NOT_FOUND" || error.code === "FORBIDDEN")) return `O token do GitHub não é membro de ${org}.`
+        return toGithubDomainError(error)
+    }
+    if (membership.state !== "active") return `O convite do token para ${org} ainda está pendente.`
+    if (membership.role === "admin") return null
+    const settings = await githubRequest<GithubOrg>(`/orgs/${encodeURIComponent(org)}`, { label: "bootstrap: política da organização" }).catch((error: unknown) => toGithubDomainError(error))
+    const denied = `A organização ${org} não permite que o token crie repositórios${visibility ? (visibility === "private" ? " privados" : " públicos") : ""}: peça a um dono da organização ou escolha outra conta.`
+    if (settings.members_can_create_repositories === false) return denied
+    if (visibility === "private" && settings.members_can_create_private_repositories === false) return denied
+    if (visibility === "public" && settings.members_can_create_public_repositories === false) return denied
+    return null
 }
 
 export async function listRepoOwners(): Promise<RepoOwnersDto> {
@@ -51,12 +87,13 @@ const check = (repo: string, state: RepoCheckDto["state"], message: string, extr
  * Nome inválido, dono fora do alcance do token, já vinculado ou com bootstrap em andamento: bloqueia.
  * Livre: será criado. Existente e não vinculado: modo repositório existente, com a branch padrão.
  */
-export async function checkRepoName(owner: string, name: string, options: { ignoreBootstrapId?: string } = {}): Promise<RepoCheckDto> {
+export async function checkRepoName(owner: string, name: string, options: { ignoreBootstrapId?: string; visibility?: "private" | "public" } = {}): Promise<RepoCheckDto> {
     const repo = repoFullName(owner, name)
     if (!isValidRepoOwner(owner)) return check(repo, "invalid", REPO_OWNER_MESSAGE)
     if (!isValidRepoName(name)) return check(repo, "invalid", REPO_NAME_MESSAGE)
     const owners = await listRepoOwners()
-    if (!owners.owners.some((item) => item.login.toLowerCase() === owner.toLowerCase())) {
+    const target = owners.owners.find((item) => item.login.toLowerCase() === owner.toLowerCase())
+    if (!target) {
         return check(repo, "forbidden", `O token do GitHub não tem acesso a ${owner}: escolha a conta ${owners.viewer} ou uma organização do token.`)
     }
     await dbConnect()
@@ -67,11 +104,17 @@ export async function checkRepoName(owner: string, name: string, options: { igno
     if (active) return check(repo, "in-progress", `Já há um bootstrap em andamento para ${repo}.`, { bootstrapId: String(active._id) })
     try {
         const found = await githubRequest<GithubRepo>(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(name)}`, { label: "bootstrap: conferir o repositório" })
+        const can = found.permissions
+        if (!can || !(can.push || can.maintain || can.admin)) return check(repo, "forbidden", `O token do GitHub só tem leitura em ${repo}: o agente precisa de permissão de escrita (push) para publicar.`)
         return check(repo, "existing", "Este repositório já existe no GitHub: o bootstrap vai usá-lo", { defaultBranch: found.default_branch || "main", private: found.private })
     } catch (error) {
-        if (error instanceof GithubError && error.code === "NOT_FOUND") return check(repo, "free", "Nome livre: o repositório será criado.")
-        return toGithubDomainError(error)
+        if (!(error instanceof GithubError && error.code === "NOT_FOUND")) return toGithubDomainError(error)
     }
+    if (target.kind === "org") {
+        const blocked = await orgCreationBlock(target.login, options.visibility)
+        if (blocked) return check(repo, "forbidden", blocked)
+    }
+    return check(repo, "free", "Nome livre: o repositório será criado.")
 }
 
 /** Colunas do último vínculo criado; sem vínculo, a primeira coluna do quadro e nenhuma de conclusão. */

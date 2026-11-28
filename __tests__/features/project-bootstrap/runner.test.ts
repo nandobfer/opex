@@ -44,6 +44,7 @@ const mocks = vi.hoisted(() => ({
     existingCentral: null as { _id: string } | null,
     updateCentralFails: false,
     centralConfig: null as unknown,
+    createGate: null as { arrive: () => Promise<void> } | null,
     savedEnv: { name: 'app', slug: 'app', source: { projectName: 'app' }, limits: null, composeOverrides: null } as Record<string, unknown>,
 }))
 
@@ -75,8 +76,13 @@ vi.mock('@/features/project-bootstrap/server/host', () => ({
         return mocks.missing
     }),
     readBootstrapEnv: vi.fn(async () => `MONGODB_URI=mongodb://app:${SECRET}@mongo/app\n`),
-    checkHostDirectory: vi.fn(),
+    checkHostDirectory: vi.fn(async () => ({ path: '/home/u/code/app', kind: 'free', reason: null, message: 'A pasta não existe: será criada.' })),
 }))
+vi.mock('@/features/project-bootstrap/server/github', () => ({
+    checkRepoName: vi.fn(async () => ({ repo: 'org/app', state: 'free', blocked: false, message: 'Nome livre', defaultBranch: null, private: null, bootstrapId: null })),
+    initialLinkColumns: vi.fn(async () => ({ entryColumnKey: 'todo', closedColumnKey: null })),
+}))
+vi.mock('@/features/project-bootstrap/server/catalog', () => ({ getTechCatalog: vi.fn(async () => ({ groups: [], technologies: [] })) }))
 vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => mocks.client }))
 vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list', () => ({
     listOpencodeSkillsAt: async () => {
@@ -143,13 +149,21 @@ vi.mock('@/features/environments/server/deploy', () => {
 })
 
 import { resumeIfStale, startActivation } from '@/features/project-bootstrap/server/runner'
-import { cancelProjectBootstrap, retryProjectBootstrap, sendProjectBootstrapMessage } from '@/features/project-bootstrap/server/service'
+import { cancelProjectBootstrap, retryProjectBootstrap, sendProjectBootstrapMessage, startProjectBootstrap } from '@/features/project-bootstrap/server/service'
 
 type Store = ReturnType<typeof createFakeCollection> & { exists: (filter: Record<string, unknown>) => Promise<unknown> }
 
 function store(): Store {
     const collection = createFakeCollection() as Store
     collection.exists = async (filter) => ((await collection.countDocuments(filter)) > 0 ? { _id: 'x' } : null)
+    // Índice único parcial `active_repo_unique` (trava de um bootstrap aberto por repositório), como o Mongo: E11000.
+    const create = collection.create
+    collection.create = (async (doc: Record<string, unknown>) => {
+        // Corrida: com `createGate`, cada envio espera o outro chegar ao create (os dois já passaram pela consulta).
+        if (mocks.createGate) await mocks.createGate.arrive()
+        if (typeof doc.activeRepo === 'string' && collection.docs.some((row) => row.activeRepo === doc.activeRepo)) throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 })
+        return create(doc)
+    }) as Store['create']
     // `$push` (lista de deploys e pedidos pendentes), que a coleção falsa não implementa.
     const updateOne = collection.updateOne
     collection.updateOne = (async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
@@ -237,6 +251,7 @@ beforeEach(() => {
     mocks.missing = []
     mocks.deployStatus = 'success'
     mocks.deployQueue = []
+    mocks.createGate = null
     mocks.envs = []
     mocks.existingCentral = null
     mocks.updateCentralFails = false
@@ -269,7 +284,7 @@ describe('fim do turno', () => {
         await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
         await settle()
         expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify'])
-        expect(current(id)).toMatchObject({ status: 'failed', step: 'provision', missing: ['o push do último commit na branch', 'a porta anotada em /home/used_ports'] })
+        expect(current(id)).toMatchObject({ status: 'failed', step: 'provision', missing: ['o push do último commit na branch', 'a porta anotada em /home/used_ports com o nome deste projeto (`<porta> -> <repositório>`)'] })
     })
 
     it('sem o resumo final, aguarda o dono sem conferir', async () => {
@@ -299,7 +314,7 @@ describe('fim do turno', () => {
 
 describe('Tentar novamente', () => {
     it('com pendências, pede ao agente na mesma sessão que complete e confere de novo antes de amarrar', async () => {
-        const id = seed({ status: 'failed', missing: ['a porta anotada em /home/used_ports'], sessionId: 'sess-1' })
+        const id = seed({ status: 'failed', missing: ['a porta anotada em /home/used_ports com o nome deste projeto (`<porta> -> <repositório>`)'], sessionId: 'sess-1' })
         await retryProjectBootstrap(id, 'local')
         await settle()
         expect(mocks.turns[0]!.text).toContain('falta a porta anotada em /home/used_ports')
@@ -460,5 +475,53 @@ describe('achados da revisão (rodada 1)', () => {
         const audits = JSON.stringify(mocks.recordAudit.mock.calls)
         expect(audits).not.toContain('hunter2')
         expect(audits).toContain('mensagemCaracteres')
+    })
+})
+
+describe('achados da revisão (rodada 3)', () => {
+    it('cancelar depois de um reinício (hub local vazio) interrompe a sessão remota persistida e solta a trava', async () => {
+        const id = seed({ status: 'running', sessionId: 'sess-1', activeRepo: 'org/app' })
+        expect(mocks.active.size).toBe(0)
+        await cancelProjectBootstrap(id, 'local')
+        expect(mocks.client.session.interrupt).toHaveBeenCalledWith({ sessionID: 'sess-1' })
+        expect(current(id)).toMatchObject({ status: 'cancelled', activeRepo: null })
+    })
+
+    it('volta ao deploy: o .env importado substitui inteiro (valor esvaziado não mantém o anterior)', async () => {
+        const { updateEnvironment } = await import('@/features/environments/server/service')
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(vi.mocked(updateEnvironment).mock.calls[0]![3]).toEqual({ emptyKeepsSaved: false })
+        expect(current(id)).toMatchObject({ status: 'done', activeRepo: null })
+    })
+
+    it('a conferência recebe o repositório e o nome do projeto esperados', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toEqual({ directory: '/home/u/code/app', branch: 'main', port: 4014, project: 'app', repo: 'org/app' })
+    })
+
+    it('dois envios ao mesmo tempo para o mesmo repositório: só um bootstrap abre', async () => {
+        const input = { owner: 'org', name: 'app', visibility: 'private' as const, context: 'API', directory: '/home/u/code/app', entryColumnKey: 'todo', closedColumnKey: null }
+        let release: () => void = () => {}
+        const both = new Promise<void>((resolve) => (release = resolve))
+        let arrived = 0
+        mocks.createGate = {
+            arrive: () => {
+                if (++arrived === 2) release()
+                return both
+            },
+        }
+        const results = await Promise.allSettled([startProjectBootstrap(input, 'local'), startProjectBootstrap(input, 'local')])
+        expect(arrived).toBe(2)
+        await settle()
+        expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(1)
+        const rejected = results.find((item) => item.status === 'rejected') as PromiseRejectedResult
+        expect(rejected.reason).toMatchObject({ status: 409, code: 'BOOTSTRAP_ALREADY_RUNNING' })
+        expect(docs().filter((row) => row.repo === 'org/app')).toHaveLength(1)
     })
 })

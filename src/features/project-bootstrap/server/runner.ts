@@ -350,7 +350,7 @@ async function afterTurn(activation: Activation, result: BootstrapResult): Promi
     publishWorkbenchEvent(activation.id, { type: "notice", level: "info", message: "Conferindo as entregas no host…" })
     let missing
     try {
-        missing = await verifyDeliverables(doc.directory, fixed.branch, fixed.port)
+        missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port: fixed.port, project: doc.name, repo: doc.repo })
     } catch (error) {
         await fail(activation, `${errorText(error)}: use Tentar novamente.`)
         return null
@@ -466,7 +466,10 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
             // Nova volta depois de um deploy com falha: o agente pode ter mudado o `.env` ou a porta.
             const saved = await Environment.findById(environmentId).lean()
             // Mantém a identidade gravada (slug e projeto do compose, inclusive o sufixo `-N` da criação).
-            if (saved) await updateEnvironment(environmentId, { ...input, name: saved.name, slug: saved.slug, source: { ...input.source, projectName: saved.source?.projectName ?? saved.slug }, limits: saved.limits ?? null, composeOverrides: saved.composeOverrides ?? null } as typeof input, actorId())
+            if (saved) await updateEnvironment(environmentId, { ...input, name: saved.name, slug: saved.slug, source: { ...input.source, projectName: saved.source?.projectName ?? saved.slug }, limits: saved.limits ?? null, composeOverrides: saved.composeOverrides ?? null } as typeof input, actorId(), {
+                // O `.env` importado é o arquivo inteiro: valor vazio é vazio (não mantém o da tentativa anterior).
+                emptyKeepsSaved: false,
+            })
         }
         if (!(await setPhase(activation, "deploy", "deploy"))) return null
         try {
@@ -491,7 +494,7 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
     const finished = { ...started, status: outcome.status === "success" ? "success" : "failed", error: outcome.error }
     await ProjectBootstrap.updateOne(activation.own, { $set: { deploys: withEntry((await loadBootstrapDoc(activation.id)).deploys, finished) } })
     if (outcome.status === "success") {
-        await setOwned(activation, { status: "done", step: "done", phase: null, error: null, finishedAt: new Date() })
+        await setOwned(activation, { status: "done", step: "done", phase: null, error: null, activeRepo: null, finishedAt: new Date() })
         await recordAudit({ userId: actorId(), entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: activation.id, acao: AcaoAuditoria.ATUALIZAR, depois: { repositorio: doc.repo, concluido: true, ambiente: environmentId, deploy: deployId } })
         log.info({ bootstrapId: activation.id }, `${PROJECT_BOOTSTRAP_STAGE_LABEL} ${doc.repo}: concluído`)
         return null

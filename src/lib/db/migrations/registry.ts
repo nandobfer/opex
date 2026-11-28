@@ -23,6 +23,7 @@ import { ensurePluginIndexes } from "./ensure-plugin-indexes"
 import { ensureAgentFileIndexes } from "./ensure-agent-file-indexes"
 import { candidatadorCurriculoTools } from "./candidatador-curriculo-tools"
 import { seedProjectBootstrapCatalog } from "./project-bootstrap-catalog"
+import { ensureProjectBootstrapIndexes } from "./ensure-project-bootstrap-indexes"
 
 registerMigrations(
     { name: "seed-integrations-from-env", run: () => seedIntegrationsFromEnv() },
@@ -52,4 +53,6 @@ registerMigrations(
     { name: "candidatador-curriculo-tools", run: () => candidatadorCurriculoTools() },
     // OPE-215: carga inicial do catálogo de tecnologias do Agente de Bootstrap (uma vez, com marca).
     { name: "project-bootstrap-catalog", run: () => seedProjectBootstrapCatalog() },
+    // OPE-215: trava única de um bootstrap aberto por repositório.
+    { name: "ensure-project-bootstrap-indexes", run: () => ensureProjectBootstrapIndexes() },
 )

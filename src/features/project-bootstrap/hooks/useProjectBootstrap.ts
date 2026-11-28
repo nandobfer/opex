@@ -33,10 +33,10 @@ export const useBootstrapPrefill = () => useQuery({ queryKey: [PROJECT_BOOTSTRAP
 
 export const useRepoOwners = () => useQuery({ queryKey: [PROJECT_BOOTSTRAP_QUERY_KEY, "owners"], queryFn: () => get<RepoOwnersDto>("/project-bootstraps/owners"), staleTime: 5 * 60_000, retry: false })
 
-export const useRepoCheck = (owner: string | null, name: string | null) =>
+export const useRepoCheck = (owner: string | null, name: string | null, visibility?: "private" | "public") =>
     useQuery({
-        queryKey: [PROJECT_BOOTSTRAP_QUERY_KEY, "check-repo", owner, name],
-        queryFn: async ({ signal }) => unwrapApi((await api.get<ApiResponse<RepoCheckDto>>("/project-bootstraps/check-repo", { params: { owner, name }, signal })).data),
+        queryKey: [PROJECT_BOOTSTRAP_QUERY_KEY, "check-repo", owner, name, visibility ?? null],
+        queryFn: async ({ signal }) => unwrapApi((await api.get<ApiResponse<RepoCheckDto>>("/project-bootstraps/check-repo", { params: { owner, name, visibility }, signal })).data),
         enabled: Boolean(owner && name),
         staleTime: 15_000,
         retry: false,

@@ -20,22 +20,35 @@ describe('classifyDirectory', () => {
 })
 
 describe('conferência do fim da etapa 2', () => {
-    const ALL_OK = 'GIT=ok\nPUSH=ok\nCLEAN=ok\nENV=ok\nENVIGNORED=ok\nCOMPOSE=ok\nPORT=ok'
+    const ALL_OK = 'GIT=ok\nORIGIN=git@github.com:Org/App.git\nPUSH=ok\nCLEAN=ok\nENV=ok\nENVIGNORED=ok\nCOMPOSE=ok\nPORT=ok\nPORTFREE=ok'
 
     it('tudo entregue = nada faltando', () => {
-        expect(missingDeliverables(ALL_OK)).toEqual([])
+        expect(missingDeliverables(ALL_OK, 'org/app')).toEqual([])
     })
 
     it('lista cada entrega que faltou (marcador ausente conta como faltando)', () => {
         const output = ALL_OK.replace('PUSH=ok', 'PUSH=missing').replace('PORT=ok', 'PORT=missing').replace('ENV=ok\n', '')
-        expect(missingDeliverables(output)).toEqual(['push', 'env', 'port'])
-        expect(describeMissing(['port'])).toEqual(['a porta anotada em /home/used_ports'])
+        expect(missingDeliverables(output, 'org/app')).toEqual(['push', 'env', 'port'])
+        expect(describeMissing(['port'])).toEqual(['a porta anotada em /home/used_ports com o nome deste projeto (`<porta> -> <repositório>`)'])
     })
 
-    it('o comando confere a branch, a porta e nunca imprime o .env', () => {
-        const command = verificationCommand("/home/u/code/app", 'main', 4014)
-        expect(command).toContain("refs/heads/main")
-        expect(command).toContain('4014')
+    it('remoto de outro repositório (ou sem remoto) não passa', () => {
+        expect(missingDeliverables(ALL_OK.replace('Org/App', 'org/outro'), 'org/app')).toEqual(['origin'])
+        expect(missingDeliverables(ALL_OK.replace('ORIGIN=git@github.com:Org/App.git', 'ORIGIN='), 'org/app')).toEqual(['origin'])
+    })
+
+    it('porta ocupada por outro container ou processo não passa', () => {
+        expect(missingDeliverables(ALL_OK.replace('PORTFREE=ok', 'PORTFREE=missing'), 'org/app')).toEqual(['portFree'])
+    })
+
+    it('o comando exige a reserva com o nome do projeto, confere quem escuta na porta, tira credenciais do remoto e nunca imprime o .env', () => {
+        const command = verificationCommand({ directory: '/home/u/code/app', branch: 'main', port: 4014, project: 'my.app' })
+        expect(command).toContain('refs/heads/main')
+        // Reserva da porta com o rótulo exato (ponto escapado): uma linha de outro projeto não conta.
+        expect(command).toContain("'^[[:space:]]*4014[[:space:]]*->[[:space:]]*my\\.app([[:space:]]|$)'")
+        expect(command).toContain('docker ps')
+        expect(command).toContain('ss -ltnH')
+        expect(command).toContain("sed -E 's#//[^@/]*@#//#'")
         expect(command).not.toMatch(/cat .*\.env/)
     })
 })

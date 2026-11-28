@@ -126,8 +126,8 @@ export async function getBootstrapPrefill(): Promise<ProjectBootstrapPrefillDto>
     return { codeRoot: AGENTIC_CODE_ROOT, ...columns, blockers }
 }
 
-export async function checkBootstrapRepo(owner: string, name: string): Promise<RepoCheckDto> {
-    return checkRepoName(owner, name)
+export async function checkBootstrapRepo(owner: string, name: string, visibility?: "private" | "public"): Promise<RepoCheckDto> {
+    return checkRepoName(owner, name, { visibility })
 }
 
 export async function checkBootstrapDirectory(path: string, repo: string): Promise<DirectoryCheckDto> {
@@ -142,7 +142,7 @@ export async function startProjectBootstrap(input: ProjectBootstrapStartValues, 
     const blockers = await projectBootstrapBlockers()
     if (blockers.length) throw new DomainError(409, blockers[0]!.message, "BOOTSTRAP_UNAVAILABLE", { blockers })
     const repo = repoFullName(input.owner, input.name)
-    const check = await checkRepoName(input.owner, input.name)
+    const check = await checkRepoName(input.owner, input.name, { visibility: input.visibility })
     if (check.blocked) throw new DomainError(409, check.message, "BOOTSTRAP_REPO_BLOCKED")
     const directory = await checkHostDirectory(input.directory, repo)
     if (directory.kind === "blocked") throw new DomainError(409, `${directory.reason} ${directory.message}`, "BOOTSTRAP_DIRECTORY_BLOCKED")
@@ -152,9 +152,10 @@ export async function startProjectBootstrap(input: ProjectBootstrapStartValues, 
     const branch = check.defaultBranch ?? "main"
     const visibility = mode === "existing" ? (check.private === false ? "public" : "private") : input.visibility
     await dbConnect()
-    const doc = (
-        await ProjectBootstrap.create({
+    // A trava `activeRepo` (índice único parcial) torna a reserva atômica: o segundo envio concorrente cai aqui.
+    const createdDoc = await ProjectBootstrap.create({
             repo,
+            activeRepo: repo,
             owner: input.owner,
             name: input.name,
             visibility,
@@ -171,8 +172,11 @@ export async function startProjectBootstrap(input: ProjectBootstrapStartValues, 
             attempt: 1,
             stateAt: new Date(),
             heartbeatAt: new Date(),
+        }).catch((error: unknown) => {
+            if ((error as { code?: number }).code === 11000) throw new DomainError(409, `Já há um bootstrap em andamento para ${repo}.`, "BOOTSTRAP_ALREADY_RUNNING")
+            throw error
         })
-    ).toObject() as unknown as IProjectBootstrap
+    const doc = createdDoc.toObject() as unknown as IProjectBootstrap
     const id = String(doc._id)
     await recordAudit({
         userId: actorId,
@@ -223,14 +227,15 @@ export async function retryProjectBootstrap(id: string, actorId: string): Promis
 export async function cancelProjectBootstrap(id: string, actorId: string): Promise<ProjectBootstrapDto> {
     const doc = await load(id)
     assertOpen(doc)
-    await ProjectBootstrap.updateOne({ _id: doc._id }, { $set: { status: "cancelled", activationId: null, finishedAt: new Date(), pendingForms: [], pendingPermissions: [] } })
+    await ProjectBootstrap.updateOne({ _id: doc._id }, { $set: { status: "cancelled", activeRepo: null, activationId: null, finishedAt: new Date(), pendingForms: [], pendingPermissions: [] } })
     if (doc.sessionId) {
         const { getOpencodeClient } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client")
         const client = await getOpencodeClient().catch(() => null)
         for (const form of (doc.pendingForms ?? []) as { id?: string }[]) {
             if (form.id) await client?.session.form.cancel({ sessionID: doc.sessionId, formID: form.id }).catch(() => undefined)
         }
-        if (isWorkbenchActive(id)) await client?.session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
+        // Sempre: depois de um reinício (ou em outra instância) o mapa local está vazio, mas a sessão remota pode seguir trabalhando.
+        await client?.session.interrupt({ sessionID: doc.sessionId }).catch(() => undefined)
     }
     abortBootstrap(id)
     await prepareHub(id)

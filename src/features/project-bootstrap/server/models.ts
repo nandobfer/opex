@@ -44,6 +44,8 @@ export interface IProjectBootstrap {
     created: { repoUrl: string | null; projectId: string | null; centralId: string | null; environmentId: string | null; deployId: string | null; port: number | null }
     /** A configuração do bootstrap (branch, backup, saúde) já foi aplicada na central. */
     centralConfiguredAt: Date | null
+    /** Trava do repositório enquanto o bootstrap está aberto (índice único parcial); `null` ao concluir ou cancelar. */
+    activeRepo: string | null
     deploys: { deployId: string; attempt: number; status: string; error: string | null; at: Date }[]
     usage: { costUsd: number; inputTokens: number; outputTokens: number }
     startedAt: Date
@@ -86,6 +88,7 @@ const ProjectBootstrapSchema = new Schema<IProjectBootstrap>(
         result: { type: Schema.Types.Mixed, default: null },
         created: { type: Schema.Types.Mixed, default: EMPTY_CREATED },
         centralConfiguredAt: { type: Date, default: null },
+        activeRepo: { type: String, default: null },
         deploys: {
             type: [new Schema({ deployId: { type: String, required: true }, attempt: { type: Number, required: true }, status: { type: String, required: true }, error: { type: String, default: null }, at: { type: Date, required: true } }, { _id: false })],
             default: [],
@@ -96,6 +99,9 @@ const ProjectBootstrapSchema = new Schema<IProjectBootstrap>(
     },
     { collection: "project_bootstraps", versionKey: false, timestamps: true, minimize: false },
 )
+
+// Um bootstrap aberto por repositório, atômico: dois envios ao mesmo tempo não passam os dois (OPE-215).
+ProjectBootstrapSchema.index({ activeRepo: 1 }, { unique: true, partialFilterExpression: { activeRepo: { $type: "string" } }, name: "active_repo_unique" })
 
 export interface IProjectBootstrapTechGroup {
     _id: Types.ObjectId

@@ -52,7 +52,7 @@ export const projectBootstrapStartSchema = z.object({
 export type ProjectBootstrapStartInput = z.input<typeof projectBootstrapStartSchema>
 export type ProjectBootstrapStartValues = z.output<typeof projectBootstrapStartSchema>
 
-export const repoCheckQuerySchema = z.object({ owner: repoOwnerSchema, name: repoNameSchema })
+export const repoCheckQuerySchema = z.object({ owner: repoOwnerSchema, name: repoNameSchema, visibility: z.enum(["private", "public"]).optional() })
 export const directoryCheckQuerySchema = z.object({ path: hostDirectorySchema, repo: z.string().trim().min(3).max(140) })
 
 /** Mensagem do dono para o agente (resposta em texto, nova tentativa ou durante a execução). */

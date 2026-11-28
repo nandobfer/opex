@@ -25,6 +25,9 @@ você, destructive = falhou, success = concluída). A etapa atual abre por padr�
      permissão no dono, **já vinculado** (`projects.repo`) ou com bootstrap em andamento **bloqueiam**; livre = será
      criado; existente e não vinculado = **modo repositório existente** ("Este repositório já existe no GitHub: o bootstrap
      vai usá-lo"), com a branch padrão do GitHub como ref do ambiente e base da central, e a visibilidade oculta;
+   - permissão real do token também bloqueia: repositório existente só com leitura (sem `push`/`maintain`/`admin` em
+     `permissions`), convite pendente na organização ou organização que não deixa o membro criar repositórios (geral ou na
+     visibilidade escolhida, `members_can_create_*`; dono da organização sempre pode);
    - visibilidade (padrão privado), contexto geral (objetivo e stack) e os **badges de tecnologia** ao vivo
      (`detectTechnologies`: sem acento e caixa, palavra inteira, aceita `.`/`#`/`+`, sem repetir, agrupado na ordem dos
      grupos);
@@ -41,12 +44,14 @@ você, destructive = falhou, success = concluída). A etapa atual abre por padr�
    novo na mesma conversa). O agente cria o repositório (`gh repo create owner/nome --private|--public`, depois de
    `gh auth status`), escreve AGENTS.md, README, `aicontext/`, o código mínimo (só health check no servidor; só a página
    de entrada no frontend), Dockerfile, `docker-compose.yml`, manifesto, `.env` (ignorado) e `.env.example`, os
-   usuários/bancos exclusivos nos serviços compartilhados, anota a porta em `/home/used_ports` (`<porta> -> <projeto>`) e
+   usuários/bancos exclusivos nos serviços compartilhados, anota a porta em `/home/used_ports` (`<porta> -> <nome do repositório>`) e
    faz o push. Termina com o bloco ` ```json bootstrap-result ` (`{ port, healthPath, hasServer, usesMongo, branch }`,
    `parseBootstrapResult`). Sem o bloco, o bootstrap fica **aguardando você**; bloco inválido falha.
-   - **Conferência no host** (Opex, pelo shell do OpenCode, `verificationCommand`): repositório git com `origin`, push do
-     `HEAD` em `refs/heads/<branch>`, árvore limpa, `.env` existente e ignorado, `docker-compose.yml` e a linha da porta em
-     `/home/used_ports`. Faltou algo: a etapa falha listando o que faltou; **Tentar novamente** pede ao agente, na mesma
+   - **Conferência no host** (Opex, pelo shell do OpenCode, `verificationCommand`): repositório git com `origin` apontando
+     para **este** repositório (o remoto é lido sem credenciais), push do `HEAD` em `refs/heads/<branch>`, árvore limpa,
+     `.env` existente e ignorado, `docker-compose.yml`, a reserva da porta em `/home/used_ports` com o nome do repositório
+     (`<porta> -> <nome>`; reserva de outro projeto não conta) e a porta livre (nenhum container de outro diretório a
+     publica e nenhum outro processo escuta nela; um container deste diretório pode usá-la). Faltou algo: a etapa falha listando o que faltou; **Tentar novamente** pede ao agente, na mesma
      conversa, que complete. A branch é sempre a decidida na etapa 1.
 3. **Amarração** (`LinkPanel`): `createLink` (vínculo em Integrações › GitHub, que cria o Projeto) e `createCentral` +
    `updateCentral` com `bootstrapCentralConfig` (branch base e destino do PR = a branch do push; backup do banco **só**
@@ -59,12 +64,19 @@ você, destructive = falhou, success = concluída). A etapa atual abre por padr�
    `healthUrl` = `http://localhost:<porta><healthPath>` ou `/` sem servidor, sem limites, variáveis do `.env` lido no host
    por `readText`) e `startDeploy`; o Opex acompanha o registro do deploy. Deploy com falha: soma uma tentativa e **volta à
    etapa 2** na mesma conversa com o erro e o fim do log (sem limite de voltas; o stepper mostra "Tentativa N"); na volta,
-   o ambiente existente é atualizado (o `.env` ou a porta podem ter mudado). Slug ou projeto do compose já usados por outro
+   o ambiente existente é atualizado (o `.env` ou a porta podem ter mudado; o `.env` substitui as variáveis inteiras, então
+   um valor esvaziado no arquivo fica vazio, sem manter o da tentativa anterior). Slug ou projeto do compose já usados por outro
    ambiente: o ambiente nasce com o primeiro `<slug>-N` livre (`freeEnvironmentSlug`), com aviso na conversa; as voltas seguintes mantêm o slug e o projeto do compose gravados.
 5. **Concluído** (`DonePanel`): links do repositório, da central e do ambiente e a porta.
 
 **Cancelar** (com confirmação) para o agente, dispensa as perguntas e marca **Cancelado**; nada do que foi criado é
-apagado e o resumo lista o que ficou (`createdSummary`).
+apagado e o resumo lista o que ficou (`createdSummary`). Com sessão gravada, a sessão do OpenCode é sempre interrompida no
+host, mesmo depois de um reinício (quando o processo não tem mais o turno em memória).
+
+**Um bootstrap aberto por repositório**, de forma atômica: o registro leva `activeRepo` enquanto está aberto (executando,
+aguardando ou com falha), com índice único parcial (`active_repo_unique`, criado pela migração
+`ensure-project-bootstrap-indexes`); concluir ou cancelar limpa a trava. Dois envios ao mesmo tempo: o segundo recebe 409
+`BOOTSTRAP_ALREADY_RUNNING`.
 
 ## Motor e retomada
 

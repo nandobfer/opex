@@ -1,6 +1,6 @@
 import { DomainError } from "@/lib/api/route"
 import { openHost, type OpencodeHost } from "@/features/opencode-resources/server/host"
-import { classifyDirectory, directoryCheckCommand, missingDeliverables, shq, verificationCommand, type Deliverable } from "../host-checks"
+import { classifyDirectory, directoryCheckCommand, missingDeliverables, shq, verificationCommand, type Deliverable, type VerificationTarget } from "../host-checks"
 import type { DirectoryCheckDto } from "../types"
 
 /**
@@ -23,11 +23,11 @@ export async function ensureHostDirectory(path: string, host?: OpencodeHost): Pr
 }
 
 /** Fim da etapa 2: o que faltou entregar (vazio = tudo certo). */
-export async function verifyDeliverables(directory: string, branch: string, port: number, host?: OpencodeHost): Promise<Deliverable[]> {
+export async function verifyDeliverables(input: VerificationTarget & { repo: string }, host?: OpencodeHost): Promise<Deliverable[]> {
     const target = host ?? (await openHost())
-    const result = await target.run(verificationCommand(directory, branch, port), 60_000, { quiet: true, retryOnLost: true })
+    const result = await target.run(verificationCommand(input), 60_000, { quiet: true, retryOnLost: true })
     if (result.exitCode !== 0) throw new DomainError(502, "Não foi possível conferir as entregas no host do OpenCode", "BOOTSTRAP_VERIFY_FAILED")
-    return missingDeliverables(result.output)
+    return missingDeliverables(result.output, input.repo)
 }
 
 /** `.env` produzido pelo agente (o conteúdo nunca vai para log, evento ou auditoria). */

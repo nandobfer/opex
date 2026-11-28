@@ -29,7 +29,7 @@ export function useBootstrapInfoForm(initialRepo: string) {
     const owners = useRepoOwners()
     const catalog = useTechCatalog()
     const board = useTaskBoard()
-    const [owner, name, context, directory] = useWatch({ control: form.control, name: ["owner", "name", "context", "directory"] })
+    const [owner, name, context, directory, visibility] = useWatch({ control: form.control, name: ["owner", "name", "context", "directory", "visibility"] })
     const directoryEdited = useRef(false)
     const columnsApplied = useRef(false)
 
@@ -53,7 +53,8 @@ export function useBootstrapInfoForm(initialRepo: string) {
     const repoKey = repoReady ? `${owner.trim()}/${name.trim()}` : null
     const debouncedRepo = useDebouncedValue(repoKey, CHECK_DELAY_MS)
     const [checkOwner, checkName] = debouncedRepo ? debouncedRepo.split("/") : [null, null]
-    const repoCheck = useRepoCheck(checkOwner ?? null, checkName ?? null)
+    // A visibilidade entra na conferência: a organização pode permitir só privados ou só públicos.
+    const repoCheck = useRepoCheck(checkOwner ?? null, checkName ?? null, visibility)
     const repoPending = repoKey !== debouncedRepo
     const fullName = repoReady ? repoFullName(owner.trim(), name.trim()) : null
     const dirKey = directory && fullName && !form.formState.errors.directory ? `${directory}\n${fullName}` : null
