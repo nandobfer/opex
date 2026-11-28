@@ -331,7 +331,10 @@ transcrição sob demanda do áudio, que depende do recurso de transcrição do 
   mensagem mais antiga da página) aparecem como **pílulas** entre as mensagens ("Secretário · Respondeu: motivo") e as
   mensagens enviadas por ele levam o selo **"Secretário"** (`agentMessageIds`: `messageIds` do registro do turno, o
   `sentMessageId` das perguntas ao dono e, para o que foi enviado antes da OPE-197, o `secretary_sent` dos últimos
-  7 dias; mais antigas ficam sem selo; a mensagem de teste da integração, `origin: "test"`, nunca leva).
+  7 dias; mais antigas ficam sem selo; a mensagem de teste da integração, `origin: "test"`, nunca leva). A decisão
+  **Desligado** não vira pílula na conversa (decisão do dono, OPE-207; `TIMELINE_HIDDEN_DECISIONS`): fica só na seção
+  Decisões. A conversa (lista, linha do tempo, envio, mídia e ações) funciona igual com o Secretário desligado; só a
+  resposta automática depende dele ligado.
 - **Envio pelo dono** (decisão D1, "completo sem CRM"; `POST …/messages`): texto com emoji (`emoji-picker-react`, a
   mesma biblioteca do Atendimento, sob demanda e em pt-BR), Enter envia e Shift+Enter quebra a linha; responder
   citando; reagir (seis rápidas e o seletor; tocar na atual remove); anexos (fotos e vídeos, documento, câmera, áudio)

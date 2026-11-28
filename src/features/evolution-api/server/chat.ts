@@ -1,9 +1,14 @@
+import { loggerFor } from "@/lib/logger"
 import { buildChatPage, type ChatEffects, type ChatMessageDto } from "../chat-message"
 import { CAPTION_MEDIA_TYPES, validateMediaFile } from "../chat-media-rules"
+import { USER_JID_SUFFIX } from "../constants"
 import type { EvolutionMessage } from "../evolution-dto"
+import { lidAliasOf } from "../message"
 import type { ChatMediaFields, ChatSendInput } from "../schemas"
 import { evolution, toDomainError } from "./client"
-import { conversationJids } from "./lid"
+import { conversationJids, rememberLidAliases, type LidAlias } from "./lid"
+
+const log = loggerFor({ feature: "evolution-api" })
 
 /**
  * Conversa de verdade da aba Conversas do Secretário (OPE-197): página da linha do tempo lida da Evolution sob demanda
@@ -37,11 +42,17 @@ function secondsOf(message: EvolutionMessage): number {
 /**
  * Mensagens de uma conversa guardada em um ou mais `remoteJid` (número e `@lid`, OPE-207): lê até `limit` de cada um
  * (até `before`, inclusivo), junta, descarta ids repetidos (a Evolution grava linhas duplicadas) e corta em `limit`.
+ * A consulta de um número leva `remoteJidAlt` igual a ele: traz também a metade `@lid`, mesmo sem correspondência conhecida.
  * O cursor seguinte é o segundo da mais antiga; se ele não andou (tudo no mesmo segundo), recua 1 s.
  */
 export async function fetchConversationMessages(instance: string, jids: readonly string[], input: { before?: Date | null; limit: number }, options?: { signal?: AbortSignal }): Promise<ConversationMessages> {
     const { before, limit } = input
-    const pages = await Promise.all(jids.map((jid) => evolution.findMessages(instance, { remoteJid: jid, pageSize: limit, ...(before ? { from: new Date(0), to: before } : {}) }, options)))
+    const pages = await Promise.all(jids.map((jid) => evolution.findMessages(instance, {
+        remoteJid: jid,
+        ...(jid.endsWith(USER_JID_SUFFIX) ? { remoteJidAlt: jid } : {}),
+        pageSize: limit,
+        ...(before ? { from: new Date(0), to: before } : {}),
+    }, options)))
     const byId = new Map<string, EvolutionMessage>()
     for (const page of pages) for (const record of page.records) if (!byId.has(record.key.id)) byId.set(record.key.id, record)
     const merged = [...byId.values()].sort((a, b) => secondsOf(b) - secondsOf(a))
@@ -53,7 +64,24 @@ export async function fetchConversationMessages(instance: string, jids: readonly
         if (before && cursor * 1000 >= before.getTime()) cursor = Math.floor(before.getTime() / 1000) - 1
         nextBefore = new Date(cursor * 1000)
     }
+    learnLidAliases(instance, records)
     return { records, hasOlder, nextBefore }
+}
+
+/**
+ * Mensagens do `@lid` com o número em `remoteJidAlt` ensinam a correspondência ao abrir a conversa (lista e webhook passam a
+ * juntar as metades). Em segundo plano: não segura a página, e a falha só vai para o log.
+ */
+function learnLidAliases(instance: string, records: readonly EvolutionMessage[]): void {
+    const aliases = new Map<string, LidAlias>()
+    for (const record of records) {
+        const alias = lidAliasOf(record.key)
+        if (alias) aliases.set(alias.pn, alias)
+    }
+    if (aliases.size === 0) return
+    void rememberLidAliases(instance, [...aliases.values()]).catch((error: unknown) => {
+        log.warn({ errorKind: error instanceof Error ? error.name : typeof error, instance }, "[evolution] Falha ao gravar a correspondência LID ↔ número pela conversa")
+    })
 }
 
 /** As `limit` mensagens mais recentes da conversa (mais novas primeiro), juntando número e `@lid` (histórico do Secretário). */

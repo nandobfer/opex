@@ -62,7 +62,10 @@ describe("fetchConversationMessages (OPE-207)", () => {
         expect(result.records.map((item) => item.key.id)).toEqual(["L2", "L1", "P2"])
         expect(result.hasOlder).toBe(true)
         expect(result.nextBefore).toEqual(new Date(200 * 1000))
-        expect(mocks.findMessages).toHaveBeenCalledWith("opex", { remoteJid: PN, pageSize: 3 }, undefined)
+        // Número: remoteJid e remoteJidAlt (traz a metade @lid sem correspondência); @lid: só remoteJid.
+        expect(mocks.findMessages).toHaveBeenCalledWith("opex", { remoteJid: PN, remoteJidAlt: PN, pageSize: 3 }, undefined)
+        expect(mocks.findMessages).toHaveBeenCalledWith("opex", { remoteJid: LID, pageSize: 3 }, undefined)
+        expect(mocks.bulkWrite).not.toHaveBeenCalled()
     })
 
     it("tudo cabe na página: sem anteriores e sem cursor", async () => {
@@ -75,9 +78,19 @@ describe("fetchConversationMessages (OPE-207)", () => {
         mocks.findMessages.mockResolvedValue(page([record("B", 500), record("A", 450)], 80))
         const before = new Date(600 * 1000)
         const result = await fetchConversationMessages("opex", [PN], { limit: 50, before })
-        expect(mocks.findMessages).toHaveBeenCalledWith("opex", { remoteJid: PN, pageSize: 50, from: new Date(0), to: before }, undefined)
+        expect(mocks.findMessages).toHaveBeenCalledWith("opex", { remoteJid: PN, remoteJidAlt: PN, pageSize: 50, from: new Date(0), to: before }, undefined)
         expect(result.hasOlder).toBe(true)
         expect(result.nextBefore).toEqual(new Date(450 * 1000))
+    })
+
+    it("mensagens do @lid com o número em remoteJidAlt ensinam a correspondência; falha ao gravar não derruba a leitura", async () => {
+        mocks.findMessages.mockResolvedValue(page([{ ...record("L1", 300, LID), key: { id: "L1", remoteJid: LID, remoteJidAlt: PN, fromMe: false } }]))
+        mocks.bulkWrite.mockRejectedValueOnce(new Error("banco fora"))
+        const result = await fetchConversationMessages("opex", [PN], { limit: 50 })
+        expect(result.records.map((item) => item.key.id)).toEqual(["L1"])
+        await vi.waitFor(() => expect(mocks.bulkWrite).toHaveBeenCalled())
+        const ops = mocks.bulkWrite.mock.calls[0]![0] as { updateOne: { filter: unknown; update: { $set: unknown } } }[]
+        expect(ops.map((op) => [op.updateOne.filter, op.updateOne.update.$set])).toEqual([[{ _id: `opex:${PN}` }, { lidJid: LID, hasChat: true }]])
     })
 
     it("cursor preso no mesmo segundo recua 1 s (não repete a página para sempre)", async () => {

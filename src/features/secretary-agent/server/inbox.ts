@@ -49,6 +49,9 @@ async function agentMessageIdsOf(instance: string, chatId: string, ids: string[]
  * Página da linha do tempo (`before` ausente = mais recentes). A conversa é lida nas duas metades que a Evolution guarda
  * quando o contato passou a ser endereçado por LID (número e `@lid`, OPE-207).
  */
+/** Decisões que não viram pílula na linha do tempo da conversa. */
+export const TIMELINE_HIDDEN_DECISIONS = ["disabled"] as const
+
 export async function conversationTimeline(chatId: string, before: Date | null): Promise<ChatTimelinePageDto> {
     const { instance, jid } = await target(chatId)
     await secretaryDb()
@@ -58,7 +61,8 @@ export async function conversationTimeline(chatId: string, before: Date | null):
     const range = timeline.hasOlder && oldest ? { at: { $gte: new Date(oldest) } } : {}
     const [decisions, agentMessageIds] = await Promise.all([
         timeline.items.length || !before
-            ? SecretaryDecisionRecord.find({ instance, chatId, ...range }).sort({ at: -1 }).limit(DECISIONS_PER_PAGE).select("decision reason at").lean()
+            // "Desligado" não aparece na conversa (decisão do dono, OPE-207): fica só na seção Decisões.
+            ? SecretaryDecisionRecord.find({ instance, chatId, decision: { $nin: TIMELINE_HIDDEN_DECISIONS }, ...range }).sort({ at: -1 }).limit(DECISIONS_PER_PAGE).select("decision reason at").lean()
             : Promise.resolve([]),
         agentMessageIdsOf(instance, chatId, timeline.items.map((item) => item.id)),
     ])

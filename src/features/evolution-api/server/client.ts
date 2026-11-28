@@ -217,13 +217,17 @@ export const evolution = {
             ...options,
         }),
     /** Uma página de mensagens de uma conversa (mais novas primeiro na 2.3.8). */
-    findMessages: async (name: string, input: { remoteJid: string; page?: number; pageSize?: number; from?: Date; to?: Date }, options?: CallOptions) => {
+    /**
+     * Com `remoteJidAlt`, a Evolution (Baileys) devolve as mensagens que batem com `remoteJid` OU `remoteJidAlt`: pelo número
+     * nos dois, vem também a metade gravada no `@lid` (OPE-207).
+     */
+    findMessages: async (name: string, input: { remoteJid: string; remoteJidAlt?: string; page?: number; pageSize?: number; from?: Date; to?: Date }, options?: CallOptions) => {
         const result = await evolutionCall("POST", `/chat/findMessages/${inst(name)}`, evolutionMessagesPageSchema, {
             label: "Mensagens",
             timeoutMs: 60_000,
             body: {
                 where: {
-                    key: { remoteJid: input.remoteJid },
+                    key: { remoteJid: input.remoteJid, ...(input.remoteJidAlt ? { remoteJidAlt: input.remoteJidAlt } : {}) },
                     ...(input.from ? { messageTimestamp: { gte: input.from.toISOString(), lte: (input.to ?? new Date()).toISOString() } } : {}),
                 },
                 page: input.page ?? 1,

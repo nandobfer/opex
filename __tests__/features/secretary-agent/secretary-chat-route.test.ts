@@ -21,8 +21,9 @@ const mocks = vi.hoisted(() => ({
     sent: vi.fn(),
     sentUpsert: vi.fn(),
     jids: vi.fn(),
+    remember: vi.fn(),
 }))
-vi.mock("@/features/evolution-api/server/lid", () => ({ conversationJids: mocks.jids }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ conversationJids: mocks.jids, rememberLidAliases: mocks.remember }))
 vi.mock("@/features/auth/server/context", () => ({ requireAdminSession: vi.fn() }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { EXECUTAR: "EXECUTAR" }, recordAudit: mocks.audit }))
 vi.mock("@/features/evolution-api/server/client", () => ({ evolution: mocks.evolution, toDomainError: (error: unknown) => { throw error } }))
@@ -56,6 +57,7 @@ beforeEach(() => {
     mocks.notices.mockReturnValue([])
     mocks.sent.mockReturnValue([])
     mocks.jids.mockImplementation(async (_instance: string, value: string) => [value])
+    mocks.remember.mockResolvedValue(0)
     for (const fn of [mocks.evolution.sendText, mocks.evolution.sendReaction, mocks.evolution.sendLocation, mocks.evolution.sendContact, mocks.evolution.sendMedia, mocks.evolution.sendWhatsAppAudio]) fn.mockResolvedValue({ key: { id: "NEW" } })
 })
 
@@ -74,7 +76,7 @@ describe("GET mensagens da conversa (OPE-197)", () => {
         expect(data.nextBefore).toBe(new Date(1_790_000_100 * 1000).toISOString())
         expect(data.decisions).toEqual([{ id: "opex:A", decision: "replied", reason: "ok", at: "2026-09-21T00:00:00.000Z" }])
         expect(new Set(data.agentMessageIds)).toEqual(new Set(["B", "C", "D"]))
-        expect(mocks.decisions).toHaveBeenCalledWith({ instance: "opex", chatId, at: { $gte: new Date(1_790_000_100 * 1000) } })
+        expect(mocks.decisions).toHaveBeenCalledWith({ instance: "opex", chatId, decision: { $nin: ["disabled"] }, at: { $gte: new Date(1_790_000_100 * 1000) } })
         // A mensagem de teste da integração não leva o selo.
         expect(mocks.sent).toHaveBeenCalledWith(expect.objectContaining({ origin: { $ne: "test" } }))
     })
@@ -87,6 +89,37 @@ describe("GET mensagens da conversa (OPE-197)", () => {
 })
 
 describe("GET conversa endereçada por LID (OPE-207)", () => {
+    it("regressão da prévia: sem correspondência conhecida, a consulta pelo número traz as mensagens do @lid (remoteJidAlt) e ensina a correspondência", async () => {
+        mocks.evolution.findMessages.mockImplementation(async (_instance: string, input: { remoteJid: string; remoteJidAlt?: string }) => {
+            const records = [{ key: { id: "L2", remoteJid: lid, remoteJidAlt: jid, fromMe: false }, message: { conversation: "oi" }, messageTimestamp: 1_790_000_200 }, { key: { id: "L1", remoteJid: lid, remoteJidAlt: jid, fromMe: true }, message: { conversation: "olá" }, messageTimestamp: 1_790_000_100 }]
+            return input.remoteJidAlt === jid ? { total: 2, pages: 1, page: 1, records } : { total: 0, pages: 0, page: 1, records: [] }
+        })
+        const { data } = await (await get()).json()
+        expect(mocks.evolution.findMessages).toHaveBeenCalledWith("opex", expect.objectContaining({ remoteJid: jid, remoteJidAlt: jid }), undefined)
+        expect(data.items.map((item: { id: string }) => item.id)).toEqual(["L1", "L2"])
+        expect(mocks.remember).toHaveBeenCalledWith("opex", [{ lid, pn: jid }])
+    })
+
+    it("Secretário desligado: as mensagens aparecem e a pílula Desligado não (as outras decisões continuam)", async () => {
+        mocks.evolution.findMessages.mockResolvedValue({ total: 2, pages: 1, page: 1, records: [record("B", 1_790_000_200), record("A", 1_790_000_100)] })
+        const rows = [
+            { _id: "opex:B", decision: "disabled", reason: "Agente desligado ou sem modelo configurado.", at: new Date("2026-09-21T00:00:02Z") },
+            { _id: "opex:A", decision: "replied", reason: "ok", at: new Date("2026-09-21T00:00:01Z") },
+        ]
+        mocks.decisions.mockImplementation((filter: { decision?: { $nin?: string[] } }) => rows.filter((row) => !filter.decision?.$nin?.includes(row.decision)))
+        const { data } = await (await get()).json()
+        expect(data.items.map((item: { id: string }) => item.id)).toEqual(["A", "B"])
+        expect(data.decisions.map((pill: { decision: string }) => pill.decision)).toEqual(["replied"])
+    })
+
+    it("a falha ao gravar a correspondência não derruba a página", async () => {
+        mocks.remember.mockRejectedValue(new Error("banco fora"))
+        mocks.evolution.findMessages.mockResolvedValue({ total: 1, pages: 1, page: 1, records: [{ key: { id: "L1", remoteJid: lid, remoteJidAlt: jid, fromMe: false }, message: { conversation: "oi" }, messageTimestamp: 1_790_000_100 }] })
+        const response = await get()
+        expect(response.status).toBe(200)
+        expect((await response.json()).data.items.map((item: { id: string }) => item.id)).toEqual(["L1"])
+    })
+
     it("regressão: a mensagem mais nova gravada só no @lid aparece junto das do número", async () => {
         mocks.jids.mockResolvedValue([jid, lid])
         mocks.evolution.findMessages.mockImplementation(async (_instance: string, input: { remoteJid: string }) =>

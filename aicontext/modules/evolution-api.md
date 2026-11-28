@@ -127,8 +127,11 @@ Parte genérica de WhatsApp da conversa do Secretário (ver `secretary-agent.md`
 ## Endereçamento por LID (OPE-207)
 
 Quando o WhatsApp passa a endereçar um contato pelo `<lid>@lid`, a Evolution 2.3.8 grava as mensagens novas nesse
-`remoteJid` (com o número em `remoteJidAlt`, quando vem) e as antigas continuam no número; o `findMessages` só filtra
-por `remoteJid` exato, e as tabelas `Contact`, `Chat` e `IsOnWhatsapp` da Evolution não guardam a correspondência.
+`remoteJid` (com o número em `remoteJidAlt`, quando vem) e as antigas continuam no número. As tabelas `Contact`, `Chat` e
+`IsOnWhatsapp` da Evolution não guardam a correspondência. O `findMessages` (Baileys) aceita `remoteJid` e `remoteJidAlt`
+juntos e devolve as que batem com qualquer um: a consulta de um número leva `remoteJidAlt` igual a ele e já traz a metade
+`@lid`, intercalada e paginada pela própria Evolution, mesmo sem correspondência conhecida (a implementação Business
+ignora o campo).
 
 - `lidAliasOf` (puro, `message.ts`): `@lid` com `remoteJidAlt` de número gera `{ lid, pn }`.
 - O contato do número guarda `lidJid` (`evolution_contacts`, índice `instance_lid`), aprendido no webhook
@@ -139,7 +142,8 @@ por `remoteJid` exato, e as tabelas `Contact`, `Chat` e `IsOnWhatsapp` da Evolut
   conhecida (ex.: resposta do dono pelo celular): prévia, não lidas, evento da conversa e turno do Secretário ficam na
   conversa do número. O mesmo vale para os JIDs de `MESSAGES_UPDATE`.
 - `conversationJids` devolve as duas metades (número primeiro); a linha do tempo e o histórico do Secretário leem as
-  duas. `lidAliases` devolve LID → número, para a lista de conversas juntar a metade LID na do número. A análise de
+  duas (a do `@lid` cobre as mensagens sem `remoteJidAlt`). Ao abrir a conversa, as mensagens do `@lid` com o número em
+  `remoteJidAlt` também ensinam a correspondência (`rememberLidAliases` em segundo plano; falha só no log). `lidAliases` devolve LID → número, para a lista de conversas juntar a metade LID na do número. A análise de
   personalidade ainda lê cada conversa pelo próprio JID (pendência).
 
 ## Debug, auditoria e tempo real
