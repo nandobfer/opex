@@ -26,13 +26,28 @@ import { createRunFollower, followGithubRun } from '@/features/agentic/server/gi
 type Run = { status: string; conclusion: string | null }
 type Job = { id: number; name: string; status: string; conclusion: string | null; steps: { name: string; number: number; status: string; conclusion: string | null }[] }
 
-/** Cada consulta devolve o próximo estado (o último se repete). */
+/** Cada consulta devolve o próximo estado (o último se repete). `seenAt[i]` = saída escrita antes do estado i. */
 function scenario(states: { run: Run; jobs: Job[] }[]) {
   let index = -1
+  const seenAt: string[] = []
   gh.full.mockImplementation(async (path: string) => {
-    if (!path.includes('/jobs')) index = Math.min(index + 1, states.length - 1)
+    if (!path.includes('/jobs')) {
+      index = Math.min(index + 1, states.length - 1)
+      seenAt[index] ??= out
+    }
     const state = states[Math.max(index, 0)]!
     return { data: path.includes('/jobs') ? { jobs: state.jobs } : state.run, notModified: false, etag: null, status: 200, next: null, rateRemaining: 5000 }
+  })
+  return seenAt
+}
+
+/** Log por etapa (`/jobs/{id}/steps/{n}/logs`) e do job inteiro (`/jobs/{id}/logs`), por caminho. */
+function logs(byPath: Record<string, string | (() => string | null)>) {
+  gh.text.mockImplementation(async (path: string) => {
+    const entry = Object.entries(byPath).find(([suffix]) => path.endsWith(suffix))?.[1]
+    const value = typeof entry === 'function' ? entry() : entry
+    if (value === undefined || value === null) throw new gh.GithubError('Não encontrado', 'NOT_FOUND', 404)
+    return value
   })
 }
 
@@ -50,39 +65,77 @@ beforeEach(() => {
 })
 
 describe('followGithubRun', () => {
-  it('caminho feliz: fila → etapas → job concluído → log escrito uma única vez', async () => {
+  it('caminho feliz: fila → etapa → log da etapa antes da linha de fim → job concluído', async () => {
     scenario([
       { run: { status: 'queued', conclusion: null }, jobs: [] },
       { run: { status: 'in_progress', conclusion: null }, jobs: [{ id: 9, name: 'preview', status: 'in_progress', conclusion: null, steps: [step(1, 'Checkout', 'in_progress')] }] },
       { run: { status: 'completed', conclusion: 'success' }, jobs: [{ id: 9, name: 'preview', status: 'completed', conclusion: 'success', steps: [step(1, 'Checkout', 'completed', 'success')] }] },
     ])
-    gh.text.mockRejectedValueOnce(new gh.GithubError('Não encontrado', 'NOT_FOUND', 404)).mockResolvedValue('2026-11-27T22:15:01Z docker buildx build ok\n')
+    let calls = 0
+    // O log da etapa pode demorar uma consulta para sair: 404 na primeira, texto na seguinte.
+    logs({ '/jobs/9/steps/1/logs': () => (++calls === 1 ? null : '2026-11-27T22:15:01Z docker buildx build ok\n') })
     const result = await followGithubRun({ repo: 'org/app', runId: 42, signal: new AbortController().signal, write, pollMs: 0 })
     expect(result).toEqual({ followed: true, conclusion: 'success', failure: null })
     const text = strip(out)
     expect(text).toContain('aguardando um runner')
-    expect(text).toContain('▶ Etapa 1/1 · Checkout')
-    expect(text).toContain('✔ Checkout')
+    const order = ['▶ Etapa 1/1 · Checkout', 'docker buildx build ok', '✔ Checkout', '✔ Job preview concluído', 'GitHub Actions concluído'].map((part) => text.indexOf(part))
+    expect(order.every((at) => at >= 0)).toBe(true)
+    expect([...order].sort((a, b) => a - b)).toEqual(order)
     expect(text.split('docker buildx build ok')).toHaveLength(2)
-    expect(text.indexOf('docker buildx build ok')).toBeLessThan(text.indexOf('✔ Job preview concluído'))
-    expect(text).toContain('GitHub Actions concluído')
     expect(gh.full.mock.calls[0]![0]).toBe('/repos/org/app/actions/runs/42')
   })
 
-  it('log incremental: escreve as linhas completas durante a execução e só o resto no fim', async () => {
-    const running = { run: { status: 'in_progress', conclusion: null }, jobs: [{ id: 3, name: 'preview', status: 'in_progress', conclusion: null, steps: [step(1, 'Testes', 'in_progress')] }] }
-    scenario([running, { run: { status: 'completed', conclusion: 'success' }, jobs: [{ ...running.jobs[0]!, status: 'completed', conclusion: 'success', steps: [step(1, 'Testes', 'completed', 'success')] }] }])
-    gh.text.mockResolvedValueOnce('linha 1\nlinha 2 parc').mockResolvedValue('linha 1\nlinha 2 parcial\nlinha 3\n')
+  it('F1: com o log do job em 404 durante a execução, o log de uma etapa concluída aparece antes de o job terminar', async () => {
+    const running = (steps: Job['steps']) => ({ run: { status: 'in_progress', conclusion: null }, jobs: [{ id: 3, name: 'preview', status: 'in_progress', conclusion: null, steps }] })
+    const seenAt = scenario([
+      running([step(1, 'Testes completos (antes do build)', 'completed', 'success'), step(2, 'Build e artefato', 'in_progress')]),
+      running([step(1, 'Testes completos (antes do build)', 'completed', 'success'), step(2, 'Build e artefato', 'in_progress')]),
+      { run: { status: 'completed', conclusion: 'success' }, jobs: [{ id: 3, name: 'preview', status: 'completed', conclusion: 'success', steps: [step(1, 'Testes completos (antes do build)', 'completed', 'success'), step(2, 'Build e artefato', 'completed', 'success')] }] },
+    ])
+    logs({ '/jobs/3/steps/1/logs': 'Test Files  152 passed\n', '/jobs/3/steps/2/logs': '#12 [build 5/9] RUN pnpm build\n' })
+    await followGithubRun({ repo: 'org/app', runId: 1, signal: new AbortController().signal, write, pollMs: 0 })
+    // Antes do estado concluído: a saída real da etapa de testes já está no log, e o início da etapa 2 vem depois dela.
+    const before = strip(seenAt[2]!)
+    expect(before).toContain('Test Files  152 passed')
+    expect(before.indexOf('Test Files  152 passed')).toBeLessThan(before.indexOf('▶ Etapa 2/2 · Build e artefato'))
+    expect(before).not.toContain('Job preview concluído')
+    // O log do job inteiro não é consultado (as etapas já trouxeram tudo), e nada se repete.
+    expect(gh.text.mock.calls.some(([path]) => String(path).endsWith('/jobs/3/logs'))).toBe(false)
+    expect(strip(out).split('Test Files  152 passed')).toHaveLength(2)
+    expect(strip(out)).toContain('RUN pnpm build')
+  })
+
+  it('sem log por etapa: avisa uma vez e usa o log do job inteiro quando o job termina', async () => {
+    scenario([{ run: { status: 'completed', conclusion: 'success' }, jobs: [{ id: 4, name: 'preview', status: 'completed', conclusion: 'success', steps: [step(1, 'Testes', 'completed', 'success'), step(2, 'Build', 'completed', 'success')] }] }])
+    logs({ '/jobs/4/logs': 'log completo do job\n' })
     await followGithubRun({ repo: 'org/app', runId: 1, signal: new AbortController().signal, write, pollMs: 0 })
     const text = strip(out)
-    expect(text.split('linha 1')).toHaveLength(2)
-    expect(text).toContain('linha 2 parcial\nlinha 3')
-    expect(text).not.toContain('linha 2 parc\n')
+    expect(text.split('o log desta etapa não ficou disponível')).toHaveLength(2)
+    expect(text).toContain('✔ Build')
+    expect(text.indexOf('log completo do job')).toBeLessThan(text.indexOf('✔ Job preview concluído'))
+  })
+
+  it('F2: run concluído com a lista de jobs ainda vazia continua consultando até os jobs aparecerem', async () => {
+    const done = { run: { status: 'completed', conclusion: 'failure' }, jobs: [] as Job[] }
+    scenario([done, done, { ...done, jobs: [{ id: 6, name: 'preview', status: 'completed', conclusion: 'failure', steps: [step(1, 'Testes', 'completed', 'failure')] }] }])
+    logs({ '/jobs/6/steps/1/logs': '##[error]Process completed with exit code 1.\n' })
+    const result = await followGithubRun({ repo: 'org/app', runId: 1, signal: new AbortController().signal, write, pollMs: 0 })
+    expect(result.failure).toContain('etapa 1 "Testes"')
+    expect(strip(out)).toContain('Process completed with exit code 1.')
+    expect(strip(out)).not.toContain('GitHub Actions concluído')
+  })
+
+  it('F2: run concluído que nunca lista jobs encerra com aviso depois de algumas consultas', async () => {
+    scenario([{ run: { status: 'completed', conclusion: 'success' }, jobs: [] }])
+    const result = await followGithubRun({ repo: 'org/app', runId: 1, signal: new AbortController().signal, write, pollMs: 0 })
+    expect(result.followed).toBe(true)
+    expect(gh.full.mock.calls.length).toBeGreaterThan(2)
+    expect(strip(out)).toContain('o GitHub não listou nenhum job deste run')
   })
 
   it('run com falha: bloco com o job, a etapa e o trecho do log', async () => {
     scenario([{ run: { status: 'completed', conclusion: 'failure' }, jobs: [{ id: 5, name: 'preview', status: 'completed', conclusion: 'failure', steps: [step(1, 'Testes completos (antes do build)', 'completed', 'failure')] }] }])
-    gh.text.mockResolvedValue('2026-11-27T22:15:01Z FAIL soma.test.ts\n2026-11-27T22:15:02Z ##[error]Process completed with exit code 1.\n')
+    logs({ '/jobs/5/steps/1/logs': '2026-11-27T22:15:01Z FAIL soma.test.ts\n2026-11-27T22:15:02Z ##[error]Process completed with exit code 1.\n' })
     const result = await followGithubRun({ repo: 'org/app', runId: 1, signal: new AbortController().signal, write, pollMs: 0 })
     expect(result.conclusion).toBe('failure')
     expect(result.failure).toContain('etapa 1 "Testes completos (antes do build)"')

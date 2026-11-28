@@ -1,7 +1,6 @@
 import { GithubError, githubRequestFull, githubRequestText, type GithubResponse } from "@/features/github/client"
 import { logger } from "@/lib/logger"
 import {
-    completeLines,
     diffSteps,
     emptyStepsSeen,
     failureExcerpt,
@@ -11,27 +10,35 @@ import {
     githubJobEnd,
     githubQueuedLine,
     githubRunDoneLine,
+    githubStepEnd,
     parseGithubRunUrl,
+    type StepEvent,
     type GithubJob,
 } from "../github-run-log"
 
 /**
  * Acompanhamento do run do GitHub Actions da prévia remota (OPE-214), pela integração GitHub: enquanto o
  * script da prévia espera o run em silêncio, o servidor escreve no log do build as etapas ao vivo, o log
- * de cada job e, na falha, o trecho que a explica. É melhor esforço: qualquer falha vira uma linha de
- * aviso no próprio log e o build segue pelo código de saída do script.
+ * de cada etapa assim que ela termina (endpoint de log por etapa: o log do job inteiro só existe no fim
+ * do job) e, na falha, o trecho que a explica. É melhor esforço: qualquer falha vira uma linha de aviso
+ * no próprio log e o build segue pelo código de saída do script.
  */
 
 /** Intervalo entre as consultas do run e dos jobs (com ETag: o 304 não gasta o limite de uso). */
 export const FOLLOW_POLL_MS = 5_000
-/** Enquanto o job roda, o log dele é lido a cada N consultas (se a API já o entregar). */
-const LOG_EVERY_TICKS = 3
-/** Consultas sem o log de um job já concluído antes de desistir dele (o log pode demorar a sair). */
+/** Consultas sem o log de uma etapa (ou do job) já concluída antes de desistir dele (o log pode demorar a sair). */
 const LOG_MISSES = 6
+/** Consultas com o run concluído e nenhum job listado antes de encerrar (atraso de consistência da API). */
+const EMPTY_JOBS_TICKS = 6
 /** Falhas transitórias seguidas (rede, 5xx) antes de desistir do acompanhamento. */
 const MAX_ERRORS = 4
 /** Teto da espera pelo fim do acompanhamento depois que o script terminou. */
 export const FINISH_TIMEOUT_MS = 60_000
+
+const UNAVAILABLE_STEP_LOG = "\x1b[90m(o log desta etapa não ficou disponível pela API do GitHub; as próximas etapas deste job saem sem log)\x1b[0m\n"
+const UNAVAILABLE_JOB_LOG = "\x1b[90m(o log deste job não ficou disponível pela API do GitHub)\x1b[0m\n"
+const PARTIAL_JOB_LOG = "\x1b[90m(parte do log deste job não veio pela API do GitHub; o log completo está no link da execução)\x1b[0m\n"
+const NO_JOBS = "\x1b[90m(o GitHub não listou nenhum job deste run)\x1b[0m\n"
 
 export interface FollowResult {
     /** `false` = o acompanhamento não foi até o fim (erro ou interrupção). */
@@ -74,27 +81,39 @@ export async function followGithubRun(input: { repo: string; runId: number; sign
     const pollMs = input.pollMs ?? FOLLOW_POLL_MS
     const base = `/repos/${repo}/actions/runs/${runId}`
     const seen = emptyStepsSeen()
+    /** Log cru já obtido de cada job (etapas concatenadas ou o job inteiro): base do trecho da falha. */
     const logs = new Map<number, string>()
-    const written = new Map<number, number>()
+    /** Etapas com log escrito, por job. */
+    const stepLogs = new Map<number, number>()
+    /** Jobs em que o log por etapa não veio: as etapas seguintes saem sem log. */
+    const noStepLogs = new Set<number>()
     const finalized = new Set<number>()
-    const misses = new Map<number, number>()
+    const misses = new Map<string, number>()
+    let pending: StepEvent[] = []
     let jobs: GithubJob[] = []
     let run: RunInfo | null = null
     let runEtag: string | null = null
     let jobsEtag: string | null = null
     let queuedShown = false
     let errors = 0
-    let tick = 0
+    let emptyTicks = 0
 
-    const readLog = async (jobId: number): Promise<string | null> => {
+    const readLog = async (path: string): Promise<string | null> => {
         try {
-            return await githubRequestText(`/repos/${repo}/actions/jobs/${jobId}/logs`, { signal, label: "log do job do Actions" })
+            return await githubRequestText(path, { signal, label: "log do Actions" })
         } catch {
             return null
         }
     }
+    /** Mais uma consulta sem o log; `true` = desistiu dele. */
+    const missed = (key: string) => {
+        const count = (misses.get(key) ?? 0) + 1
+        misses.set(key, count)
+        return count >= LOG_MISSES
+    }
+    const keep = (jobId: number, text: string) => logs.set(jobId, (logs.get(jobId) ?? "") + text)
 
-    for (;; tick++) {
+    for (;;) {
         if (signal.aborted) return NOT_FOLLOWED
         try {
             const runRes: GithubResponse<RunInfo> = await githubRequestFull<RunInfo>(base, { etag: runEtag, signal, label: "run do Actions" })
@@ -124,38 +143,71 @@ export async function followGithubRun(input: { repo: string; runId: number; sign
             queuedShown = true
             write(githubQueuedLine())
         }
-        write(diffSteps(seen, jobs))
+        pending.push(...diffSteps(seen, jobs))
 
-        for (const job of jobs) {
-            if (finalized.has(job.id) || !seen.jobs.has(job.id)) continue
-            const completed = job.status === "completed"
-            if (!completed && tick % LOG_EVERY_TICKS !== 0) continue
-            if (completed && job.conclusion === "skipped") {
-                finalized.add(job.id)
-                write(githubJobEnd(job))
+        // Na ordem do job: uma etapa concluída ainda sem log segura o que vem depois no mesmo job.
+        const blocked = new Set<number>()
+        const waiting: StepEvent[] = []
+        for (const item of pending) {
+            const { jobId } = item
+            if (blocked.has(jobId)) {
+                waiting.push(item)
                 continue
             }
-            const text = await readLog(job.id)
-            if (signal.aborted) return NOT_FOLLOWED
-            if (text !== null) {
-                logs.set(job.id, text)
-                const chunk = completed ? text : completeLines(text)
-                const from = written.get(job.id) ?? 0
-                if (chunk.length > from) {
-                    write(formatJobLog(chunk.slice(from)))
-                    written.set(job.id, chunk.length)
+            if (item.kind === "text") {
+                write(item.text)
+                continue
+            }
+            const { step } = item
+            if (step.conclusion !== "skipped" && !noStepLogs.has(jobId)) {
+                const text = await readLog(`/repos/${repo}/actions/jobs/${jobId}/steps/${step.number}/logs`)
+                if (signal.aborted) return NOT_FOLLOWED
+                if (text !== null) {
+                    keep(jobId, text)
+                    stepLogs.set(jobId, (stepLogs.get(jobId) ?? 0) + 1)
+                    write(formatJobLog(text))
+                } else if (missed(`${jobId}:${step.number}`)) {
+                    noStepLogs.add(jobId)
+                    write(UNAVAILABLE_STEP_LOG)
+                } else {
+                    blocked.add(jobId)
+                    waiting.push(item)
+                    continue
                 }
             }
-            if (!completed) continue
-            const missed = text === null ? (misses.get(job.id) ?? 0) + 1 : 0
-            misses.set(job.id, missed)
-            if (text === null && missed < LOG_MISSES) continue
-            if (text === null) write("\x1b[90m(o log deste job não ficou disponível pela API do GitHub)\x1b[0m\n")
+            write(githubStepEnd(step))
+        }
+        pending = waiting
+
+        for (const job of jobs) {
+            if (finalized.has(job.id) || !seen.jobs.has(job.id) || job.status !== "completed") continue
+            if (pending.some((item) => item.jobId === job.id)) continue
+            const hasSteps = (job.steps ?? []).some((step) => step.conclusion !== "skipped")
+            if (hasSteps && noStepLogs.has(job.id)) {
+                if (stepLogs.get(job.id)) write(PARTIAL_JOB_LOG)
+                else {
+                    // Sem nenhuma etapa com log: o log do job inteiro (só existe com o job concluído).
+                    const text = await readLog(`/repos/${repo}/actions/jobs/${job.id}/logs`)
+                    if (signal.aborted) return NOT_FOLLOWED
+                    if (text !== null) {
+                        keep(job.id, text)
+                        write(formatJobLog(text))
+                    } else if (missed(`job:${job.id}`)) write(UNAVAILABLE_JOB_LOG)
+                    else continue
+                }
+            }
             finalized.add(job.id)
             write(githubJobEnd(job))
         }
 
-        if (run?.status === "completed" && jobs.every((job) => finalized.has(job.id))) {
+        if (run?.status === "completed" && !pending.length && jobs.every((job) => finalized.has(job.id))) {
+            // Run concluído sem nenhum job listado: pode ser atraso de consistência da API; espera um pouco.
+            if (!jobs.length && ++emptyTicks < EMPTY_JOBS_TICKS) {
+                jobsEtag = null
+                await sleep(pollMs, signal)
+                continue
+            }
+            if (!jobs.length) write(NO_JOBS)
             const conclusion = run.conclusion ?? null
             const failure = conclusion === "success" ? null : failureExcerpt(jobs, logs)
             write(failure ? githubFailureBlock(failure) : githubRunDoneLine(conclusion))

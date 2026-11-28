@@ -322,9 +322,14 @@ descartar o shell) e cada trecho da saída vai ao vivo para a aba **Build (N)** 
   - liga quando a saída do script traz a URL do run (`Prévia GitHub: …/actions/runs/<id>`) **do repositório
     da central** (URL de outro repositório é ignorada); só no método GitHub Action — servidor e PC não mudam;
   - consulta o run e os jobs a cada 5 s (com ETag) e escreve "aguardando um runner", o cabeçalho de cada job,
-    o início e o fim de cada etapa (duração, falha, pulada) e o **log de cada job** — incremental (linhas
-    completas) se a API já o entregar durante a execução, senão inteiro quando o job termina — sem o carimbo de
-    hora e com `##[group]`/`##[error]`/`##[warning]` em cores; nada é escrito duas vezes;
+    o início de cada etapa e, assim que ela termina, o **log da etapa** (`/actions/jobs/{id}/steps/{n}/logs`: o
+    log do job inteiro só existe com o job concluído, e o `preview.yml` tem um job só) seguido da linha de fim
+    (duração, falha, pulada) — sem o carimbo de hora e com `##[group]`/`##[error]`/`##[warning]` em cores; nada é
+    escrito duas vezes e a ordem do job é mantida (uma etapa cujo log ainda não saiu segura as seguintes). Se o
+    log por etapa não vier (6 consultas), uma linha cinza avisa, as etapas seguintes do job saem sem log e, quando
+    nenhuma etapa trouxe log, o log do job inteiro entra quando o job termina;
+  - só encerra depois de ver os jobs: run concluído com a lista de jobs ainda vazia (atraso da API) continua
+    consultando por até 6 consultas e, se nada aparecer, encerra com a linha "o GitHub não listou nenhum job";
   - no fim: "GitHub Actions concluído" ou o bloco **"GitHub Actions falhou"** com o job e a etapa que falharam,
     as linhas `##[error]` e o final do log do job (`failureExcerpt`). Esse trecho também vai à frente do final
     da saída no prompt de correção (`buildFixPrompt`);

@@ -87,16 +87,22 @@ export function githubJobEnd(job: GithubJob): string {
 }
 
 /**
- * Transições das etapas desde a última consulta: cabeçalho do job, início e fim de cada etapa — cada
- * uma escrita uma única vez. Muta `seen`.
+ * Evento das etapas na ordem em que acontecem: `text` (cabeçalho do job ou início de etapa, escrito como
+ * está) ou `done` (etapa terminou: o log dela entra antes da linha de fim, `githubStepEnd`).
  */
-export function diffSteps(seen: StepsSeen, jobs: GithubJob[]): string {
-    let out = ""
+export type StepEvent = { kind: "text"; jobId: number; text: string } | { kind: "done"; jobId: number; step: GithubStep }
+
+/**
+ * Transições das etapas desde a última consulta — cabeçalho do job, início e fim de cada etapa, cada um
+ * uma única vez e na ordem do job (inclusive as puladas, que não têm log). Muta `seen`.
+ */
+export function diffSteps(seen: StepsSeen, jobs: GithubJob[]): StepEvent[] {
+    const events: StepEvent[] = []
     for (const job of jobs) {
         if (job.status === "queued" || job.status === "waiting" || job.status === "pending") continue
         if (!seen.jobs.has(job.id)) {
             seen.jobs.add(job.id)
-            out += githubJobHeader(job)
+            events.push({ kind: "text", jobId: job.id, text: githubJobHeader(job) })
         }
         const steps = [...(job.steps ?? [])].sort((a, b) => a.number - b.number)
         for (const step of steps) {
@@ -105,16 +111,16 @@ export function diffSteps(seen: StepsSeen, jobs: GithubJob[]): string {
             const skipped = done && step.conclusion === "skipped"
             if (!seen.started.has(key) && (step.status === "in_progress" || (done && !skipped))) {
                 seen.started.add(key)
-                out += githubStepStart(step, steps.length)
+                events.push({ kind: "text", jobId: job.id, text: githubStepStart(step, steps.length) })
             }
             if (done && !seen.finished.has(key)) {
                 seen.finished.add(key)
                 seen.started.add(key)
-                out += githubStepEnd(step)
+                events.push({ kind: "done", jobId: job.id, step })
             }
         }
     }
-    return out
+    return events
 }
 
 const TIMESTAMP = /^\uFEFF?\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z ?/
@@ -138,12 +144,6 @@ export function formatJobLog(raw: string): string {
     if (lines.at(-1) === "") lines.pop()
     const out = lines.map(formatLine).filter((line): line is string => line !== null)
     return out.length ? `${out.join("\n")}\n` : ""
-}
-
-/** Parte do log já completa (até a última quebra de linha): só ela é escrita enquanto o job roda. */
-export function completeLines(raw: string): string {
-    const end = raw.lastIndexOf("\n")
-    return end < 0 ? "" : raw.slice(0, end + 1)
 }
 
 const EXCERPT_LINES = 80
