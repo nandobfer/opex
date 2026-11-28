@@ -1,15 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { DEFAULT_SECRETARY_SETTINGS } from "@/features/secretary-agent/schemas"
 
-const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), contacts: vi.fn(), states: vi.fn(), notices: vi.fn(), update: vi.fn(), audit: vi.fn(), publish: vi.fn(), lids: vi.fn() }))
-vi.mock("@/features/evolution-api/server/lid", () => ({ lidAliases: mocks.lids }))
+const mocks = vi.hoisted(() => ({ load: vi.fn(), save: vi.fn(), contacts: vi.fn(), states: vi.fn(), notices: vi.fn(), update: vi.fn(), audit: vi.fn(), publish: vi.fn(), lids: vi.fn(), jids: vi.fn(), updateMany: vi.fn() }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ lidAliases: mocks.lids, conversationJids: mocks.jids }))
 vi.mock("@/lib/db", () => ({ AcaoAuditoria: { ATUALIZAR: "ATUALIZAR" }, recordAudit: mocks.audit }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: mocks.publish }))
 vi.mock("@/features/evolution-api/server/contacts", () => ({ listContacts: mocks.contacts }))
 vi.mock("@/features/secretary-agent/server/settings", () => ({ loadSecretarySettings: mocks.load, saveSecretarySettings: mocks.save }))
 vi.mock("@/features/secretary-agent/server/models", () => ({
     secretaryDb: vi.fn(),
-    SecretaryConversation: { updateOne: mocks.update, find: () => ({ select: () => ({ lean: mocks.states }) }) },
+    SecretaryConversation: { updateOne: mocks.update, updateMany: mocks.updateMany, find: () => ({ select: () => ({ lean: mocks.states }) }) },
     SecretaryNotice: { distinct: mocks.notices },
 }))
 
@@ -24,6 +24,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.load.mockResolvedValue({ settings })
     mocks.lids.mockResolvedValue(new Map())
+    mocks.jids.mockImplementation(async (_instance: string, value: string) => [value])
 })
 
 describe("conversas do Secretário", () => {
@@ -79,6 +80,34 @@ describe("conversas do Secretário", () => {
             ["5521999999999", "2026-11-26T10:00:00.000Z", null, 0],
             ["lid-40686980210703", "2026-11-26T09:00:00.000Z", null, 0],
         ])
+    })
+
+    it("OPE-207: bloqueio, pausa e pergunta salvos no @lid valem para a conversa unificada no número", async () => {
+        const lidJid = "158879933534209@lid"
+        const contacts = [{ jid, lastMessageAt: "2026-11-27T10:00:00.000Z" }, { jid: lidJid, lastMessageAt: "2026-11-26T10:00:00.000Z" }]
+        const run = async (patch: { blocked?: string[]; paused?: boolean; notice?: boolean }) => {
+            mocks.load.mockResolvedValueOnce({ settings: { ...settings, criteria: { ...settings.criteria, audience: { ...settings.criteria.audience, blocked: patch.blocked ?? [] } } } })
+            mocks.contacts.mockResolvedValueOnce(contacts)
+            mocks.states.mockResolvedValueOnce(patch.paused ? [{ jid: lidJid, pausedUntil: new Date(Date.now() + 60_000) }] : [])
+            mocks.notices.mockResolvedValueOnce(patch.notice ? ["lid-158879933534209"] : [])
+            mocks.lids.mockResolvedValueOnce(new Map([[lidJid, jid]]))
+            const rows = await listSecretaryConversations()
+            expect(rows.map((row) => row.chatId)).toEqual([chatId])
+            return rows[0]!.state
+        }
+        expect(await run({ blocked: [lidJid] })).toBe("excluded")
+        expect(await run({ paused: true })).toBe("paused")
+        expect(await run({ notice: true })).toBe("waiting-owner")
+    })
+
+    it("OPE-207: voltar a responder e retomar pela conversa do número limpam também o @lid", async () => {
+        const lidJid = "158879933534209@lid"
+        mocks.jids.mockResolvedValue([jid, lidJid])
+        mocks.load.mockResolvedValue({ settings: { ...settings, criteria: { ...settings.criteria, audience: { ...settings.criteria.audience, blocked: [lidJid, "outro@s.whatsapp.net"] } } } })
+        await changeConversation(chatId, { action: "include" }, "local")
+        expect(mocks.save.mock.calls[0]![0].criteria.audience.blocked).toEqual(["outro@s.whatsapp.net"])
+        await changeConversation(chatId, { action: "resume" }, "local")
+        expect(mocks.updateMany).toHaveBeenCalledWith({ instance: "opex", jid: { $in: [lidJid] } }, { $set: { pausedUntil: null } })
     })
 
     it("OPE-207: sem a metade do número na lista, a metade @lid continua visível (a conversa não some)", async () => {

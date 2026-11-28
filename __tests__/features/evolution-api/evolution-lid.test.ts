@@ -93,10 +93,17 @@ describe("fetchConversationMessages (OPE-207)", () => {
         expect(ops.map((op) => [op.updateOne.filter, op.updateOne.update.$set])).toEqual([[{ _id: `opex:${PN}` }, { lidJid: LID, hasChat: true }]])
     })
 
-    it("cursor preso no mesmo segundo recua 1 s (não repete a página para sempre)", async () => {
-        mocks.findMessages.mockResolvedValue(page([record("A", 500), record("B", 500)], 120))
-        const result = await fetchConversationMessages("opex", [PN], { limit: 2, before: new Date(500 * 1000) })
-        expect(result.nextBefore).toEqual(new Date(499 * 1000))
+    it("mais mensagens no mesmo segundo do que o limite: nenhuma se perde e o cursor recua 1 s (não repete a página)", async () => {
+        const sameSecond = ["A", "B", "C", "D", "E"].map((id) => record(id, 500))
+        mocks.findMessages.mockImplementation(async (_instance: string, input: { pageSize: number; from?: Date }) =>
+            input.from && input.from.getTime() === 500 * 1000 ? page(sameSecond, 5) : page(sameSecond.slice(0, input.pageSize), 120))
+        const first = await fetchConversationMessages("opex", [PN], { limit: 2 })
+        expect(first.records.map((item) => item.key.id)).toEqual(["A", "B"])
+        expect(first.nextBefore).toEqual(new Date(500 * 1000))
+        const second = await fetchConversationMessages("opex", [PN], { limit: 2, before: first.nextBefore })
+        expect(mocks.findMessages).toHaveBeenLastCalledWith("opex", expect.objectContaining({ from: new Date(500 * 1000), to: new Date(500 * 1000), pageSize: 1000 }), undefined)
+        expect(second.records.map((item) => item.key.id).sort()).toEqual(["A", "B", "C", "D", "E"])
+        expect(second.nextBefore).toEqual(new Date(499 * 1000))
     })
 })
 

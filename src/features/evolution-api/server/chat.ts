@@ -16,6 +16,8 @@ const log = loggerFor({ feature: "evolution-api" })
  */
 
 export const CHAT_PAGE_SIZE = 50
+/** Teto de mensagens lidas de um mesmo segundo quando ele sozinho passa de uma página. */
+const SAME_SECOND_MAX = 1000
 
 export interface ChatTimelinePage {
     items: ChatMessageDto[]
@@ -43,25 +45,36 @@ function secondsOf(message: EvolutionMessage): number {
  * Mensagens de uma conversa guardada em um ou mais `remoteJid` (número e `@lid`, OPE-207): lê até `limit` de cada um
  * (até `before`, inclusivo), junta, descarta ids repetidos (a Evolution grava linhas duplicadas) e corta em `limit`.
  * A consulta de um número leva `remoteJidAlt` igual a ele: traz também a metade `@lid`, mesmo sem correspondência conhecida.
- * O cursor seguinte é o segundo da mais antiga; se ele não andou (tudo no mesmo segundo), recua 1 s.
+ * O cursor seguinte é o segundo da mais antiga; se ele não andou (mais de `limit` no mesmo segundo), a página traz o
+ * segundo inteiro e o cursor recua 1 s.
  */
 export async function fetchConversationMessages(instance: string, jids: readonly string[], input: { before?: Date | null; limit: number }, options?: { signal?: AbortSignal }): Promise<ConversationMessages> {
     const { before, limit } = input
-    const pages = await Promise.all(jids.map((jid) => evolution.findMessages(instance, {
+    const read = (from: Date | null, to: Date | null, pageSize: number) => Promise.all(jids.map((jid) => evolution.findMessages(instance, {
         remoteJid: jid,
         ...(jid.endsWith(USER_JID_SUFFIX) ? { remoteJidAlt: jid } : {}),
-        pageSize: limit,
-        ...(before ? { from: new Date(0), to: before } : {}),
+        pageSize,
+        ...(to ? { from: from ?? new Date(0), to } : {}),
     }, options)))
+    const pages = await read(null, before ?? null, limit)
     const byId = new Map<string, EvolutionMessage>()
-    for (const page of pages) for (const record of page.records) if (!byId.has(record.key.id)) byId.set(record.key.id, record)
+    const add = (list: readonly { records: EvolutionMessage[] }[]) => { for (const page of list) for (const record of page.records) if (!byId.has(record.key.id)) byId.set(record.key.id, record) }
+    add(pages)
     const merged = [...byId.values()].sort((a, b) => secondsOf(b) - secondsOf(a))
-    const records = merged.slice(0, limit)
+    let records = merged.slice(0, limit)
     const hasOlder = records.length > 0 && (merged.length > limit || pages.some((page) => page.total > page.records.length))
     let nextBefore: Date | null = null
     if (hasOlder) {
         let cursor = secondsOf(records[records.length - 1]!)
-        if (before && cursor * 1000 >= before.getTime()) cursor = Math.floor(before.getTime() / 1000) - 1
+        if (before && cursor * 1000 >= before.getTime()) {
+            // O cursor não andou: há mais de `limit` mensagens no mesmo segundo. Lê o segundo inteiro (sem cortar em `limit`)
+            // antes de recuar, para nenhuma ficar de fora.
+            const second = Math.floor(before.getTime() / 1000)
+            byId.clear()
+            add(await read(new Date(second * 1000), new Date(second * 1000), SAME_SECOND_MAX))
+            records = [...byId.values()]
+            cursor = second - 1
+        }
         nextBefore = new Date(cursor * 1000)
     }
     learnLidAliases(instance, records)

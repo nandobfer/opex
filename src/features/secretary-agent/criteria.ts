@@ -25,6 +25,8 @@ export interface CriteriaConversation {
     isGroup: boolean
     /** Em grupo: menção ao número/LID do dono ou resposta a uma mensagem dele. */
     mentioned: boolean
+    /** Outras identidades da mesma conversa (número ↔ `@lid`, OPE-207): "Nunca responder" e "escolhidos" valem para todas. */
+    aliases?: readonly string[]
 }
 
 /** Decisão do assunto (modelo de texto ou JEV): os assuntos que bateram, pelo `id`. */
@@ -78,13 +80,14 @@ export function evaluateAudience(criteria: SecretaryCriteria, conversation: Crit
     const { audience } = criteria
     const steps: CriteriaStep[] = []
     const fail = (rule: CriteriaRule, reason: string) => ({ steps, failure: { rule, reason } })
-    if (isBlocked(criteria, conversation.jid)) {
+    const jids = [conversation.jid, ...(conversation.aliases ?? [])]
+    if (jids.some((jid) => isBlocked(criteria, jid))) {
         steps.push(step("blocked", "fail", "Sim: a conversa está em \"Nunca responder a\"."))
         return fail("blocked", "A conversa está em \"Nunca responder a\".")
     }
     steps.push(step("blocked", "pass", "Não."))
     if (audience.mode === "selected") {
-        if (!audience.selected.includes(conversation.jid)) {
+        if (!jids.some((jid) => audience.selected.includes(jid))) {
             steps.push(step("audience", "fail", "Não: \"Responder a\" está em \"Só os escolhidos\" e a conversa não está na lista."))
             return fail("not-selected", "A conversa não está entre os escolhidos de \"Responder a\".")
         }
