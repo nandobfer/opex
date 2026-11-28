@@ -32,6 +32,8 @@ export interface WorkbenchBuildDto {
     logChars: number
     droppedChars: number
     message: string | null
+    /** Página do run do GitHub Actions da execução atual (`https://github.com/<dono>/<repo>/actions/runs/<id>`) ou `null`. */
+    runUrl: string | null
 }
 
 /** Teto do log gravado por build (acima disso guarda o final). */
@@ -39,9 +41,10 @@ export const BUILD_LOG_MAX_CHARS = 2_000_000
 
 /** Linha do stream NDJSON do log de um build. `offset` = posição absoluta no log (conta o que foi descartado). */
 export type BuildLogLine =
-    | { type: "snapshot"; offset: number; text: string; status: BuildStatus; message: string | null }
+    | { type: "snapshot"; offset: number; text: string; status: BuildStatus; message: string | null; runUrl: string | null }
     | { type: "append"; offset: number; text: string }
     | { type: "status"; status: BuildStatus; message: string | null }
+    | { type: "run"; url: string | null }
     | { type: "ping"; ts: string }
 
 /** Aplica o teto: mantém o final e soma o que saiu do início. */
@@ -91,9 +94,11 @@ export interface BuildLogViewState {
     end: number
     status: BuildStatus | null
     message: string | null
+    /** Link do run do GitHub Actions informado pelo servidor (nunca lido do texto do log). */
+    runUrl: string | null
 }
 
-export const INITIAL_BUILD_LOG_VIEW: BuildLogViewState = { loaded: false, end: 0, status: null, message: null }
+export const INITIAL_BUILD_LOG_VIEW: BuildLogViewState = { loaded: false, end: 0, status: null, message: null, runUrl: null }
 
 /**
  * Aplica uma linha do stream. Devolve o novo estado e o que fazer no terminal: `reset` (limpar e
@@ -103,7 +108,7 @@ export function applyBuildLogLine(state: BuildLogViewState, line: BuildLogLine):
     switch (line.type) {
         case "snapshot":
             return {
-                state: { loaded: true, end: line.offset + line.text.length, status: line.status, message: line.message },
+                state: { loaded: true, end: line.offset + line.text.length, status: line.status, message: line.message, runUrl: line.runUrl ?? null },
                 reset: line.offset > 0 ? `${BUILD_LOG_TRUNCATED}${line.text}` : line.text,
             }
         case "append": {
@@ -115,6 +120,8 @@ export function applyBuildLogLine(state: BuildLogViewState, line: BuildLogLine):
         }
         case "status":
             return { state: { ...state, status: line.status, message: line.message } }
+        case "run":
+            return state.loaded ? { state: { ...state, runUrl: line.url } } : { state }
         case "ping":
             return { state }
     }
@@ -134,14 +141,6 @@ export function splitBuildLogChunk(buffer: string): { lines: BuildLogLine[]; res
         }
     }
     return { lines, rest }
-}
-
-const GITHUB_RUN_URL = /https:\/\/github\.com\/[\w.-]+\/[\w.-]+\/actions\/runs\/\d+/g
-
-/** Última URL de execução do GitHub Actions no trecho do log (o script da prévia remota a imprime). */
-export function lastGithubRunUrl(text: string): string | null {
-    const found = text.match(GITHUB_RUN_URL)
-    return found ? found[found.length - 1]! : null
 }
 
 /** Aviso exibido quando o início do log foi descartado pelo teto. */

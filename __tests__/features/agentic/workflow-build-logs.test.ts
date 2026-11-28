@@ -30,6 +30,7 @@ const mocks = vi.hoisted(() => ({
   beginSection: vi.fn(),
   appendOutput: vi.fn(),
   restartSection: vi.fn(),
+  setRun: vi.fn(),
   runBuild: vi.fn(),
   probe: vi.fn(),
   runShell: vi.fn(async () => ({ exitCode: 0, status: 'exited', output: '' })),
@@ -92,6 +93,7 @@ vi.mock('@/features/agentic/server/build-logs', () => ({
   beginBuildSection: mocks.beginSection,
   appendBuildOutput: mocks.appendOutput,
   restartBuildSection: mocks.restartSection,
+  setBuildRun: mocks.setRun,
 }))
 vi.mock('@/features/agentic/server/preview-build', () => ({ runPreviewBuild: mocks.runBuild }))
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: mocks.probe }))
@@ -481,6 +483,16 @@ describe('workflow — prévia no GitHub Action rodada pelo app', () => {
     await startRemote()
     await vi.waitFor(() => expect(doc().stage).toBe('preview'))
     expect(gh.full).not.toHaveBeenCalled()
+    expect(mocks.setRun).not.toHaveBeenCalled()
+  })
+
+  it('OPE-221: o build guarda o run do repositório da central, não as URLs de fixture do log dos testes', async () => {
+    finishedRun('success', '2026-11-27T22:15:01Z details_url: https://github.com/org/app/actions/runs/9\n')
+    scriptOutput(['Prévia GitHub: https://github.com/org/app/actions/runs/42\n', 'Prévia publicada na porta 4015\n'])
+    const wb = await startRemote()
+    await vi.waitFor(() => expect(doc().stage).toBe('preview'))
+    expect(appended()).toContain('actions/runs/9')
+    expect(mocks.setRun.mock.calls).toEqual([[String(wb._id), { repo: 'org/app', runId: 42 }]])
   })
 
   it('OPE-214: falha no acompanhamento vira aviso no log e não muda o resultado do build', async () => {
@@ -501,6 +513,7 @@ describe('workflow — prévia no GitHub Action rodada pelo app', () => {
     await startBuildTurn(String(wb._id))
     await vi.waitFor(() => expect(doc().stage).toBe('preview'))
     expect(gh.full).not.toHaveBeenCalled()
+    expect(mocks.setRun).not.toHaveBeenCalled()
   })
 
   it('falha de uma tentativa antiga não invalida a reserva de uma tentativa mais nova', async () => {

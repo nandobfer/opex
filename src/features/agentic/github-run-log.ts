@@ -18,6 +18,14 @@ export function parseGithubRunUrl(text: string): GithubRunRef | null {
     return found
 }
 
+const REPO = /^[\w.-]+\/[\w.-]+$/
+
+/** Página do run no GitHub (sempre `https://`), ou `null` se o repositório ou o id não forem válidos. */
+export function githubRunUrl(ref: GithubRunRef | null | undefined): string | null {
+    if (!ref || !REPO.test(ref.repo) || !Number.isSafeInteger(ref.runId) || ref.runId <= 0) return null
+    return `https://github.com/${ref.repo}/actions/runs/${ref.runId}`
+}
+
 export interface GithubStep {
     name: string
     number: number

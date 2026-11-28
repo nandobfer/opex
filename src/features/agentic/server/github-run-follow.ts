@@ -12,6 +12,7 @@ import {
     githubRunDoneLine,
     githubStepEnd,
     parseGithubRunUrl,
+    type GithubRunRef,
     type StepEvent,
     type GithubJob,
 } from "../github-run-log"
@@ -235,6 +236,8 @@ export function createRunFollower(input: {
     repo: string | null
     signal: AbortSignal
     write: (text: string) => void
+    /** O run do repositório da central foi reconhecido (uma vez por execução do script). */
+    onRun?: (ref: GithubRunRef) => void
     pollMs?: number
     finishTimeoutMs?: number
 }): RunFollower {
@@ -274,6 +277,11 @@ export function createRunFollower(input: {
             const cut = Math.max(0, lines.indexOf("\n", urlAt) + 1 - before)
             input.write(chunk.slice(0, cut))
             held = chunk.slice(cut)
+            try {
+                input.onRun?.(ref)
+            } catch (error) {
+                logger.warn({ repo: ref.repo, runId: ref.runId, err: error }, "[agentic] Falha ao registrar o run do GitHub Actions no build")
+            }
             // Depois do abort, nada do acompanhamento vai ao log (o build pode já ser outro).
             const write = (text: string) => {
                 if (!inner.signal.aborted) input.write(text)

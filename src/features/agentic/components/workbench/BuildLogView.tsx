@@ -37,7 +37,7 @@ const when = (iso: string) => format(new Date(iso), "dd/MM HH:mm", { locale: ptB
  */
 export function BuildLogView({ workbenchId, selectedId, onSelect }: { workbenchId: string; selectedId: string | null; onSelect: (id: string) => void }) {
     const query = useWorkbenchBuilds(workbenchId)
-    // URL do run do GitHub Action lida do log do build selecionado (BuildLogPanel); vale só para esse build.
+    // Link do run do GitHub Action informado pelo stream do build selecionado (BuildLogPanel); vale só para esse build.
     const [runLink, setRunLink] = useState<{ buildId: string; url: string | null } | null>(null)
     const reportRunUrl = useCallback((buildId: string, url: string | null) => {
         setRunLink((current) => (current?.buildId === buildId && current.url === url ? current : { buildId, url }))
@@ -65,7 +65,8 @@ export function BuildLogView({ workbenchId, selectedId, onSelect }: { workbenchI
     const latest = builds[0]
     const selected = builds.find((build) => build.id === selectedId) ?? latest
     if (!selected || !latest) return null
-    const runUrl = runLink?.buildId === selected.id ? runLink.url : null
+    // Ao vivo pelo stream depois do snapshot; antes dele, o que a lista trouxe.
+    const runUrl = runLink?.buildId === selected.id ? runLink.url : selected.runUrl
     return (
         <div className="flex min-h-0 flex-1 flex-col gap-3 p-4">
             <div className="flex flex-wrap items-center justify-between gap-2">

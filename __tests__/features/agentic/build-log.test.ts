@@ -41,7 +41,7 @@ describe('capBuildLog', () => {
 
 describe('applyBuildLogLine', () => {
   it('snapshot reinicia o terminal; append na posição certa anexa', () => {
-    let step = applyBuildLogLine(INITIAL_BUILD_LOG_VIEW, { type: 'snapshot', offset: 0, text: 'abc', status: 'running', message: null })
+    let step = applyBuildLogLine(INITIAL_BUILD_LOG_VIEW, { type: 'snapshot', offset: 0, text: 'abc', status: 'running', message: null, runUrl: null })
     expect(step.reset).toBe('abc')
     expect(step.state).toMatchObject({ loaded: true, end: 3, status: 'running' })
     step = applyBuildLogLine(step.state, { type: 'append', offset: 3, text: 'de' })
@@ -57,10 +57,23 @@ describe('applyBuildLogLine', () => {
   })
 
   it('log com o início descartado avisa no terminal; status final atualiza o estado', () => {
-    const step = applyBuildLogLine(INITIAL_BUILD_LOG_VIEW, { type: 'snapshot', offset: 10, text: 'fim', status: 'failed', message: 'erro' })
+    const step = applyBuildLogLine(INITIAL_BUILD_LOG_VIEW, { type: 'snapshot', offset: 10, text: 'fim', status: 'failed', message: 'erro', runUrl: null })
     expect(step.reset).toBe(`${BUILD_LOG_TRUNCATED}fim`)
     expect(step.state.end).toBe(13)
     expect(applyBuildLogLine(step.state, { type: 'status', status: 'succeeded', message: null }).state.status).toBe('succeeded')
+  })
+
+  it('link do run (OPE-221): vem do snapshot e da linha run, sem escrever nada no terminal', () => {
+    const RUN = 'https://github.com/nandobfer/opex/actions/runs/46092133916'
+    let step = applyBuildLogLine(INITIAL_BUILD_LOG_VIEW, { type: 'snapshot', offset: 0, text: 'Prévia GitHub: https://github.com/org/app/actions/runs/9\n', status: 'running', message: null, runUrl: RUN })
+    expect(step.state.runUrl).toBe(RUN)
+    step = applyBuildLogLine(step.state, { type: 'run', url: null })
+    expect(step.state.runUrl).toBeNull()
+    expect(step.write).toBeUndefined()
+    step = applyBuildLogLine(step.state, { type: 'run', url: RUN })
+    expect(step.state.runUrl).toBe(RUN)
+    // Antes do snapshot a linha não vale (o snapshot traz o estado completo).
+    expect(applyBuildLogLine(INITIAL_BUILD_LOG_VIEW, { type: 'run', url: RUN }).state.runUrl).toBeNull()
   })
 
   it('splitBuildLogChunk separa as linhas completas do resto', () => {
