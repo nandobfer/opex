@@ -66,6 +66,7 @@ import { liveChatEnabled, deliverLiveMessage } from "./live-chat"
 import { claimAgenticFiles, transferAgenticFiles, deleteWorkbenchFiles, fileDtosFor, fileIdsOf, liveAttachments, loadClaimableFiles, promptFilesFor } from "./files"
 import { agenticDownloadDir, withAttachmentsSection } from "../files"
 import { withWorkbenchContext } from "../workbench-context"
+import { isPlanText, NOT_A_PLAN_MESSAGE } from "../plan-text"
 import { syncWorkbenchContext, type WorkbenchTurnContext } from "./workbench-context"
 import { registerWorkbenchMcpAt } from "./workbench-mcp/register"
 import { lookupOpencodeSession, OpencodeLookupAbortedError } from "@/lib/ai/opencode-sessions"
@@ -1342,6 +1343,8 @@ async function afterTurn(client: OpencodeClient, loaded: Loaded, stage: Workbenc
         case "planning": {
             const text = result.text.trim()
             if (!text) throw new Error("O planejador não devolveu um plano")
+            // Só um anúncio ("fecho o plano quando os resultados chegarem"): não vira versão nem vai à revisão (OPE-216).
+            if (!isPlanText(text)) throw new Error(NOT_A_PLAN_MESSAGE)
             const version = (doc.plans?.length ?? 0) + 1
             await update(doc, { stage: "plan_review", runState: "idle", pendingFeedback: null }, { $push: { plans: { version, text, feedback: doc.pendingFeedback ?? null, createdAt: new Date() } } })
             // Plano pronto não ocupa vaga: a próxima mesa da central pode executar.

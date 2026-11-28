@@ -403,11 +403,11 @@ no servidor Node (`src/features/auth/server/context.ts`); API pública por token
   encapsulado em `src/features/plugins/server/kernel/cordis.ts`), compilação das versões com `rolldown` (1.3.3,
   fixado) e CSS das classes do plugin com o `compile` do `tailwindcss` (dependência de produção); diff entre
   versões com `diff`
-- PDF/PNG dos documentos dos agentes: Gotenberg (serviço compartilhado no host, integração `gotenberg`, chamado com
-  `fetch` nativo; `aicontext/modules/agent-documents.md`)
+- PDF/PNG dos documentos dos agentes: Gotenberg (serviço compartilhado no host, integração `gotenberg` da biblioteca
+  `@nandobfer/integracoes`, chamado com `fetch` nativo; `aicontext/modules/agent-documents.md`)
 - Central de Integrações: biblioteca `@nandobfer/integracoes` (repositório público `nandobfer/integracoes`,
   instalada por `github:nandobfer/integracoes#vX.Y.Z`, `dist/` versionado; OPE-212): lista, página, campos,
-  segredos, teste, debug, explorador, agendador e rotas da central, mais Pusher, SMTP, Storage S3, GitHub, Crons,
+  segredos, teste, debug, explorador, agendador e rotas da central, mais Pusher, SMTP, Storage S3, Gotenberg, GitHub, Crons,
   API interna e a camada de IA; o Opex registra os adaptadores em `src/features/integrations/registry/`
   (`aicontext/modules/integrations.md`)
 - Integrações: terminal de logs com `@xterm/xterm` (+ `@xterm/addon-fit`, `@xterm/addon-search`),

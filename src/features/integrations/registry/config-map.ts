@@ -1,5 +1,6 @@
 import type { CronJobConfig } from "@nandobfer/integracoes"
 import type { AiIntegrationConfigMap } from "@nandobfer/integracoes/ia"
+import type { GotenbergValues } from "@nandobfer/integracoes/gotenberg"
 import type { PusherValues } from "@nandobfer/integracoes/pusher"
 
 /**
@@ -27,6 +28,6 @@ export interface IntegrationConfigMap extends Omit<AiIntegrationConfigMap, "ai_o
     /** Builder Machine: ativação e a chave privada colada pelo usuário (a configuração fica nas coleções `local_docker_*`). */
     builder_machine: { active: boolean; sshPrivateKey?: string }
     engramind: { baseUrl?: string; opexPublicUrl?: string; environmentId?: string; memoryExportScript?: string; adminToken?: string; webhookSecret?: string; appToken?: string }
-    gotenberg: { url?: string; timeoutSeconds: number; urlTtlMinutes: number; urlTtlMaxMinutes: number }
+    gotenberg: GotenbergValues
     "evolution-api": { internalUrl?: string; publicUrl?: string; defaultInstance?: string; version?: string; webhookUrl?: string; apiKey?: string; webhookSecret?: string }
 }

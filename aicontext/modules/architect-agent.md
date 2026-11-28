@@ -183,6 +183,9 @@ pelo schema com a lista dos válidos.
   ("Agente Arquiteto" no painel). O custo **não** soma no uso nem no apontamento da mesa (não é etapa).
 - Progresso (fase, leituras, nós e ligações) vai pelo stream ao vivo; a mudança de fase também fica na
   versão e vai pelo Pusher (para quem não está com o stream aberto).
+- Subagentes em segundo plano (OPE-216): enquanto o turno do OpenCode espera, `progress.background`
+  (`{ subagents, shells, other }`, só ao vivo) troca a fase da faixa por "Aguardando N subagentes em segundo
+  plano…" (ampulheta); o diagrama sai do texto da execução final.
 
 ## Diagrama ao vivo (`stream-parser.ts`, `server/live-hub.ts`, `server/stream.ts`)
 

@@ -92,7 +92,8 @@ describe('runAgentTurn', () => {
     await vi.waitFor(() => expect(client.session.prompt).toHaveBeenCalled())
     controller.abort(new Error('Interrompido pelo usuário'))
     const result = await pending
-    expect(client.session.interrupt).toHaveBeenCalledWith({ sessionID: 's1' })
+    // OPE-216: a interrupção leva prazo (opções da requisição com o sinal).
+    expect(client.session.interrupt).toHaveBeenCalledWith({ sessionID: 's1' }, expect.objectContaining({ signal: expect.anything() }))
     expect(result).toMatchObject({ outcome: 'interrupted', text: 'a' })
   })
 })

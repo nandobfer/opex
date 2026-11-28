@@ -369,6 +369,13 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   interromper e executar comandos de verificação. Ver `modules/agentic-dev.md`. O **refinamento de
   tarefas** (`modules/refinement.md`) usa o mesmo cliente e o mesmo **runner genérico de turno**
   (`src/lib/ai/opencode-run.ts`, compartilhado com a mesa).
+- **Trabalho em segundo plano** (OPE-216): o OpenCode do host roda na **v2.4.2** e o cliente
+  `@opencode/client` do Opex também (2.4.2). Desde a v2.3 o subagente roda em segundo plano e acorda a
+  sessão numa execução nova; o `runAgentTurn` só termina o turno com a sessão quieta (sem jobs em
+  `experimental.job.list`, sem entrega na `session.inbox` e sem a sessão rodando), publica o evento
+  `background` enquanto espera e devolve o texto da execução final; o gancho `onSegment` avisa quem
+  acumula o `onText`. O Parar cancela os jobs (`experimental.job.cancel`). Vale para todos os consumidores
+  do runner; detalhes em `modules/agentic-dev.md`, "Subagentes e trabalho em segundo plano".
 - **Medição de consumo** (`@nandobfer/integracoes/modules/integrations/ia/ai/consumption`, coleção `ai_consumption_logs`): uma linha por
   etapa/geração, prospectiva e **separada** dos acumuladores das features (`ai_usage_logs`), das
   mesas (`agentic_workbenches.usage`/`time_logs`) e dos refinamentos (`task_refinements.usage`) —

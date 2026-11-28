@@ -8,6 +8,7 @@ import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
 import { previewBaseUrl } from "@/lib/instance"
 import { skillPermissionRules } from "@/features/opencode-resources/skill-permissions"
+import { backgroundLabel } from "@/features/agentic/background-label"
 import { listOpencodeSkillsAt } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list"
 
 /**
@@ -152,6 +153,8 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
         await client.session.instructions.entry.put({ sessionID: sessionId, key: INSTRUCTIONS_KEY, value: input.instructions(`${mcpName}_`) })
         const [{ runAgentTurn }, { runWithFallback, fallbackNotice }, { DEFAULT_PROVIDER_LIMIT_POLICY }] = await Promise.all([import("@/lib/ai/opencode-run"), import("@/features/agentic/server/model-fallback"), import("@/lib/ai/opencode-events")])
         let graceTimer: ReturnType<typeof setTimeout> | null = null
+        // Um passo de aviso por espera pelo trabalho em segundo plano (OPE-216), não a cada mudança da contagem.
+        let waitingNoticed = false
         const poll = setInterval(() => {
             if (activation.outcome && !graceTimer) graceTimer = setTimeout(() => activation.controller.abort("control"), STOP_GRACE_MS)
         }, 1_000)
@@ -184,11 +187,21 @@ export async function runOpencodeEngine(input: EngineInput): Promise<EngineResul
                                 onText: (delta) => {
                                     text += delta
                                 },
+                                // A sessão acordou depois dos subagentes (OPE-216): o relato é o da execução final.
+                                onSegment: () => {
+                                    text = ""
+                                },
                                 onStep: (usage) => {
                                     const tokens = usage.tokens.input + usage.tokens.output + usage.tokens.reasoning
                                     input.onUsage({ tokens, inputTokens: usage.tokens.input, outputTokens: usage.tokens.output, costUsd: usage.costUsd, stepId: usage.stepId ?? String(Date.now()), model: turnAgent.model ?? engine.model, provider: "opencode", recorded: true })
                                 },
                                 publish: (event) => {
+                                    if (event.type === "background") {
+                                        const label = backgroundLabel(event)
+                                        if (label && !waitingNoticed) input.onStep({ kind: "notice", label: "Aguardando trabalho em segundo plano", detail: label })
+                                        waitingNoticed = Boolean(label)
+                                        return
+                                    }
                                     if (event.type === "tool" && event.state !== "running" && !event.name.startsWith(`${mcpName}_`)) input.onStep({ kind: "tool", label: event.name, toolName: event.name, detail: (event.error ?? event.input ?? null)?.slice(0, 400) ?? null, error: event.state === "error" })
                                 },
                             },

@@ -44,7 +44,7 @@ export function emitOps(diagramId: string, ops: readonly AppliedOp[]): void {
     for (const listener of entry.listeners) listener(line)
 }
 
-export function emitProgress(diagramId: string, patch: Partial<Pick<ArchitectLiveProgress, "phase" | "tools">>): void {
+export function emitProgress(diagramId: string, patch: Partial<Pick<ArchitectLiveProgress, "phase" | "tools" | "background">>): void {
     const entry = hub.get(diagramId)
     if (!entry) return
     entry.progress = { ...entry.progress, ...patch }

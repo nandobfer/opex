@@ -23,7 +23,7 @@ const turn = (key: string, ended: boolean): TimelineItem => ({
   end: ended ? { outcome: 'succeeded', message: null, durationMs: 60_000, costUsd: 0.01 } : null,
 })
 
-const state = (items: TimelineItem[], patch: Partial<TimelineState> = {}): TimelineState => ({ items, reasoning: false, loaded: true, ...patch })
+const state = (items: TimelineItem[], patch: Partial<TimelineState> = {}): TimelineState => ({ items, reasoning: false, background: null, loaded: true, ...patch })
 
 /**
  * O DOM de teste não faz layout: define as métricas de rolagem no container e devolve um medidor. O
@@ -58,6 +58,19 @@ const scrollContainer = (container: HTMLElement): HTMLElement => container.query
 const toBottomButton = () => screen.queryByRole('button', { name: 'Ir para o final' })
 
 beforeEach(() => vi.clearAllMocks())
+
+describe('Timeline (espera em segundo plano, OPE-216)', () => {
+  it('mostra a espera pelos subagentes no lugar de "Trabalhando…"', () => {
+    render(<Timeline timeline={state([text('x1', 'Disparei duas explorações.')], { background: { subagents: 2, shells: 0, other: 0 } })} running />)
+    expect(screen.getByText('Aguardando 2 subagentes em segundo plano…')).toBeTruthy()
+    expect(screen.queryByText('Trabalhando…')).toBeNull()
+  })
+
+  it('sem espera volta a "Trabalhando…"', () => {
+    render(<Timeline timeline={state([text('x1', 'ok')])} running />)
+    expect(screen.getByText('Trabalhando…')).toBeTruthy()
+  })
+})
 
 describe('Timeline (scroll)', () => {
   it('acompanha o fim mesmo quando um item do meio cresce (fim de turno)', () => {
