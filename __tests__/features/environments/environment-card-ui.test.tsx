@@ -18,6 +18,7 @@ vi.mock('@/features/environments/hooks/useEnvironments', () => ({ useEnvironment
 import { EnvironmentCard } from '@/features/environments/components/EnvironmentCard'
 import { EnvironmentCardSkeleton } from '@/features/environments/components/card/EnvironmentCardSkeleton'
 import { PortalEnvironmentCard } from '@/features/environments/portal/PortalEnvironmentCard'
+import { CONTAINER_GRID, CONTAINER_USAGE_CLASS } from '@/features/environments/components/card/environment-card-layout'
 
 const port = (overrides: Partial<ContainerPortDto> = {}): ContainerPortDto => ({ container: 3000, protocol: 'tcp', published: 4100, hostIp: null, reach: 'link', ...overrides })
 
@@ -224,7 +225,31 @@ describe('card do ambiente (dono)', () => {
     expect(document.querySelectorAll('[data-skeleton-usage-bar]')).toHaveLength(0)
   })
 
-  it('coluna Recursos: 4 barras por container, com o % e a base (limite ou servidor)', () => {
+  it('skeleton: as barras de cada container ficam na grade compacta da coluna Recursos (OPE-218)', () => {
+    render(<EnvironmentCardSkeleton cards={1} containers={2} />)
+    const grids = document.querySelectorAll('[data-skeleton-container-usage]')
+    expect(grids).toHaveLength(2)
+    for (const grid of grids) {
+      expect(grid.className).toBe(CONTAINER_USAGE_CLASS)
+      expect(grid.querySelectorAll(':scope > [data-skeleton-usage-bar][data-compact="true"]')).toHaveLength(4)
+    }
+  })
+
+  it('coluna Recursos: as 4 barras compactas na mesma linha, coluna de 16rem (OPE-218)', () => {
+    render(<EnvironmentCard env={env()} pcAvailable linkHost="h" capacity={HOST} onIntent={vi.fn()} />)
+    const app = document.querySelector('[data-service="app"]') as HTMLElement
+    expect(app.className).toContain(CONTAINER_GRID.owner)
+    expect(CONTAINER_GRID.owner).toContain('_16rem]')
+    const cells = Array.from(app.querySelectorAll('[data-usage-metric]'))
+    expect(cells).toHaveLength(4)
+    const grid = cells[0]!.parentElement!
+    expect(cells.every((cell) => cell.parentElement === grid)).toBe(true)
+    expect(grid.className).toBe(CONTAINER_USAGE_CLASS)
+    expect(grid.classList.contains('sm:grid-cols-4')).toBe(true)
+    expect(cells.every((cell) => cell.getAttribute('data-compact') === 'true')).toBe(true)
+  })
+
+  it('coluna Recursos: 4 barras por container, com o % e a base (limite ou servidor) no title', () => {
     const limited = service({ limits: { memoryGb: 1, swapGb: null, cpus: 2 }, usage: { cpuPercent: 50, memoryBytes: 512 * 1024 ** 2, swapBytes: 0, diskBytes: GIB, volumes: [], diskCheckedAt: '2026-11-28T10:00:00.000Z' } })
     render(<EnvironmentCard env={env({ services: [limited] })} pcAvailable linkHost="h" capacity={HOST} onIntent={vi.fn()} />)
     const app = document.querySelector('[data-service="app"]') as HTMLElement
@@ -232,11 +257,15 @@ describe('card do ambiente (dono)', () => {
     expect(bars).toHaveLength(4)
     const memory = app.querySelector('[data-usage-metric="memory"]') as HTMLElement
     expect(memory.querySelector('[role="progressbar"]')!.getAttribute('aria-valuenow')).toBe('50')
-    expect(memory.textContent).toContain('512 MiB de 1 GiB (limite)')
+    expect(memory.textContent).toContain('50%')
+    expect(memory.textContent).not.toContain('512 MiB de 1 GiB')
+    expect(memory.getAttribute('title')).toBe('512 MiB de 1 GiB (limite)')
+    expect(memory.querySelector('[role="progressbar"]')!.getAttribute('aria-label')).toContain('512 MiB de 1 GiB (limite)')
     const cpu = app.querySelector('[data-usage-metric="cpu"]') as HTMLElement
-    expect(cpu.textContent).toContain('0,5 de 2 CPUs (limite)')
+    expect(cpu.getAttribute('title')).toBe('0,5 de 2 CPUs (limite)')
     const disk = app.querySelector('[data-usage-metric="disk"]') as HTMLElement
-    expect(disk.textContent).toContain('1 GiB de 100 GiB (servidor)')
+    expect(disk.getAttribute('title')).toContain('1 GiB de 100 GiB (servidor)')
+    expect(disk.getAttribute('title')).toContain('lido às')
   })
 
   it('"Sem swap", "lendo…" e container parado como texto; sem a capacidade da máquina, "não lido"', () => {

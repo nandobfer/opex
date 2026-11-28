@@ -4,6 +4,7 @@ import type { ReactNode } from "react"
 import { motion, useReducedMotion } from "framer-motion"
 import { AnimatedNumber } from "@/components/motion/AnimatedNumber"
 import { cn } from "@/lib/utils"
+import { USAGE_BAR_COMPACT_CLASS, USAGE_BAR_COMPACT_LABEL_CLASS, USAGE_BAR_COMPACT_TRACK_ROW_CLASS } from "./usage-bar-layout"
 import { USAGE_LEVEL_CLASSES, USAGE_PULSE_PERCENT, usageLevel } from "./usage-level"
 
 /** % inteiro (padrão) ou com casas decimais em pt-BR (ex.: 43,9%). */
@@ -31,6 +32,8 @@ interface UsageBarProps {
     fractionDigits?: number
     /** `level` (padrão): cores pela faixa de consumo; `primary`: cor primária fixa, sem pulso. */
     tone?: "level" | "primary"
+    /** Célula curta (várias lado a lado): só rótulo e %, o detalhe vai para o `title` (OPE-218). */
+    compact?: boolean
 }
 
 /**
@@ -39,7 +42,7 @@ interface UsageBarProps {
  * pulso no vermelho a partir de 95% — sem animação com movimento reduzido. Também serve a progresso
  * (`tone="primary"`), inclusive indeterminado (`percent={null}`).
  */
-export function UsageBar({ label, percent, ariaLabel, ariaValueText, detail, detailTitle, dataAttributes, fractionDigits = 0, tone = "level" }: UsageBarProps) {
+export function UsageBar({ label, percent, ariaLabel, ariaValueText, detail, detailTitle, dataAttributes, fractionDigits = 0, tone = "level", compact = false }: UsageBarProps) {
     const reduceMotion = useReducedMotion()
     const indeterminate = percent === null
     const used = indeterminate ? 0 : Math.min(100, Math.max(0, percent))
@@ -47,6 +50,52 @@ export function UsageBar({ label, percent, ariaLabel, ariaValueText, detail, det
     const colors = tone === "primary" ? PRIMARY_CLASSES : USAGE_LEVEL_CLASSES[level]
     const pulse = tone === "level" && level === "critical" && used >= USAGE_PULSE_PERCENT && !reduceMotion
     const stateAttributes = tone === "level" ? { "data-level": level } : { "data-tone": tone }
+    const compactTitle = compact ? (detailTitle ?? (typeof detail === "string" ? detail : undefined)) : undefined
+
+    const track = (
+        <div
+            role="progressbar"
+            aria-label={ariaLabel}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={indeterminate ? undefined : Math.round(used)}
+            aria-valuetext={ariaValueText}
+            className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted"
+        >
+            {indeterminate ? (
+                <motion.div
+                    data-indeterminate-bar
+                    className={cn("absolute inset-y-0 w-[30%] rounded-full", colors.bar)}
+                    initial={{ left: reduceMotion ? "35%" : "-30%" }}
+                    animate={{ left: reduceMotion ? "35%" : ["-30%", "100%"] }}
+                    transition={reduceMotion ? { duration: 0 } : { duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
+                />
+            ) : (
+                <motion.div
+                    className={cn("h-full rounded-full transition-colors duration-300", colors.bar)}
+                    initial={{ width: 0 }}
+                    animate={{ width: `${used}%`, opacity: pulse ? [1, 0.55, 1] : 1 }}
+                    transition={{
+                        width: { duration: reduceMotion ? 0 : 0.6, ease: "easeOut" },
+                        opacity: pulse ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 },
+                    }}
+                />
+            )}
+        </div>
+    )
+    const percentText = !indeterminate && <AnimatedNumber value={used} formatter={percentFormatter(fractionDigits)} className={cn("font-mono font-semibold tabular-nums transition-colors duration-300", colors.text)} />
+
+    if (compact) {
+        return (
+            <div className={USAGE_BAR_COMPACT_CLASS} title={compactTitle} data-compact="true" {...stateAttributes} data-indeterminate={indeterminate ? "true" : undefined} {...dataAttributes}>
+                <div className={USAGE_BAR_COMPACT_LABEL_CLASS}>
+                    <span className="truncate text-muted-foreground">{label}</span>
+                    <span className="shrink-0">{percentText}</span>
+                </div>
+                <div className={USAGE_BAR_COMPACT_TRACK_ROW_CLASS}>{track}</div>
+            </div>
+        )
+    }
 
     return (
         <div className="space-y-1" {...stateAttributes} data-indeterminate={indeterminate ? "true" : undefined} {...dataAttributes}>
@@ -58,38 +107,10 @@ export function UsageBar({ label, percent, ariaLabel, ariaValueText, detail, det
                             {detail}
                         </span>
                     )}
-                    {!indeterminate && <AnimatedNumber value={used} formatter={percentFormatter(fractionDigits)} className={cn("font-mono font-semibold tabular-nums transition-colors duration-300", colors.text)} />}
+                    {percentText}
                 </span>
             </div>
-            <div
-                role="progressbar"
-                aria-label={ariaLabel}
-                aria-valuemin={0}
-                aria-valuemax={100}
-                aria-valuenow={indeterminate ? undefined : Math.round(used)}
-                aria-valuetext={ariaValueText}
-                className="relative h-1.5 w-full overflow-hidden rounded-full bg-muted"
-            >
-                {indeterminate ? (
-                    <motion.div
-                        data-indeterminate-bar
-                        className={cn("absolute inset-y-0 w-[30%] rounded-full", colors.bar)}
-                        initial={{ left: reduceMotion ? "35%" : "-30%" }}
-                        animate={{ left: reduceMotion ? "35%" : ["-30%", "100%"] }}
-                        transition={reduceMotion ? { duration: 0 } : { duration: 1.4, repeat: Infinity, ease: "easeInOut" }}
-                    />
-                ) : (
-                    <motion.div
-                        className={cn("h-full rounded-full transition-colors duration-300", colors.bar)}
-                        initial={{ width: 0 }}
-                        animate={{ width: `${used}%`, opacity: pulse ? [1, 0.55, 1] : 1 }}
-                        transition={{
-                            width: { duration: reduceMotion ? 0 : 0.6, ease: "easeOut" },
-                            opacity: pulse ? { duration: 1.6, repeat: Infinity, ease: "easeInOut" } : { duration: 0.2 },
-                        }}
-                    />
-                )}
-            </div>
+            {track}
         </div>
     )
 }

@@ -25,13 +25,17 @@ export function useSecretaryConversations() {
     return useQuery({ queryKey: conversationsKey, queryFn: async () => (await api.get<{ data: SecretaryConversationDto[] }>(CONVERSATIONS_PATH)).data.data, refetchInterval: 30_000 })
 }
 
-/** Linha do tempo paginada: página 1 = mais recentes; "Carregar mensagens anteriores" busca a seguinte. */
+/**
+ * Linha do tempo paginada por cursor (OPE-207): a primeira página traz as mais recentes; "Carregar mensagens
+ * anteriores" pede `?antes=<nextBefore>`. Páginas vizinhas podem repetir mensagens do mesmo segundo (o cliente descarta
+ * pelo id).
+ */
 export function useChatTimeline(chatId: string) {
     return useInfiniteQuery({
         queryKey: timelineKey(chatId),
-        queryFn: async ({ pageParam }) => (await api.get<{ data: ChatTimelinePageDto }>(timelinePath(chatId), { params: { page: pageParam } })).data.data,
-        initialPageParam: 1,
-        getNextPageParam: (last) => (last.hasOlder ? last.page + 1 : undefined),
+        queryFn: async ({ pageParam }) => (await api.get<{ data: ChatTimelinePageDto }>(timelinePath(chatId), { params: pageParam ? { antes: pageParam } : {} })).data.data,
+        initialPageParam: null as string | null,
+        getNextPageParam: (last) => (last.hasOlder && last.nextBefore ? last.nextBefore : undefined),
     })
 }
 

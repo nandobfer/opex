@@ -85,7 +85,7 @@ describe('filtros da lista de ambientes', () => {
     expect(screen.getByRole('textbox', { name: 'Busca' })).toBeTruthy()
     for (const label of ['Máquina', 'Situação', 'Origem']) expect(screen.getAllByText(label).length).toBeGreaterThan(0)
     expect(screen.getByText('3 REGISTROS')).toBeTruthy()
-  })
+  }, 15000) // o primeiro render carrega a página sob demanda; no runner de CI passa de 5 s
 
   it('buscar uma porta deixa só o card dela; a contagem do grupo é a filtrada', async () => {
     await renderPage()

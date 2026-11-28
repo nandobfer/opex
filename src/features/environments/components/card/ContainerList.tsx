@@ -36,7 +36,7 @@ export interface UsageContext {
 /** Rótulo da coluna, só abaixo de `md` (no `md` o cabeçalho da lista nomeia as colunas). */
 const Label = ({ children }: { children: string }) => <span className="w-20 shrink-0 text-[11px] uppercase tracking-wide text-muted-foreground md:hidden">{children}</span>
 
-/** CPU, RAM, swap e disco do container em barras (o % é do limite; sem limite, da máquina). */
+/** CPU, RAM, swap e disco do container em barras compactas lado a lado (o % é do limite; sem limite, da máquina). */
 function Resources({ item, context }: { item: ContainerItem; context: UsageContext }) {
     const usage = item.usage ?? EMPTY_USAGE
     const set = containerUsage({ running: item.state === "running", usage, limits: item.limits ?? null }, context.capacity)
@@ -44,7 +44,7 @@ function Resources({ item, context }: { item: ContainerItem; context: UsageConte
     return (
         <div className="flex min-w-0 items-start gap-2 md:block" title={limits ? `Limite aplicado: ${limits}` : "Sem limite aplicado: o % é sobre a máquina"}>
             <Label>Recursos</Label>
-            <UsageBars items={usageBarsItems(set, context.machine, { scope: item.service, diskCheckedAt: usage.diskCheckedAt })} className={CONTAINER_USAGE_CLASS} />
+            <UsageBars compact items={usageBarsItems(set, context.machine, { scope: item.service, diskCheckedAt: usage.diskCheckedAt })} className={CONTAINER_USAGE_CLASS} />
         </div>
     )
 }

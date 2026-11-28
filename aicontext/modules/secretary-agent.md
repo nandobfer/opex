@@ -6,7 +6,10 @@ Tem memórias próprias no Engramind, aprende sozinho e pergunta ao dono o que n
 
 Configuração: `/integracoes/ia?aba=agente-secretario&secao=<geral|criterios|decisoes|simulacao|personalidade|memorias|conversas|avisos>`
 (links das seções por `secretarySectionPath` em `links.ts`).
-Página de métricas: `/agente-secretario` (Visão geral, Histórico e Memórias).
+Página do agente: `/agente-secretario`, com as abas **Conversas** (padrão, fora da URL; OPE-207), Visão geral, Histórico e
+Memórias (`?aba=visao-geral|historico|memorias`; links por `secretaryPagePath` e `SECRETARY_PAGE_TABS` em `links.ts`).
+Decisão do dono no planejamento da OPE-207: a aba e a conversa aberta ficam em query string (`?aba=`, `?conversa=`), no
+mesmo padrão de todas as páginas de agente (`AgentPage`) e da aba de Integrações, e não em segmentos de caminho.
 O custo da Visão geral inclui turno, análise e decisões de assunto (modelo de texto ou JEV), mas não Simulação.
 O painel separa **Mensagens em pausa** (mensagens barradas) de **Intervenções do dono** (mensagens do dono
 registradas como assunção da conversa no WhatsApp).
@@ -296,20 +299,36 @@ cliente, campanha, vincular contato, seleção em lote, filtros de filial/respon
 transcrição sob demanda do áudio, que depende do recurso de transcrição do Zaturno). Componentes em
 `components/conversations/`.
 
-- **Layout**: card na altura visível da tela (mínimo 480 px), lista à esquerda (340/380 px) e conversa à direita; no
+- **Duas telas, o mesmo componente** (OPE-207): o `ConversationsInbox` aparece em Integrações › IA › Agente Secretário ›
+  Conversas e na aba **Conversas** de `/agente-secretario` (`SecretaryConversationsTab`, que carrega a configuração salva
+  para a pausa e os contatos pelas mesmas chaves de cache, com skeleton na estrutura do inbox e erro com "Tentar
+  novamente"). O tempo real do Secretário é o mesmo nas duas (`useSecretaryRealtime`). **Abrir memórias** vai para a
+  aba Memórias da tela em que a pessoa está: em Integrações, a seção Memórias; na página do agente,
+  `?aba=memorias&conversa=<id>` (contexto `SecretaryMemoriesLinkProvider`). Na página do agente a troca é
+  imediata, sem ida ao servidor (`inPage` do provider + `navigateInPage` no clique simples, com estado `null` para o Next
+  sincronizar o `useSearchParams` da aba Memórias; o Voltar retorna à conversa; Ctrl/Cmd+clique abre como link). Em
+  Integrações › IA a seção vem do hook de abas da central, que não escuta essa troca: lá o link navega normalmente.
+- **Layout**: card com a altura restante da área visível até o fim da página, medida a partir do topo do card
+  (`useInboxHeight`, no padrão do `useFillViewportHeight` e medindo de novo ao fim da entrada animada da aba; igual no inbox, no skeleton e no erro; mínimo 480 px, abaixo disso
+  a página rola), lista à esquerda (340/380 px) e conversa à direita; no
   celular, uma de cada vez, com Voltar. A conversa aberta e os filtros ficam na URL (`conversa=<id>`, `busca`, `filtro`,
   `secretario`); a troca de conversa é animada e, sem nenhuma aberta, aparece "Selecione uma conversa".
 - **Lista** (`GET /api/secretary/conversations`, cache `evolution_contacts`): foto, nome, horário da última mensagem no
   padrão do WhatsApp, prévia com o ícone do tipo, **não lidas do WhatsApp**, selo do estado do Secretário (pausado
   até…, nunca responder, aguardando o dono) e o menu ⋮ com as ações; busca por nome ou número (fuse.js), chips
   **Todas / Não lidas** e o filtro **Secretário** por estado (equivalente ao "Com o agente" do Atendimento);
-  virtualizada acima de 50. Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
+  virtualizada acima de 50. A metade `@lid` de uma conversa com número conhecido entra na do número (OPE-207,
+  `mergeLidHalves`): a linha fica com a prévia e o horário mais recentes e a soma das não lidas; sem a metade do
+  número na lista, a do LID continua visível. Conversas só LID continuam como `lid-<dígitos>`. Sem conversas, "Nenhuma conversa ainda." com "Sincronizar contatos e conversas"
   (`EvolutionSyncAction`; sem instância escolhida, o link para a aba Instância da integração).
 - **Ações** (decisão do dono D4, 26/11/2026): Pausar/Retomar (pelo tempo da pausa configurado), Nunca responder/Voltar
   a responder (entra ou sai de `criteria.audience.blocked`, com confirmação ao bloquear) e Abrir memórias ficam **no
   cabeçalho do chat e num menu em cada item da lista**, com resposta otimista e reversão com toast em falha.
-- **Linha do tempo** (`GET /api/secretary/conversations/[chatId]/messages?page=`): as mensagens vêm da Evolution sob
-  demanda (50 por página, sem cópia no Opex; ver `evolution-api.md`, "Conversa"), com divisores de data, balões (texto,
+- **Linha do tempo** (`GET /api/secretary/conversations/[chatId]/messages?antes=`): as mensagens vêm da Evolution sob
+  demanda (50 por página, sem cópia no Opex; ver `evolution-api.md`, "Conversa"), lidas nas duas metades da conversa
+  quando o contato passou a ser endereçado por LID (número e `@lid`, OPE-207). A paginação é por cursor: sem `antes`,
+  as mais recentes; a página devolve `hasOlder` e `nextBefore` (instante da mais antiga, inclusivo; mensagens repetidas
+  entre páginas são descartadas pelo id; `antes` inválido é 400). Com divisores de data, balões (texto,
   foto/vídeo com visualizador em tela cheia, áudio com player e velocidade, documento com baixar, localização, contatos,
   citação com salto até a mensagem, reações, editada, apagada, autor em grupo e status de envio/entrega/leitura) e
   "Carregar mensagens anteriores". A mídia vem de `GET …/messages/[messageId]/media` (binário, `private`).
@@ -317,7 +336,10 @@ transcrição sob demanda do áudio, que depende do recurso de transcrição do 
   mensagem mais antiga da página) aparecem como **pílulas** entre as mensagens ("Secretário · Respondeu: motivo") e as
   mensagens enviadas por ele levam o selo **"Secretário"** (`agentMessageIds`: `messageIds` do registro do turno, o
   `sentMessageId` das perguntas ao dono e, para o que foi enviado antes da OPE-197, o `secretary_sent` dos últimos
-  7 dias; mais antigas ficam sem selo; a mensagem de teste da integração, `origin: "test"`, nunca leva).
+  7 dias; mais antigas ficam sem selo; a mensagem de teste da integração, `origin: "test"`, nunca leva). A decisão
+  **Desligado** não vira pílula na conversa (decisão do dono, OPE-207; `TIMELINE_HIDDEN_DECISIONS`): fica só na seção
+  Decisões. A conversa (lista, linha do tempo, envio, mídia e ações) funciona igual com o Secretário desligado; só a
+  resposta automática depende dele ligado.
 - **Envio pelo dono** (decisão D1, "completo sem CRM"; `POST …/messages`): texto com emoji (`emoji-picker-react`, a
   mesma biblioteca do Atendimento, sob demanda e em pt-BR), Enter envia e Shift+Enter quebra a linha; responder
   citando; reagir (seis rápidas e o seletor; tocar na atual remove); anexos (fotos e vídeos, documento, câmera, áudio)

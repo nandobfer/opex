@@ -14,7 +14,7 @@ segue o fluxo de trabalho; `navLabel` (sidebar e aba) não leva "Agente", `title
 |---|---|---|---|---|
 | Opex | `/agente-opex` | `agente-opex` | cliente | Visão geral, Histórico, Memórias |
 | Maddox | `/agente-maddox` | `agente-maddox` | cliente | Visão geral, Histórico, Memórias |
-| Secretário (OPE-192) | `/agente-secretario` | `agente-secretario` | período | Visão geral (respostas, conversas atendidas, pausas, perguntas ao dono, custo real ou estimado; execuções = decisões de `secretary_decisions`, com o assunto classificado), Histórico, Memórias |
+| Secretário (OPE-192) | `/agente-secretario` | `agente-secretario` | período | Visão geral (respostas, conversas atendidas, pausas, perguntas ao dono, custo real ou estimado; execuções = decisões de `secretary_decisions`, com o assunto classificado), Histórico, Memórias; antes delas, **Conversas** (padrão, OPE-207) |
 | Orçamentista | `/agente-orcamentista` | `orcamentista` | cliente, repositório, margem | Visão geral, Histórico |
 | Catalogador | `/agente-catalogador` | `catalogador` | cliente, repositório | Visão geral, Histórico |
 | Refinador | `/agente-refinador` | `refinar-tarefa` | cliente, repositório | Visão geral, Histórico |
@@ -38,7 +38,9 @@ O item de chat do Agente Opex/Maddox no rodapé da sidebar continua (é o chat; 
   fundidos ficam disponíveis se qualquer feature estiver); nas antigas, do hook de configuração delas.
 - **Abas na URL** (`?aba=`, `OptionTabs` + `AnimatePresence mode="wait"`): **Visão geral** primeiro e
   padrão (omitida da URL); depois **Histórico** (`historico`, agentes novos) e as abas próprias
-  (`revisoes`, `execucoes`, `memorias`). As listas e filtros das abas antigas não mudaram.
+  (`revisoes`, `execucoes`, `memorias`). As listas e filtros das abas antigas não mudaram. `leadingTabs` põe abas
+  antes da Visão geral e `defaultTab` troca a padrão (a padrão sai da URL; as outras, inclusive a Visão geral, ficam em
+  `?aba=`). Só o Secretário usa: **Conversas** primeiro e padrão (OPE-207).
 - **Filtros na URL** (`?periodo=&de=&ate=&clientes=&repositorios=&margem=`, `AgentFiltersBar` sobre o
   `MetricsFiltersBar` compartilhado, fundo do card): período **7 dias, 30 dias (padrão), 90 dias,
   12 meses ou personalizado** (intervalo com o `PresetDateRangeFilter`), **Clientes** e

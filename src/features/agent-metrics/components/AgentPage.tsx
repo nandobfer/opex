@@ -25,30 +25,40 @@ interface AgentPageProps {
     agent: AgentId
     /** Abas depois da Visão geral (e do Histórico, nos agentes novos): as atuais das páginas antigas, Memórias. */
     tabs?: readonly AgentPageTab[]
+    /** Abas antes da Visão geral (ex.: Conversas do Secretário, OPE-207). */
+    leadingTabs?: readonly AgentPageTab[]
+    /** Aba padrão, omitida da URL; sem ela, a Visão geral. */
+    defaultTab?: string
     /** Motivo do aviso de disponibilidade vindo da página (as antigas já têm o hook); padrão: o da Visão geral. */
     availabilityReason?: string | null
     /** Ações à direita do Configurar (ex.: "Revisar PR"). */
     actions?: ReactNode
 }
 
-const TAB_DEFAULTS = { aba: OVERVIEW_TAB }
+const NO_TABS: readonly AgentPageTab[] = []
 
 /**
  * Página de um agente (OPE-122): cabeçalho do catálogo ("Agente X" + Configurar), aviso de
- * disponibilidade e as abas na URL (`?aba=`) — **Visão geral** primeiro e padrão, depois o Histórico
- * (agentes novos) e as abas próprias. Os filtros (período, cliente, repositório) ficam na URL e valem
+ * disponibilidade e as abas na URL (`?aba=`) — as abas iniciais (`leadingTabs`), a **Visão geral**, o
+ * Histórico (agentes novos) e as abas próprias. A padrão (fora da URL) é a Visão geral, salvo `defaultTab`. Os filtros (período, cliente, repositório) ficam na URL e valem
  * para a Visão geral e o Histórico. Atualiza em tempo real.
  */
-export function AgentPage({ agent, tabs = [], availabilityReason, actions }: AgentPageProps) {
+export function AgentPage({ agent, tabs = NO_TABS, leadingTabs = NO_TABS, defaultTab = OVERVIEW_TAB, availabilityReason, actions }: AgentPageProps) {
     const def = agentDef(agent)
     useAgentMetricsRealtime(agent)
     const allTabs = useMemo<{ value: string; label: string }[]>(
-        () => [{ value: OVERVIEW_TAB, label: "Visão geral" }, ...(def.hasHistory ? [{ value: HISTORY_TAB, label: "Histórico" }] : []), ...tabs.map(({ value, label }) => ({ value, label }))],
-        [def.hasHistory, tabs],
+        () => [
+            ...leadingTabs.map(({ value, label }) => ({ value, label })),
+            { value: OVERVIEW_TAB, label: "Visão geral" },
+            ...(def.hasHistory ? [{ value: HISTORY_TAB, label: "Histórico" }] : []),
+            ...tabs.map(({ value, label }) => ({ value, label })),
+        ],
+        [def.hasHistory, leadingTabs, tabs],
     )
     const tabValues = useMemo(() => allTabs.map((tab) => tab.value), [allTabs])
     const tabSchema = useMemo<UrlFilterSchema<{ aba: string }>>(() => ({ aba: urlFilterCodecs.string(tabValues) }), [tabValues])
-    const [{ aba }, setTab] = useUrlFilters(TAB_DEFAULTS, tabSchema)
+    const tabDefaults = useMemo(() => ({ aba: defaultTab }), [defaultTab])
+    const [{ aba }, setTab] = useUrlFilters(tabDefaults, tabSchema)
     const [filters, setFilters, resetFilters] = useUrlFilters(DEFAULT_AGENT_METRICS_FILTERS, AGENT_METRICS_FILTER_SCHEMA)
     const params = useMemo(() => toMetricsParams(filters), [filters])
     const withFilters = aba === OVERVIEW_TAB || aba === HISTORY_TAB
@@ -76,7 +86,7 @@ export function AgentPage({ agent, tabs = [], availabilityReason, actions }: Age
             ) : aba === HISTORY_TAB ? (
                 <AgentHistoryTab agent={agent} params={params} filtering={filtering} onClearFilters={resetFilters} />
             ) : (
-                tabs.find((tab) => tab.value === aba)?.render()
+                [...leadingTabs, ...tabs].find((tab) => tab.value === aba)?.render()
             )}
         </AgentPageFrame>
     )

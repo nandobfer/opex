@@ -4,8 +4,10 @@ import { useMemo, useRef, type ComponentProps, type ReactNode } from "react"
 import ReactMarkdown, { type Components } from "react-markdown"
 import remarkGfm from "remark-gfm"
 import { LINE_CODE_PROP, LINE_END_PROP, LINE_PROP, rehypeLogicalLines } from "@/lib/markdown/rehype-logical-lines"
+import { rehypeSourceOffsets } from "@/lib/markdown/rehype-source-offsets"
 import { cn } from "@/lib/utils"
 import { MarkdownCodeBlock } from "./markdown-code-block"
+import { useMarkdownCopy } from "./markdown-copy"
 import { LineRenderContext, MarkdownLine } from "./markdown-line"
 import { useInheritedLineAction, type MarkdownLineAction } from "./markdown-line-action"
 import { MarkdownMedia } from "./markdown-media"
@@ -16,6 +18,7 @@ import { MarkdownSelectionLayer } from "./markdown-selection"
  * (padrão do react-markdown) e links externos abrem em nova aba. Cores no estilo do OpenCode, pelos
  * tokens `md-*` do `globals.css`: títulos lilás, negrito e marcadores âmbar, código inline verde e
  * citação ciano. Todo bloco de código tem o botão "Copiar bloco de código" (`markdown-code-block`).
+ * Copiar uma seleção leva o Markdown do trecho (`markdown-copy`, `src/lib/markdown/copy.ts`).
  */
 /** Tira a prop `node` (AST) que o react-markdown repassa e o DOM não aceita. */
 function rest<P extends { node?: unknown }>(props: P): Omit<P, "node"> {
@@ -49,7 +52,7 @@ const components: Components = {
     ),
     th: (props) => <th className="border px-2 py-1 text-left font-semibold" {...rest(props)} />,
     td: (props) => <td className="border px-2 py-1 align-top" {...rest(props)} />,
-    hr: () => <hr className="my-3 border-border" />,
+    hr: (props) => <hr className="my-3 border-border" {...rest(props)} />,
 }
 
 /** Prop do hast em kebab-case (o react-markdown repassa `data-*` assim). */
@@ -73,7 +76,9 @@ const lineComponents: Components = {
     },
 }
 
-const REHYPE_LINES = [rehypeLogicalLines]
+// Offsets do fonte (cópia em Markdown, OPE-220) antes das linhas, cujos spans não têm posição.
+const REHYPE_LINES = [rehypeSourceOffsets, rehypeLogicalLines]
+const REHYPE_PLAIN = [rehypeSourceOffsets]
 
 interface MarkdownProps {
     children: string
@@ -90,8 +95,9 @@ export function Markdown({ children, className, lineAction }: MarkdownProps) {
     const action = lineAction === undefined ? inherited : lineAction
     const render = useMemo(() => (action ? { action, source: children } : null), [action, children])
     const rootRef = useRef<HTMLDivElement>(null)
+    useMarkdownCopy(rootRef, children)
     return (
-        <div ref={rootRef} className={cn("break-words text-sm text-foreground/90", className)}>
+        <div ref={rootRef} data-md-root="" className={cn("break-words text-sm text-foreground/90", className)}>
             {render ? (
                 <LineRenderContext.Provider value={render}>
                     <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={REHYPE_LINES} components={lineComponents}>
@@ -100,7 +106,7 @@ export function Markdown({ children, className, lineAction }: MarkdownProps) {
                     <MarkdownSelectionLayer rootRef={rootRef} action={render.action} source={children} />
                 </LineRenderContext.Provider>
             ) : (
-                <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+                <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={REHYPE_PLAIN} components={components}>
                     {children}
                 </ReactMarkdown>
             )}

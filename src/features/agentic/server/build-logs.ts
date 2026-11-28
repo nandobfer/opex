@@ -3,6 +3,7 @@ import { dbConnect } from "@/lib/db"
 import { AgenticBuild, type IAgenticBuild } from "@/lib/db/models/Agentic"
 import { logger } from "@/lib/logger"
 import { buildSectionHeader, capBuildLog, type BuildLogLine, type BuildStatus, type WorkbenchBuildDto } from "../build-log"
+import { githubRunUrl, type GithubRunRef } from "../github-run-log"
 
 /**
  * Builds da prévia (aba "Build (N)"): um documento em `agentic_builds` por build da etapa "Subindo a
@@ -24,6 +25,8 @@ interface ActiveBuild {
     commands: string[]
     /** Posição absoluta do começo da saída da execução atual (depois do cabeçalho). */
     sectionStart: number
+    /** Run do GitHub Actions da execução atual (o link do selo "GitHub Action"). */
+    githubRun: GithubRunRef | null
     timer: ReturnType<typeof setTimeout> | null
     flushing: Promise<void>
     listeners: Set<Listener>
@@ -59,7 +62,7 @@ function flush(build: ActiveBuild, extra: Partial<Pick<IAgenticBuild, "status" |
         try {
             await AgenticBuild.updateOne(
                 { _id: build.buildId },
-                { $set: { log: build.log, droppedChars: build.dropped, logChars: build.dropped + build.log.length, commands: build.commands, sectionStart: build.sectionStart, ...extra } },
+                { $set: { log: build.log, droppedChars: build.dropped, logChars: build.dropped + build.log.length, commands: build.commands, sectionStart: build.sectionStart, githubRun: build.githubRun, ...extra } },
             )
         } catch (error) {
             logger.error({ err: error, workbenchId: build.workbenchId, buildId: build.buildId }, "[agentic] Falha ao gravar o log do build")
@@ -78,7 +81,7 @@ function append(build: ActiveBuild, text: string): void {
     scheduleFlush(build)
 }
 
-function hydrate(doc: Pick<IAgenticBuild, "_id" | "workbenchId" | "log" | "droppedChars" | "commands" | "sectionStart">): ActiveBuild {
+function hydrate(doc: Pick<IAgenticBuild, "_id" | "workbenchId" | "log" | "droppedChars" | "commands" | "sectionStart"> & { githubRun?: IAgenticBuild["githubRun"] }): ActiveBuild {
     const log = doc.log ?? ""
     const dropped = doc.droppedChars ?? 0
     return {
@@ -88,6 +91,7 @@ function hydrate(doc: Pick<IAgenticBuild, "_id" | "workbenchId" | "log" | "dropp
         dropped,
         commands: [...(doc.commands ?? [])],
         sectionStart: doc.sectionStart ?? dropped + log.length,
+        githubRun: doc.githubRun ? { repo: doc.githubRun.repo, runId: doc.githubRun.runId } : null,
         timer: null,
         flushing: Promise.resolve(),
         listeners: new Set(),
@@ -115,7 +119,7 @@ export async function startBuild(workbenchId: string, meta: { port: number | nul
 export async function resumeBuild(workbenchId: string): Promise<void> {
     if (state.active.has(workbenchId)) return
     await dbConnect()
-    const doc = await AgenticBuild.findOne({ workbenchId }).sort({ number: -1 }).select({ workbenchId: 1, log: 1, droppedChars: 1, commands: 1, sectionStart: 1, status: 1 }).lean()
+    const doc = await AgenticBuild.findOne({ workbenchId }).sort({ number: -1 }).select({ workbenchId: 1, log: 1, droppedChars: 1, commands: 1, sectionStart: 1, status: 1, githubRun: 1 }).lean()
     if (!doc) return
     // O build pode ter sido dado como interrompido enquanto o app estava fora: volta a valer.
     if (doc.status !== "running") await AgenticBuild.updateOne({ _id: doc._id }, { $set: { status: "running", endedAt: null, message: null } })
@@ -129,6 +133,22 @@ export function beginBuildSection(workbenchId: string, command: string): void {
     build.commands.push(command)
     append(build, buildSectionHeader(command, new Date(), build.log.length === 0 && build.dropped === 0))
     build.sectionStart = build.dropped + build.log.length
+    // Nova execução (correção): o link do run anterior não vale mais até o novo run ser reconhecido.
+    if (build.githubRun) {
+        build.githubRun = null
+        emit(build, { type: "run", url: null })
+    }
+}
+
+/** Run do GitHub Actions da execução atual (reconhecido na saída do script, no repositório da central). */
+export function setBuildRun(workbenchId: string, ref: GithubRunRef): void {
+    const build = state.active.get(workbenchId)
+    const url = githubRunUrl(ref)
+    if (!build || !url) return
+    if (build.githubRun?.repo === ref.repo && build.githubRun.runId === ref.runId) return
+    build.githubRun = { repo: ref.repo, runId: ref.runId }
+    emit(build, { type: "run", url })
+    scheduleFlush(build)
 }
 
 /** Trecho da saída do build (ou uma linha do app, como o código de saída e o aviso de correção). */
@@ -148,7 +168,7 @@ export function restartBuildSection(workbenchId: string): void {
     if (keep >= 0 && keep <= build.log.length) build.log = build.log.slice(0, keep)
     else build.log += "\n\x1b[90m…(retomando a leitura da saída)…\x1b[0m\n"
     build.sectionStart = build.dropped + build.log.length
-    emit(build, { type: "snapshot", offset: build.dropped, text: build.log, status: "running", message: null })
+    emit(build, { type: "snapshot", offset: build.dropped, text: build.log, status: "running", message: null, runUrl: githubRunUrl(build.githubRun) })
     scheduleFlush(build)
 }
 
@@ -181,6 +201,7 @@ function toDto(doc: Omit<IAgenticBuild, "log">, status: BuildStatus): WorkbenchB
         logChars: doc.logChars ?? 0,
         droppedChars: doc.droppedChars ?? 0,
         message: doc.message ?? null,
+        runUrl: doc.method === "github" ? githubRunUrl(doc.githubRun) : null,
     }
 }
 
@@ -198,7 +219,7 @@ export async function listBuilds(workbenchId: string): Promise<WorkbenchBuildDto
     return docs.map((doc) => {
         const dto = toDto(doc, effectiveStatus(doc))
         // O que ainda não foi gravado já aparece no tamanho.
-        return active?.buildId === dto.id ? { ...dto, commands: [...active.commands], logChars: active.dropped + active.log.length, droppedChars: active.dropped } : dto
+        return active?.buildId === dto.id ? { ...dto, commands: [...active.commands], logChars: active.dropped + active.log.length, droppedChars: active.dropped, runUrl: dto.method === "github" ? githubRunUrl(active.githubRun) : null } : dto
     })
 }
 
@@ -242,7 +263,7 @@ export async function openBuildLogStream(workbenchId: string, buildId: string, s
             const active = state.active.get(workbenchId)
             if (active?.buildId === buildId) {
                 // Em memória e síncrono: o snapshot e a assinatura não perdem nenhum trecho.
-                write({ type: "snapshot", offset: active.dropped, text: active.log, status: "running", message: null })
+                write({ type: "snapshot", offset: active.dropped, text: active.log, status: "running", message: null, runUrl: githubRunUrl(active.githubRun) })
                 const listener: Listener = (line) => {
                     write(line)
                     if (line.type === "status") cleanup()
@@ -251,7 +272,7 @@ export async function openBuildLogStream(workbenchId: string, buildId: string, s
                 unsubscribe = () => active.listeners.delete(listener)
                 return
             }
-            write({ type: "snapshot", offset: doc.droppedChars ?? 0, text: doc.log ?? "", status: effectiveStatus(doc), message: doc.message ?? null })
+            write({ type: "snapshot", offset: doc.droppedChars ?? 0, text: doc.log ?? "", status: effectiveStatus(doc), message: doc.message ?? null, runUrl: githubRunUrl(doc.githubRun) })
             cleanup()
         },
         cancel() {

@@ -16,7 +16,7 @@ vi.mock('@/lib/db/models/Agentic', async () => {
   return { AgenticBuild: mocks.model }
 })
 
-import { appendBuildOutput, beginBuildSection, dropBuilds, listBuilds, openBuildLogStream, restartBuildSection, resumeBuild, settleBuild, startBuild } from '@/features/agentic/server/build-logs'
+import { appendBuildOutput, beginBuildSection, dropBuilds, listBuilds, openBuildLogStream, restartBuildSection, resumeBuild, setBuildRun, settleBuild, startBuild } from '@/features/agentic/server/build-logs'
 import type { BuildLogLine } from '@/features/agentic/build-log'
 
 const UP = 'PORT=4015 docker compose -p app-mt-1 up -d --build'
@@ -106,7 +106,63 @@ describe('build-logs', () => {
     await settleBuild(wb, 'succeeded')
     expect(stored(wb)[0]!.log).toBe('cabeçalho\nparte lida e o resto\n')
     const lines = await readAll(response)
-    expect(lines[1]).toEqual({ type: 'snapshot', offset: 0, text: 'cabeçalho\n', status: 'running', message: null })
+    expect(lines[1]).toEqual({ type: 'snapshot', offset: 0, text: 'cabeçalho\n', status: 'running', message: null, runUrl: null })
+  })
+
+  describe('link do run do GitHub Actions (OPE-221)', () => {
+    const RUN = 'https://github.com/org/app/actions/runs/42'
+
+    it('o run registrado vira o runUrl da lista, do snapshot e da linha run; URLs no texto do log não contam', async () => {
+      const id = await startBuild(wb, { port: null, local: false, method: 'github' })
+      beginBuildSection(wb, 'npx tsx scripts/preview-github.ts')
+      const response = await openBuildLogStream(wb, id, new AbortController().signal)
+      appendBuildOutput(wb, `Prévia GitHub: ${RUN}\n`)
+      setBuildRun(wb, { repo: 'org/app', runId: 42 })
+      setBuildRun(wb, { repo: 'org/app', runId: 42 })
+      appendBuildOutput(wb, 'details_url: https://github.com/org/app/actions/runs/9\n')
+      expect((await listBuilds(wb))[0]!.runUrl).toBe(RUN)
+      await settleBuild(wb, 'succeeded')
+      const lines = await readAll(response)
+      expect(lines.filter((line) => line.type === 'run')).toEqual([{ type: 'run', url: RUN }])
+      expect(stored(wb)[0]!.githubRun).toEqual({ repo: 'org/app', runId: 42 })
+      expect((await listBuilds(wb))[0]!.runUrl).toBe(RUN)
+      const [snapshot] = await readAll(await openBuildLogStream(wb, id, new AbortController().signal))
+      expect(snapshot).toMatchObject({ type: 'snapshot', runUrl: RUN })
+    })
+
+    it('nova execução (correção) limpa o link até o novo run; a retomada mantém o run gravado', async () => {
+      const id = await startBuild(wb, { port: null, local: false, method: 'github' })
+      beginBuildSection(wb, 'script')
+      setBuildRun(wb, { repo: 'org/app', runId: 42 })
+      const response = await openBuildLogStream(wb, id, new AbortController().signal)
+      beginBuildSection(wb, 'script')
+      expect((await listBuilds(wb))[0]!.runUrl).toBeNull()
+      setBuildRun(wb, { repo: 'org/app', runId: 43 })
+      await settleBuild(wb, 'failed', 'falhou')
+      const runs = (await readAll(response)).filter((line) => line.type === 'run')
+      expect(runs).toEqual([{ type: 'run', url: null }, { type: 'run', url: 'https://github.com/org/app/actions/runs/43' }])
+
+      const other = `${wb}-r`
+      await mocks.model.create({ workbenchId: other, number: 1, status: 'running', method: 'github', startedAt: new Date(), log: 'x', droppedChars: 0, sectionStart: 1, commands: ['script'], githubRun: { repo: 'org/app', runId: 7 } })
+      await resumeBuild(other)
+      restartBuildSection(other)
+      expect((await listBuilds(other))[0]!.runUrl).toBe('https://github.com/org/app/actions/runs/7')
+      await settleBuild(other, 'succeeded')
+    })
+
+    it('build local ou run inválido: sem link', async () => {
+      await startBuild(wb, { port: 4015, local: false, method: 'local' })
+      beginBuildSection(wb, UP)
+      setBuildRun(wb, { repo: 'org/app', runId: 42 })
+      expect((await listBuilds(wb))[0]!.runUrl).toBeNull()
+      await settleBuild(wb, 'succeeded')
+      const gh = `${wb}-g`
+      await startBuild(gh, { port: null, local: false, method: 'github' })
+      setBuildRun(gh, { repo: 'org app', runId: 42 })
+      setBuildRun(gh, { repo: 'org/app', runId: 0 })
+      expect((await listBuilds(gh))[0]!.runUrl).toBeNull()
+      await settleBuild(gh, 'succeeded')
+    })
   })
 
   it('saída fora de um build ativo é ignorada e a exclusão apaga os builds', async () => {

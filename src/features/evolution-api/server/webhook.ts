@@ -2,9 +2,10 @@
 import { createHash, timingSafeEqual } from "node:crypto"
 import { evolutionWebhookBodySchema, type EvolutionMessage, type EvolutionWebhookBody } from "../evolution-dto"
 import { isGroupJid, LID_JID_SUFFIX, normalizeJid } from "../constants"
-import { messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "../message"
+import { lidAliasOf, messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "../message"
 import { chatJidsOfUpdate, connectionOf, contactsOf, filledProfileFields, messagesOf, normalizeEventName, qrOf, type ContactUpdate } from "../webhook-parse"
 import { evolutionConfig, patchState } from "./instances"
+import { rememberLidAliases, resolveKnownLid } from "./lid"
 import { contactKey, EvolutionContact, EvolutionInstanceState, EvolutionSeenEvent, evolutionDb } from "./models"
 import { evolutionLog, publishEvolution } from "./shared"
 
@@ -120,6 +121,21 @@ export function ownerLidOf(raw: EvolutionMessage): string | null {
     return participant?.endsWith(LID_JID_SUFFIX) ? participant : null
 }
 
+/**
+ * Endereçamento por LID (OPE-207): mensagem `@lid` com `remoteJidAlt` ensina a correspondência; `@lid` sem
+ * `remoteJidAlt` (ex.: resposta do dono pelo celular) cai na conversa do número quando ela já é conhecida.
+ */
+export async function withKnownLid(instance: string, raw: EvolutionMessage, parsed: ParsedMessage): Promise<ParsedMessage> {
+    const alias = lidAliasOf(raw.key)
+    if (alias) {
+        await rememberLidAliases(instance, [alias])
+        return parsed
+    }
+    if (!parsed.chatJid.endsWith(LID_JID_SUFFIX)) return parsed
+    const chatJid = await resolveKnownLid(instance, parsed.chatJid)
+    return chatJid === parsed.chatJid ? parsed : { ...parsed, chatJid }
+}
+
 /** Repassa a mensagem ao Agente Secretário (import sob demanda: o turno puxa a SDK de IA). */
 async function forwardToSecretary(instance: string, message: ParsedMessage): Promise<void> {
     const { handleIncomingMessage } = await import("@/features/secretary-agent/server/inbound")
@@ -182,7 +198,7 @@ export async function processEvolutionEvent(body: EvolutionWebhookBody): Promise
             await publishContactsThrottled(instance)
             await notifySecretaryChats(instance, chats.filter((chat) => typeof chat.unreadCount === "number").map((chat) => chat.jid))
         } else if (event === "MESSAGES_UPDATE") {
-            const jids = chatJidsOfUpdate(body.data)
+            const jids = [...new Set(await Promise.all(chatJidsOfUpdate(body.data).map((jid) => resolveKnownLid(instance, jid))))]
             message = `${jids.length} conversa(s) com mensagens atualizadas`
             await notifySecretaryChats(instance, jids)
         } else if (event === "MESSAGES_UPSERT") {
@@ -192,7 +208,7 @@ export async function processEvolutionEvent(body: EvolutionWebhookBody): Promise
             await Promise.all(messages.map(async (raw) => {
                 if (raw.key.remoteJid === "status@broadcast") return
                 if (!(await markSeen(`${instance}:${raw.key.id}`))) return
-                const parsed = parseEvolutionMessage(raw)
+                const parsed = await withKnownLid(instance, raw, parseEvolutionMessage(raw))
                 const ownerLid = ownerLidOf(raw)
                 if (ownerLid) await patchState(instance, { ownerLid })
                 await upsertContacts(

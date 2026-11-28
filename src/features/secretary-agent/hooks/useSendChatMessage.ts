@@ -99,7 +99,7 @@ export function useSendChatMessage(chatId: string) {
     return { sendText, sendLocation, sendContacts, sendFiles }
 }
 
-type TimelineCache = InfiniteData<ChatTimelinePageDto, number>
+type TimelineCache = InfiniteData<ChatTimelinePageDto, string | null>
 
 /** Reação do dono (vazia remove), otimista: a página muda na hora e volta em falha, com toast. */
 export function useReactToChatMessage(chatId: string) {

@@ -32,6 +32,8 @@ export interface ReplyPorts {
 export interface PlanInput {
     settings: SecretarySettings
     chatJid: string
+    /** Outras identidades da conversa (número ↔ `@lid`), para os critérios de quem responder. */
+    aliases?: readonly string[]
     isGroup: boolean
     mentioned: boolean
     /** Texto das mensagens pendentes (com a mídia já interpretada). */
@@ -53,7 +55,7 @@ export type PlanResult =
 
 export async function planSecretaryReply(input: PlanInput, ports: ReplyPorts): Promise<PlanResult> {
     const { settings } = input
-    const conversation = { jid: input.chatJid, isGroup: input.isGroup, mentioned: input.mentioned }
+    const conversation = { jid: input.chatJid, aliases: input.aliases, isGroup: input.isGroup, mentioned: input.mentioned }
     // Etapa 1 antes de chamar quem decide o assunto: quem não pode ser respondido não gasta decisão.
     const audience = evaluateAudience(settings.criteria, conversation)
     let subject: SubjectTrace | null = null

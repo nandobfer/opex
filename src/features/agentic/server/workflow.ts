@@ -54,7 +54,7 @@ import { runAfterResponse } from "@/lib/after-response"
 import { newJobId } from "@/features/local-docker/server/detached"
 import { buildExitLine, buildFixSeparator, buildPrepareSeparator, terminalBuildFailure } from "../build-log"
 import { createRunFollower } from "./github-run-follow"
-import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, settleBuild, startBuild } from "./build-logs"
+import { appendBuildOutput, beginBuildSection, dropBuilds, restartBuildSection, resumeBuild, setBuildRun, settleBuild, startBuild } from "./build-logs"
 import { runPreviewBuild } from "./preview-build"
 import { buildQueuePosition, buildQueuePositions, pumpBuildQueue } from "./build-queue"
 import { cleanupTargets, cleanupVerificationCommands, deletionContext, hasCleanupWork, type CleanupTargets } from "./environment-cleanup"
@@ -1099,7 +1099,7 @@ async function buildTurn(
         log.step(`${WORKBENCH_STAGE_LABELS.building}: ${remote ? "script da prévia remota" : "docker compose"}`, { workbenchId: id, jobId })
         const timeoutMinutes = remote ? remotePreviewTimeoutMinutes(config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
         // GitHub Action (OPE-214): a saída do workflow vem da API (o script só espera o run em silêncio).
-        const follower = remote ? createRunFollower({ repo: loaded.repo?.repo ?? null, signal: controller.signal, write: (text) => appendBuildOutput(id, text) }) : null
+        const follower = remote ? createRunFollower({ repo: loaded.repo?.repo ?? null, signal: controller.signal, write: (text) => appendBuildOutput(id, text), onRun: (ref) => setBuildRun(id, ref) }) : null
         let run: Awaited<ReturnType<typeof runPreviewBuild>>
         try {
             run = await runPreviewBuild({
