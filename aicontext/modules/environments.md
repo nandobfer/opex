@@ -358,8 +358,14 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
   8. **Deploy que falha antes de subir os containers** (antes do passo "Sobe no …", inclusive na retomada; no mesmo lugar
      do último deploy, não no mover): o override e o `.env.opex` voltam aos da `current` ("Override e variáveis extras
      voltaram aos do último deploy concluído"), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada.
-     **Falha a partir do passo que sobe** (os containers podem estar com a configuração nova): os arquivos ficam os deste
-     deploy, a `pending` vira a `current` e o log registra "Os containers já subiram com a configuração deste deploy…".
+     **O passo que sobe terminou e um passo seguinte falhou** (ex.: a saúde): os containers estão com a configuração
+     nova, então os arquivos ficam os deste deploy, a `pending` vira a `current` e o estado implantado (`deployedOn`, ref,
+     commit, versão, limites, `deployedComposeOverrides`, revisão do compose) passa a ser o deste deploy, mesmo com o deploy
+     falho; o log registra "Os containers subiram com a configuração deste deploy e um passo seguinte falhou…".
+     **O próprio passo que sobe falhou** (estado dos containers indeterminado): os arquivos voltam aos da `current` (no
+     mesmo lugar), o estado implantado continua o do último deploy concluído e o log registra a deriva possível ("O passo
+     que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy… faça um novo deploy…").
+     Na retomada vale o mesmo, pelo passo gravado no ponto de retomada.
      Ambiente implantado antes das cópias existirem ganha a `current` no começo do deploy seguinte (passo "Cópia do último
      deploy", antes de regravar os arquivos). Sem cópia (nunca implantado), nada é restaurado.
 - **"Ler compose"** (`POST /api/environments/compose-services`) passa a devolver também `values` por serviço

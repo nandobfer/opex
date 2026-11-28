@@ -252,10 +252,16 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     return { services, envFiles, composeVersion, ownImages }
 }
 
-/** Progresso da execução: `cutover` = o passo que sobe os containers já começou (eles podem ter a configuração nova). */
+/**
+ * Progresso da execução: `upStarted` = o passo que sobe os containers começou; `upDone` = ele terminou sem erro (o
+ * passo seguinte começou sem falha). Começado e não terminado = estado dos containers indeterminado.
+ */
 interface ExecutionProgress {
-    cutover: boolean
+    upStarted: boolean
+    upDone: boolean
 }
+
+const newProgress = (): ExecutionProgress => ({ upStarted: false, upDone: false })
 
 /**
  * A cópia `pending` (os arquivos deste deploy) vira a do último deploy. Nunca derruba o deploy: os containers já
@@ -431,7 +437,8 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     let commit: string | null = null
     let tag: string | null = null
     let plan: ComposePlan | null = null
-    const progress: ExecutionProgress = { cutover: false }
+    const progress = newProgress()
+    let checkpoint: DeployCheckpoint | null = null
     // Mesmo lugar do último deploy concluído: a falha volta os arquivos gerados aos dele (mover não tem o que voltar).
     const samePlace = Boolean(env.deployedOn && env.deployedOn.buildOn === target.buildOn && env.deployedOn.runOn === target.runOn)
     try {
@@ -452,13 +459,14 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         const skipBuild = await canReuseBuild(ctx, env, settings, plan, access, target, commit, buildServices, envFiles)
         if (skipBuild) ctx.write(`\nBuild reaproveitado: as imagens do commit ${commit} já existem no ${machineName(target.buildOn)}.\n`)
         // Daqui em diante o deploy pode ser retomado por outro processo (ex.: o redeploy do próprio app).
-        const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion, overrides: env.composeOverrides ?? null, pullServices }
+        checkpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion, overrides: env.composeOverrides ?? null, pullServices }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
         await runExecution(ctx, env, settings, plan, access, checkpoint, progress)
         await promoteDeployedFiles(ctx, plan, String(env._id))
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
-        if (plan) await settleFailedFiles(ctx, plan, String(env._id), { samePlace, cutover: progress.cutover })
+        if (plan) await settleFailedFiles(ctx, plan, String(env._id), { samePlace, progress })
+        if (progress.upDone && checkpoint) await recordApplied(env, checkpoint)
         await failDeploy(String(env._id), deployId, recorder, error, commit, tag)
     } finally {
         await recorder.stop()
@@ -466,32 +474,42 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     }
 }
 
+/** Aviso de que os containers podem divergir do que consta como implantado (o passo que sobe falhou no meio). */
+export const DEPLOY_DRIFT_WARNING =
+    "O passo que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy. O que consta como implantado continua o do último deploy concluído; faça um novo deploy para os containers voltarem a bater com ele."
+
 /**
- * Arquivos depois de um deploy que falhou: antes de subir os containers, voltam aos do último deploy concluído;
- * depois (os containers podem estar com a configuração nova), ficam os deste deploy, que viram a cópia, e o log
- * registra a condição.
+ * Arquivos depois de um deploy que falhou:
+ * - antes de subir os containers: voltam aos do último deploy concluído;
+ * - o passo que sobe terminou e um passo seguinte falhou: os containers estão com a configuração deste deploy, então
+ *   os arquivos ficam os dele e viram a cópia (e quem chama grava o estado aplicado);
+ * - o próprio passo que sobe falhou (estado indeterminado): os arquivos voltam aos do último deploy concluído, que
+ *   continua sendo o estado gravado, e o log registra a deriva possível dos containers.
  */
-async function settleFailedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string, state: { samePlace: boolean; cutover: boolean }): Promise<void> {
-    if (!state.cutover) {
-        if (state.samePlace) await restoreDeployedFiles(ctx, plan, environmentId)
+async function settleFailedFiles(ctx: DeployContext, plan: ComposePlan, environmentId: string, state: { samePlace: boolean; progress: ExecutionProgress }): Promise<void> {
+    if (state.progress.upDone) {
+        ctx.write(`\n\u001b[33mOs containers subiram com a configuração deste deploy e um passo seguinte falhou: o override, as variáveis extras e o que consta como implantado passam a ser os deste deploy.\u001b[0m\n`)
+        await promoteDeployedFiles(ctx, plan, environmentId)
         return
     }
-    ctx.write(`\n\u001b[33mOs containers já subiram com a configuração deste deploy: o override e as variáveis extras ficam os dele (não voltam aos do último deploy concluído).\u001b[0m\n`)
-    await promoteDeployedFiles(ctx, plan, environmentId)
+    if (state.samePlace) await restoreDeployedFiles(ctx, plan, environmentId)
+    if (state.progress.upStarted) ctx.write(`\n\u001b[33m${DEPLOY_DRIFT_WARNING}\u001b[0m\n`)
 }
 
 /** Fase de execução (`executionSteps`) a partir do passo do ponto de retomada, que avança a cada passo. */
-async function runExecution(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, checkpoint: DeployCheckpoint, progress: ExecutionProgress = { cutover: false }): Promise<void> {
+async function runExecution(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, checkpoint: DeployCheckpoint, progress: ExecutionProgress = newProgress()): Promise<void> {
     const steps = executionSteps({ settings, plan, buildOn: env.buildOn, runOn: env.runOn, targets: access.targets, buildServices: checkpoint.buildServices, ports: env.ports, healthUrl: env.healthUrl, skipBuild: checkpoint.skipBuild, pullServices: checkpoint.pullServices ?? [], from: checkpoint.from, down: downCommand })
     const upIndex = steps.findIndex((step) => step.label.startsWith("Sobe no "))
-    // Retomada a partir do passo que sobe (ou depois): os containers podem já ter subido.
-    if (checkpoint.step > 0 && upIndex >= 0 && checkpoint.step >= upIndex) progress.cutover = true
+    // Retomada: no passo que sobe, o estado é indeterminado; depois dele (sem falha gravada), os containers já subiram.
+    if (checkpoint.step > 0 && upIndex >= 0 && checkpoint.step >= upIndex) progress.upStarted = true
+    if (checkpoint.step > 0 && upIndex >= 0 && checkpoint.step > upIndex && !checkpoint.failure) progress.upDone = true
     await runSteps(ctx, steps, {
         start: checkpoint.step,
         failure: checkpoint.failure,
         jobIds: (index) => executionJobId(ctx.deployId, index),
         onStep: async (index, failure) => {
-            if (index === upIndex && !failure) progress.cutover = true
+            if (index === upIndex && !failure) progress.upStarted = true
+            if (index > upIndex && progress.upStarted && !failure) progress.upDone = true
             await EnvironmentDeploy.updateOne({ _id: ctx.deployId }, { $set: { "checkpoint.step": index, "checkpoint.failure": failure } })
         },
     })
@@ -499,10 +517,19 @@ async function runExecution(ctx: DeployContext, env: IEnvironment, settings: Env
 
 type Recorder = ReturnType<typeof deployRecorder>
 
-async function completeDeploy(env: IEnvironment, deployId: string, recorder: Recorder, checkpoint: DeployCheckpoint): Promise<void> {
+/**
+ * Grava o que está aplicado nos containers (máquinas, ref, commit, versão, limites, ajustes e revisão do compose):
+ * no sucesso e quando o passo que sobe terminou mas um passo seguinte falhou.
+ */
+async function recordApplied(env: IEnvironment, checkpoint: DeployCheckpoint): Promise<void> {
     const target = { buildOn: env.buildOn, runOn: env.runOn }
     await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: target, deployedRef: checkpoint.ref ?? (env.source.kind === "central" ? env.source.ref : null), deployedCommit: checkpoint.commit, deployedVersion: checkpoint.version, deployedLimits: checkpoint.limits ?? environmentLimitsOf(env.limits), deployedComposeOverrides: checkpoint.overrides !== undefined ? checkpoint.overrides : (env.composeOverrides ?? null), ...(typeof checkpoint.composeVersion === "number" ? { deployedComposeVersion: checkpoint.composeVersion } : {}), updatedAt: new Date() } })
     if (typeof checkpoint.composeVersion === "number") await markComposeDeployed(String(env._id), checkpoint.composeVersion)
+}
+
+async function completeDeploy(env: IEnvironment, deployId: string, recorder: Recorder, checkpoint: DeployCheckpoint): Promise<void> {
+    const target = { buildOn: env.buildOn, runOn: env.runOn }
+    await recordApplied(env, checkpoint)
     await finishDeploy(deployId, "success", null, recorder.log(), checkpoint.commit, checkpoint.tag)
     envLog.info({ id: String(env._id), deployId, ...target }, "[environments] Deploy concluído")
 }
@@ -562,12 +589,14 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
     const checkpoint = deploy.checkpoint ?? null
     let plan: ComposePlan | null = null
     let samePlace = false
-    const progress: ExecutionProgress = { cutover: false }
+    const progress = newProgress()
+    let resumedEnv: IEnvironment | null = null
     busy().add(envId)
     try {
         if (!checkpoint) throw new StepError(INTERRUPTED_BEFORE_EXECUTION)
         const saved = await loadEnvironment(envId)
         const env: IEnvironment = { ...saved, buildOn: deploy.buildOn, runOn: deploy.runOn }
+        resumedEnv = env
         const access = await machineAccess(run)
         if ((env.buildOn === "pc" || env.runOn === "pc") && !access.pcAvailable) throw new StepError(`Não foi possível retomar o deploy depois de o app reiniciar: ${access.pcReason ?? "o PC não está disponível"}`)
         const settings = await loadEnvironmentsSettings()
@@ -579,7 +608,8 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
         await promoteDeployedFiles(ctx, plan, envId)
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
-        if (plan) await settleFailedFiles(ctx, plan, envId, { samePlace, cutover: progress.cutover })
+        if (plan) await settleFailedFiles(ctx, plan, envId, { samePlace, progress })
+        if (progress.upDone && checkpoint && resumedEnv) await recordApplied(resumedEnv, checkpoint)
         await failDeploy(envId, deployId, recorder, error, checkpoint?.commit ?? deploy.commit, checkpoint?.tag ?? deploy.imageTag)
     } finally {
         busy().delete(envId)

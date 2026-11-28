@@ -728,7 +728,10 @@ describe('serviços do compose no deploy (OPE-211)', () => {
     const base = host()
     const fail = { on: '' }
     const touchesFiles = (command: string) => command.includes('base64 -d >') || command.includes('environments-deployed') || (command.startsWith('rm -f ') && command.includes('.env.opex'))
+    // Containers simulados: o override na pasta a cada `up -d` (tentado ou não).
+    const containers: string[] = []
     const run = vi.fn(async (command: string, timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
+      if (command.includes(' up -d')) containers.push(existsSync(join(dir, 'docker-compose.opex.yml')) ? readFileSync(join(dir, 'docker-compose.opex.yml'), 'utf8') : '')
       if (fail.on && command.includes(fail.on)) {
         base.calls.push(command)
         return { exitCode: 1, output: 'erro' }
@@ -745,7 +748,7 @@ describe('serviços do compose no deploy (OPE-211)', () => {
       return base.run(command, timeout, opts)
     })
     const read = (path: string) => (existsSync(join(dir, path)) ? readFileSync(join(dir, path), 'utf8') : null)
-    return { run, calls: base.calls, fail, dir, home, read, cleanup: () => rmSync(root, { recursive: true, force: true }) }
+    return { run, calls: base.calls, fail, dir, home, read, containers, cleanup: () => rmSync(root, { recursive: true, force: true }) }
   }
 
   it('regressão: deploy que falha antes de subir volta o override do último deploy concluído (Derrubar e Levantar seguem com os ajustes implantados)', async () => {
@@ -781,20 +784,46 @@ describe('serviços do compose no deploy (OPE-211)', () => {
     }
   })
 
-  it('regressão: falha depois de subir os containers não volta os arquivos (ficam os que estão no ar) e o log registra', async () => {
+  it('regressão: saúde falha depois do up concluído: arquivos, containers e o estado implantado ficam os deste deploy (deploy falho)', async () => {
     const files = fileHost()
     try {
-      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      const env = await createEnvironment(input({ healthUrl: 'http://localhost:4100/health', composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
       await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
-      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
-      files.fail.on = 'up -d'
+      expect(deploys.docs[0]!.status).toBe('success')
+      await updateEnvironment(String(env._id), input({ healthUrl: 'http://localhost:4100/health', composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = 'curl -fsS'
       await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
       expect(deploys.docs[1]!.status).toBe('failed')
       const current = files.read('docker-compose.opex.yml')!
       expect(current).toContain('restart: no')
-      expect(String(deploys.docs[1]!.log)).toContain('Os containers já subiram com a configuração deste deploy')
-      // A cópia passa a ser a dos containers no ar: uma falha seguinte antes de subir volta para ela.
+      // Os containers subiram com este override.
+      expect(files.containers.at(-1)).toBe(current)
+      expect(String(deploys.docs[1]!.log)).toContain('Os containers subiram com a configuração deste deploy e um passo seguinte falhou')
       expect(readFileSync(join(files.home, '.opex/environments-deployed', String(env._id), 'current/docker-compose.opex.yml'), 'utf8')).toBe(current)
+      // O que consta como implantado é o que está no ar: sem pendência falsa.
+      expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { restart: 'no' })], yaml: '' })
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão: o próprio up falha (estado indeterminado): arquivos e estado implantado ficam os do último deploy e o log registra a deriva', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      const deployed = files.read('docker-compose.opex.yml')!
+      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = 'up -d'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[1]!.status).toBe('failed')
+      // A tentativa usou o override novo (containers talvez parcialmente recriados)...
+      expect(files.containers.at(-1)).toContain('restart: no')
+      // ...mas o estado gravado e os arquivos seguem coerentes entre si: os do último deploy concluído.
+      expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+      expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { restart: 'always' })], yaml: '' })
+      expect(String(deploys.docs[1]!.log)).toContain('O passo que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy')
+      expect(String(deploys.docs[1]!.log)).not.toContain('Os containers subiram com a configuração deste deploy')
     } finally {
       files.cleanup()
     }
