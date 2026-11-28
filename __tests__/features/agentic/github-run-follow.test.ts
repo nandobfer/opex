@@ -183,6 +183,21 @@ describe('createRunFollower', () => {
     expect(failure).toContain('docker build falhou')
   })
 
+  it('abort: libera a saída retida na hora e o acompanhamento para de consultar e de escrever', async () => {
+    scenario([{ run: { status: 'in_progress', conclusion: null }, jobs: [] }])
+    const follower = createRunFollower({ repo: 'org/app', signal: new AbortController().signal, write, pollMs: 60_000 })
+    follower.output('Prévia GitHub: https://github.com/org/app/actions/runs/7\nretido\n')
+    await vi.waitFor(() => expect(gh.full).toHaveBeenCalled())
+    const calls = gh.full.mock.calls.length
+    follower.abort()
+    expect(strip(out)).toContain('retido')
+    const after = out
+    expect(await follower.finish()).toBeNull()
+    await new Promise((resolve) => setTimeout(resolve, 10))
+    expect(gh.full.mock.calls.length).toBe(calls)
+    expect(out).toBe(after)
+  })
+
   it('URL de outro repositório não liga o acompanhamento', async () => {
     const follower = createRunFollower({ repo: 'org/app', signal: new AbortController().signal, write, pollMs: 0 })
     follower.output('Prévia GitHub: https://github.com/outro/repo/actions/runs/1\nfim\n')

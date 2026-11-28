@@ -455,6 +455,27 @@ describe('workflow — prévia no GitHub Action rodada pelo app', () => {
     expect(fix).toContain('[preview] Testes/build remoto falharam')
   })
 
+  it('OPE-214: erro do host depois da URL encerra o acompanhamento do run (nada mais é consultado nem escrito)', async () => {
+    // Run que não termina: sem o abort, o acompanhamento seguiria consultando e escrevendo.
+    gh.full.mockImplementation(async (path: string) => ({ data: path.includes('/jobs') ? { jobs: [] } : { status: 'in_progress', conclusion: null }, notModified: false, etag: null, status: 200, next: null, rateRemaining: 5000 }))
+    mocks.runBuild.mockImplementationOnce(async (input: { onOutput: (chunk: string) => void }) => {
+      input.onOutput('Prévia GitHub: https://github.com/org/app/actions/runs/42\nretido\n')
+      await vi.waitFor(() => expect(gh.full).toHaveBeenCalled())
+      throw new Error('conexão com o host caiu')
+    })
+    await startRemote()
+    await vi.waitFor(() => expect(doc().runState).toBe('failed'))
+    expect(appended()).toContain('retido')
+    // O sinal das consultas ao GitHub foi abortado: o polling (a cada 5 s) não volta a consultar.
+    const signal = (gh.full.mock.calls.at(-1)![1] as { signal: AbortSignal }).signal
+    expect(signal.aborted).toBe(true)
+    const calls = gh.full.mock.calls.length
+    const writes = mocks.appendOutput.mock.calls.length
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(gh.full.mock.calls.length).toBe(calls)
+    expect(mocks.appendOutput.mock.calls.length).toBe(writes)
+  })
+
   it('OPE-214: URL de outro repositório não liga o acompanhamento', async () => {
     scriptOutput(['Prévia GitHub: https://github.com/outro/repo/actions/runs/1\n'])
     await startRemote()

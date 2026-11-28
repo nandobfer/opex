@@ -1099,14 +1099,21 @@ async function buildTurn(
         const timeoutMinutes = remote ? remotePreviewTimeoutMinutes(config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
         // GitHub Action (OPE-214): a saída do workflow vem da API (o script só espera o run em silêncio).
         const follower = remote ? createRunFollower({ repo: loaded.repo?.repo ?? null, signal: controller.signal, write: (text) => appendBuildOutput(id, text) }) : null
-        const run = await runPreviewBuild({
-            run: commands.run,
-            jobId,
-            timeoutMs: timeoutMinutes * 60_000,
-            signal: controller.signal,
-            onOutput: (chunk) => (follower ? follower.output(chunk) : appendBuildOutput(id, chunk)),
-            heartbeat: hooks.heartbeat,
-        })
+        let run: Awaited<ReturnType<typeof runPreviewBuild>>
+        try {
+            run = await runPreviewBuild({
+                run: commands.run,
+                jobId,
+                timeoutMs: timeoutMinutes * 60_000,
+                signal: controller.signal,
+                onOutput: (chunk) => (follower ? follower.output(chunk) : appendBuildOutput(id, chunk)),
+                heartbeat: hooks.heartbeat,
+            })
+        } catch (error) {
+            // Sem o script, o acompanhamento do run não pode seguir escrevendo no log (o próximo build seria outro).
+            follower?.abort()
+            throw error
+        }
         const remoteFailure = follower ? await follower.finish() : null
         appendBuildOutput(id, buildExitLine(run.exitCode))
         await AgenticWorkbench.updateOne({ _id: doc._id }, { $unset: { "previewBuild.job": 1 } })

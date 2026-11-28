@@ -222,6 +222,8 @@ export interface RunFollower {
     output(chunk: string): void
     /** O script terminou: espera o acompanhamento (com teto), libera o que ficou retido e devolve o trecho da falha. */
     finish(): Promise<string | null>
+    /** O build saiu por erro: encerra o acompanhamento na hora (nada mais vai ao log) e libera o que ficou retido. */
+    abort(): void
 }
 
 /**
@@ -272,17 +274,26 @@ export function createRunFollower(input: {
             const cut = Math.max(0, lines.indexOf("\n", urlAt) + 1 - before)
             input.write(chunk.slice(0, cut))
             held = chunk.slice(cut)
-            following = followGithubRun({ repo: ref.repo, runId: ref.runId, signal, write: input.write, pollMs: input.pollMs })
+            // Depois do abort, nada do acompanhamento vai ao log (o build pode já ser outro).
+            const write = (text: string) => {
+                if (!inner.signal.aborted) input.write(text)
+            }
+            following = followGithubRun({ repo: ref.repo, runId: ref.runId, signal, write, pollMs: input.pollMs })
                 .catch((error: unknown) => {
                     logger.warn({ repo: ref.repo, runId: ref.runId, err: error }, "[agentic] Falha no acompanhamento do GitHub Actions")
-                    input.write(githubFollowWarning(reasonOf(error)))
+                    write(githubFollowWarning(reasonOf(error)))
                     return NOT_FOLLOWED
                 })
                 .then((value) => {
                     result = value
-                    release()
+                    if (!inner.signal.aborted) release()
                     return value
                 })
+        },
+        abort() {
+            if (inner.signal.aborted) return
+            inner.abort()
+            if (following && !done) release()
         },
         async finish() {
             if (!following) return null
@@ -296,6 +307,7 @@ export function createRunFollower(input: {
                 inner.abort()
                 input.write("\n\x1b[33m⚠ O acompanhamento do GitHub Actions não terminou a tempo depois do fim do script; o restante da saída do workflow está no link da execução.\x1b[0m\n")
                 await following
+                release()
             }
             return result?.failure ?? null
         },
