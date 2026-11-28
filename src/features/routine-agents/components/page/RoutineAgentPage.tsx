@@ -19,6 +19,8 @@ import { ChatWithAgentButton } from "../chat/ChatWithAgentButton"
 import { RoutineChatColumn, useRoutineChatCollapsed } from "../chat/RoutineChatColumn"
 import { RoutineAgentEditor } from "../editor/RoutineAgentEditor"
 import { RoutineRunsTab } from "../runs/RoutineRunsTab"
+import { RoutinePauseToggle } from "../schedule/RoutinePauseToggle"
+import { RoutineScheduleIndicators } from "../schedule/RoutineScheduleIndicators"
 import { RunNowDialog } from "../runs/RunNowDialog"
 import { RoutineEntriesTab } from "./RoutineEntriesTab"
 import { RoutineMemoriesTab } from "./RoutineMemoriesTab"
@@ -83,11 +85,18 @@ export function RoutineAgentPage({ id }: { id: string }) {
                 onSettings={() => setPage((current) => ({ ...current, configurar: "1" }))}
                 actions={
                     <>
+                        <RoutinePauseToggle agent={agent} />
                         <ChatWithAgentButton disabledReason={chatDisabledReason(agent)} onOpen={openChat} />
                         <RunNowDialog agentId={agent.id} disabledReason={runDisabledReason(agent)} />
                     </>
                 }
-                notice={<AvailabilityNotice reason={provisioningNotice} />}
+                notice={
+                    <>
+                        {/* OPE-213: gatilhos ligados e a próxima execução, acima das abas (visíveis em todas). */}
+                        <RoutineScheduleIndicators agent={agent} />
+                        <AvailabilityNotice reason={provisioningNotice} />
+                    </>
+                }
                 tabs={TABS}
                 tab={aba}
                 onTabChange={(value) => setPage((current) => ({ ...current, aba: value }))}
