@@ -1,5 +1,5 @@
 import { after } from "next/server"
-import { createIntegrationsServer, createSecretBox, type IntegrationsLogger, type SecretBox, type ResolvedIntegration as LibResolvedIntegration } from "@nandobfer/integracoes/server"
+import { createIntegrationsServer, createSecretBox, extendPersistence, type IntegrationsLogger, type SecretBox, type ResolvedIntegration as LibResolvedIntegration } from "@nandobfer/integracoes/server"
 import { configureIaServer } from "@nandobfer/integracoes/ia/server"
 import * as appSecretBox from "@/lib/crypto/secretBox"
 import { dbConnect, recordAudit } from "@/lib/db"
@@ -82,7 +82,9 @@ export const integrations = createIntegrationsServer<IntegrationConfigMap>({
     schedulerTickHooks: OPEX_SCHEDULER_TICK_HOOKS,
     afterResponse: (task) => after(task),
     systemActorId: getLocalUser().id,
-    ...(MEMORY_STORE ? { loadConfigs: async () => new Map() } : {}),
+    // Persistência: o adaptador Mongoose da biblioteca (padrão, carregado sob demanda), nas coleções de sempre.
+    // Nos testes, a leitura das configurações volta vazia e o resto delega ao adaptador (que os testes simulam).
+    ...(MEMORY_STORE ? { persistence: extendPersistence({ configs: { list: async () => [] } }) } : {}),
     instanceId: readOptional(() => instance.INSTANCE_ID),
 })
 

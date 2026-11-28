@@ -46,6 +46,14 @@ dono. Valores que antes viviam no `.env` são persistidos no MongoDB.
   boot; o servidor também importa pelas fachadas `src/lib/integrations/server.ts` (todo o
   `@nandobfer/integracoes/server`) e `src/lib/integrations/scheduler.ts`. `src/lib/pusher/server.ts`,
   `src/lib/email/mailer.ts` e `src/lib/storage/s3.ts` são fachadas finas dos clientes da biblioteca.
+- **Persistência** (lib ≥ 0.4.0): a central grava e lê só pela `persistence` injetada (`configs`, `keyRing`,
+  `statuses`, `logs`, `cronStates`, `apiTokens`). O Opex usa o padrão, o adaptador Mongoose da biblioteca
+  (`mongoosePersistence`), nas coleções de sempre (`integration_configs`, `integration_statuses`, `integration_logs`,
+  `integration_cron_jobs`, `api_tokens`). Nos testes (`OPEX_INTEGRATIONS_STORE=memory`), `extendPersistence` troca só a
+  leitura das configurações (vazia) e delega o resto. Os dados de IA usam os modelos Mongoose da biblioteca
+  (`configureIaServer({ models })` os trocaria).
+- **Ícone e ordem** (`icon`, `order`) são opcionais no contrato da definição; o Opex não declara nenhum, então a lista
+  segue a ordem do registro e mostra só o nome.
 - **Rotas catch-all** (despacho pelo registro; as rotas estáticas antigas saíram para não sombrear):
   `src/app/api/integrations/[[...path]]`, `src/app/api/ai/[...path]`, `src/app/api/opencode/[...path]` e
   `src/app/api/command-code/[...path]`. URLs, métodos, corpos e status são os de antes. O ponto de montagem

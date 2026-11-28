@@ -158,7 +158,8 @@ describe('runSchedulerTick (issue #604)', () => {
     const recalc = mocks.updateOne.mock.calls.find(([filter]) => filter.scheduleSignature)!
     expect(recalc[0]).toEqual({ jobId: 'cancel', scheduleSignature: { $ne: 'daily:17:30' } })
     expect(recalc[1].$set.nextRunAt.toISOString()).toBe('2026-09-22T20:30:00.000Z')
-    expect(recalc[2]).toBeUndefined()
+    // A persistência Mongoose da biblioteca passa as opções explícitas: o recálculo nunca cria o documento.
+    expect(recalc[2]?.upsert ?? false).toBe(false)
   })
 
   it('regressão: o upsert só cria o estado ($setOnInsert, filtro só por jobId) — nunca um documento por tick', async () => {
