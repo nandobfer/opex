@@ -63,8 +63,8 @@ importers:
         specifier: ^5.2.2
         version: 5.9.1(@standard-schema/spec@1.1.0)(react-hook-form@7.89.0(@types/react@19.3.0)(react@19.2.3))(zod@4.6.5)
       '@nandobfer/integracoes':
-        specifier: github:nandobfer/integracoes#v0.4.0
-        version: https://codeload.github.com/nandobfer/integracoes/tar.gz/6491d1ce43d110381d3055e633edb1b638207c69(6d4dd1271590b60f92f0637d6323ee93)
+        specifier: github:nandobfer/integracoes#v0.5.0
+        version: https://codeload.github.com/nandobfer/integracoes/tar.gz/e90067d4427dd5c97113533cf777838ece9e9573(6d4dd1271590b60f92f0637d6323ee93)
       '@opencode/client':
         specifier: 2.4.2
         version: 2.4.2
@@ -1281,9 +1281,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/6491d1ce43d110381d3055e633edb1b638207c69':
-    resolution: {gitHosted: true, integrity: sha512-8FEG8lFdWsAHGjv+NECtaZLA3DI7o4jFXtMUuAQWvupNC6sDW89nA9JkEXQQS0c4iBckGhf3z+mzcT9nbqmhxA==, tarball: https://codeload.github.com/nandobfer/integracoes/tar.gz/6491d1ce43d110381d3055e633edb1b638207c69}
-    version: 0.4.0
+  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/e90067d4427dd5c97113533cf777838ece9e9573':
+    resolution: {gitHosted: true, integrity: sha512-2gHyYqHJsojhoi58J5Xx5hXSB3Zqr8TV/PcOm9ZWVpvruNqI99xvpxe4hUkSybx3Hsyzt20gRRkMj9XqKAUc7g==, tarball: https://codeload.github.com/nandobfer/integracoes/tar.gz/e90067d4427dd5c97113533cf777838ece9e9573}
+    version: 0.5.0
     engines: {node: '>=20'}
     peerDependencies:
       '@ai-sdk/anthropic': '>=4.0.82'
@@ -6389,7 +6389,7 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
-  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/6491d1ce43d110381d3055e633edb1b638207c69(6d4dd1271590b60f92f0637d6323ee93)':
+  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/e90067d4427dd5c97113533cf777838ece9e9573(6d4dd1271590b60f92f0637d6323ee93)':
     dependencies:
       class-variance-authority: 0.7.1
       clsx: 2.1.1

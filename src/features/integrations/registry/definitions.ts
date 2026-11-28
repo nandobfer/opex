@@ -1,6 +1,7 @@
 import { createIntegrationRegistry, defineIntegration, extendDefinition, type IntegrationDefinition } from "@nandobfer/integracoes"
 import { cronsIntegration } from "@nandobfer/integracoes/crons"
 import { githubIntegration } from "@nandobfer/integracoes/github"
+import { gotenbergIntegration } from "@nandobfer/integracoes/gotenberg"
 import { aiCostIntegrations, aiIntegrations, configureIa } from "@nandobfer/integracoes/ia"
 import { internalApiIntegration } from "@nandobfer/integracoes/internal-api"
 import { pusherIntegration } from "@nandobfer/integracoes/pusher"
@@ -12,8 +13,8 @@ import { OPEX_CONSUMPTION_ORIGIN_LABELS } from "./origin-labels"
 
 /**
  * Registro das integrações do Opex — ponto ÚNICO (módulo puro: servidor e navegador). As comuns vêm
- * da biblioteca `@nandobfer/integracoes`; as do Opex (Clientes, Builder Machine, Engramind, Evolution
- * API, Gotenberg, Google Drive) são adaptadores do próprio app. A ordem aqui é a ordem da lista.
+ * da biblioteca `@nandobfer/integracoes` (inclusive a Gotenberg); as do Opex (Clientes, Builder Machine,
+ * Engramind, Evolution API, Google Drive) são adaptadores do próprio app. A ordem aqui é a ordem da lista.
  */
 
 configureIa({
@@ -102,37 +103,12 @@ const opexIntegrations = [
 ]
 
 // OPE-210: HTML → PDF/PNG dos documentos dos agentes (ver aicontext/modules/agent-documents.md). Serviço
-// compartilhado no host (projeto Compose próprio, rede gotenberg-network); sem `env`.
-const gotenberg = defineIntegration({
-    id: "gotenberg",
-    name: "Gotenberg (PDF)",
+// compartilhado no host (projeto Compose próprio, rede gotenberg-network); sem `env`. Adaptador da
+// biblioteca (OPE-217): o Opex injeta só os textos.
+const gotenberg = gotenbergIntegration({
     description: "Conversão de HTML em PDF e PNG dos documentos dos agentes e validade das URLs desses documentos",
-    streamsDebugOverPusher: true,
-    publicFields: [
-        { key: "url", label: "URL interna", description: "Endereço que o servidor do Opex alcança (rede gotenberg-network)", kind: "url", placeholder: "http://gotenberg:3000", required: true },
-        { key: "timeoutSeconds", label: "Tempo limite da conversão", kind: "number", unit: "s", defaultValue: 30, min: 5, max: 120 },
-        {
-            key: "urlTtlMinutes",
-            label: "Validade padrão das URLs dos documentos",
-            description: "Validade das URLs de download e de envio devolvidas pelas ferramentas de documentos dos agentes",
-            kind: "number",
-            unit: "min",
-            defaultValue: 15,
-            min: 1,
-            max: 1440,
-        },
-        {
-            key: "urlTtlMaxMinutes",
-            label: "Validade máxima das URLs dos documentos",
-            description: "Teto da validade que o agente pode pedir (se ficar abaixo da padrão, vale a menor das duas)",
-            kind: "number",
-            unit: "min",
-            defaultValue: 60,
-            min: 1,
-            max: 10_080,
-        },
-    ],
-    secretFields: [],
+    urlDescription: "Endereço que o servidor do Opex alcança (rede gotenberg-network)",
+    urlPlaceholder: "http://gotenberg:3000",
 })
 
 const googleDrive = defineIntegration({
