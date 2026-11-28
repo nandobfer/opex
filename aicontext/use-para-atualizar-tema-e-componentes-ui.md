@@ -409,7 +409,10 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - **Linhas de consumo** (CPU, RAM, swap, disco e afins) usam `UsageBars` (`src/components/metrics/UsageBars.tsx`,
   OPE-211) sobre a `UsageBar`: lista de `{ key, label, percent, detail, ariaLabel }` ou `{ key, label, emptyText }` (linha
   só com texto, ex.: "Sem swap", "lendo…"). Usada pelo painel "Servidor e quota" (`HostMetricsRows`) e pelos cards de
-  Ambientes; não monte as barras à mão.
+  Ambientes; não monte as barras à mão. Com `compact` (OPE-218; também na `UsageBar`) cada barra vira uma célula curta
+  para ficar lado a lado numa grade: rótulo e % numa linha, a trilha (ou o texto sem valor) numa faixa de altura fixa e
+  o detalhe no `title`. As classes ficam em `src/components/metrics/usage-bar-layout.ts`, reaproveitadas pelos skeletons
+  (coluna Recursos dos containers em Ambientes).
 - **Copiar um valor** (link, token, comando) usa `CopyButton` (`src/components/ui/copy-button.tsx`, OPE-211): botão de
   ícone com `label` (rótulo acessível e `title`), `navigator.clipboard`, toast `successMessage` e o ícone de copiado
   animado que volta em 1,5 s (`resetMs={null}` mantém). O `SecretReveal` usa o mesmo botão; não escreva outro copiar.
