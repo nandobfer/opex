@@ -7,8 +7,8 @@ import { messageOf, routineLog } from "../shared"
 import type { EngineInput, EngineResult } from "./types"
 import { routineAgentTitle } from "../../identity-plan"
 import { previewBaseUrl } from "@/lib/instance"
+import { skillPermissionRules } from "@/features/opencode-resources/skill-permissions"
 import { backgroundLabel } from "@/features/agentic/background-label"
-import { matchOpencodeSkill } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills"
 import { listOpencodeSkillsAt } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list"
 
 /**
@@ -49,26 +49,10 @@ export function routineSessionPermissions(hostMcps: readonly string[], allowed: 
 }
 
 /**
- * Skills do host (OPE-153): nega todas (`skill` + `*`, inclusive nativas, de projeto e as que surgirem) e
- * libera só as selecionadas que existem — a última regra que casa vence no OpenCode. Seleção por id ou nome
- * (`matchOpencodeSkill`); a regra usa sempre o id do OpenCode.
+ * Skills do host (OPE-153): nega todas e libera só as selecionadas que existem — regra compartilhada com o
+ * Agente de Bootstrap (`skillPermissionRules`, OPE-215).
  */
-export function routineSkillPermissions(hostSkills: readonly { id: string; name: string }[], allowed: readonly string[]): { rules: PermissionRule[]; missing: string[] } {
-    const rules: PermissionRule[] = [{ action: "skill", resource: "*", effect: "deny" }]
-    const granted = new Set<string>()
-    const missing: string[] = []
-    for (const name of allowed) {
-        const skill = matchOpencodeSkill(name, hostSkills)
-        if (!skill) {
-            missing.push(name)
-            continue
-        }
-        if (granted.has(skill.id)) continue
-        granted.add(skill.id)
-        rules.push({ action: "skill", resource: skill.id, effect: "allow" })
-    }
-    return { rules, missing }
-}
+export const routineSkillPermissions = skillPermissionRules
 
 /** Quanto a retomada espera o turno antigo da sessão parar depois de interrompê-lo. */
 export const STALE_TURN_WAIT_MS = 15_000

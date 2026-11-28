@@ -5,6 +5,11 @@
 Página **Ambientes** (`/ambientes`, no grupo **Configurações** do menu, junto de Integrações) para gerenciar ambientes **Docker Compose** no **servidor** e no **PC** (pela conexão
 do Builder Machine, nativo), com build e execução em máquinas diferentes por um **registry local**.
 
+O bootstrap de projeto (OPE-215, `modules/project-bootstrap.md`) cria o ambiente de uma central nova pelas mesmas funções
+(`createEnvironment` + `startDeploy`): origem Central, ref da branch do push, build e execução no servidor, a porta do
+projeto, URL de saúde e sem limites, com as variáveis lidas do `.env` do projeto no host (o conteúdo não vai para log,
+evento nem auditoria). Deploy com falha devolve o erro e o fim do log ao Agente de Bootstrap.
+
 ### Tela
 
 - **Builder do servidor** (OPE-186): card fixo **acima** dos grupos Servidor/PC (`components/builder/`), para o

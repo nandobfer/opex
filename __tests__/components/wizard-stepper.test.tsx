@@ -38,4 +38,18 @@ describe('WizardStepper', () => {
     expect(screen.getByRole('button', { name: 'Campos pendentes: Nome da campanha, Segmento' })).toBeTruthy()
     expect((screen.getByRole('button', { name: 'Etapa 2: Oferta' }) as HTMLButtonElement).disabled).toBe(true)
   })
+
+  it('sem `statuses`, não mostra estado nem barra de progresso (contrato antigo)', () => {
+    render(<WizardStepper steps={STEPS} current={1} maxReachable={1} onStepClick={vi.fn()} />)
+    expect(screen.queryAllByRole('progressbar')).toHaveLength(0)
+    expect(screen.getByRole('button', { name: 'Etapa 1: Segmento' }).hasAttribute('data-status')).toBe(false)
+  })
+
+  it('com `statuses`, cada etapa mostra o próprio estado, o progresso e o rótulo extra', () => {
+    render(<WizardStepper steps={STEPS} current={1} maxReachable={1} onStepClick={vi.fn()} statuses={['done', 'failed', 'idle']} progress={[1, 0.45, 0]} badges={[null, 'Tentativa 3', null]} />)
+    expect(screen.getByRole('button', { name: 'Etapa 1: Segmento (concluída)' }).getAttribute('data-status')).toBe('done')
+    expect(screen.getByRole('button', { name: 'Etapa 2: Oferta (falhou)' }).getAttribute('data-status')).toBe('failed')
+    expect(screen.getByRole('progressbar', { name: 'Progresso de Oferta' }).getAttribute('aria-valuenow')).toBe('45')
+    expect(screen.getByText('Tentativa 3')).toBeTruthy()
+  })
 })

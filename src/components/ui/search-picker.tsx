@@ -3,7 +3,7 @@
 import { useId, useMemo, useState, type KeyboardEvent, type ReactElement, type ReactNode } from "react"
 import Fuse, { type FuseOptionKey } from "fuse.js"
 import { AnimatePresence, motion } from "framer-motion"
-import { Check, Loader2, Search } from "lucide-react"
+import { Check, Loader2, Plus, Search } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { cn } from "@/lib/utils"
@@ -81,6 +81,11 @@ export interface SearchPickerProps<T> {
      */
     getParentKey?: (item: T) => string | null
     getDepth?: (item: T) => number
+    /**
+     * Opção de criar com o termo digitado (ex.: "Criar repositório «nome»"), no fim da lista, também pelo
+     * teclado. Só aparece com termo e quando `visible` (padrão: sempre) aceita o termo.
+     */
+    createOption?: { label: (term: string) => ReactNode; onCreate: (term: string) => void; visible?: (term: string) => boolean }
 }
 
 /**
@@ -147,6 +152,7 @@ export function SearchPicker<T>({
     closeOnPick = true,
     getParentKey,
     getDepth,
+    createOption,
 }: SearchPickerProps<T>) {
     const listId = useId()
     const [open, setOpen] = useState(false)
@@ -161,6 +167,9 @@ export function SearchPicker<T>({
         return (pinFirst ? pinItemsFirst(shaped, pinFirst) : shaped).slice(0, MAX_VISIBLE)
     }, [filterItems, fuse, ordered, query, pinFirst, getParentKey, getKey])
     const selectedSet = useMemo(() => (selectedKeys ? new Set(selectedKeys) : null), [selectedKeys])
+    const showCreate = Boolean(createOption && query && (createOption.visible?.(query) ?? true))
+    const createIndex = visible.length
+    const optionCount = visible.length + (showCreate ? 1 : 0)
 
     const changeTerm = (next: string) => {
         setTerm(next)
@@ -178,18 +187,25 @@ export function SearchPicker<T>({
         onPick(item)
         if (closeOnPick) changeOpen(false)
     }
+    const create = () => {
+        if (!createOption || !query) return
+        createOption.onCreate(query)
+        changeOpen(false)
+    }
     const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
         if (event.nativeEvent.isComposing || loading || fetching || disabled) return
         if (event.key === "ArrowDown" || event.key === "ArrowUp") {
             event.preventDefault()
-            if (visible.length === 0) return
+            if (optionCount === 0) return
             const step = event.key === "ArrowDown" ? 1 : -1
-            setActive((current) => (current + step + visible.length) % visible.length)
+            setActive((current) => (current + step + optionCount) % optionCount)
         } else if (event.key === "Enter") {
             event.preventDefault()
+            if (showCreate && active === createIndex) return create()
             const available = visible.filter((item) => !disabledReason?.(item))
             const item = visible[active] ?? (query || available.length === 1 ? available[0] : undefined)
             if (item) pick(item)
+            else if (showCreate) create()
         }
     }
     const optionDomId = (index: number) => `${listId}-opt-${index}`
@@ -268,7 +284,24 @@ export function SearchPicker<T>({
                             )
                         })}
                     </AnimatePresence>
-                    {!loading && visible.length === 0 && <li className="px-2 py-6 text-center text-sm text-muted-foreground">{query ? emptySearchText : emptyText}</li>}
+                    {showCreate && createOption && (
+                        <motion.li key="__create" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.12 }}>
+                            <button
+                                type="button"
+                                id={optionDomId(createIndex)}
+                                role="option"
+                                aria-selected={active === createIndex}
+                                data-create-option
+                                onMouseEnter={() => setActive(createIndex)}
+                                onClick={create}
+                                className={cn("flex w-full items-center gap-2 rounded-sm px-2 py-1.5 text-left text-sm text-primary hover:bg-muted", active === createIndex && "bg-muted")}
+                            >
+                                <Plus className="h-4 w-4 shrink-0" aria-hidden />
+                                <span className="min-w-0 truncate">{createOption.label(query)}</span>
+                            </button>
+                        </motion.li>
+                    )}
+                    {!loading && visible.length === 0 && !showCreate && <li className="px-2 py-6 text-center text-sm text-muted-foreground">{query ? emptySearchText : emptyText}</li>}
                     {loading && <li className="px-2 py-6 text-center text-sm text-muted-foreground">{loadingText}</li>}
                 </ul>
                 {footer && <div className="border-t p-1">{footer}</div>}

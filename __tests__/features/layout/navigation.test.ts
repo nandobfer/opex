@@ -181,7 +181,9 @@ describe("categoria Agentes (OPE-122)", () => {
     })
 
     it("nome e ícone de cada item são os mesmos da aba de configuração em Integrações › Inteligência Artificial", () => {
-        const tabs = AI_EDITOR_TABS.slice(1)
+        // O Agente de Bootstrap (OPE-215) tem só a aba, no fim, fora do catálogo (sem item na sidebar).
+        const tabs = AI_EDITOR_TABS.slice(1).filter((tab) => tab.id !== "agente-bootstrap")
+        expect(AI_EDITOR_TABS.at(-1)!.id).toBe("agente-bootstrap")
         expect(tabs.map((tab) => tab.id)).toEqual(AGENT_CATALOG.map((agent) => agent.settingsTab))
         agentes.items.forEach((item, index) => {
             expect(item.label).toBe(tabs[index]!.label)

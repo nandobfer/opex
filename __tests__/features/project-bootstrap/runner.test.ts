@@ -1,0 +1,690 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createFakeCollection } from '../../helpers/fake-collection'
+
+/**
+ * Motor do bootstrap (OPE-215): cada ponto de entrada que chega ao fim da etapa 2 (fim do turno, Tentar
+ * novamente, volta depois do deploy com falha e a retomada depois de um reinício) passa pela conferência
+ * no host ANTES da amarração; as etapas 3 e 4 não duplicam o que já foi criado.
+ */
+
+const SECRET = 'segredo-do-env-123'
+const RESULT_BLOCK = '```json bootstrap-result\n{"port":4014,"healthPath":"/api/health","hasServer":true,"usesMongo":true,"branch":"qualquer"}\n```'
+
+const mocks = vi.hoisted(() => ({
+    active: new Map<string, AbortController>(),
+    calls: [] as string[],
+    turns: [] as { text: string; attach: boolean }[],
+    turnText: '',
+    turnOutcome: 'succeeded' as 'succeeded' | 'failed',
+    missing: [] as string[],
+    deployStatus: 'success' as 'success' | 'failed',
+    /** Desfechos dos próximos deploys, em ordem (vazia = `deployStatus`). */
+    deployQueue: [] as ('success' | 'failed')[],
+    deployOutcome: 'success' as 'success' | 'failed',
+    hostSkills: [{ id: 'bootstrap-docker', name: 'bootstrap-docker' }] as { id: string; name: string }[],
+    skillListFails: false,
+    probe: { outcome: 'attached', follow: true, message: null as string | null },
+    settings: { enabled: true, agent: { agent: null, model: 'anthropic/claude', variant: null, fallbacks: [] }, timeoutMinutes: 60, instructions: '', skills: ['bootstrap-docker'] },
+    recordAudit: vi.fn(async (_input: unknown) => {}),
+    publishAppEvent: vi.fn(async (_event: string, _payload: unknown) => {}),
+    publishWorkbenchEvent: vi.fn((_id: string, _event: unknown) => {}),
+    client: {
+        session: {
+            get: vi.fn(async () => ({ id: 'sess-1' })),
+            create: vi.fn(async () => ({ id: 'sess-1' })),
+            update: vi.fn(async () => ({})),
+            skill: vi.fn(async () => undefined),
+            instructions: { entry: { put: vi.fn(async () => ({})) } },
+            interrupt: vi.fn(async () => ({})),
+            form: { cancel: vi.fn(async () => ({})) },
+        },
+    },
+    store: null as unknown,
+    envs: [] as { slug: string; source: { projectName: string } }[],
+    existingCentral: null as { _id: string } | null,
+    updateCentralFails: false,
+    centralConfig: null as unknown,
+    blockers: [] as { message: string; href: string; action: string }[],
+    columnsMissing: false,
+    envText: null as string | null,
+    createGate: null as { arrive: () => Promise<void> } | null,
+    savedEnv: { name: 'app', slug: 'app', source: { projectName: 'app' }, limits: null, composeOverrides: null } as Record<string, unknown>,
+}))
+
+vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR' } }))
+vi.mock('@/lib/logger', () => ({ loggerFor: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
+vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent }))
+vi.mock('@/features/agentic/server/hub', () => ({
+    prepareHub: vi.fn(async () => {}),
+    flushWorkbenchEvents: vi.fn(async () => {}),
+    publishWorkbenchEvent: mocks.publishWorkbenchEvent,
+    markWorkbenchActive: (id: string, controller: AbortController) => mocks.active.set(id, controller),
+    clearWorkbenchActive: (id: string, controller: AbortController) => mocks.active.get(id) === controller && mocks.active.delete(id),
+    isWorkbenchActive: (id: string) => mocks.active.has(id),
+    abortWorkbenchRun: (id: string, reason: string) => mocks.active.get(id)?.abort(new Error(reason)),
+}))
+vi.mock('@/features/project-bootstrap/server/models', () => ({
+    get ProjectBootstrap() {
+        return mocks.store
+    },
+}))
+vi.mock('@/features/project-bootstrap/server/settings', () => ({ loadProjectBootstrapSettings: async () => ({ settings: mocks.settings }), projectBootstrapBlockers: async () => mocks.blockers }))
+vi.mock('@/features/project-bootstrap/server/host', () => ({
+    ensureHostDirectory: vi.fn(async () => {
+        mocks.calls.push('mkdir')
+    }),
+    verifyDeliverables: vi.fn(async () => {
+        mocks.calls.push('verify')
+        return mocks.missing
+    }),
+    readBootstrapEnv: vi.fn(async () => mocks.envText ?? `MONGODB_URI=mongodb://app:${SECRET}@mongo/app\n`),
+    checkHostDirectory: vi.fn(async () => ({ path: '/home/u/code/app', kind: 'free', reason: null, message: 'A pasta não existe: será criada.' })),
+}))
+vi.mock('@/features/project-bootstrap/server/github', () => ({
+    checkRepoName: vi.fn(async () => ({ repo: 'org/app', state: 'free', blocked: false, message: 'Nome livre', defaultBranch: null, private: null, bootstrapId: null })),
+    initialLinkColumns: vi.fn(async () => ({ entryColumnKey: 'todo', closedColumnKey: null })),
+    assertBootstrapColumns: vi.fn(async () => {
+        if (mocks.columnsMissing) throw Object.assign(new Error('A coluna de entrada escolhida não existe mais no quadro'), { status: 400, code: 'COLUMN_NOT_FOUND' })
+    }),
+}))
+vi.mock('@/features/project-bootstrap/server/catalog', () => ({ getTechCatalog: vi.fn(async () => ({ groups: [], technologies: [] })) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => mocks.client }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list', () => ({
+    listOpencodeSkillsAt: async () => {
+        if (mocks.skillListFails) throw new Error('OpenCode fora do ar')
+        return { skills: mocks.hostSkills, directory: '/d', attempts: 1 }
+    },
+}))
+vi.mock('@/lib/ai/opencode-run', () => ({
+    steerAgentTurn: vi.fn(async () => true),
+    runAgentTurn: vi.fn(async (_client: unknown, request: { text: string; attach?: boolean }) => {
+        mocks.calls.push(request.attach ? 'attach' : 'turn')
+        mocks.turns.push({ text: request.text, attach: request.attach === true })
+        return { outcome: mocks.turnOutcome, text: mocks.turnText, message: mocks.turnOutcome === 'failed' ? 'falhou' : null, costUsd: 0, durationMs: 1 }
+    }),
+}))
+vi.mock('@/features/agentic/server/model-fallback', () => ({ runWithFallback: (agent: unknown, text: string, run: (agent: unknown, text: string) => unknown) => run(agent, text), fallbackNotice: () => '' }))
+vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: vi.fn(async () => mocks.probe) }))
+vi.mock('@/lib/db/models/Project', () => ({ Project: { findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ select: () => ({ lean: async () => ({ name: 'app' }) }) }) } }))
+vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { findOne: () => ({ select: () => ({ lean: async () => mocks.existingCentral }) }) } }))
+vi.mock('@/features/github/server/links', () => ({
+    createLink: vi.fn(async () => {
+        mocks.calls.push('link')
+        return { id: 'p'.repeat(24) }
+    }),
+}))
+vi.mock('@/features/agentic/server/centrals', async () => {
+    const { defaultCentralConfig } = await import('@/features/agentic/schemas')
+    return {
+        createCentral: vi.fn(async () => {
+            mocks.calls.push('central')
+            return { id: 'c'.repeat(24) }
+        }),
+        loadCentral: vi.fn(async () => ({ config: defaultCentralConfig('/home/u/code/app') })),
+        updateCentral: vi.fn(async (_id: string, config: unknown) => {
+            if (mocks.updateCentralFails) throw new Error('Modelo padrão inválido')
+            mocks.calls.push('central-config')
+            mocks.centralConfig = config
+            return {}
+        }),
+    }
+})
+vi.mock('@/features/environments/server/service', () => ({
+    createEnvironment: vi.fn(async () => {
+        mocks.calls.push('environment')
+        return { _id: 'e'.repeat(24) }
+    }),
+    updateEnvironment: vi.fn(async () => {
+        mocks.calls.push('environment-update')
+    }),
+    getDeploy: vi.fn(async () => ({ log: 'compilando\nERRO: porta ocupada' })),
+}))
+vi.mock('@/features/environments/server/models', () => ({
+    Environment: { find: () => ({ select: () => ({ lean: async () => mocks.envs }) }), findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => mocks.savedEnv, select: () => ({ lean: async () => ({ ...mocks.savedEnv, lastDeployId: null }) }) }) },
+    EnvironmentDeploy: { findById: () => ({ select: () => ({ lean: async () => ({ status: mocks.deployOutcome, error: mocks.deployOutcome === 'failed' ? 'Build falhou' : null }) }) }) },
+}))
+vi.mock('@/features/environments/server/deploy', () => {
+    let seq = 0
+    return {
+        startDeploy: vi.fn(async () => {
+            mocks.calls.push('deploy')
+            mocks.deployOutcome = mocks.deployQueue.shift() ?? mocks.deployStatus
+            return `d${++seq}`.padEnd(24, '0')
+        }),
+    }
+})
+
+import { resumeIfStale, startActivation } from '@/features/project-bootstrap/server/runner'
+import { cancelProjectBootstrap, retryProjectBootstrap, sendProjectBootstrapMessage, setProjectBootstrapEnvironment, startProjectBootstrap } from '@/features/project-bootstrap/server/service'
+
+type Store = ReturnType<typeof createFakeCollection> & { exists: (filter: Record<string, unknown>) => Promise<unknown> }
+
+function store(): Store {
+    const collection = createFakeCollection() as Store
+    collection.exists = async (filter) => ((await collection.countDocuments(filter)) > 0 ? { _id: 'x' } : null)
+    // Índice único parcial `active_repo_unique` (trava de um bootstrap aberto por repositório), como o Mongo: E11000.
+    const create = collection.create
+    collection.create = (async (doc: Record<string, unknown>) => {
+        // Corrida: com `createGate`, cada envio espera o outro chegar ao create (os dois já passaram pela consulta).
+        if (mocks.createGate) await mocks.createGate.arrive()
+        if (typeof doc.activeRepo === 'string' && collection.docs.some((row) => row.activeRepo === doc.activeRepo)) throw Object.assign(new Error('E11000 duplicate key'), { code: 11000 })
+        return create(doc)
+    }) as Store['create']
+    // `$push` (lista de deploys e pedidos pendentes), que a coleção falsa não implementa.
+    const updateOne = collection.updateOne
+    collection.updateOne = (async (filter: Record<string, unknown>, update: Record<string, unknown>) => {
+        const push = update.$push as Record<string, unknown> | undefined
+        if (!push) return updateOne(filter, update)
+        const doc = collection.docs.find((row) => Object.entries(filter).every(([key, value]) => String((row as Record<string, unknown>)[key]) === String(value)))
+        if (!doc) return { matchedCount: 0, modifiedCount: 0 }
+        for (const [key, value] of Object.entries(push)) (doc as Record<string, unknown>)[key] = [...(((doc as Record<string, unknown>)[key] as unknown[]) ?? []), value]
+        return { matchedCount: 1, modifiedCount: 1 }
+    }) as Store['updateOne']
+    return collection
+}
+
+const docs = () => (mocks.store as Store).docs as unknown as Record<string, unknown>[]
+
+function seed(extra: Record<string, unknown> = {}): string {
+    const row = (mocks.store as Store).insert({
+        repo: 'org/app',
+        owner: 'org',
+        name: 'app',
+        visibility: 'private',
+        mode: 'new',
+        branch: 'main',
+        directory: '/home/u/code/app',
+        context: 'API em Node para gerir pedidos',
+        centralConfiguredAt: null,
+        technologies: [{ name: 'Node.js', group: 'Backend' }],
+        entryColumnKey: 'todo',
+        closedColumnKey: null,
+        step: 'provision',
+        status: 'running',
+        phase: 'turn',
+        attempt: 1,
+        error: null,
+        missing: [],
+        notice: null,
+        sessionId: null,
+        activeSkills: null,
+        pendingForms: [],
+        pendingPermissions: [],
+        turnStartedAt: null,
+        reconnect: null,
+        activationId: null,
+        heartbeatAt: new Date(),
+        stateAt: new Date(),
+        result: null,
+        created: { repoUrl: null, projectId: null, centralId: null, environmentId: null, deployId: null, port: null },
+        deploys: [],
+        usage: { costUsd: 0, inputTokens: 0, outputTokens: 0 },
+        startedAt: new Date(),
+        finishedAt: null,
+        ...extra,
+    })
+    return String(row._id)
+}
+
+/** Espera as ativações em segundo plano (e as voltas encadeadas) terminarem. */
+async function settle(): Promise<void> {
+    for (let index = 0; index < 400; index++) {
+        await new Promise((resolve) => setTimeout(resolve, 0))
+        if (!mocks.active.size) {
+            await new Promise((resolve) => setTimeout(resolve, 0))
+            if (!mocks.active.size) return
+        }
+    }
+    throw new Error('ativação não terminou')
+}
+
+/** A conferência no host acontece (e antes do passo que depende dela). */
+function expectBefore(first: string, then: string): void {
+    expect(mocks.calls).toContain(first)
+    expect(mocks.calls).toContain(then)
+    expect(mocks.calls.indexOf(first)).toBeLessThan(mocks.calls.indexOf(then))
+}
+
+const current = (id: string) => docs().find((row) => String(row._id) === id)!
+
+beforeEach(() => {
+    mocks.store = store()
+    mocks.active.clear()
+    mocks.calls = []
+    mocks.turns = []
+    mocks.turnText = `Pronto.\n${RESULT_BLOCK}`
+    mocks.turnOutcome = 'succeeded'
+    mocks.missing = []
+    mocks.deployStatus = 'success'
+    mocks.deployQueue = []
+    mocks.createGate = null
+    mocks.blockers = []
+    mocks.columnsMissing = false
+    mocks.envText = null
+    mocks.envs = []
+    mocks.existingCentral = null
+    mocks.updateCentralFails = false
+    mocks.centralConfig = null
+    mocks.savedEnv = { name: 'app', slug: 'app', source: { projectName: 'app' }, limits: null, composeOverrides: null }
+    mocks.hostSkills = [{ id: 'bootstrap-docker', name: 'bootstrap-docker' }]
+    mocks.skillListFails = false
+    mocks.probe = { outcome: 'attached', follow: true, message: null }
+    vi.clearAllMocks()
+})
+
+describe('fim do turno', () => {
+    it('confere as entregas no host antes da amarração e conclui com o deploy', async () => {
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify', 'link', 'central', 'central-config', 'environment', 'deploy'])
+        const doc = current(id)
+        expect(doc).toMatchObject({ status: 'done', step: 'done' })
+        // A branch é a decidida na etapa 1, mesmo que o agente diga outra.
+        expect(doc.result).toMatchObject({ port: 4014, branch: 'main' })
+        expect(doc.created).toMatchObject({ projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: 'e'.repeat(24), port: 4014 })
+        expect(mocks.client.session.create).toHaveBeenCalledWith(expect.objectContaining({ permissions: [{ action: 'skill', resource: '*', effect: 'deny' }, { action: 'skill', resource: 'bootstrap-docker', effect: 'allow' }] }))
+        expect(mocks.client.session.skill).toHaveBeenCalledWith({ sessionID: 'sess-1', id: 'bootstrap-docker', resume: false })
+    })
+
+    it('com pendências, falha listando o que faltou e não amarra nada', async () => {
+        mocks.missing = ['push', 'port']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify'])
+        expect(current(id)).toMatchObject({ status: 'failed', step: 'provision', missing: ['o push do último commit na branch', 'a porta anotada em /home/used_ports com o nome deste projeto (`<porta> -> <repositório>`)'] })
+    })
+
+    it('sem o resumo final, aguarda o dono sem conferir', async () => {
+        mocks.turnText = 'Qual banco você prefere: PostgreSQL ou MongoDB?'
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(mocks.calls).toEqual(['mkdir', 'turn'])
+        expect(current(id)).toMatchObject({ status: 'waiting', notice: expect.stringContaining('sem o resumo final') })
+    })
+
+    it('skill escolhida que não existe no host (ou a lista que falha) bloqueia antes de abrir a sessão', async () => {
+        mocks.hostSkills = []
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('"bootstrap-docker" não está instalada') })
+        expect(mocks.client.session.create).not.toHaveBeenCalled()
+        mocks.skillListFails = true
+        const other = seed()
+        await startActivation(other, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(current(other)).toMatchObject({ status: 'failed', error: expect.stringContaining('listar as skills') })
+        expect(mocks.calls).not.toContain('turn')
+    })
+})
+
+describe('Tentar novamente', () => {
+    it('com pendências, pede ao agente na mesma sessão que complete e confere de novo antes de amarrar', async () => {
+        const id = seed({ status: 'failed', missing: ['a porta anotada em /home/used_ports com o nome deste projeto (`<porta> -> <repositório>`)'], sessionId: 'sess-1' })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.turns[0]!.text).toContain('falta a porta anotada em /home/used_ports')
+        expect(mocks.client.session.create).not.toHaveBeenCalled()
+        // A sessão existente recebe as permissões das skills e a ativação antes do turno.
+        expect(mocks.client.session.update).toHaveBeenCalledWith({ sessionID: 'sess-1', permissions: [{ action: 'skill', resource: '*', effect: 'deny' }, { action: 'skill', resource: 'bootstrap-docker', effect: 'allow' }] })
+        expect(mocks.client.session.skill).toHaveBeenCalledWith({ sessionID: 'sess-1', id: 'bootstrap-docker', resume: false })
+        expectBefore('mkdir', 'turn')
+        expectBefore('verify', 'link')
+        expect(current(id).status).toBe('done')
+    })
+
+    it('na amarração, refaz só a etapa (sem turno do agente nem nova conferência)', async () => {
+        const id = seed({ step: 'link', phase: 'central', status: 'failed', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: null, environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual(['central', 'central-config', 'environment', 'deploy'])
+    })
+})
+
+describe('deploy com falha', () => {
+    it('volta à conversa com o erro e o log, confere de novo e refaz o deploy', async () => {
+        // O primeiro deploy falha; o segundo passa.
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify', 'link', 'central', 'central-config', 'environment', 'deploy', 'mkdir', 'turn', 'verify', 'environment-update', 'deploy'])
+        // A volta ao agente prepara a sessão de novo (permissões), sem reativar a skill já ativa nela.
+        expect(mocks.client.session.update).toHaveBeenCalledWith({ sessionID: 'sess-1', permissions: [{ action: 'skill', resource: '*', effect: 'deny' }, { action: 'skill', resource: 'bootstrap-docker', effect: 'allow' }] })
+        expect(mocks.client.session.skill).toHaveBeenCalledTimes(1)
+        expect(mocks.turns[1]!.text).toContain('Build falhou')
+        expect(mocks.turns[1]!.text).toContain('ERRO: porta ocupada')
+        const doc = current(id)
+        expect(doc).toMatchObject({ status: 'done', attempt: 2 })
+        expect((doc.deploys as { status: string }[]).map((item) => item.status)).toEqual(['failed', 'success'])
+    })
+})
+
+describe('retomada depois de um reinício', () => {
+    it('religa a mesma sessão (attach) sem reenviar o prompt e confere antes de amarrar', async () => {
+        const id = seed({ sessionId: 'sess-1', turnStartedAt: new Date(), heartbeatAt: new Date(Date.now() - 10 * 60_000), stateAt: new Date(Date.now() - 10 * 60_000), activationId: 'velha' })
+        expect(await resumeIfStale(current(id) as never)).toBe(true)
+        await settle()
+        expect(mocks.turns[0]).toEqual({ text: '', attach: true })
+        expect(mocks.client.session.instructions.entry.put).not.toHaveBeenCalled()
+        // Reconectar não ativa skill nem cria pasta.
+        expect(mocks.client.session.skill).not.toHaveBeenCalled()
+        expect(mocks.calls).not.toContain('mkdir')
+        expectBefore('verify', 'link')
+    })
+
+    it('na etapa 4, refaz o deploy sem duplicar o vínculo e a central', async () => {
+        const id = seed({ step: 'deploy', phase: 'deploy', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: 'e'.repeat(24), deployId: null, port: 4014 }, heartbeatAt: new Date(0), stateAt: new Date(0) })
+        await resumeIfStale(current(id) as never)
+        await settle()
+        expect(mocks.calls).toEqual(['environment-update', 'deploy'])
+    })
+
+    it('sessão perdida vira falha acionável; com batimento recente, nada acontece', async () => {
+        const recent = seed({ sessionId: 'sess-1' })
+        expect(await resumeIfStale(current(recent) as never)).toBe(false)
+        mocks.probe = { outcome: 'nothing', follow: false, message: 'A sessão do OpenCode não existe mais' }
+        const lost = seed({ sessionId: 'sess-1', heartbeatAt: new Date(0), stateAt: new Date(0) })
+        expect(await resumeIfStale(current(lost) as never)).toBe(false)
+        expect(current(lost)).toMatchObject({ status: 'failed', error: expect.stringContaining('Tentar novamente') })
+    })
+})
+
+describe('cancelar e sigilo', () => {
+    it('cancelar para o agente e não apaga nada do que foi criado', async () => {
+        const id = seed({ step: 'deploy', status: 'failed', created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: 4014 } })
+        const dto = await cancelProjectBootstrap(id, 'local')
+        expect(dto.status).toBe('cancelled')
+        expect(dto.created).toMatchObject({ projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), port: 4014 })
+        expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ depois: expect.objectContaining({ status: 'cancelado' }) }))
+    })
+
+    it('o .env nunca vai para a auditoria nem para os eventos', async () => {
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(JSON.stringify(mocks.recordAudit.mock.calls)).not.toContain(SECRET)
+        expect(JSON.stringify(mocks.publishAppEvent.mock.calls)).not.toContain(SECRET)
+        expect(JSON.stringify(mocks.publishWorkbenchEvent.mock.calls)).not.toContain(SECRET)
+        expect(mocks.publishAppEvent.mock.calls.every(([, payload]) => Object.keys(payload as object).join() === 'id')).toBe(true)
+    })
+})
+
+describe('achados da revisão (rodada 1)', () => {
+    it('as instruções da sessão levam o contexto e as tecnologias; sem sessão, Tentar novamente reenvia o prompt inicial', async () => {
+        mocks.hostSkills = []
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(current(id).status).toBe('failed')
+        mocks.hostSkills = [{ id: 'bootstrap-docker', name: 'bootstrap-docker' }]
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.turns[0]!.text).toContain('Provisione o projeto org/app')
+        expect(mocks.turns[0]!.text).toContain('API em Node para gerir pedidos')
+        const instructions = (mocks.client.session.instructions.entry.put.mock.calls as unknown as [{ value: string }][])[0]![0].value
+        expect(instructions).toContain('API em Node para gerir pedidos')
+        expect(instructions).toContain('- Node.js (Backend)')
+    })
+
+    it('updateCentral que falha: a nova tentativa aplica a configuração do bootstrap na central já criada', async () => {
+        mocks.updateCentralFails = true
+        const id = seed({ step: 'link', phase: 'link', status: 'failed', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'develop' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: null, environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(current(id)).toMatchObject({ status: 'failed', created: expect.objectContaining({ centralId: 'c'.repeat(24) }) })
+        mocks.updateCentralFails = false
+        mocks.calls = []
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual(['central-config', 'environment', 'deploy'])
+        expect(mocks.centralConfig).toMatchObject({ git: expect.objectContaining({ baseBranch: 'develop', prTargetBranch: 'develop' }), environment: expect.objectContaining({ backupDatabase: false }) })
+    })
+
+    it('central achada pelo projeto (id não gravado) também recebe a configuração', async () => {
+        mocks.existingCentral = { _id: 'c'.repeat(24) }
+        const id = seed({ step: 'link', phase: 'central', status: 'failed', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: true, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: null, environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls.slice(0, 1)).toEqual(['central-config'])
+        expect(current(id).created).toMatchObject({ centralId: 'c'.repeat(24) })
+    })
+
+    it('slug já usado por outro ambiente: cria com o próximo livre', async () => {
+        const { createEnvironment } = await import('@/features/environments/server/service')
+        mocks.envs = [{ slug: 'app', source: { projectName: 'app' } }, { slug: 'outro', source: { projectName: 'app-2' } }]
+        const id = seed({ step: 'deploy', phase: 'environment', status: 'failed', centralConfiguredAt: new Date(), result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(vi.mocked(createEnvironment).mock.calls[0]![0]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
+        expect(current(id).status).toBe('done')
+    })
+
+    it('ambiente criado com slug sufixado: a volta depois do deploy com falha mantém o slug e o projeto do compose', async () => {
+        const { createEnvironment, updateEnvironment } = await import('@/features/environments/server/service')
+        mocks.envs = [{ slug: 'app', source: { projectName: 'app' } }, { slug: 'app-2', source: { projectName: 'app-2' } }]
+        mocks.savedEnv = { name: 'app', slug: 'app-3', source: { projectName: 'app-3' }, limits: null, composeOverrides: null }
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(vi.mocked(createEnvironment).mock.calls[0]![0]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
+        const update = vi.mocked(updateEnvironment).mock.calls[0] as unknown as [string, { slug: string; source: { projectName: string } }]
+        expect(update[1]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
+        expect(current(id).status).toBe('done')
+    })
+
+    it('a auditoria da mensagem do dono guarda só o tamanho, nunca o texto', async () => {
+        const id = seed({ status: 'waiting', sessionId: 'sess-1' })
+        await sendProjectBootstrapMessage(id, 'a senha do banco é hunter2', 'local')
+        await settle()
+        const audits = JSON.stringify(mocks.recordAudit.mock.calls)
+        expect(audits).not.toContain('hunter2')
+        expect(audits).toContain('mensagemCaracteres')
+    })
+})
+
+describe('achados da revisão (rodada 3)', () => {
+    it('cancelar depois de um reinício (hub local vazio) interrompe a sessão remota persistida e solta a trava', async () => {
+        const id = seed({ status: 'running', sessionId: 'sess-1', activeRepo: 'org/app' })
+        expect(mocks.active.size).toBe(0)
+        await cancelProjectBootstrap(id, 'local')
+        expect(mocks.client.session.interrupt).toHaveBeenCalledWith({ sessionID: 'sess-1' })
+        expect(current(id)).toMatchObject({ status: 'cancelled', activeRepo: null })
+    })
+
+    it('volta ao deploy: o .env importado substitui inteiro (valor esvaziado não mantém o anterior)', async () => {
+        const { updateEnvironment } = await import('@/features/environments/server/service')
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(vi.mocked(updateEnvironment).mock.calls[0]![3]).toEqual({ emptyKeepsSaved: false })
+        expect(current(id)).toMatchObject({ status: 'done', activeRepo: null })
+    })
+
+    it('a conferência recebe o repositório e o nome do projeto esperados', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toEqual({ directory: '/home/u/code/app', branch: 'main', port: 4014, project: 'app', repo: 'org/app', composeProject: null })
+    })
+
+    it('volta depois do deploy com falha: a conferência trata o container do ambiente deste bootstrap como próprio', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        mocks.savedEnv = { name: 'app', slug: 'app-3', source: { projectName: 'app-3' }, limits: null, composeOverrides: null }
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        const calls = vi.mocked(verifyDeliverables).mock.calls.map(([input]) => (input as { composeProject: string | null }).composeProject)
+        expect(calls).toEqual([null, 'app-3'])
+        expect(current(id).status).toBe('done')
+    })
+
+    it('dois envios ao mesmo tempo para o mesmo repositório: só um bootstrap abre', async () => {
+        const input = { owner: 'org', name: 'app', visibility: 'private' as const, context: 'API', directory: '/home/u/code/app', entryColumnKey: 'todo', closedColumnKey: null }
+        let release: () => void = () => {}
+        const both = new Promise<void>((resolve) => (release = resolve))
+        let arrived = 0
+        mocks.createGate = {
+            arrive: () => {
+                if (++arrived === 2) release()
+                return both
+            },
+        }
+        const results = await Promise.allSettled([startProjectBootstrap(input, 'local'), startProjectBootstrap(input, 'local')])
+        expect(arrived).toBe(2)
+        await settle()
+        expect(results.filter((item) => item.status === 'fulfilled')).toHaveLength(1)
+        const rejected = results.find((item) => item.status === 'rejected') as PromiseRejectedResult
+        expect(rejected.reason).toMatchObject({ status: 409, code: 'BOOTSTRAP_ALREADY_RUNNING' })
+        expect(docs().filter((row) => row.repo === 'org/app')).toHaveLength(1)
+    })
+})
+
+describe('ambiente e deploy opcionais (v5)', () => {
+    const LIBRARY_BLOCK = '```json bootstrap-result\n{"hasServer":false,"usesMongo":false,"branch":"main"}\n```'
+    const DEPLOYED = { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: null }
+    const LIBRARY_RESULT = { port: null, healthPath: null, hasServer: false, usesMongo: false, branch: 'main' }
+
+    it('fim do turno sem ambiente: confere só o git, amarra e conclui sem criar ambiente nem deploy', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        // A skill só com ambiente nem precisa estar instalada.
+        mocks.hostSkills = []
+        mocks.turnText = `Pronto.\n${LIBRARY_BLOCK}`
+        const id = seed({ withEnvironment: false, activeRepo: 'org/app' })
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expectBefore('verify', 'link')
+        expect(mocks.calls).toContain('central')
+        expect(mocks.calls).not.toContain('environment')
+        expect(mocks.calls).not.toContain('deploy')
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toEqual({ directory: '/home/u/code/app', branch: 'main', repo: 'org/app', withEnvironment: false })
+        expect(mocks.client.session.skill).not.toHaveBeenCalled()
+        expect(current(id)).toMatchObject({ status: 'done', step: 'done', activeRepo: null, result: { port: null } })
+    })
+
+    it('com ambiente, a skill só com ambiente continua exigida (falha fechada)', async () => {
+        mocks.hostSkills = []
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('bootstrap-docker') })
+    })
+
+    it('retomada na etapa 4 com o ambiente desligado conclui sem deploy', async () => {
+        const id = seed({ withEnvironment: false, step: 'deploy', phase: 'environment', result: LIBRARY_RESULT, created: DEPLOYED, heartbeatAt: new Date(0), stateAt: new Date(0) })
+        expect(await resumeIfStale(current(id) as never)).toBe(true)
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'done', step: 'done' })
+    })
+
+    it('Tentar novamente na etapa 4 com o ambiente desligado conclui sem deploy', async () => {
+        const id = seed({ withEnvironment: false, step: 'deploy', status: 'failed', phase: 'deploy', result: LIBRARY_RESULT, created: DEPLOYED })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'done', step: 'done' })
+    })
+
+    it('desligar na etapa 2 com o turno vivo manda o aviso ao agente e grava a escolha com auditoria', async () => {
+        const { steerAgentTurn } = await import('@/lib/ai/opencode-run')
+        const id = seed({ sessionId: 'sess-1' })
+        mocks.active.set(id, new AbortController())
+        await setProjectBootstrapEnvironment(id, false, 'local')
+        mocks.active.delete(id)
+        expect(vi.mocked(steerAgentTurn)).toHaveBeenCalledWith(id, expect.stringContaining('DESLIGOU'))
+        expect(current(id).withEnvironment).toBe(false)
+        expect(mocks.recordAudit).toHaveBeenCalledWith(expect.objectContaining({ antes: { comAmbiente: true }, depois: expect.objectContaining({ comAmbiente: false }) }))
+    })
+
+    it('desligar na etapa 2 parada com o resumo já entregue confere de novo sem as pendências de Docker e conclui', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        const id = seed({ status: 'failed', missing: ['o docker-compose.yml'], result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' } })
+        await setProjectBootstrapEnvironment(id, false, 'local')
+        await settle()
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toMatchObject({ withEnvironment: false })
+        expectBefore('verify', 'link')
+        expect(mocks.calls).not.toContain('deploy')
+        expect(current(id)).toMatchObject({ status: 'done', result: { port: null } })
+    })
+
+    it('desligar na etapa 4 com falha conclui sem deploy; o ambiente já criado fica', async () => {
+        const id = seed({ step: 'deploy', status: 'failed', phase: 'deploy', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { ...DEPLOYED, environmentId: 'e'.repeat(24), port: 4014 } })
+        await setProjectBootstrapEnvironment(id, false, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'done', created: { environmentId: 'e'.repeat(24) } })
+    })
+
+    it('recusa (409) concluído, cancelado, deploy em andamento e ligar fora da etapa 2', async () => {
+        const done = seed({ status: 'done', step: 'done' })
+        await expect(setProjectBootstrapEnvironment(done, false, 'local')).rejects.toMatchObject({ status: 409 })
+        const cancelled = seed({ status: 'cancelled' })
+        await expect(setProjectBootstrapEnvironment(cancelled, false, 'local')).rejects.toMatchObject({ status: 409 })
+        const deploying = seed({ step: 'deploy', status: 'running', phase: 'deploy' })
+        await expect(setProjectBootstrapEnvironment(deploying, false, 'local')).rejects.toMatchObject({ status: 409, code: 'BOOTSTRAP_ENVIRONMENT_LOCKED' })
+        const linking = seed({ step: 'link', status: 'failed', withEnvironment: false })
+        await expect(setProjectBootstrapEnvironment(linking, true, 'local')).rejects.toMatchObject({ status: 409, code: 'BOOTSTRAP_ENVIRONMENT_LOCKED' })
+        expect(current(linking).withEnvironment).toBe(false)
+    })
+
+    it('o início grava a escolha da etapa 1', async () => {
+        const input = { owner: 'org', name: 'app', visibility: 'private' as const, context: 'Plugin', directory: '/home/u/code/app', entryColumnKey: 'todo', closedColumnKey: null, withEnvironment: false }
+        const dto = await startProjectBootstrap(input, 'local')
+        mocks.active.clear()
+        expect(dto.withEnvironment).toBe(false)
+        expect(docs().find((row) => row.repo === 'org/app')).toMatchObject({ withEnvironment: false })
+    })
+})
+
+describe('achados da revisão (v5, rodada 1)', () => {
+    const input = { owner: 'org', name: 'app', visibility: 'private' as const, context: 'API', directory: '/home/u/code/app', entryColumnKey: 'todo', closedColumnKey: null, withEnvironment: true }
+
+    it('religar o ambiente depois de um resumo sem porta falha pedindo o bloco completo e não cria ambiente', async () => {
+        const id = seed({ status: 'failed', withEnvironment: false, result: { port: null, healthPath: null, hasServer: true, usesMongo: false, branch: 'main' } })
+        await setProjectBootstrapEnvironment(id, true, 'local')
+        await settle()
+        expect(mocks.calls).not.toContain('verify')
+        expect(mocks.calls).not.toContain('link')
+        expect(mocks.calls).not.toContain('environment')
+        expect(current(id)).toMatchObject({ status: 'failed', step: 'provision', withEnvironment: true, missing: [expect.stringContaining('`port`')] })
+    })
+
+    it('a etapa 4 não cria ambiente com um resumo sem porta', async () => {
+        const id = seed({ step: 'deploy', status: 'failed', phase: 'deploy', result: { port: null, healthPath: null, hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: null } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('porta') })
+    })
+
+    it('.env com mais de 100 variáveis falha a etapa 4 com o motivo, sem cortar nem criar o ambiente', async () => {
+        mocks.envText = Array.from({ length: 101 }, (_, index) => `VAR_${index}=x`).join('\n')
+        const id = seed({ step: 'deploy', status: 'failed', phase: 'deploy', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual([])
+        expect(current(id)).toMatchObject({ status: 'failed', error: expect.stringContaining('101 variáveis') })
+    })
+
+    it('o envio recusa (409) quando há bloqueio, sem criar o registro', async () => {
+        mocks.blockers = [{ message: 'O token do GitHub não está configurado.', href: '/integracoes/github', action: 'Configurar o GitHub' }]
+        await expect(startProjectBootstrap(input, 'local')).rejects.toMatchObject({ status: 409, code: 'BOOTSTRAP_UNAVAILABLE' })
+        expect(docs()).toHaveLength(0)
+    })
+
+    it('o envio recusa (400) coluna que não existe no quadro, antes de criar o registro', async () => {
+        mocks.columnsMissing = true
+        await expect(startProjectBootstrap(input, 'local')).rejects.toMatchObject({ status: 400, code: 'COLUMN_NOT_FOUND' })
+        expect(docs()).toHaveLength(0)
+        expect(mocks.turns).toHaveLength(0)
+    })
+})

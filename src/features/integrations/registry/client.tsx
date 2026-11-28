@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { AlarmClock, Bot, Eye, Gauge, KeyRound, Puzzle, ServerCog, Sparkles, SquareSlash } from "lucide-react"
+import { AlarmClock, Bot, Eye, Gauge, KeyRound, Puzzle, Rocket, ServerCog, Sparkles, SquareSlash } from "lucide-react"
 import { defineIntegrationClient, IntegrationsProvider, type IntegrationClientAdapter, type IntegrationEditorFormProps, type IntegrationsRealtimeClient } from "@nandobfer/integracoes/react"
 import { aiClientAdapters, type AiHubTab, type AiProviderExtraTab } from "@nandobfer/integracoes/ia/react"
 import { cronsClient } from "@nandobfer/integracoes/crons/react"
@@ -30,6 +30,9 @@ import { AdversarialAgentTab } from "@/features/adversarial-agent/components/set
 import { MentorAgentTab } from "@/features/adversarial-agent/components/mentor/MentorAgentTab"
 import { ArchitectAgentTab } from "@/features/architect-agent/components/settings/ArchitectAgentTab"
 import { RoutineAgentsTab } from "@/features/routine-agents/components/settings/RoutineAgentsTab"
+import { ProjectBootstrapTab } from "@/features/project-bootstrap/components/settings/ProjectBootstrapTab"
+import { NewBootstrapPage } from "@/features/project-bootstrap/components/new/NewBootstrapPage"
+import { ProjectBootstrapPage } from "@/features/project-bootstrap/components/page/ProjectBootstrapPage"
 import { OpencodeAccountsCard } from "@/features/opencode-accounts/components/OpencodeAccountsCard"
 import { OpencodeResourceTab } from "@/features/opencode-resources/components/OpencodeResourceTab"
 import { OpencodeControlsTab } from "@/features/opencode-service/components/OpencodeControlsTab"
@@ -63,14 +66,19 @@ const AGENT_TAB_COMPONENTS: Record<Exclude<AiTab, "provedores">, HubTabComponent
     "revisao-pr": PrReviewTab,
     "agente-mentor": MentorAgentTab,
     rotineiros: () => <RoutineAgentsTab />,
+    "agente-bootstrap": ProjectBootstrapTab,
 }
 
-const AI_HUB_TABS: readonly AiHubTab[] = AGENT_CATALOG.map((agent) => ({
-    id: agent.settingsTab,
-    label: agent.navLabel,
-    icon: agent.icon,
-    component: AGENT_TAB_COMPONENTS[agent.settingsTab as Exclude<AiTab, "provedores">],
-}))
+const AI_HUB_TABS: readonly AiHubTab[] = [
+    ...AGENT_CATALOG.map((agent) => ({
+        id: agent.settingsTab,
+        label: agent.navLabel,
+        icon: agent.icon,
+        component: AGENT_TAB_COMPONENTS[agent.settingsTab as Exclude<AiTab, "provedores">],
+    })),
+    // Agente de Bootstrap (OPE-215): só a aba, fora do catálogo de agentes (sem item na sidebar).
+    { id: "agente-bootstrap", label: "Bootstrap", icon: Rocket, component: AGENT_TAB_COMPONENTS["agente-bootstrap"] },
+]
 
 const resource = (kind: "skill" | "agent" | "command" | "plugin" | "mcp"): AiProviderExtraTab["component"] =>
     function OpencodeResource({ dirty }) {
@@ -107,7 +115,12 @@ export const OPEX_CLIENT_ADAPTERS: readonly IntegrationClientAdapter[] = [
         aliases: AI_TAB_ALIASES,
         useHubEffects: useAiFeatureRealtime,
         providerTabs: { opencode: OPENCODE_TABS },
-        hubPages: [{ path: "centrais/:id", component: ({ params }) => <CentralPage id={params.id!} /> }],
+        hubPages: [
+            { path: "centrais/:id", component: ({ params }) => <CentralPage id={params.id!} /> },
+            // Bootstrap de projeto (OPE-215): "novo" antes de ":id" (a primeira que casa vence).
+            { path: "bootstraps/novo", component: () => <NewBootstrapPage /> },
+            { path: "bootstraps/:id", component: ({ params }) => <ProjectBootstrapPage id={params.id!} /> },
+        ],
     }),
     defineIntegrationClient({
         id: "orcamentos",

@@ -123,6 +123,8 @@ vi.mock('@/features/opex-agent/server/settings', () => ({
   opexAvailability: async () => (mocks.available ? { available: true, reason: null } : { available: false, reason: 'Agente desativado' }),
 }))
 vi.mock('@/features/opex-agent/server/titler', () => ({ refreshSessionTitle: async () => {} }))
+// Gancho do tick dos bootstraps de projeto (OPE-215): sem banco neste teste.
+vi.mock('@/features/project-bootstrap/server/runner', () => ({ resumeStaleProjectBootstraps: async () => ({ resumed: 0 }) }))
 vi.mock('@/features/opex-agent/server/confirmations', () => ({ requestConfirmation: vi.fn(), refreshConfirmations: async (parts: unknown[]) => parts }))
 vi.mock('@/features/opex-agent/server/tools/context', () => ({ nowContext: () => ({ iso: '2026-11-25T12:00:00.000Z', local: 'quarta', timeZone: 'America/Sao_Paulo' }) }))
 vi.mock('@/features/opex-agent/server/tools/registry', () => ({ enabledOpexTools: () => [], findOpexTool: () => undefined, needsConfirmation: () => false }))

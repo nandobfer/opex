@@ -526,6 +526,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   | Revisor | `revisao-pr` | Só a configuração; as revisões ficam em `/agente-revisor` — `modules/pr-review.md` |
   | Mentor | `agente-mentor` | Lições das mesas que viram memórias (ícone `GraduationCap`) — `modules/adversarial-agent.md`, "Agente Mentor" |
   | Rotineiros | `rotineiros` | Agentes rotineiros (ícone `Repeat`): lista, editor (`?agente=<id>`/`novo`) e o modelo do subagente de provisionamento — `modules/routine-agents.md` |
+  | Bootstrap | `agente-bootstrap` | Agente de Bootstrap (ícone `Rocket`, OPE-215): só a aba, **fora** do `AGENT_CATALOG` (sem item na sidebar nem página `/agente-*`); seções Configuração, Skills, Catálogo de tecnologias e Histórico; assistente em `/integracoes/ia/bootstraps/novo` e `/integracoes/ia/bootstraps/[id]` — `modules/project-bootstrap.md` |
 
   O `ProviderModelCard` compartilhado aceita `names` (caminhos aninhados, ex.: `opex.model` nos
   agentes rotineiros), `hideAgent` e `idPrefix`; sem eles, usa os campos `provider/model/agent/variant`.

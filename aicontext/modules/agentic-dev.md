@@ -89,6 +89,15 @@ em `agent_metric_events` pelo `workflow.ts`), Histórico das mesas e Memórias �
   bloqueado com o motivo; a lista vazia, o carregamento, o "não encontrado" e a falha da consulta
   (com **Tentar novamente**) têm estado próprio.
 
+### Nova central com repositório novo (OPE-215)
+
+No diálogo **Nova central**, digitar um nome que não está na lista de repositórios vinculados oferece **Criar
+repositório «nome» e provisionar o ambiente**; o botão vira **Continuar no bootstrap** e leva ao assistente
+`/integracoes/ia/bootstraps/novo`, que cria o repositório, provisiona com o Agente de Bootstrap e cria no fim o vínculo, a
+central (branch base e destino do PR = a branch do push; backup do banco só com MongoDB) e o ambiente. Acima das centrais,
+o card **Bootstraps em andamento** aparece só com algum bootstrap executando, aguardando ou com falha. Ver
+`modules/project-bootstrap.md`.
+
 ### Central (`/integracoes/ia/centrais/[id]`, `agentic_centrals`)
 
 Configuração validada por `centralConfigSchema` (mesmo schema na tela e na API; campos ausentes

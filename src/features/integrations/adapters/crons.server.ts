@@ -98,6 +98,8 @@ export const OPEX_SCHEDULER_TICK_HOOKS = [
     { failureMessage: "[scheduler] Falha no tick dos ambientes", run: async () => (await import("@/features/environments/server/forwards")).runEnvironmentsTick() },
     // Agentes rotineiros: disparos agendados, retomadas das hibernadas, fila e limites. Ver aicontext/modules/routine-agents.md.
     { failureMessage: "[scheduler] Falha no tick dos agentes rotineiros", run: async (now: Date) => (await import("@/features/routine-agents/server/tick")).runDueRoutineAgents(now) },
+    // Bootstrap de projeto (OPE-215): retoma os bootstraps "executando" sem batimento (o app reiniciou). Ver aicontext/modules/project-bootstrap.md.
+    { failureMessage: "[scheduler] Falha ao retomar os bootstraps de projeto", run: async (now: Date) => (await import("@/features/project-bootstrap/server/runner")).resumeStaleProjectBootstraps(now) },
     // Plugins do dono (OPE-172): o kernel desta instância acompanha o banco (mudanças feitas por outra instância).
     { failureMessage: "[scheduler] Falha ao reconciliar os plugins com o banco", run: async () => (await import("@/features/plugins/server/service")).reconcilePluginServers() },
     // Plugins do dono (OPE-172): crons registrados pela fiber stable de cada plugin. Ver aicontext/modules/plugins.md.

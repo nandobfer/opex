@@ -243,6 +243,10 @@ sem pedido explícito.
   `secretary-analysis-updated` (`{ id }`) em `private-app`; e `secretary-chat-updated` (`{ chatId }`, OPE-197) a cada
   mensagem nova ou atualizada e mudança de não lidas na instância do Secretário, para a aba Conversas (ver
   `aicontext/modules/secretary-agent.md`).
+- Bootstrap de projeto (OPE-215): `project-bootstrap-updated` (`{ id }`) em `private-app` a cada mudança de etapa, estado,
+  pedidos pendentes ou do que foi criado, e `project-bootstrap-catalog-updated` (`{ kind: "group" | "technology" | "seed" }`)
+  ao mudar o catálogo de tecnologias; a conversa do agente vai pelo NDJSON (`GET /api/project-bootstraps/[id]/events`) e o
+  log do deploy pelo stream do ambiente (ver `aicontext/modules/project-bootstrap.md`).
 - Tokens de sistema da API interna: `api-tokens-updated` (`{ id }`) em `private-app` ao gerar, editar
   escopos ou revogar.
 - Custos de IA (OPE-203): `ai-billing-updated` (`{ kind: "fx" | "subscription-days" }`) em `private-app` quando as
