@@ -49,7 +49,7 @@ export function deploySteps(input: DeployPlanInput): DeployStep[] {
     const run = targets[runOn]
     const steps: DeployStep[] = []
     const cross = buildOn !== runOn && input.buildServices.length > 0
-    if (input.buildServices.length && !input.skipBuild) steps.push(buildStep(plan, buildOn, build))
+    if (input.buildServices.length && !input.skipBuild) steps.push(buildStep(plan, buildOn, build, input.buildServices))
     if (cross) {
         steps.push({ label: "Registry no servidor", command: ensureRegistryCommand(settings), timeoutMs: 120_000 })
         if (buildOn === "pc") {
@@ -74,12 +74,13 @@ export function deploySteps(input: DeployPlanInput): DeployStep[] {
  * Build na máquina do build. No servidor com o builder configurado em Ambientes: cria o builder quando
  * ele sumiu (mesmo passo, dentro da trava) e o build vai por `BUILDX_BUILDER`; o log diz qual builder.
  */
-function buildStep(plan: ComposePlan, buildOn: Machine, target: DockerTarget): DeployStep {
+function buildStep(plan: ComposePlan, buildOn: Machine, target: DockerTarget, services: readonly string[]): DeployStep {
     const label = `Build no ${buildOn === "pc" ? "PC" : "servidor"}`
-    if (buildOn === "pc") return { label, command: buildCommand(plan, target), timeoutMs: BUILD_TIMEOUT, lock: buildOn }
+    const command = buildCommand(plan, target, services)
+    if (buildOn === "pc") return { label, command, timeoutMs: BUILD_TIMEOUT, lock: buildOn }
     const builder = target.serverBuilder
-    if (!builder) return { label, command: buildCommand(plan, target), timeoutMs: BUILD_TIMEOUT, lock: buildOn, note: "Build com o builder padrão do host." }
-    return { label, command: `${builderDeployEnsureCommand(builder)} && ${buildCommand(plan, target)}`, timeoutMs: BUILD_TIMEOUT, lock: buildOn, note: `Build com o builder do buildx "${builder.name}" (BUILDX_BUILDER).` }
+    if (!builder) return { label, command, timeoutMs: BUILD_TIMEOUT, lock: buildOn, note: "Build com o builder padrão do host." }
+    return { label, command: `${builderDeployEnsureCommand(builder)} && ${command}`, timeoutMs: BUILD_TIMEOUT, lock: buildOn, note: `Build com o builder do buildx "${builder.name}" (BUILDX_BUILDER).` }
 }
 
 /** Derrubar na máquina onde está (e tirar os repasses das portas do PC). */

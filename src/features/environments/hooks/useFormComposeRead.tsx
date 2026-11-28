@@ -48,11 +48,15 @@ export function ComposeReadProvider({ form, env, children }: { form: UseFormRetu
     const { mutate } = mutation
     const [result, setResult] = useState<ComposeServicesDto | null>(null)
     const lastKey = useRef<string | null>(null)
+    // Cada leitura leva um número: a resposta só vale se ainda for a da leitura mais recente (uma antiga e mais
+    // lenta nunca sobrescreve a atual).
+    const seq = useRef(0)
 
     const read = useCallback(() => {
         if (!canRead || !readSource) return
         lastKey.current = readKey
-        mutate({ source: readSource, ...(env && readSource.kind === "managed" ? { environmentId: env.id } : {}) }, { onSuccess: setResult })
+        const id = ++seq.current
+        mutate({ source: readSource, ...(env && readSource.kind === "managed" ? { environmentId: env.id } : {}) }, { onSuccess: (data) => (id === seq.current ? setResult(data) : undefined) })
     }, [canRead, readSource, readKey, env, mutate])
 
     useEffect(() => {

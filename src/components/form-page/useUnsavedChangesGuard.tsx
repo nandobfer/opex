@@ -17,8 +17,12 @@ function internalHref(event: MouseEvent): string | null {
 /**
  * Guarda de alterações não salvas de uma página de formulário. Com alterações, pede "Descartar
  * alterações?" antes de sair pelo voltar/Cancelar (`guard`), por um link interno do app (captura do
- * clique) e ao fechar ou recarregar a aba (`beforeunload`). Os botões voltar/avançar do navegador não
- * passam pelo guarda (o App Router não oferece interceptação).
+ * clique), pelo botão voltar do navegador (`popstate`) e ao fechar ou recarregar a aba (`beforeunload`).
+ *
+ * O voltar do navegador: com alterações, o guarda empilha uma entrada sentinela no histórico (mesma URL e o
+ * mesmo `history.state`, então o App Router continua na página). O voltar consome a sentinela; o guarda a
+ * empilha de novo e pergunta. "Descartar e sair" volta duas entradas (a sentinela e a página). Sem alterações
+ * (ex.: depois de salvar), o voltar que consome a sentinela segue direto para a página anterior.
  */
 export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => void) => void; dialog: ReactNode } {
     const router = useRouter()
@@ -37,6 +41,32 @@ export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => 
         window.addEventListener("beforeunload", onBeforeUnload)
         return () => window.removeEventListener("beforeunload", onBeforeUnload)
     }, [dirty])
+
+    const sentinel = useRef(false)
+    useEffect(() => {
+        if (!dirty || sentinel.current) return
+        window.history.pushState(window.history.state, "", window.location.href)
+        sentinel.current = true
+    }, [dirty])
+
+    useEffect(() => {
+        const onPopState = () => {
+            if (!sentinel.current) return
+            if (!dirtyRef.current) {
+                // A sentinela foi consumida sem alterações pendentes: segue para a página anterior.
+                sentinel.current = false
+                window.history.back()
+                return
+            }
+            window.history.pushState(window.history.state, "", window.location.href)
+            setPending(() => () => {
+                sentinel.current = false
+                window.history.go(-2)
+            })
+        }
+        window.addEventListener("popstate", onPopState)
+        return () => window.removeEventListener("popstate", onPopState)
+    }, [])
 
     useEffect(() => {
         const onClick = (event: MouseEvent) => {

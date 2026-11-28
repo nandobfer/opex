@@ -93,8 +93,9 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   - **Salvar**: Novo volta para `/ambientes` (toast "Ambiente criado"). Editar fica na página ("Tudo salvo") com o aviso
     "Salvo. As mudanças valem no próximo deploy" e o botão **Fazer deploy** (a mesma ação da linha; abre a página do log).
   - **Sair com alterações** (`useUnsavedChangesGuard`): Cancelar, o voltar e qualquer link interno do app pedem
-    "Descartar alterações?"; fechar/recarregar a aba usa o `beforeunload`. Os botões voltar/avançar do navegador não
-    passam pelo guarda (o App Router não oferece interceptação).
+    "Descartar alterações?"; fechar/recarregar a aba usa o `beforeunload`. O **voltar do navegador** também pergunta:
+    com alterações, o guarda empilha uma entrada sentinela de mesma URL; o voltar a consome, o guarda a empilha de novo e
+    pergunta ("Descartar e sair" volta duas entradas). Sem alterações (depois de salvar), esse voltar segue direto.
   - **Tempo real**: o formulário é montado uma vez por ambiente (um evento não reseta o que está sendo editado). Versão
     **mais nova** do ambiente no servidor (`updatedAt`) mostra "Este ambiente foi alterado em outro lugar" com
     **Recarregar** (descarta e relê) e **Manter o que estou editando**.
@@ -377,22 +378,24 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
      o erro do deploy leva só a última linha, com os valores do environment, dos labels e do YAML avançado trocados por
      `[valor oculto]`. Na falha, o override é regravado **sem os ajustes** (passo "Override sem os ajustes (a
      conferência falhou)") e, em seguida, a regra do item 8 o volta ao do último deploy concluído, quando existe.
-  7. **Cópias dos arquivos gerados** (o override e o `.env.opex`), numa pasta só do Opex, **fora da pasta do projeto**:
+  7. **Cópias dos arquivos gerados** (o override, o `.env.opex` e, no compose gerenciado, o `docker-compose.yml` da
+     revisão, `deployedExtras`), numa pasta só do Opex, **fora da pasta do projeto**:
      `$HOME/.opex/environments-deployed/<id do ambiente>/` na máquina dos arquivos (`deployedStore`, `DEPLOYED_STORE`), com
      `current` (o último deploy concluído) e `pending` (o deploy em andamento). Antes de subir, o passo "Cópia dos arquivos
      deste deploy" prepara a `pending`; no sucesso, ela vira a `current` (a anterior só sai depois da troca). Se a troca
      falhar, o deploy **conclui assim mesmo** (containers, arquivos e `deployedComposeOverrides` ficam na configuração
      nova), as cópias saem e o log avisa "Não foi possível guardar a cópia…". Apagar o ambiente apaga só essa pasta do
      Opex, nunca nada da pasta do projeto. Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
-  8. **Deploy que falha antes de subir os containers** (antes do passo "Sobe no …", inclusive na retomada; no mesmo lugar
-     do último deploy, não no mover): o override e o `.env.opex` voltam aos da `current` ("Override e variáveis extras
-     voltaram aos do último deploy concluído"), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada.
+  8. **Deploy que falha antes de subir os containers** (antes do passo "Sobe no …", inclusive na retomada e **no mover**,
+     em que o implantado continua sendo o da origem): o override, o `.env.opex` e, no gerenciado, o `docker-compose.yml`
+     voltam aos da `current` ("Override[, compose gerenciado] e variáveis extras voltaram aos do último deploy concluído";
+     a revisão que falhou não fica na pasta), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada.
+     Cópia antiga sem o `docker-compose.yml` não o apaga (fica como está).
      **O passo que sobe terminou e um passo seguinte falhou** (ex.: a saúde): os containers estão com a configuração
      nova, então os arquivos ficam os deste deploy, a `pending` vira a `current` e o estado implantado (`deployedOn`, ref,
      commit, versão, limites, `deployedComposeOverrides`, revisão do compose) passa a ser o deste deploy, mesmo com o deploy
      falho; o log registra "Os containers subiram com a configuração deste deploy e um passo seguinte falhou…".
-     **O próprio passo que sobe falhou** (estado dos containers indeterminado): os arquivos voltam aos da `current` (no
-     mesmo lugar), o estado implantado continua o do último deploy concluído e o log registra a deriva possível ("O passo
+     **O próprio passo que sobe falhou** (estado dos containers indeterminado): os arquivos voltam aos da `current`, o estado implantado continua o do último deploy concluído e o log registra a deriva possível ("O passo
      que sobe os containers falhou: alguns podem ter ficado com a configuração deste deploy… faça um novo deploy…").
      Na retomada vale o mesmo, pelo passo gravado no ponto de retomada.
      Ambiente implantado antes das cópias existirem ganha a `current` no começo do deploy seguinte (passo "Cópia do último

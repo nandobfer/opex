@@ -668,6 +668,19 @@ describe('serviços do compose no deploy (OPE-211)', () => {
     expect(String(deploys.docs[0]!.log)).toContain('▸ Build no servidor')
   })
 
+  it('regressão (F3): serviço com imagem própria fica fora do comando de build; o outro com build continua', async () => {
+    const config = JSON.stringify({ services: { app: { build: { context: '.' } }, worker: { build: { context: './worker' } }, db: { image: 'mongo:7' } } })
+    const source = { kind: 'central' as const, centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: ['app', 'worker', 'db'], projectName: 'loja' }
+    const env = await createEnvironment(input({ source, composeOverrides: { services: [service('app', { image: 'ghcr.io/loja/app:2' })], yaml: '' } }), 'local')
+    const { run, calls } = host({ config })
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const build = calls.find((command) => / build( |$)/.test(command) && command.includes('docker compose'))!
+    expect(build).toMatch(/ build 'worker'$/)
+    expect(build).not.toContain("'app'")
+    expect(build).not.toContain("'db'")
+  })
+
   it('regressão: image: !reset null no YAML avançado mantém o build do serviço (não vira imagem própria)', async () => {
     const env = await createEnvironment(input({ composeOverrides: { services: [], yaml: 'app:\n  image: !reset null\n' } }), 'local')
     const { run, calls } = host()
@@ -718,14 +731,14 @@ describe('serviços do compose no deploy (OPE-211)', () => {
    * Host em que os comandos dos arquivos gerados (override, `.env.opex` e as cópias do Opex) rodam de verdade no shell,
    * numa pasta temporária no lugar da pasta do ambiente e com um `$HOME` temporário; o resto é o host simulado.
    */
-  function fileHost(projectDir?: string) {
+  function fileHost(projectDir?: string, options: { slug?: string; config?: string } = {}) {
     const root = mkdtempSync(join(tmpdir(), 'opex-deploy-files-'))
     const home = join(root, 'home')
-    // Central: a pasta do ambiente é `"$HOME/opex-envs/<slug>"`; adotado: a pasta do projeto (trocada pela temporária).
-    const dir = projectDir ? join(root, 'projeto') : join(home, 'opex-envs', 'loja')
+    // Central e gerenciado: a pasta do ambiente é `"$HOME/opex-envs/<slug>"`; adotado: a pasta do projeto (trocada pela temporária).
+    const dir = projectDir ? join(root, 'projeto') : join(home, 'opex-envs', options.slug ?? 'loja')
     mkdirSync(dir, { recursive: true })
     mkdirSync(home, { recursive: true })
-    const base = host()
+    const base = host({ config: options.config })
     const fail = { on: '' }
     const touchesFiles = (command: string) => command.includes('base64 -d >') || command.includes('environments-deployed') || (command.startsWith('rm -f ') && command.includes('.env.opex'))
     // Containers simulados: o override na pasta a cada `up -d` (tentado ou não).
@@ -779,6 +792,56 @@ describe('serviços do compose no deploy (OPE-211)', () => {
       await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', files.run)
       expect(files.calls.at(-1)).toContain('-f docker-compose.opex.yml')
       expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão (F1): mover que falha antes de subir volta o override do deploy concluído; Levantar segue com ele', async () => {
+    const files = fileHost()
+    try {
+      const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: '' } }), 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.status).toBe('success')
+      const deployed = files.read('docker-compose.opex.yml')!
+      await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+      files.fail.on = ' pull'
+      await runEnvironmentAction(String(env._id), { action: 'move', buildOn: 'server', runOn: 'pc' }, 'local', files.run)
+      await vi.waitFor(() => expect(deploys.docs[1]!.status).toBe('failed'))
+      expect(files.read('docker-compose.opex.yml')).toBe(deployed)
+      expect(String(deploys.docs[1]!.log)).toContain('voltaram aos do último deploy concluído')
+      expect(envs.docs[0]!.deployedOn).toEqual({ buildOn: 'server', runOn: 'server' })
+      files.fail.on = ''
+      await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', files.run)
+      expect(files.containers.at(-1)).toBe(deployed)
+      expect(files.containers.at(-1)).not.toContain('restart: no')
+    } finally {
+      files.cleanup()
+    }
+  })
+
+  it('regressão (F2): compose gerenciado: a revisão nova que falha volta à implantada no docker-compose.yml; Levantar usa a implantada', async () => {
+    const MINIO = 'services:\n  minio:\n    image: minio/minio\n'
+    const files = fileHost(undefined, { slug: 'minio', config: JSON.stringify({ services: { minio: { image: 'minio/minio' } } }) })
+    try {
+      const env = await createEnvironment(input({ slug: 'minio', name: 'MinIO', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: MINIO, ports: [], env: [] }), 'local')
+      const { saveComposeRevision } = await import('@/features/environments/server/compose-revisions')
+      await saveComposeRevision(String(env._id), { content: `${MINIO}# v2\n` }, 'local')
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[0]!.status).toBe('success')
+      expect(files.read('docker-compose.yml')).toContain('# v2')
+      expect(readFileSync(join(files.home, '.opex/environments-deployed', String(env._id), 'current/docker-compose.yml'), 'utf8')).toContain('# v2')
+      await saveComposeRevision(String(env._id), { content: `${MINIO}# v3\n` }, 'local')
+      files.fail.on = 'config --format json'
+      await startDeploy(String(env._id), 'local', { kind: 'deploy', run: files.run, wait: true })
+      expect(deploys.docs[1]!.status).toBe('failed')
+      expect(files.read('docker-compose.yml')).toContain('# v2')
+      expect(files.read('docker-compose.yml')).not.toContain('# v3')
+      expect(String(deploys.docs[1]!.log)).toContain('compose gerenciado')
+      expect(envs.docs[0]!.deployedComposeVersion).toBe(2)
+      files.fail.on = ''
+      await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', files.run)
+      expect(files.read('docker-compose.yml')).toContain('# v2')
     } finally {
       files.cleanup()
     }

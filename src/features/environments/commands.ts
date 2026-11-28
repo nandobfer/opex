@@ -59,7 +59,8 @@ export function composeCommand(plan: ComposePlan, target: DockerTarget, args: st
 const servicesArg = (plan: ComposePlan) => plan.services.map(quote).join(" ")
 
 export const configCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, "config --format json", { override: false })
-export const buildCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, `build ${servicesArg(plan)}`.trim(), { build: true })
+/** Build só dos serviços que buildam (os com imagem própria ficam de fora; OPE-211). */
+export const buildCommand = (plan: ComposePlan, target: DockerTarget, services: readonly string[]) => composeCommand(plan, target, `build ${services.map(quote).join(" ")}`.trim(), { build: true })
 export const upCommand = (plan: ComposePlan, target: DockerTarget, build: boolean) => composeCommand(plan, target, `up -d ${build ? "--build" : "--no-build"} --remove-orphans ${servicesArg(plan)}`.trim(), { build })
 export const pushCommand = (plan: ComposePlan, target: DockerTarget, services: string[]) => composeCommand(plan, target, `push ${services.map(quote).join(" ")}`.trim())
 export const pullCommand = (plan: ComposePlan, target: DockerTarget) => composeCommand(plan, target, `pull ${servicesArg(plan)}`.trim())
@@ -239,24 +240,31 @@ export function removeGeneratedCommand(plan: Pick<ComposePlan, "dir" | "filesOn"
 const GENERATED = `${OVERRIDE_FILE} ${ENV_FILE}`
 
 /**
+ * Arquivos extras guardados com o override e o `.env.opex` (ex.: o `docker-compose.yml` do compose gerenciado, que o
+ * deploy regrava antes de subir). Só nomes de arquivo da pasta do ambiente.
+ */
+export type DeployedExtras = readonly string[]
+const extrasArg = (extras: DeployedExtras) => extras.filter((name) => /^[A-Za-z0-9._-]+$/.test(name)).join(" ")
+
+/**
  * Cópias do override e do `.env.opex` (OPE-211), numa pasta só do Opex, fora da pasta do projeto, na máquina
  * dos arquivos: `current` (o último deploy concluído) e `pending` (o deploy em andamento, promovida no fim).
  */
 export const deployedStore = (environmentId: string) => `"$HOME/${DEPLOYED_STORE}/${environmentId.replace(/[^a-zA-Z0-9_-]/g, "")}"`
 
 const onFiles = (plan: Pick<ComposePlan, "filesOn">, command: string) => (plan.filesOn === "pc" ? muxCommand(command) : command)
-const copyInto = (plan: Pick<ComposePlan, "dir">, to: string) => `cd ${plan.dir} && for f in ${GENERATED}; do if [ -f "$f" ]; then cp -p "$f" ${to}/"$f"; fi; done`
+const copyInto = (plan: Pick<ComposePlan, "dir">, to: string, extras: DeployedExtras) => `cd ${plan.dir} && for f in ${GENERATED} ${extrasArg(extras)}; do if [ -f "$f" ]; then cp -p "$f" ${to}/"$f"; fi; done`
 
 /** Ambiente implantado antes das cópias existirem: os arquivos de agora viram a cópia `current` (só se não houver). */
-export function bootstrapDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string): string {
+export function bootstrapDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string, extras: DeployedExtras = []): string {
     const store = deployedStore(environmentId)
-    return onFiles(plan, `umask 077 && s=${store} && if [ ! -d "$s/current" ]; then mkdir -p "$s/current" && ${copyInto(plan, '"$s/current"')}; fi`)
+    return onFiles(plan, `umask 077 && s=${store} && if [ ! -d "$s/current" ]; then mkdir -p "$s/current" && ${copyInto(plan, '"$s/current"', extras)}; fi`)
 }
 
 /** Cópia `pending` dos arquivos deste deploy, feita antes de subir os containers. */
-export function stageDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string): string {
+export function stageDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string, extras: DeployedExtras = []): string {
     const store = deployedStore(environmentId)
-    return onFiles(plan, `umask 077 && s=${store} && rm -rf "$s/pending" && mkdir -p "$s/pending" && ${copyInto(plan, '"$s/pending"')}`)
+    return onFiles(plan, `umask 077 && s=${store} && rm -rf "$s/pending" && mkdir -p "$s/pending" && ${copyInto(plan, '"$s/pending"', extras)}`)
 }
 
 /** `pending` vira `current` (a anterior só sai depois da troca; se a troca falha, ela volta). */
@@ -270,10 +278,16 @@ export function dropDeployedFilesCommand(plan: Pick<ComposePlan, "filesOn">, env
     return onFiles(plan, `rm -rf ${deployedStore(environmentId)}; true`)
 }
 
-/** Volta o override e o `.env.opex` aos da cópia `current` (sem a cópia, não mexe em nada). */
-export function restoreDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string): string {
+/**
+ * Volta o override, o `.env.opex` e os extras aos da cópia `current` (sem a cópia, não mexe em nada). Override e
+ * `.env.opex` ausentes na cópia são apagados (o deploy implantado não os tinha); um extra ausente na cópia fica como
+ * está (cópia antiga, sem ele).
+ */
+export function restoreDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, environmentId: string, extras: DeployedExtras = []): string {
     const store = deployedStore(environmentId)
-    return onFiles(plan, `s=${store} && if [ -d "$s/current" ]; then cd ${plan.dir} && for f in ${GENERATED}; do if [ -f "$s/current/$f" ]; then cp -p "$s/current/$f" "$f"; else rm -f "$f"; fi; done; rm -rf "$s/pending"; echo restored; fi`)
+    const extra = extrasArg(extras)
+    const restoreExtras = extra ? ` for f in ${extra}; do if [ -f "$s/current/$f" ]; then cp -p "$s/current/$f" "$f"; fi; done;` : ""
+    return onFiles(plan, `s=${store} && if [ -d "$s/current" ]; then cd ${plan.dir} && for f in ${GENERATED}; do if [ -f "$s/current/$f" ]; then cp -p "$s/current/$f" "$f"; else rm -f "$f"; fi; done;${restoreExtras} rm -rf "$s/pending"; echo restored; fi`)
 }
 
 /** Apaga só o `.env.opex` (ambiente sem variáveis extras: o do deploy anterior não pode valer). */

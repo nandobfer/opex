@@ -165,7 +165,8 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
   seções: seção visível por `IntersectionObserver`, ponto nas alteradas, alerta nas com erro; preso à
   lateral só no `lg`, faixa no topo abaixo dele; `scrollToSection` rola e foca o campo inválido) e
   `useUnsavedChangesGuard(dirty)` ("Descartar alterações?" no Cancelar/voltar, nos links internos do app
-  e `beforeunload`; voltar/avançar do navegador não passam por ele). Formulário longo: seções em cards com
+  , no botão voltar do navegador — `popstate` com uma entrada sentinela de mesma URL no histórico — e no
+  `beforeunload`). Formulário longo: seções em cards com
   o índice, ações no cabeçalho e no `FormFooter`.
 - Escolha múltipla em lista longa usa `MultiAutocomplete` (`src/components/ui/multi-autocomplete.tsx`):
   busca tolerante (fuse.js), teclado (↑/↓/Enter/Esc, Backspace remove o último), grupos com

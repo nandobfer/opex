@@ -1,7 +1,7 @@
 /** @vitest-environment happy-dom */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import Link from 'next/link'
 import { Boxes, Tag } from 'lucide-react'
 import { framerMotionMock } from '../helpers/framer-motion'
@@ -83,6 +83,47 @@ describe('useUnsavedChangesGuard', () => {
     expect(nav.push).not.toHaveBeenCalled()
     fireEvent.click(screen.getByRole('button', { name: 'Descartar e sair' }))
     expect(nav.push).toHaveBeenCalledWith('/outra')
+  })
+
+  it('regressão (F5): voltar do navegador com alterações pede confirmação e fica na página; descartar volta duas entradas', () => {
+    const push = vi.spyOn(window.history, 'pushState')
+    const go = vi.spyOn(window.history, 'go').mockImplementation(() => undefined)
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined)
+    const { rerender } = render(<Guarded dirty={false} action={vi.fn()} />)
+    expect(push).not.toHaveBeenCalled()
+    rerender(<Guarded dirty action={vi.fn()} />)
+    // Com alterações: uma sentinela com a mesma URL.
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(push.mock.calls[0]![2]).toBe(window.location.href)
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    expect(screen.getByText('Descartar alterações?')).toBeTruthy()
+    // Fica na página: a sentinela volta.
+    expect(push).toHaveBeenCalledTimes(2)
+    expect(go).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Continuar editando' }))
+    expect(go).not.toHaveBeenCalled()
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    fireEvent.click(screen.getByRole('button', { name: 'Descartar e sair' }))
+    expect(go).toHaveBeenCalledWith(-2)
+    expect(back).not.toHaveBeenCalled()
+    push.mockRestore()
+    go.mockRestore()
+    back.mockRestore()
+  })
+
+  it('depois de salvar (sem alterações), o voltar que consome a sentinela segue direto, sem perguntar', () => {
+    const push = vi.spyOn(window.history, 'pushState')
+    const back = vi.spyOn(window.history, 'back').mockImplementation(() => undefined)
+    const { rerender } = render(<Guarded dirty action={vi.fn()} />)
+    rerender(<Guarded dirty={false} action={vi.fn()} />)
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    expect(screen.queryByText('Descartar alterações?')).toBeNull()
+    expect(back).toHaveBeenCalledTimes(1)
+    // Outro voltar (já sem sentinela): o guarda não interfere.
+    act(() => window.dispatchEvent(new PopStateEvent('popstate')))
+    expect(back).toHaveBeenCalledTimes(1)
+    push.mockRestore()
+    back.mockRestore()
   })
 
   it('beforeunload só com alterações', () => {
