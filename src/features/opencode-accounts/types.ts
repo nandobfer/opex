@@ -15,7 +15,8 @@ export type OpencodeAuthMethodDto =
 export interface OpencodeAccountDto {
     id: string
     label: string
-    method: "key" | "oauth"
+    /** `external`: credencial mantida fora do OpenCode (OpenCode 2.4). */
+    method: "key" | "oauth" | "external"
     active: boolean
     /** Mensagem do OpenCode quando a conta precisa ser autenticada de novo. */
     needsAuth: string | null

@@ -303,9 +303,10 @@ describe('OAuth dos MCPs do Agente Opex', () => {
     expect(docOf(server.id).oauth.status).toBe('authorized')
     await updateMcpServer(server.id, baseInput({ url: 'https://mcp.test/v2/mcp' }), 'local')
     expect(docOf(server.id).oauth).toMatchObject({ tokens: null, client: null, status: 'not_authorized' })
-    const merged = mergeMcpOauth({ clientId: 'pre', clientSecret: 's3', scope: '' }, docOf(server.id).oauth, false)
+    // O segredo de teste tem "-", que a base64 do texto cifrado nunca produz: a asserção confere só o vazamento do texto puro.
+    const merged = mergeMcpOauth({ clientId: 'pre', clientSecret: 'segredo-puro-marcado', scope: '' }, docOf(server.id).oauth, false)
     expect(merged.clientId).toBe('pre')
-    expect(JSON.stringify(merged.clientSecret)).not.toContain('s3')
+    expect(JSON.stringify(merged.clientSecret)).not.toContain('segredo-puro-marcado')
   })
 
   it('regressão: editar o formulário não devolve ao banco um token renovado por um turno no meio do salvamento', async () => {

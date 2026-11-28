@@ -6,6 +6,14 @@ const ts = '2026-10-09T12:00:00.000Z'
 const run = (lines: WorkbenchStreamLine[]): TimelineState => lines.reduce(applyTimelineLine, INITIAL_TIMELINE)
 
 describe('applyTimelineLine', () => {
+  it('espera pelo trabalho em segundo plano (OPE-216): define, zera e some no fim do turno', () => {
+    const turn: WorkbenchStreamLine = { type: 'turn', stage: 'planning', title: 'Planejando', agent: 'plan', model: null, seq: 1, ts }
+    const waiting = run([{ type: 'reset' }, turn, { type: 'background', subagents: 2, shells: 0, other: 0, seq: 2, ts }])
+    expect(waiting.background).toEqual({ subagents: 2, shells: 0, other: 0 })
+    expect(applyTimelineLine(waiting, { type: 'background', subagents: 0, shells: 0, other: 0, seq: 3, ts }).background).toBeNull()
+    expect(applyTimelineLine(waiting, { type: 'turn-end', outcome: 'succeeded', message: null, durationMs: 1, costUsd: 0, seq: 3, ts }).background).toBeNull()
+  })
+
   it('reset marca carregado; textos seguidos viram um bloco', () => {
     const state = run([{ type: 'reset' }, { type: 'turn', stage: 'planning', title: 'Planejando', agent: 'plan', model: null, seq: 1, ts }, { type: 'text', text: 'Ol', seq: 2, ts }, { type: 'text', text: 'á', seq: 3, ts }])
     expect(state.loaded).toBe(true)

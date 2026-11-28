@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { FLOW_SURFACE_CLASS } from "@/components/flow/flow-theme"
 import { type ArchitectDepth, type ArchitectPhase } from "../../constants"
-import type { ArchitectDiagramDto } from "../../types"
+import type { ArchitectDiagramDto, ArchitectLiveProgress } from "../../types"
 import { NODE_SIZE_STYLE } from "../../layout"
 import { DepthControl } from "./DepthControl"
 import { ArchitectLiveBar } from "./ArchitectLiveBar"
@@ -89,7 +89,7 @@ export function ArchitectCanvasSkeleton({ label }: { label?: string }) {
  * Geração em curso antes do primeiro nó (o agente lendo o plano e o código): o próprio canvas, no
  * formato final, com o nó do objetivo "fantasma" pulsando no centro. Os nós aparecem aqui ao vivo.
  */
-export function ArchitectLiveWaiting({ phase, tools, connected, provider = null }: { phase: ArchitectPhase | null; tools: number; connected: boolean; provider?: string | null }) {
+export function ArchitectLiveWaiting({ phase, tools, connected, provider = null, background = null }: { phase: ArchitectPhase | null; tools: number; connected: boolean; provider?: string | null; background?: ArchitectLiveProgress["background"] }) {
     const reducedMotion = useReducedMotion()
     return (
         <div className={ARCHITECT_TAB_CLASS} aria-busy="true">
@@ -97,7 +97,7 @@ export function ArchitectLiveWaiting({ phase, tools, connected, provider = null 
             <div className={ARCHITECT_CANVAS_WRAP_CLASS}>
                 <div className={ARCHITECT_CANVAS_CLASS} data-testid="architect-live-waiting">
                     <ToolbarSkeleton />
-                    <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0 }} connected={connected} provider={provider} />
+                    <ArchitectLiveBar progress={{ phase: phase ?? "starting", tools, nodes: 0, edges: 0, background }} connected={connected} provider={provider} />
                     <div className="flex h-full items-center justify-center p-8">
                         <motion.div
                             style={NODE_SIZE_STYLE}

@@ -81,6 +81,10 @@ export type OpencodeSessionEvent =
     | { kind: "form"; form: OpencodeFormDto }
     | { kind: "form-closed"; id: string }
     | { kind: "moved"; directory: string }
+    /** Começo de uma execução da sessão (o OpenCode acorda a sessão com o resultado de um subagente, OPE-216). */
+    | { kind: "start" }
+    /** Job em segundo plano (subagente, comando de terminal…) mudou de estado (OpenCode 2.4). */
+    | { kind: "job"; id: string; jobKind: string; status: string }
     | { kind: "end"; outcome: "succeeded" }
     | { kind: "end"; outcome: "failed"; message: string; error?: OpencodeRetryError }
     | { kind: "end"; outcome: "interrupted"; reason: string }
@@ -98,11 +102,12 @@ const providerError = (value: unknown): OpencodeRetryError | undefined => {
     return { type: str(value.type), message: str(value.message) ?? "erro desconhecido", status: typeof value.status === "number" ? value.status : null }
 }
 
-/** Sessão do evento: `form.created` traz em `data.form.sessionID`; os demais, em `data.sessionID`. */
+/** Sessão do evento: `form.created` traz em `data.form.sessionID`; `experimental.job.updated`, em `data.info.sessionID`; os demais, em `data.sessionID`. */
 export function opencodeEventSessionId(event: unknown): string | null {
     if (!isObj(event) || !isObj(event.data)) return null
     const data = event.data
     if (event.type === "form.created" && isObj(data.form)) return str(data.form.sessionID)
+    if (event.type === "experimental.job.updated" && isObj(data.info)) return str(data.info.sessionID)
     return str(data.sessionID)
 }
 
@@ -222,6 +227,13 @@ export function normalizeOpencodeEvent(event: unknown, sessionId: string): Openc
             return { kind: "notice", message: `Passo do modelo falhou: ${errorMessage(data.error, "erro desconhecido")}` }
         case "session.retry.scheduled":
             return { kind: "retry", attempt: num(data.attempt), at: num(data.at), error: providerError(data.error) ?? { type: null, message: "erro desconhecido", status: null } }
+        case "session.execution.started":
+            return { kind: "start" }
+        case "experimental.job.updated": {
+            const info = isObj(data.info) ? data.info : {}
+            const jobId = str(info.id)
+            return jobId ? { kind: "job", id: jobId, jobKind: str(info.kind) ?? "job", status: str(info.status) ?? "running" } : null
+        }
         case "session.execution.succeeded":
             return { kind: "end", outcome: "succeeded" }
         case "session.execution.failed": {
