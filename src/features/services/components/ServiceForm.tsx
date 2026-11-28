@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation"
 import { useCallback, useMemo, useState } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
-import { ArrowLeft, Loader2 } from "lucide-react"
+import { Loader2 } from "lucide-react"
 import { motion } from "framer-motion"
+import { FormPageHeader } from "@/components/form-page/FormPageHeader"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { DatePicker } from "@/components/ui/date-picker"
@@ -114,17 +115,12 @@ export function ServiceForm({ service }: { service?: ServiceDto }) {
 
     return (
         <motion.section initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.2 }} className="space-y-6">
-            <header className="space-y-3">
-                <Button asChild variant="ghost" size="sm" className="-ml-2 gap-1.5">
-                    <Link href={SERVICES_PATH}>
-                        <ArrowLeft className="h-4 w-4" aria-hidden /> Financeiro
-                    </Link>
-                </Button>
-                <div>
-                    <h1 className="text-lg font-semibold md:text-2xl">{service ? `Editar serviço ${service.code}` : "Novo serviço"}</h1>
-                    <p className="text-sm text-muted-foreground">Lançamento manual de faturamento: escolha o cliente, descreva o serviço e informe os valores.</p>
-                </div>
-            </header>
+            <FormPageHeader
+                backHref={SERVICES_PATH}
+                backLabel="Financeiro"
+                title={service ? `Editar serviço ${service.code}` : "Novo serviço"}
+                description="Lançamento manual de faturamento: escolha o cliente, descreva o serviço e informe os valores."
+            />
 
             <Card>
                 <CardContent className="pt-6">

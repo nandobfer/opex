@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { framerMotionMock } from '../../helpers/framer-motion'
 import type { DeployEvent, DeployStreamEvent, EnvironmentDeploySummaryDto, EnvironmentDto, UnmanagedProjectDto } from '@/features/environments/types'
 
-/** Ambientes: linha com ações, opções de máquina com o PC fechado, mover e não gerenciados. */
+/** Ambientes: regras de tela, opções de máquina com o PC fechado, histórico, log, mover e não gerenciados (o card fica em `environment-card-ui`). */
 
 const mocks = vi.hoisted(() => ({
   action: vi.fn(),
@@ -21,7 +21,6 @@ vi.mock('@/features/environments/hooks/useEnvironments', () => ({
 vi.mock('@/lib/ndjson-client', () => ({ readNdjson: mocks.readNdjson }))
 vi.mock('@nandobfer/integracoes/react', () => ({ IntegrationConsole: () => <div data-testid="console" /> }))
 
-import { EnvironmentRow } from '@/features/environments/components/EnvironmentRow'
 import { MoveDialog } from '@/features/environments/components/MoveDialog'
 import { UnmanagedList } from '@/features/environments/components/UnmanagedList'
 import { DeployLog } from '@/features/environments/components/DeployLog'
@@ -44,7 +43,7 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   deployedOn: { buildOn: 'server', runOn: 'server' },
   deployedVersion: '1.43.0',
   lastDeploy: null,
-  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '', cpu: '1.5%', memory: '120MiB / 8GiB', version: '1.44.0', limits: null }],
+  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up', ports: '', listen: [], cpu: '1.5%', memory: '120MiB / 8GiB', version: '1.44.0', limits: null }],
   createdAt: new Date().toISOString(),
   updatedAt: new Date().toISOString(),
   ...overrides,
@@ -78,42 +77,6 @@ describe('regras de tela', () => {
   })
 })
 
-describe('linha do ambiente', () => {
-  it('mostra estado, CPU/RAM e dispara levantar/derrubar; apagar pede confirmação fora', () => {
-    const onIntent = vi.fn()
-    render(<EnvironmentRow env={env()} pcAvailable onIntent={onIntent} />)
-    expect(screen.getByText('No ar')).toBeTruthy()
-    expect(screen.getByText(/CPU 1.5% · RAM 120MiB/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Derrubar' }))
-    expect(mocks.action).toHaveBeenCalledWith({ action: 'down' }, expect.anything())
-    fireEvent.click(screen.getByRole('button', { name: 'Apagar' }))
-    expect(onIntent).toHaveBeenCalledWith({ kind: 'delete' })
-    // Limites não lidos: nada de texto nem selo.
-    expect(document.body.textContent).not.toContain('limites:')
-    expect(screen.queryByText(/faça Deploy/)).toBeNull()
-  })
-
-  it('limites aplicados na linha; salvos diferentes dos aplicados pedem Deploy (OPE-193)', () => {
-    const applied = { memoryGb: 4, swapGb: null, cpus: 2 }
-    const services = [{ ...env().services[0]!, limits: applied }]
-    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', ...applied } })} pcAvailable onIntent={vi.fn()} />)
-    expect(screen.getByText(/limites: RAM 4 GiB · swap padrão · 2 CPUs/)).toBeTruthy()
-    expect(screen.queryByText(/faça Deploy/)).toBeNull()
-    cleanup()
-    render(<EnvironmentRow env={env({ services, limitsConfigured: true, deployedLimits: { mode: 'shared', ...applied }, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} />)
-    expect(screen.getByText('Limites salvos diferem dos aplicados: faça Deploy')).toBeTruthy()
-    cleanup()
-    // Nunca implantado: não há o que comparar.
-    render(<EnvironmentRow env={env({ services, deployedOn: null, limitsConfigured: true, limits: { mode: 'shared', memoryGb: 8, swapGb: null, cpus: 2 } })} pcAvailable onIntent={vi.fn()} />)
-    expect(screen.queryByText(/faça Deploy/)).toBeNull()
-  })
-
-  it('ambiente no PC com o túnel fechado: ações bloqueadas', () => {
-    render(<EnvironmentRow env={env({ runOn: 'pc', deployedOn: { buildOn: 'pc', runOn: 'pc' } })} pcAvailable={false} onIntent={vi.fn()} />)
-    expect(screen.getByRole('button', { name: 'Levantar' }).hasAttribute('disabled')).toBe(true)
-    expect(screen.getByRole('button', { name: /Redeploy/ }).hasAttribute('disabled')).toBe(true)
-  })
-})
 
 const deploy = (overrides: Partial<EnvironmentDeploySummaryDto> = {}): EnvironmentDeploySummaryDto => ({
   id: 'd1',
@@ -143,19 +106,6 @@ describe('versão e histórico de deploys', () => {
     expect([formatDuration(45_000), formatDuration(192_000), formatDuration(3_900_000)]).toEqual(['45 s', '3 min 12 s', '1 h 05 min'])
   })
 
-  it('a linha mostra a versão e o Histórico fica disponível mesmo durante o deploy', () => {
-    const onIntent = vi.fn()
-    render(<EnvironmentRow env={env({ lastDeploy: deploy({ status: 'running', finishedAt: null, durationMs: null }) })} pcAvailable onIntent={onIntent} />)
-    expect(screen.getByText('v1.44.0')).toBeTruthy()
-    expect(screen.getByText('Implantando')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Levantar' }).hasAttribute('disabled')).toBe(true)
-    // "Último deploy …" leva à página do log (OPE-208: antes abria a gaveta).
-    expect(screen.getByRole('link', { name: /Último deploy em andamento/ }).getAttribute('href')).toBe('/ambientes/deploys/d1')
-    const history = screen.getByRole('button', { name: 'Histórico' })
-    expect(history.hasAttribute('disabled')).toBe(false)
-    fireEvent.click(history)
-    expect(onIntent).toHaveBeenCalledWith({ kind: 'history' })
-  })
 
   it('histórico: data, duração, build → execução, resultado, ref@commit, versão, marcas e erro; a linha é o link para a página do log', () => {
     mocks.deploys.data = [deploy(), deploy({ id: 'd2', kind: 'move', status: 'failed', durationMs: 45_000, ref: 'feature', commit: null, error: 'Sobe no servidor falhou (código 1)', skipBuild: false, resumed: false, version: null })]

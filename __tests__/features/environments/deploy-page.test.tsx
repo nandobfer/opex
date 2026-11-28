@@ -37,7 +37,6 @@ for (const name of ['AdoptDialog', 'ComposeDialog', 'DeleteEnvironmentDialog', '
   vi.doMock(`@/features/environments/components/${name}`, () => ({ [name]: () => null }))
 }
 vi.mock('@/features/environments/components/builder/BuilderCard', () => ({ BuilderCard: () => null }))
-vi.mock('@/features/environments/components/EnvironmentFormDialog', () => ({ EnvironmentFormDialog: () => null, NO_HOSTS: { server: null, pc: null } }))
 
 import { loadDeployPage, REMOVED_ENVIRONMENT_NAME } from '@/features/environments/server/deploy-page'
 import { DeployLogPage, deployPageDescription } from '@/features/environments/components/DeployLogPage'
@@ -134,7 +133,7 @@ describe('Ambientes abre a página do log', () => {
   })
 
   it('deploy iniciado na linha: navega para /ambientes/deploys/<id> (antes abria a gaveta)', async () => {
-    mocks.list.data = { items: [env()], unmanaged: [], pcAvailable: true, pcReason: null, hosts: { server: null, pc: null }, checkedAt: new Date().toISOString() }
+    mocks.list.data = { items: [env()], unmanaged: [], pcAvailable: true, pcReason: null, hosts: { server: null, pc: null }, portLinkHost: null, checkedAt: new Date().toISOString() }
     mocks.action.mockImplementation((_input: unknown, options: { onSuccess: (result: { deployId: string | null; output: string | null }) => void }) => options.onSuccess({ deployId: 'd9', output: null }))
     const { EnvironmentsPage } = await import('@/features/environments/components/EnvironmentsPage')
     render(<EnvironmentsPage />)

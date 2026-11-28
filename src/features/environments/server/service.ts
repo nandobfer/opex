@@ -7,13 +7,17 @@ import { quote } from "@/features/local-docker/commands"
 import { LocalDockerPreview } from "@/features/local-docker/server/models"
 import { containerVersionsCommand, envDir, gitDirsCommand, parseContainerVersions, parseGitDirs, parseSnapshot, parseSnapshotHost, snapshotCommand, type ComposeContainer, type ComposePlan } from "../commands"
 import { ENVIRONMENTS_AUDIT_ENTITY, MANAGED_COMPOSE_FILE, REGISTRY_CONTAINER } from "../constants"
+import { withReach } from "../container-ports"
 import { composeBytes, composeContentProblem } from "../managed-compose"
 import { type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
 import { environmentLimitsOf, environmentLimitsText } from "../resource-limits"
+import { memoryUsedBytes, parsePercent, type ContainerUsageDto } from "../resource-usage"
+import { diskUsageFor } from "./disk-usage"
+import { composeOverridesText } from "../service-overrides"
 import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, HostCapacityDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
 import { Environment, EnvironmentComposeVersion, EnvironmentDeploy, environmentsDb, type IEnvironment, type IEnvironmentDeploy } from "./models"
-import { envLog, machineAccess, publishEnvironment, runEnvHost } from "./settings"
+import { envLog, loadEnvironmentsSettings, machineAccess, publishEnvironment, runEnvHost } from "./settings"
 import type { HostRunner } from "@/features/local-docker/server/shell"
 
 /** Pasta e arquivos do compose de um ambiente (puro). */
@@ -58,6 +62,8 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
         limits: environmentLimitsOf(env.limits),
         limitsConfigured: Boolean(env.limits),
         deployedLimits: env.deployedLimits ?? null,
+        composeOverrides: env.composeOverrides ?? null,
+        deployedComposeOverrides: env.deployedComposeOverrides ?? null,
         deployedOn: env.deployedOn,
         deployedVersion: env.deployedVersion ?? null,
         deployedComposeVersion: env.deployedComposeVersion ?? null,
@@ -68,7 +74,23 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
     }
 }
 
-const toService = (item: ComposeContainer): ServiceStatusDto => ({ service: item.service, container: item.name, state: item.state, status: item.status, ports: item.ports, cpu: item.cpu, memory: item.memory, version: versionCache().get(item.id) ?? null, limits: item.limits })
+type DiskRead = ReturnType<typeof diskUsageFor>
+
+/** Uso em números do container (OPE-211): CPU e RAM do `docker stats`, swap do cgroup e o disco da última leitura. */
+export function usageOf(item: ComposeContainer, disk: DiskRead): ContainerUsageDto {
+    const running = item.state === "running"
+    const read = disk?.values.get(item.name) ?? null
+    return {
+        cpuPercent: running ? parsePercent(item.cpu) : null,
+        memoryBytes: running ? memoryUsedBytes(item.memory) : null,
+        swapBytes: running ? (item.swapBytes ?? null) : null,
+        diskBytes: read?.bytes ?? null,
+        volumes: read?.volumes ?? [],
+        diskCheckedAt: disk?.checkedAt ?? null,
+    }
+}
+
+const toService = (item: ComposeContainer, reach: { runOn: Machine; forwarded: readonly number[] }, disk: DiskRead): ServiceStatusDto => ({ service: item.service, container: item.name, state: item.state, status: item.status, ports: item.ports, listen: withReach(item.listen ?? [], reach), cpu: item.cpu, memory: item.memory, version: versionCache().get(item.id) ?? null, limits: item.limits, usage: usageOf(item, disk) })
 
 /** Versão do `package.json` por id de container (por processo): o id muda quando o compose recria o container. */
 const VERSIONS_KEY = Symbol.for("opex.environments.container-versions")
@@ -119,6 +141,8 @@ export function groupUnmanaged(machine: Machine, containers: ComposeContainer[],
                 git: Boolean(first.workingDir && gitDirs.has(first.workingDir)),
                 containers: items.length,
                 running: items.filter((item) => item.state === "running").length,
+                services: [...new Set(items.map((item) => item.service).filter(Boolean))].sort(),
+                ports: [...new Set(items.flatMap((item) => (item.listen ?? []).flatMap((port) => (port.published ? [port.container, port.published] : [port.container]))))].sort((a, b) => a - b),
             }
         })
         .sort((a, b) => a.projectName.localeCompare(b.projectName))
@@ -165,9 +189,14 @@ async function itemsOf(envs: IEnvironment[], byMachine: Record<Machine, ComposeC
     )
     // Deploy cujo processo morreu (ex.: o redeploy do próprio app): retomado em segundo plano.
     void import("./resume").then(({ scheduleDeployResume }) => scheduleDeployResume(run)).catch((error: unknown) => envLog.warn({ err: error }, "[environments] Falha ao retomar deploys interrompidos"))
+    // Disco dos containers: a última leitura (no máximo a cada 5 min, em segundo plano; nunca espera aqui).
+    const disk: Record<Machine, DiskRead> = {
+        server: byMachine.server.some((item) => projects.has(item.project)) ? diskUsageFor("server", access.targets.server.context, run) : null,
+        pc: byMachine.pc.some((item) => projects.has(item.project)) ? diskUsageFor("pc", access.targets.pc.context, run) : null,
+    }
     const items = envs.map((env) => {
         const on = env.deployedOn?.runOn ?? env.runOn
-        const services = byMachine[on].filter((item) => item.project === composeProjectOf(env)).map(toService)
+        const services = byMachine[on].filter((item) => item.project === composeProjectOf(env)).map((item) => toService(item, { runOn: on, forwarded: env.ports }, disk[on]))
         return toEnvironmentDto(env, (env.lastDeployId && deploys.get(env.lastDeployId)) || null, services)
     })
     return { items, byMachine }
@@ -177,11 +206,12 @@ async function itemsOf(envs: IEnvironment[], byMachine: Record<Machine, ComposeC
 export async function listEnvironments(run: HostRunner = runEnvHost): Promise<EnvironmentsListDto> {
     await environmentsDb()
     const access = await machineAccess(run)
-    const [envs, server, pc, previews] = await Promise.all([
+    const [envs, server, pc, previews, settings] = await Promise.all([
         Environment.find().sort({ name: 1 }).lean<IEnvironment[]>(),
         snapshot("server", access.targets.server.context, run),
         access.pcAvailable ? snapshot("pc", access.targets.pc.context, run) : Promise.resolve(EMPTY_SNAPSHOT),
         previewProjects(),
+        loadEnvironmentsSettings(),
     ])
     const { items, byMachine } = await itemsOf(envs, { server: server.containers, pc: pc.containers }, access, run)
     const managed = new Set(envs.map(composeProjectOf))
@@ -193,7 +223,7 @@ export async function listEnvironments(run: HostRunner = runEnvHost): Promise<En
         const git = dirs.length ? parseGitDirs((await run(gitDirsCommand(machine, dirs), 20_000, { retryOnLost: true })).output) : new Set<string>()
         unmanaged.push(...groupUnmanaged(machine, containers, excluded, git))
     }
-    return { items, unmanaged, pcAvailable: access.pcAvailable, pcReason: access.pcReason, hosts: { server: server.host, pc: pc.host }, checkedAt: new Date().toISOString() }
+    return { items, unmanaged, pcAvailable: access.pcAvailable, pcReason: access.pcReason, hosts: { server: server.host, pc: pc.host }, portLinkHost: settings.portLinkHost || null, checkedAt: new Date().toISOString() }
 }
 
 export const composeProjectOf = (env: Pick<IEnvironment, "source">) => env.source.projectName
@@ -243,7 +273,7 @@ async function assertUnique(input: Pick<EnvironmentInput, "slug" | "source">, ig
     if (others.some((env) => env.source.projectName === input.source.projectName)) throw new DomainError(409, `Já existe um ambiente com o projeto do compose "${input.source.projectName}"`, "ENVIRONMENT_PROJECT_TAKEN")
 }
 
-const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" | "healthUrl" | "buildOn" | "runOn" | "limits"> & { env: { key: string }[] }) => ({
+const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" | "healthUrl" | "buildOn" | "runOn" | "limits" | "composeOverrides"> & { env: { key: string }[] }) => ({
     nome: env.name,
     slug: env.slug,
     origem: env.source.kind,
@@ -255,6 +285,8 @@ const auditView = (env: Pick<IEnvironment, "name" | "slug" | "source" | "ports" 
     buildEm: env.buildOn,
     executarEm: env.runOn,
     limites: environmentLimitsText(environmentLimitsOf(env.limits)),
+    // Do `environment` dos serviços, só as chaves (OPE-211).
+    servicos: composeOverridesText(env.composeOverrides) || "sem ajustes",
 })
 
 /** Compose gerenciado válido (vazio, acima do limite ou YAML inválido: 422 com a linha). */
@@ -317,7 +349,7 @@ export async function adoptProject(input: AdoptInput, actorId: string, run: Host
     if (!project) throw new DomainError(404, "Projeto não encontrado entre os não gerenciados (ele ainda está em execução?)", "ENVIRONMENT_PROJECT_NOT_FOUND")
     if (!project.workingDir || !project.configFiles.length) throw new DomainError(422, "O projeto não informa a pasta nem os arquivos do compose (labels do Docker Compose ausentes)", "ENVIRONMENT_PROJECT_INCOMPLETE")
     const source = { kind: "adopted" as const, machine: project.machine, workingDir: project.workingDir, configFiles: project.configFiles, projectName: project.projectName, git: project.git, pullOnRedeploy: false }
-    const env = await createEnvironment({ name: input.name, slug: input.slug, source, env: [], ports: [], healthUrl: "", buildOn: project.machine, runOn: project.machine, limits: null }, actorId)
+    const env = await createEnvironment({ name: input.name, slug: input.slug, source, env: [], ports: [], healthUrl: "", buildOn: project.machine, runOn: project.machine, limits: null, composeOverrides: null }, actorId)
     await Environment.updateOne({ _id: env._id }, { $set: { deployedOn: { buildOn: project.machine, runOn: project.machine } } })
     return { ...env, deployedOn: { buildOn: project.machine, runOn: project.machine } }
 }

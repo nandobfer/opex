@@ -159,6 +159,15 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
 - Ações do formulário ficam num **rodapé em linha**, nunca em barra flutuante/`sticky`:
   `flex flex-wrap justify-end gap-2 border-t pt-6` com todos os botões à direita
   (`FormFooter` de `src/components/ui/form-footer.tsx`, `DetailActions`, `TabFooter`).
+- Páginas Novo/Editar usam o kit de `src/components/form-page/` (OPE-211): `FormPageHeader` (voltar,
+  título, descrição, status e ações à direita; o `ServiceForm` do Financeiro e o ambiente usam),
+  `FormSection` (card com âncora `scroll-mt-6`, título, descrição e ações), `FormSectionNav` (índice das
+  seções: seção visível por `IntersectionObserver`, ponto nas alteradas, alerta nas com erro; preso à
+  lateral só no `lg`, faixa no topo abaixo dele; `scrollToSection` rola e foca o campo inválido) e
+  `useUnsavedChangesGuard(dirty)` ("Descartar alterações?" no Cancelar/voltar, nos links internos do app
+  , no botão voltar do navegador — `popstate` com uma entrada sentinela de mesma URL no histórico, consumida
+  antes de qualquer saída confirmada para o editor não ficar duplicado — e no `beforeunload`). Formulário longo: seções em cards com
+  o índice, ações no cabeçalho e no `FormFooter`.
 - Escolha múltipla em lista longa usa `MultiAutocomplete` (`src/components/ui/multi-autocomplete.tsx`):
   busca tolerante (fuse.js), teclado (↑/↓/Enter/Esc, Backspace remove o último), grupos com
   "Selecionar todas" opcional e os escolhidos como chips abaixo do campo. Valores livres usam
@@ -394,6 +403,16 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   e nome acessível), para o seletor e o campo (`h-8`) caberem na mesma linha do item. Os rótulos usam
   `whitespace-nowrap` (nunca quebram dentro do botão); num cabeçalho, mantenha o grupo com `shrink-0`
   para ele passar inteiro à linha seguinte em vez de espremer as opções.
+- Listas de **nome e valor** (variáveis, environment, labels) usam `KeyValueRows` (`src/components/ui/key-value-rows.tsx`,
+  controlado, com entrada/saída animadas e `KEY_VALUE_ROW` para o skeleton). Linhas de lista sem id próprio que animam
+  entrada e saída usam `useRowIds(length)` do mesmo arquivo (chaves estáveis; `removeAt` antes de tirar a linha).
+- **Linhas de consumo** (CPU, RAM, swap, disco e afins) usam `UsageBars` (`src/components/metrics/UsageBars.tsx`,
+  OPE-211) sobre a `UsageBar`: lista de `{ key, label, percent, detail, ariaLabel }` ou `{ key, label, emptyText }` (linha
+  só com texto, ex.: "Sem swap", "lendo…"). Usada pelo painel "Servidor e quota" (`HostMetricsRows`) e pelos cards de
+  Ambientes; não monte as barras à mão.
+- **Copiar um valor** (link, token, comando) usa `CopyButton` (`src/components/ui/copy-button.tsx`, OPE-211): botão de
+  ícone com `label` (rótulo acessível e `title`), `navigator.clipboard`, toast `successMessage` e o ícone de copiado
+  animado que volta em 1,5 s (`resetMs={null}` mantém). O `SecretReveal` usa o mesmo botão; não escreva outro copiar.
 - **Provedor e modelo de IA** usam sempre os componentes de `src/features/ai/components`: `AiProviderTabs`
   (só os conectados; desconectado desabilitado com "X: não conectado"; `allowed`, `extraOptions` como
   "Local"/"Desligado" e `emptyText`) + `ModelPickerField` (+ `VariantSelectField`). Usados em
