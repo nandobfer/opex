@@ -31,7 +31,7 @@ afterEach(() => {
 const stored = (overrides: Record<string, unknown> = {}) => ({
   integrationId: 'pusher',
   environment: 'interno',
-  debugMode: true,
+  debugMode: false,
   publicValues: {},
   secretValues: {},
   ...overrides,
@@ -47,7 +47,6 @@ describe('getIntegrationConfig — precedência banco → .env → default', () 
     expect(integration.values.url).toBe('https://soketi.env')
     expect(integration.values.secret).toBe('secret-env')
     expect(integration.secretSources.secret).toBe('env')
-    expect(integration.environment).toBe('externo')
     expect(integration.stored).toBe(false)
   })
 
@@ -62,8 +61,9 @@ describe('getIntegrationConfig — precedência banco → .env → default', () 
     expect(integration.values.url).toBe('https://soketi.db')
     expect(integration.values.secret).toBe('secret-db')
     expect(integration.secretSources.secret).toBe('db')
-    expect(integration.environment).toBe('interno')
-    expect(integration.debugMode).toBe(true)
+    // Campos legados do documento (ambiente e modo debug) não são lidos nem expostos.
+    expect(integration).not.toHaveProperty('environment')
+    expect(integration).not.toHaveProperty('debugMode')
   })
 
   it('segredo limpo explicitamente (null) NÃO volta a usar o .env', async () => {

@@ -35,7 +35,6 @@ const opexIntegrations = [
         id: "orcamentos",
         name: "Clientes",
         description: "Clientes do portal público: repositórios, custo por hora e fator de lucro",
-        defaultEnvironment: "externo",
         path: "clientes",
         legacyPaths: ["orcamentos"],
         streamsDebugOverPusher: true,
@@ -46,7 +45,6 @@ const opexIntegrations = [
         id: "builder_machine",
         name: "Builder Machine",
         description: "Build e containers das prévias no Docker do seu PC (WSL) por túnel SSH; túnel fechado usa o servidor",
-        defaultEnvironment: "interno",
         streamsDebugOverPusher: true,
         publicFields: [{ key: "active", label: "Integração ativa", description: "Desativada, as prévias ficam no servidor e as rotas da Builder Machine não respondem", kind: "boolean", defaultValue: false }],
         // Chave privada colada em "Inserir chave existente" (aba Preparo do PC); gerada pelo app, fica só no host.
@@ -56,7 +54,6 @@ const opexIntegrations = [
         id: "engramind",
         name: "Engramind",
         description: "Rede de memórias para agentes (serviço Rust): configurações, provedores, apps, agentes, tokens, operação e variáveis de ambiente",
-        defaultEnvironment: "externo",
         // O Engramind publica o contrato da versão em execução em `GET /openapi.json` (sem token).
         explorer: { baseUrlField: "baseUrl", authLabel: "Bearer com o token admin do Opex (guardado cifrado; nunca vai ao navegador)" },
         defaultSwagger: { baseUrlField: "baseUrl", path: "/openapi.json" },
@@ -89,7 +86,6 @@ const opexIntegrations = [
         id: "evolution-api",
         name: "Evolution API",
         description: "WhatsApp pela Evolution API: instância, pareamento por QR code ou código, webhook e operações",
-        defaultEnvironment: "interno",
         streamsDebugOverPusher: true,
         publicFields: [
             { key: "internalUrl", label: "URL interna", description: "Endereço que o servidor do Opex alcança (rede evolution-network)", kind: "url", placeholder: "http://evolution-api:8080", required: true },
@@ -111,7 +107,6 @@ const gotenberg = defineIntegration({
     id: "gotenberg",
     name: "Gotenberg (PDF)",
     description: "Conversão de HTML em PDF e PNG dos documentos dos agentes e validade das URLs desses documentos",
-    defaultEnvironment: "interno",
     streamsDebugOverPusher: true,
     publicFields: [
         { key: "url", label: "URL interna", description: "Endereço que o servidor do Opex alcança (rede gotenberg-network)", kind: "url", placeholder: "http://gotenberg:3000", required: true },
@@ -144,7 +139,6 @@ const googleDrive = defineIntegration({
     id: "google_drive",
     name: "Google Drive",
     description: "Fonte de tarefas a partir de planilhas do Google Sheets",
-    defaultEnvironment: "externo",
     status: "in-development",
     streamsDebugOverPusher: true,
     publicFields: [],

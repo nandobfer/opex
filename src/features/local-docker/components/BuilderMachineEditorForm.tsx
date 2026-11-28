@@ -38,7 +38,7 @@ interface BuilderMachineEditorFormProps {
     data: IntegrationDetailDto
     draft: Draft
     setDraft: Dispatch<SetStateAction<Draft>>
-    /** Rascunho da integração (ambiente e modo debug) com alterações. */
+    /** Rascunho da integração ("Integração ativa") com alterações. */
     dirty: boolean
     pending: boolean
     onSave: () => Promise<boolean>
@@ -48,7 +48,7 @@ interface BuilderMachineEditorFormProps {
 /**
  * Página da integração Builder Machine (`local-docker`) em abas: Geral, Túnel do Docker do PC,
  * Conexão com o PC, Preparo do PC e Docker do PC. A configuração do PC é um formulário só (Conexão +
- * Docker); Salvar grava também o Geral da integração (ambiente, modo debug e "Integração ativa").
+ * Docker); Salvar grava também o Geral da integração ("Integração ativa").
  * Desativada (como salva), a página mostra só o Geral e a ativação, com as demais abas bloqueadas.
  */
 export function BuilderMachineEditorForm({ def, data, draft, setDraft, dirty, pending, onSave, onUndo }: BuilderMachineEditorFormProps) {

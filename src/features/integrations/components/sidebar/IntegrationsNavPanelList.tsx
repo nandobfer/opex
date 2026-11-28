@@ -104,7 +104,7 @@ export function IntegrationsNavPanelList({ onNavigate, onTest, onDebug }: Integr
                             <IntegrationStatusDot health={integration.health} />
                             <span className="min-w-0 flex-1 truncate">{integration.name}</span>
                         </Link>
-                        <IntegrationRowActions integration={integration} onTest={() => onTest(integration.id)} onDebug={() => onDebug(integration.id)} size="sm" />
+                        <IntegrationRowActions onTest={() => onTest(integration.id)} onDebug={() => onDebug(integration.id)} size="sm" />
                     </li>
                 )
             })}

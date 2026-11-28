@@ -115,7 +115,6 @@ describe('updateIntegration', () => {
       {
         publicValues: { appId: 'app-novo' },
         secrets: { secret: { action: 'set', value: 'secret-novo' } },
-        environment: 'externo',
       },
       actor,
     )
@@ -124,7 +123,8 @@ describe('updateIntegration', () => {
     expect(filter).toEqual({ integrationId: 'pusher' })
     expect(update._auditContext).toEqual({ userId: 'local' })
     expect(update.$set['publicValues.appId']).toBe('app-novo')
-    expect(update.$set.environment).toBe('externo')
+    expect(update.$set).not.toHaveProperty('environment')
+    expect(update.$set).not.toHaveProperty('debugMode')
     expect(isEncryptedSecret(update.$set['secretValues.secret'])).toBe(true)
     expect(JSON.stringify(update)).not.toContain('secret-novo')
     expect(mocks.invalidateStoredIntegrations).toHaveBeenCalled()
@@ -165,8 +165,10 @@ describe('updateIntegration', () => {
 
   it('cria o documento no primeiro salvamento quando não houve seed', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(null)
-    await updateIntegration('pusher', { debugMode: true }, actor)
+    await updateIntegration('pusher', { publicValues: { appId: 'app-novo' } }, actor)
     expect(mocks.save).toHaveBeenCalled()
+    // Documento novo leva os valores legados que versões anteriores (mesmo banco) exigem.
+    expect(mocks.save.mock.contexts[0]).toMatchObject({ integrationId: 'pusher', environment: 'externo', debugMode: false })
     expect(mocks.recordAudit.mock.calls[0][0].acao).toBe('CRIAR')
   })
 })
@@ -195,7 +197,7 @@ describe('gancho de ativação (Builder Machine)', () => {
   it('sem mudança (já ativa) ou desativando: não dispara', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(stored(true))
     await updateIntegration('builder_machine', { publicValues: { active: true } }, actor)
-    await updateIntegration('builder_machine', { debugMode: true }, actor)
+    await updateIntegration('builder_machine', { swaggerUrl: '' }, actor)
     await updateIntegration('builder_machine', { publicValues: { active: false } }, actor)
     expect(mocks.enableHook).not.toHaveBeenCalled()
   })
@@ -237,9 +239,9 @@ describe('chaveiro dos provedores de IA (OPE-155)', () => {
     expect(JSON.stringify(detail)).not.toContain('gm-ativa')
   })
 
-  it('mudar só o debug não sincroniza nada com o Engramind', async () => {
+  it('mudar só a documentação não sincroniza nada com o Engramind', async () => {
     mocks.loadStoredIntegration.mockResolvedValue(stored('ai_openai'))
-    await updateIntegration('ai_openai', { debugMode: true }, actor)
+    await updateIntegration('ai_openai', { swaggerUrl: '' }, actor)
     await flush()
     expect(mocks.engramindSync).not.toHaveBeenCalled()
   })

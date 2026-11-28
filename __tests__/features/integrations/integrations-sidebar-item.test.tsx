@@ -44,15 +44,14 @@ const integration = (overrides: Partial<IntegrationListItemDto>): IntegrationLis
     id: "pusher",
     name: "Pusher",
     description: "Eventos em tempo real",
-    environment: "interno",
-    debugMode: false,
+    source: "library",
     health: { status: "ok" },
     configured: true,
     ...overrides,
 })
 
 const LIST = [
-    integration({ id: "github", name: "GitHub", health: { status: "error" }, debugMode: true }),
+    integration({ id: "github", name: "GitHub", health: { status: "error" } }),
     integration({ id: "ai", name: "Inteligência Artificial", health: { status: "warn" } }),
     integration({ id: "gemini", name: "Gemini", parent: "ai" }),
     integration({ id: "pusher", name: "Pusher", health: { status: "unknown" } }),
@@ -125,10 +124,10 @@ describe("IntegrationsSidebarItem — submenu de Integrações na sidebar (OPE-1
         expect(mocks.testDialog).toHaveBeenLastCalledWith("github")
     })
 
-    it("Debug abre o diálogo de debug; fica desabilitado sem o modo debug", () => {
+    it("Debug abre o diálogo de debug e está sempre disponível (debug sempre ativo)", () => {
         renderItem()
         openPanel()
-        expect(within(rows()[1]!).getByRole("button", { name: "Debug" }).hasAttribute("disabled")).toBe(true)
+        for (const row of rows()) expect(within(row).getByRole("button", { name: "Debug" }).hasAttribute("disabled")).toBe(false)
         fireEvent.click(within(rows()[0]!).getByRole("button", { name: "Debug" }))
         expect(panel()).toBeNull()
         expect(mocks.debugDialog).toHaveBeenLastCalledWith("github")

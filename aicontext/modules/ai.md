@@ -501,7 +501,7 @@ Quanto a chamada custaria paga por uso, em US$ por 1M de tokens; desconhecido é
   `/integracoes` e têm rotas próprias (`/integracoes/ia` em `app/(app)/integracoes/ia/page.tsx`;
   `/integracoes/ia/<provedor>` em `ia/[provider]/page.tsx`, provedor desconhecido = 404; `/integracoes/<id>` redireciona). O voltar da página do provedor leva ao hub.
 - Abas (`?aba=`, `AiEditorForm`): **Provedores** (lista com status, "Não configurado", Testar e
-  link para a página; mais o card Geral do hub) e **uma aba por agente**, na ordem do fluxo de
+  link para a página; sem card Geral: não há ambiente nem modo debug) e **uma aba por agente**, na ordem do fluxo de
   trabalho e com o nome **sem a palavra "Agente"** — a mesma ordem, os mesmos nomes e os mesmos ícones
   da categoria **Agentes** da sidebar, todos do catálogo `AGENT_CATALOG`
   (`src/features/agent-metrics/catalog.ts`; lista das abas em `src/features/ai/tabs.ts`, OPE-122):

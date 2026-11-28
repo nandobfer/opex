@@ -12,8 +12,8 @@ coleção antiga `agent_memories` fica intacta, lida só pelo backup da migraç�
 
 ## Integração `engramind` (`/integracoes/engramind`)
 
-- **Definição** (adaptador do Opex, `src/features/integrations/registry/definitions.ts`; servidor em `adapters/opex.server.ts`): ambiente `externo`, `streamsDebugOverPusher`, sem
-  `env`. Públicos, todos `group: "card"` (fora do detalhe e do PATCH genérico, para o card Geral não
+- **Definição** (adaptador do Opex, `src/features/integrations/registry/definitions.ts`; servidor em `adapters/opex.server.ts`): `streamsDebugOverPusher`, sem
+  `env`. Públicos, todos `group: "card"` (fora do detalhe e do PATCH genérico, para o formulário genérico não
   regravar URLs antigas): `baseUrl` (URL que o **servidor** do Opex alcança), `opexPublicUrl` (URL que o
   Engramind alcança para os webhooks) e `environmentId`. Salvar a conexão ou repetir o bootstrap
   invalida também o detalhe e a lista de `/integracoes`. Privados: `adminToken` e
@@ -70,7 +70,7 @@ insuficiente, "Reconfigure o token" (`QueryBoundary`). Todas têm skeleton, vazi
 | Aba | Conteúdo |
 |---|---|
 | Sobre | Resumo do Engramind e tópicos expansíveis (`help/about.ts`, o mesmo do "Saiba mais" de `/engramind`). |
-| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data), o card Geral (debug) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
+| Conexão (padrão) | URLs, token (só gravado, `SecretValueInput`), Ambiente (seletor com `GET /api/engramind/environments`), passos do bootstrap, estado (`whoami`: token, app, tipo, escopos, operações; webhook: URL, segredo e data) e o card **Documentação da API** (`ApiDocsCard`): campo "Documentação Swagger (OpenAPI)" com padrão `<URL base>/openapi.json` (o contrato publicado pela versão em execução do Engramind, sem token; `defaultSwagger` do catálogo, editável) e **Explorar** (explorador Swagger; o servidor injeta `Authorization: Bearer` com o token admin do Opex, que nunca vai ao navegador — adaptador `engramind` em `openapi/adapters.ts`). |
 | Configurações | Todas as chaves de `GET /v1/settings` (menos segredos; as da IA do Opex — `redator.provider/model/fallback_models/base_url` e `embedding.provider/model/dimensions/base_url` — aparecem **somente leitura**: "Edite na aba Provedores" e, nas URLs, "Definida pelo provedor escolhido"), agrupadas (Limites, Categorias, Memória, Contexto, Redator, Embeddings, Busca, Webhooks, Retenção). Cada `SettingField` tem rótulo + tooltip, controle gerado do metadado (número com intervalo, switch, `OptionTabs` até 4 opções, select, texto, chips para listas, `categories.list` reordenável com dnd-kit), padrão, intervalo, última alteração (app) e **Voltar ao padrão** (`null`). Grava só as alteradas (`changedSettings`), tudo ou nada; trocar provedor/modelo/URL/dimensão/prefixo do embedding pede confirmação ("valida o provedor e reindexa"). |
 | Visualização | Layout dos universos de memórias (OPE-142; ver "Aba Visualização"). |
 | Provedores | **IA do Opex** no topo (ver abaixo); `redator.api_key` e `embedding.api_key` (Gravar/Apagar; só "Configurada em …"), Testar Redator/embedding (configuração atual ou proposta em JSON, nada é gravado), Listar modelos por provedor (gemini/off desabilitados com tooltip) e Reindexar (confirmação; progresso de `get_status.embedding`, desabilitado durante `reindexing`). |

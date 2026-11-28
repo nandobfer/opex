@@ -1,3 +1,4 @@
+import { LEGACY_DOC_DEFAULTS } from "@nandobfer/integracoes"
 import { randomBytes } from "node:crypto"
 import { DomainError } from "@/lib/api/route"
 import { encryptSecret } from "@/lib/crypto/secretBox"
@@ -29,7 +30,7 @@ async function createOnce(actorId: string): Promise<string> {
     // Materializa o documento da integração se ainda não existe (sem sobrescrever o que já foi salvo).
     await Integration.updateOne(
         { integrationId: EVOLUTION_INTEGRATION_ID },
-        { $setOnInsert: { integrationId: EVOLUTION_INTEGRATION_ID, environment: "interno", debugMode: false, publicValues: {}, secretValues: {} } },
+        { $setOnInsert: { integrationId: EVOLUTION_INTEGRATION_ID, ...LEGACY_DOC_DEFAULTS, publicValues: {}, secretValues: {} } },
         { upsert: true },
     )
     const box = encryptSecret(randomBytes(32).toString("base64url"))

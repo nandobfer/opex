@@ -137,15 +137,20 @@ dono. Valores que antes viviam no `.env` são persistidos no MongoDB.
 ### Tela de listagem (`/integracoes`)
 
 - Cards no padrão dos provedores de IA (mesmo desenho de `AiProvidersTab`): Status (bolinha animada
-  com tooltip), Nome + badges (Ambiente e "Não configurado"), descrição truncada e um chevron. **O
+  com tooltip), Nome + badges (**origem do adaptador** e "Não configurado"), descrição truncada e um chevron. **O
   card inteiro é um link** para a página da integração (`integrationPath`) — não há mais botão
   "Editar".
-- Ações por card (fora do link): **Testar conexão** e **Debug** (desabilitado com motivo quando o
-  debug está desligado).
+- **Badge de origem** (`SourceBadge`, OPE-212): **"Biblioteca"** (`bg-primary/15 text-primary`) quando o
+  adaptador vem da `@nandobfer/integracoes` e **"Próprio"** (`bg-muted text-muted-foreground`) quando existe só
+  no Opex. A origem vem da definição (`source`: as da biblioteca saem com `library`; as criadas com
+  `defineIntegration` no Opex valem `app`) e chega na lista como `IntegrationListItemDto.source`. Estender uma
+  definição da biblioteca (`extendDefinition`, ex.: o GitHub com `commentOnCreate`) mantém "Biblioteca". No
+  Opex são "Próprio": Clientes (`orcamentos`), Builder Machine, Engramind, Evolution API, Gotenberg e Google
+  Drive.
+- Ações por card (fora do link): **Testar conexão** e **Debug** (sempre disponível: o debug é sempre ativo).
 - Cards "Em desenvolvimento" (Google Drive) no fim, sem ações.
 - Peças compartilhadas com o submenu da sidebar: `useTopLevelIntegrations` (lista sem as filhas, na
-  ordem da API, com o status ao vivo), `IntegrationRowActions` (Testar conexão e Debug, com
-  `DEBUG_DISABLED_REASON`) e `IntegrationActionDialogs` + `useIntegrationActionDialogs` (os dois diálogos).
+  ordem da API, com o status ao vivo), `IntegrationRowActions` (Testar conexão e Debug) e `IntegrationActionDialogs` + `useIntegrationActionDialogs` (os dois diálogos).
 
 ### Submenu de Integrações na sidebar (OPE-120)
 
@@ -171,20 +176,19 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 ### Página da integração (`/integracoes/[id]`)
 
 - Coluna do formulário: cabeçalho (voltar, nome + status, descrição, última alteração), cartões
-  Geral (ambiente, modo debug), Documentação da API, Campos públicos, Campos privados (só com
-  segredos), na API interna **Tokens de sistema**.
+  Documentação da API, Campos públicos, Campos privados (só com segredos), na API interna **Tokens de
+  sistema**. Não há escolha de ambiente (Interno/Externo) nem switch de modo debug (OPE-212).
 - Rodapé (`border-t`, `justify-end`): **Desfazer** e **Salvar**, desabilitados sem alterações.
-- **Logs do modo debug sob demanda (OPE-169)**: com o modo debug salvo (`data.debugMode`), o
-  cabeçalho mostra à direita do título um botão de ícone de debug (`DebugToggleButton`, "Abrir/Fechar
-  logs de debug", `aria-expanded` + `aria-controls` apontando para a coluna). Sem o modo debug, o botão
-  não aparece e os logs não abrem. O botão é um liga/desliga só de visualização: nada é salvo.
+- **Logs de debug sob demanda (OPE-169)**: o cabeçalho mostra sempre, à direita do título, um botão de
+  ícone de debug (`DebugToggleButton`, "Abrir/Fechar logs de debug", `aria-expanded` + `aria-controls`
+  apontando para a coluna). O botão é um liga/desliga só de visualização: nada é salvo.
   - Os componentes do terminal são compartilhados com o debug dos plugins (OPE-172): `DebugLogConsole`
     (+ `useDebugTerminal`), `useDebugLogStream`, `DebugLogsPanel`, `DebugLogsDialog` e
     `DebugToggleIconButton`. `IntegrationDebugConsole`, `LogsPanel`, `IntegrationDebugDialog` e
     `DebugToggleButton` são os adaptadores da integração (mesmo comportamento de antes).
   - Estado no `IntegrationEditor` (`debugOpen`), entregue ao `DetailHeader` de todos os formulários
     pelo contexto `IntegrationDebugToggleProvider` (`detail/debug-toggle-context.tsx`). Começa
-    **fechado** ao entrar ou trocar de integração e fecha sozinho quando o modo debug salvo vira `false`.
+    **fechado** ao entrar ou trocar de integração.
   - A partir de `xl`, abre o cartão de Logs na coluna da direita (`sticky`, altura da área visível do
     `<main>` via `useScrollViewportHeight`); a grade só ganha duas colunas com ela aberta. A barra do
     console tem sempre **Fechar** (X, `DebugConsoleCloseButton`, o mesmo da janela da lista). Fechar
@@ -235,12 +239,15 @@ mouse** abre um submenu à direita (`IntegrationsSidebarItem`, em
 - Cliente: `useIntegrationStatusLive(ids)` aplica os eventos no cache (`applyIntegrationHealth`).
   Polling: 60 s com Pusher e 15 s sem, só com a aba visível.
 
-### Modo debug
+### Debug (sempre ativo)
 
-- `integrationDebug(id)` (`@nandobfer/integracoes/modules/server/debug`) e `debugFetch(...)`: só atuam com o
-  debug ligado — exceto `integrationDebug(id, { always: true })`, para logs operacionais que a tela
-  sempre mostra (ex.: as centrais de desenvolvimento). Cada evento vai para o console do servidor, para `integration_logs` (TTL 48 h) e
-  para o Pusher `private-integration-{id}`, evento `debug-log`, agrupado a cada 500 ms.
+- Não existe modo debug a ligar (OPE-212): `integrationDebug(id)` (`@nandobfer/integracoes/modules/server/debug`)
+  e `debugFetch(...)` registram **todo** evento de toda integração. Cada evento vai para o console do servidor,
+  para `integration_logs` (TTL 48 h) e para o Pusher `private-integration-{id}`, evento `debug-log`, agrupado a
+  cada 500 ms.
+- Os campos `environment` e `debugMode` dos documentos de `integration_configs` continuam no banco só por
+  compatibilidade (versões anteriores leem o mesmo Mongo): documentos novos gravam `LEGACY_DOC_DEFAULTS` e a
+  central não lê nem expõe os dois. O PATCH recusa `environment` e `debugMode`.
 - Segredos e chaves sensíveis (`password`, `token`, `authorization`...) são mascarados.
 - O **Pusher não retransmite os próprios logs** (recursão).
 - Painel/modal **Logs** com busca (`DebugSearchBar` + `@xterm/addon-search`: Enter/Shift+Enter,

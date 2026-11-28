@@ -5,7 +5,6 @@ import { motion } from "framer-motion"
 import { Settings2, Smartphone, Webhook, MessagesSquare, Terminal } from "lucide-react"
 import type { IntegrationDef } from "@nandobfer/integracoes"
 import type { IntegrationDetailDto } from "@nandobfer/integracoes"
-import { GeneralCard } from "@nandobfer/integracoes/react"
 import { DetailActions } from "@nandobfer/integracoes/react"
 import { DetailHeader } from "@nandobfer/integracoes/react"
 import { PublicFieldsCard } from "@nandobfer/integracoes/react"
@@ -61,7 +60,6 @@ export function EvolutionEditorForm({ def, data, draft, setDraft, dirty, pending
         <DetailHeader def={def} data={data} hasAnySecret={data.secrets.apiKey?.configured === true} />
         <IntegrationTabs tabs={evolutionTabs} active={tabs.tab} onSelect={tabs.requestTab} pendingTab={tabs.pendingTab} onConfirmDiscard={tabs.confirmDiscard} onCancelDiscard={tabs.cancelDiscard} label="Seções da Evolution API">
             {tabs.tab === "geral" && <form className="flex flex-col gap-6" onSubmit={(event) => { event.preventDefault(); void save() }}>
-                <GeneralCard draft={draft} setDraft={setDraft} />
                 <PublicFieldsCard fields={def.publicFields.filter((field) => !field.group && field.key !== "version")} data={data} publicValues={draft.publicValues} setPublic={(key, value) => setDraft((prev) => ({ ...prev, publicValues: { ...prev.publicValues, [key]: value } }))} />
                 <SecretFieldsCard fields={def.secretFields.filter((field) => !field.group)} data={data} draft={draft} setDraft={setDraft} />
                 {useEnvironmentKey && <p className="text-sm text-muted-foreground">Chave disponível no ambiente. Será usada ao salvar.</p>}
@@ -72,7 +70,7 @@ export function EvolutionEditorForm({ def, data, draft, setDraft, dirty, pending
             {tabs.tab === "instancia" && <InstanceTab />}
             {tabs.tab === "webhook" && <WebhookTab />}
             {tabs.tab === "operacoes" && <OperationsTab instance={instance} />}
-            {tabs.tab === "debug" && (data.debugMode ? <IntegrationDebugConsole integrationId="evolution-api" title="Debug da Evolution API" /> : <p className="text-sm text-muted-foreground">Ative o modo debug na aba Geral para acompanhar as chamadas.</p>)}
+            {tabs.tab === "debug" && <IntegrationDebugConsole integrationId="evolution-api" title="Debug da Evolution API" />}
         </IntegrationTabs>
     </motion.div>
 }

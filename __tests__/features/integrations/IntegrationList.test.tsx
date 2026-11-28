@@ -43,8 +43,7 @@ const item = (overrides: Partial<IntegrationListItemDto>): IntegrationListItemDt
     id: "pusher",
     name: "Pusher",
     description: "Eventos em tempo real para as telas do app",
-    environment: "interno",
-    debugMode: false,
+    source: "library",
     health: { status: "ok" },
     configured: true,
     ...overrides,
@@ -55,27 +54,29 @@ beforeEach(() => {
 })
 
 describe("IntegrationList", () => {
-    it("mostra nome, descrição e ambiente de cada integração", () => {
+    it("mostra nome, descrição e a origem do adaptador (Biblioteca ou Próprio)", () => {
         mocks.useIntegrations.mockReturnValue({
-            data: [item({}), item({ id: "crons", name: "Crons", description: "Rotinas", environment: "externo" })],
+            data: [item({}), item({ id: "engramind", name: "Engramind", description: "Memórias", source: "app" })],
             isLoading: false,
         })
         render(<IntegrationList />)
         const row = screen.getByText("Pusher").closest("li")!
         expect(within(row).getByText("Eventos em tempo real para as telas do app")).toBeTruthy()
-        expect(within(row).getByText("Interno")).toBeTruthy()
-        expect(within(screen.getByText("Crons").closest("li")!).getByText("Externo")).toBeTruthy()
+        expect(within(row).getByText("Biblioteca")).toBeTruthy()
+        expect(within(screen.getByText("Engramind").closest("li")!).getByText("Próprio")).toBeTruthy()
+        expect(screen.queryByText("Interno")).toBeNull()
+        expect(screen.queryByText("Externo")).toBeNull()
     })
 
-    it("Debug fica desabilitado quando o modo debug está desligado", () => {
-        mocks.useIntegrations.mockReturnValue({ data: [item({ debugMode: false })], isLoading: false })
+    it("Debug está sempre disponível (o debug é sempre ativo)", () => {
+        mocks.useIntegrations.mockReturnValue({ data: [item({})], isLoading: false })
         render(<IntegrationList />)
         const debug = screen.getByRole("button", { name: "Debug" })
-        expect(debug.hasAttribute("disabled")).toBe(true)
+        expect(debug.hasAttribute("disabled")).toBe(false)
     })
 
     it("o card inteiro é um link para a página da integração; testar e debug abrem os modais", () => {
-        mocks.useIntegrations.mockReturnValue({ data: [item({ debugMode: true })], isLoading: false })
+        mocks.useIntegrations.mockReturnValue({ data: [item({})], isLoading: false })
         render(<IntegrationList />)
 
         expect(screen.getByText("Pusher").closest("a")!.getAttribute("href")).toBe("/integracoes/pusher")

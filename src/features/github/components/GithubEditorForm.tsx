@@ -9,7 +9,6 @@ import { ApiDocsCard } from "@nandobfer/integracoes/react"
 import { DetailActions } from "@nandobfer/integracoes/react"
 import { DetailHeader } from "@nandobfer/integracoes/react"
 import type { Draft } from "@nandobfer/integracoes/react"
-import { GeneralCard } from "@nandobfer/integracoes/react"
 import { PublicFieldsCard } from "@nandobfer/integracoes/react"
 import { SecretFieldsCard } from "@nandobfer/integracoes/react"
 import { IntegrationTabs, type IntegrationTabDef } from "@nandobfer/integracoes/react"
@@ -75,7 +74,6 @@ export function GithubEditorForm({ def, data, draft, setDraft, dirty, pending, o
             <IntegrationTabs tabs={tabs} active={tab} onSelect={requestTab} pendingTab={pendingTab} onConfirmDiscard={confirmDiscard} onCancelDiscard={cancelDiscard} label="Seções da integração GitHub">
                 {tab === "geral" && (
                     <>
-                        <GeneralCard draft={draft} setDraft={setDraft} />
                         {secretFields.length > 0 && <SecretFieldsCard fields={secretFields} data={data} draft={draft} setDraft={setDraft} />}
                         {regularFields.length > 0 && <PublicFieldsCard fields={regularFields} data={data} publicValues={draft.publicValues} setPublic={setPublic} />}
                         <ApiDocsCard data={data} draft={draft} setDraft={setDraft} dirty={dirty} onExplore={onExplore} />

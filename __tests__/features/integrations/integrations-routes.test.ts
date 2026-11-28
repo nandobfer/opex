@@ -108,12 +108,18 @@ describe('GET/PATCH /api/integrations/[id]', () => {
   it('PATCH salva com o usuário local e devolve o detalhe', async () => {
     mocks.updateIntegration.mockResolvedValue({ id: 'pusher' })
     const res = await PATCH(
-      new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ publicValues: { appId: '123' }, debugMode: true }) }),
+      new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ publicValues: { appId: '123' } }) }),
       params('pusher'),
     )
     expect(res.status).toBe(200)
     expect((await res.json()).message).toBe('Integração salva')
-    expect(mocks.updateIntegration).toHaveBeenCalledWith('pusher', { publicValues: { appId: '123' }, debugMode: true }, 'local')
+    expect(mocks.updateIntegration).toHaveBeenCalledWith('pusher', { publicValues: { appId: '123' } }, 'local')
+  })
+
+  it('PATCH recusa ambiente e modo debug (400, sem gravar)', async () => {
+    const res = await PATCH(new NextRequest('http://x', { method: 'PATCH', body: JSON.stringify({ debugMode: true }) }), params('pusher'))
+    expect(res.status).toBe(400)
+    expect(mocks.updateIntegration).not.toHaveBeenCalled()
   })
 
   it('PATCH aceita a documentação Swagger e recusa URL que não é http(s)', async () => {

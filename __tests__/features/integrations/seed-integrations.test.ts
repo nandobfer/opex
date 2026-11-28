@@ -41,12 +41,12 @@ describe('seedIntegrationsFromEnv', () => {
     expect(JSON.stringify(pusher)).not.toContain('secret-env')
   })
 
-  it('leva os defaults do código, com debug desligado', async () => {
+  it('leva os defaults do código e os valores legados de ambiente/debug (compatibilidade)', async () => {
     await seedIntegrationsFromEnv()
     const pusher = insertFor('pusher')
     expect(pusher.publicValues).toMatchObject({ mode: 'cluster', cluster: 'sa1' })
     expect(pusher.debugMode).toBe(false)
-    expect(insertFor('internal_api')).toMatchObject({ environment: 'interno', publicValues: {}, secretValues: {} })
+    expect(insertFor('internal_api')).toMatchObject({ environment: 'externo', debugMode: false, publicValues: {}, secretValues: {} })
     expect(insertFor('crons').publicValues.jobs[0].schedule).toEqual({ type: 'interval', minutes: 5 })
   })
 

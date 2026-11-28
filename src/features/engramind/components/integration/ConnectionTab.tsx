@@ -16,7 +16,6 @@ import { FORM_GRID } from "@/components/ui/form-grid"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
 import { DetailActions } from "@nandobfer/integracoes/react"
-import { GeneralCard } from "@nandobfer/integracoes/react"
 import { ApiDocsCard } from "@nandobfer/integracoes/react"
 import type { IntegrationDetailDto } from "@nandobfer/integracoes"
 import type { Draft } from "@nandobfer/integracoes/react"
@@ -141,7 +140,6 @@ function ConnectionForm({ connection, onDirtyChange, data, draft, setDraft, dirt
                 }}
                 className="flex flex-col gap-6"
             >
-                <GeneralCard draft={draft} setDraft={setDraft} />
                 <ApiDocsCard data={data} draft={draft} setDraft={setDraft} dirty={dirty} onExplore={onExplore} />
                 <DetailActions dirty={dirty} pending={pending} onUndo={onUndo} />
             </form>

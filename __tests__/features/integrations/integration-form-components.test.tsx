@@ -127,26 +127,20 @@ describe("buildIntegrationPatch", () => {
         { key: "user", label: "Usuário", kind: "text" },
     ]
     const detail = {
-        environment: "interno",
-        debugMode: false,
         publicValues: { host: "smtp.a", port: 587, user: null },
     } as unknown as IntegrationDetailDto
 
     it("envia somente o que mudou, convertendo números", () => {
         const patch = buildIntegrationPatch(fields, detail, {
-            environment: "externo",
-            debugMode: false,
             swaggerUrl: "",
             publicValues: { host: "smtp.a", port: "465", user: "" },
             secrets: { password: { action: "clear" } },
         })
-        expect(patch).toEqual({ environment: "externo", publicValues: { port: 465 }, secrets: { password: { action: "clear" } } })
+        expect(patch).toEqual({ publicValues: { port: 465 }, secrets: { password: { action: "clear" } } })
     })
 
     it("sem alterações devolve patch vazio", () => {
         const patch = buildIntegrationPatch(fields, detail, {
-            environment: "interno",
-            debugMode: false,
             swaggerUrl: "",
             publicValues: { host: "smtp.a", port: 587, user: "" },
             secrets: {},
@@ -155,7 +149,7 @@ describe("buildIntegrationPatch", () => {
     })
 
     it("documentação Swagger: envia só quando muda, sem espaços; vazio limpa", () => {
-        const base = { environment: "interno" as const, debugMode: false, publicValues: { host: "smtp.a", port: 587, user: "" }, secrets: {} }
+        const base = { publicValues: { host: "smtp.a", port: 587, user: "" }, secrets: {} }
         expect(buildIntegrationPatch(fields, detail, { ...base, swaggerUrl: " https://a/docs " })).toEqual({ swaggerUrl: "https://a/docs" })
         const saved = { ...detail, swaggerUrl: "https://a/docs" } as IntegrationDetailDto
         expect(buildIntegrationPatch(fields, saved, { ...base, swaggerUrl: "https://a/docs" })).toEqual({})
@@ -163,8 +157,8 @@ describe("buildIntegrationPatch", () => {
     })
 
     it("documentação gerenciada nunca entra no PATCH", () => {
-        const base = { environment: "interno" as const, debugMode: false, publicValues: {}, secrets: {} }
-        const managed = { environment: "interno", debugMode: false, publicValues: {}, swaggerUrl: "http://127.0.0.1:3100/api/openapi.json", swaggerUrlManaged: true } as unknown as IntegrationDetailDto
+        const base = { publicValues: {}, secrets: {} }
+        const managed = { publicValues: {}, swaggerUrl: "http://127.0.0.1:3100/api/openapi.json", swaggerUrlManaged: true } as unknown as IntegrationDetailDto
         expect(buildIntegrationPatch(getIntegrationDef("internal_api").publicFields, managed, { ...base, swaggerUrl: "https://outra/docs" })).toEqual({})
     })
 
@@ -173,8 +167,8 @@ describe("buildIntegrationPatch", () => {
         // Campo gravado só pelo card próprio: fica fora do detalhe e do PATCH genérico.
         const def = { ...base, publicFields: [...base.publicFields, { key: "typing", label: "Digitando", kind: "boolean", group: "card" } as PublicFieldDef] }
         const publicValues = { mode: "cluster", appId: "app", key: "key", cluster: "sa1", url: null, clientKey: null, clientCluster: null, clientUrl: null }
-        const saved = { environment: "externo", debugMode: false, swaggerUrl: null, publicValues } as unknown as IntegrationDetailDto
-        const draft = { environment: "externo" as const, debugMode: false, swaggerUrl: "", publicValues: { ...publicValues, url: "", clientKey: "", clientCluster: "", clientUrl: "", typing: true }, secrets: {} }
+        const saved = { swaggerUrl: null, publicValues } as unknown as IntegrationDetailDto
+        const draft = { swaggerUrl: "", publicValues: { ...publicValues, url: "", clientKey: "", clientCluster: "", clientUrl: "", typing: true }, secrets: {} }
         expect(buildIntegrationPatch(def.publicFields, saved, draft)).toEqual({})
 
         const patch = buildIntegrationPatch(def.publicFields, saved, { ...draft, publicValues: { ...draft.publicValues, appId: "app2" } })
