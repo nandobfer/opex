@@ -1,14 +1,15 @@
 /**
  * Rotas da central de integrações nos testes: as antigas rotas estáticas (`/api/ai/providers/[provider]/keys`,
  * `/api/integrations/[id]/test`...) viraram dados dos adaptadores, servidos pelos catch-alls
- * (`src/app/api/<ponto>/[...path]/route.ts`). `legacyRoute` monta os handlers com a assinatura antiga
+ * (`src/app/api/integrations/[[...path]]/route.ts`, opcional porque a raiz é a lista, e
+ * `src/app/api/<ponto>/[...path]/route.ts` nos demais). `legacyRoute` monta os handlers com a assinatura antiga
  * (`(req, { params })`) chamando o catch-all com o caminho preenchido pelos parâmetros.
  */
 type Handler = (req: Request, ctx: { params: Promise<{ path?: string[] }> }) => Promise<Response>
 type LegacyHandler = (req?: Request, ctx?: { params: Promise<Record<string, string>> | Record<string, string> }) => Promise<Response>
 
 const CATCH_ALLS: Record<string, () => Promise<Record<string, Handler>>> = {
-  integrations: () => import('@/app/api/integrations/[...path]/route') as never,
+  integrations: () => import('@/app/api/integrations/[[...path]]/route') as never,
   ai: () => import('@/app/api/ai/[...path]/route') as never,
   opencode: () => import('@/app/api/opencode/[...path]/route') as never,
   'command-code': () => import('@/app/api/command-code/[...path]/route') as never,

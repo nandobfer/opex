@@ -47,8 +47,12 @@ dono. Valores que antes viviam no `.env` são persistidos no MongoDB.
   `@nandobfer/integracoes/server`) e `src/lib/integrations/scheduler.ts`. `src/lib/pusher/server.ts`,
   `src/lib/email/mailer.ts` e `src/lib/storage/s3.ts` são fachadas finas dos clientes da biblioteca.
 - **Rotas catch-all** (despacho pelo registro; as rotas estáticas antigas saíram para não sombrear):
-  `src/app/api/integrations/[...path]`, `src/app/api/ai/[...path]`, `src/app/api/opencode/[...path]` e
-  `src/app/api/command-code/[...path]`. URLs, métodos, corpos e status são os de antes. As rotas do
+  `src/app/api/integrations/[[...path]]`, `src/app/api/ai/[...path]`, `src/app/api/opencode/[...path]` e
+  `src/app/api/command-code/[...path]`. URLs, métodos, corpos e status são os de antes. O ponto de montagem
+  `integrations` usa o catch-all **opcional** (`[[...path]]`) porque a raiz `GET /api/integrations` é a lista da
+  central (o obrigatório exige um segmento e a raiz cairia fora dele). Os demais usam `[...path]`, sem rota na raiz,
+  para não sombrear as rotas estáticas do app sob o mesmo prefixo. Regra para ponto de montagem novo: rota de caminho
+  vazio exige `[[...path]]`; sem ela, `[...path]` (`__tests__/app/integrations-catch-all-files.test.ts`). As rotas do
   OpenCode de sessão (`/api/ai/providers/opencode/{accounts,resources,service,...}`), das features de IA
   (`/api/ai/features/*`) e das memórias continuam rotas do Opex.
 - **Página catch-all** `src/app/(app)/integracoes/[[...slug]]/page.tsx`: `integrationsRegistry.match(slug)`

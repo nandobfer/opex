@@ -66,6 +66,14 @@ describe('GET /api/integrations', () => {
     expect(mocks.listIntegrations).toHaveBeenCalledWith()
   })
 
+  it('na raiz o Next chama o catch-all opcional sem `path` e a lista vem em JSON', async () => {
+    mocks.listIntegrations.mockResolvedValue([{ id: 'pusher' }])
+    const { GET } = await import('@/app/api/integrations/[[...path]]/route')
+    const res = await GET(new NextRequest('http://localhost/api/integrations'), { params: Promise.resolve({}) })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ success: true, data: [{ id: 'pusher' }] })
+  })
+
   it('falha inesperada vira 500 em pt-BR', async () => {
     mocks.listIntegrations.mockRejectedValue(new Error('mongo down'))
     const res = await listGET()
