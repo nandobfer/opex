@@ -38,16 +38,37 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   **Reiniciar** (otimistas, com reversão e toast), **Logs** (últimas 200 linhas no xterm),
   **Editar**, **Mover** (troca build/execução; aviso de volumes e de tempo fora do ar), **Apagar**
   (confirmação, opção de apagar os volumes; otimista).
-- **Novo/Editar** (react-hook-form; `environmentCreateSchema` no Novo, `environmentInputSchema` no Editar): nome e slug
-  (sugerido pelo nome); seletor **Origem** (`OptionTabs`) com **Central**, **Compose gerenciado** e **Projeto adotado**
-  (desabilitado no Novo: vem de **Adotar**; o seletor inteiro fica travado no Editar e o servidor recusa trocar a origem,
-  422 `ENVIRONMENT_SOURCE_LOCKED`). Central: central, ref, arquivo compose, serviços, nome do projeto. Compose
-  gerenciado: nome do projeto, serviços e, só no Novo, o editor do `docker-compose.yml` (ver "Compose gerenciado").
-  Adotado: só leitura + "git pull no redeploy" quando há git; variáveis extras **cifradas**, com os valores à
-  vista (ver "Variáveis extras no formulário"); **limites de recursos** (RAM, swap e CPUs, ver "Limites de
-  recursos"); **serviços do compose** (imagem, command, environment, portas, volumes... por serviço e o YAML avançado, ver
-  "Serviços do compose"); portas; URL de saúde; **Build em** / **Executar em** (`OptionTabs`; PC
-  desabilitado com o motivo quando o túnel está fechado).
+- **Novo/Editar** (OPE-211: páginas próprias, o modal saiu): `/ambientes/novo` e `/ambientes/[id]/editar`
+  (`EnvironmentEditorPage` → `EnvironmentEditorForm`, `components/editor/`). Na lista, **Novo ambiente** e o estado vazio
+  levam ao Novo; o **nome** do ambiente (`ItemNameLink`) e **Editar** levam ao Editar (Editar desligado durante um deploy).
+  O ambiente, as máquinas e a capacidade vêm da lista (`useEnvironments` + tempo real); ambiente inexistente mostra
+  "Ambiente não encontrado" com "Voltar para Ambientes"; erro, `ErrorState`; carregando, `EnvironmentEditorSkeleton`
+  (mesmo leiaute, constantes de `environment-editor-layout.ts`).
+  - **Leiaute**: cabeçalho `FormPageHeader` (voltar para Ambientes, título, status e as ações Cancelar e Salvar/Criar
+    ambiente, repetidas no `FormFooter` do fim; nada fixo na tela) e, no `lg`, o índice das seções preso à lateral
+    (`FormSectionNav`: seção visível marcada, ponto nas alteradas, alerta nas com erro; abaixo do `lg`, faixa no topo).
+  - **Seções** (cards `FormSection`, âncoras `ambiente-<seção>`, `editor-sections.ts`): **Identificação** (nome e slug;
+    no Novo o slug e o nome do projeto do compose acompanham o nome até serem editados), **Origem** (tipo em `OptionTabs`,
+    travado no Editar com "A origem não muda depois de criada" e o servidor recusa a troca, 422
+    `ENVIRONMENT_SOURCE_LOCKED`; Projeto adotado desabilitado no Novo, vem de **Adotar**. Central: central pelo
+    `SearchPicker` (busca por nome e repositório), ref, arquivo do compose, nome do projeto e os **serviços do ambiente**
+    em `ChipInput` com os do compose lido como atalho "Do compose: + app" — vazio = todos. Gerenciado: projeto, serviços
+    e, no Novo, o editor do `docker-compose.yml`; no Editar, "Compose vN" com **Abrir revisões** (o `ComposeDialog` na
+    própria página). Adotado: o resumo e "git pull no redeploy" quando há git), **Execução** (Build em / Executar em em
+    `OptionTabs`, PC desligado com o motivo; **Portas** em `ChipInput`: digitar ou colar "4100, 4101", só 1–65535 sem
+    repetir; URL de saúde), **Variáveis extras** (ver "Variáveis extras no formulário"), **Recursos** (ver "Limites de
+    recursos") e **Serviços do compose** (ver "Serviços do compose").
+  - **Status** ao lado do Salvar (`editorStatus`): "Tudo salvo", "Alterações não salvas em Origem e Serviços do
+    compose" ou "Erro em …"/"N seções com erro" (clicável: leva à seção). Salvar com erro rola até a primeira seção com
+    erro e põe o foco no campo.
+  - **Salvar**: Novo volta para `/ambientes` (toast "Ambiente criado"). Editar fica na página ("Tudo salvo") com o aviso
+    "Salvo. As mudanças valem no próximo deploy" e o botão **Fazer deploy** (a mesma ação da linha; abre a página do log).
+  - **Sair com alterações** (`useUnsavedChangesGuard`): Cancelar, o voltar e qualquer link interno do app pedem
+    "Descartar alterações?"; fechar/recarregar a aba usa o `beforeunload`. Os botões voltar/avançar do navegador não
+    passam pelo guarda (o App Router não oferece interceptação).
+  - **Tempo real**: o formulário é montado uma vez por ambiente (um evento não reseta o que está sendo editado). Versão
+    **mais nova** do ambiente no servidor (`updatedAt`) mostra "Este ambiente foi alterado em outro lugar" com
+    **Recarregar** (descarta e relê) e **Manter o que estou editando**.
 - A linha do ambiente mostra os limites **aplicados** nos containers ("limites: RAM 4 GiB · swap padrão · 2 CPUs"
   ou por serviço) e o selo "Limites salvos diferem dos aplicados: faça Deploy" (ver "Limites de recursos").
 - **Variáveis extras no formulário** (OPE-175):
@@ -216,33 +237,37 @@ servidor (`~/opex-envs/<slug>`, como a central) a cada deploy. As variáveis, o 
 - **Portal do cliente**: nunca aparece (o portal só lista origem central).
 ### Limites de recursos (OPE-193)
 
-- **Campos** (`EnvironmentLimitsField` no formulário Novo/Editar, entre as variáveis e as portas): RAM (GiB), swap
+- **Campos** (seção **Recursos** da página Novo/Editar, `ResourcesSection`; no modo "Por serviço", o grupo Recursos do
+  painel de cada serviço, `ServiceLimitsGroup`, OPE-211): RAM (GiB), swap
   **além da RAM** (GiB) e CPUs (fração), com a mesma semântica, validação e textos do builder do servidor: vazio =
   sem limite; swap vazio = padrão do Docker; swap 0 = sem swap; swap sem RAM é erro ("Defina a RAM para limitar o
   swap"). Os três campos são o componente compartilhado `ResourceLimitsFields` (o mesmo do formulário do builder), e
   a ajuda mostra a RAM e as CPUs da máquina de execução (`EnvironmentsListDto.hosts`, do `docker info` do snapshot).
-- **Modos** (`OptionTabs`): **Mesmos para cada serviço** (`{ mode: "shared", memoryGb, cpus, swapGb }`: cada
+- **Modos** (`OptionTabs`): **Mesmos para todos** (`{ mode: "shared", memoryGb, cpus, swapGb }`: cada
   container do ambiente recebe esses limites) ou **Por serviço** (`{ mode: "service", services: [{ service, … }] }`:
   uma linha por serviço; serviço sem linha fica sem limite; nomes repetidos são erro). Trocar para "Por serviço" copia
-  os valores do modo único para os serviços conhecidos (os do último "Ler compose" ou, antes dele, os do host) e, sem
-  nenhum, lê o compose sozinho; voltar ao modo único usa os valores quando são iguais em todas as linhas
-  (`switchLimitMode`, `limits-form.ts`).
-- **Ler compose** (`POST /api/environments/compose-services` `{ source }`, só o dono, `readComposeServices`): os
+  os valores do modo único para os serviços conhecidos (os do compose lido ou, antes da leitura, os do host); voltar ao
+  modo único usa os valores quando são iguais em todas as linhas (`switchLimitMode`, `limits-form.ts`). No modo "Por
+  serviço", a seção Recursos mostra o resumo de cada serviço ("RAM 2 GiB · …", "Sem limite" ou "Corrija os limites") e
+  cada linha leva ao painel do serviço, no grupo Recursos: "Definir limites de <serviço>" / "Sem limite para
+  <serviço>", com o declarado no compose e o aplicado no host.
+- **Leitura do compose** (`POST /api/environments/compose-services` `{ source }`, só o dono, `readComposeServices`): os
   serviços do compose da origem e os limites declarados neles (`mem_limit`, `memswap_limit`, `cpus` ou
   `deploy.resources.limits`, em bytes ou com unidade), sem o override do app, com `config --no-env-resolution
   --no-interpolate` (valor com `${VAR}` volta vazio). Central: `git fetch` + a ref resolvida e uma pasta temporária
   com só o arquivo do compose e os `*.yml`/`*.yaml` da ref (`git archive`), apagada no fim — o worktree do ambiente
   no ar não é tocado; os serviços escolhidos na origem filtram a lista. Adotado: a pasta do projeto (servidor ou PC).
   Compose gerenciado: a **revisão vigente** guardada no Opex, lida do YAML (`parseComposeYaml`, sem Docker); no Novo
-  ainda não há revisão, então o botão fica desabilitado (o YAML está no editor) e, sem `environmentId`, a rota
+  ainda não há revisão: a página lê o YAML do editor no navegador (`parseComposeYaml`) e, sem `environmentId`, a rota
   responde 422 `ENVIRONMENT_COMPOSE_READ_UNAVAILABLE`.
-  Por serviço, as linhas existentes ficam e os serviços novos entram com os limites do compose; linha de serviço que
-  não está no compose ganha o selo "não está no compose" e pode ser removida. No modo único, os campos vazios
-  recebem os limites do compose quando são iguais em todos os serviços (diferentes: toast sugerindo "Por serviço").
-  Falha: 502 `ENVIRONMENT_COMPOSE_READ_FAILED` com a última linha do erro (nunca o JSON), aviso com "Tentar
-  novamente" no campo; skeleton das linhas durante a leitura. Com a origem incompleta (ex.: Novo sem a central), o
-  botão fica desabilitado, a troca para "Por serviço" não lê nada e o campo diz "Escolha a origem para ler o
-  compose." (`composeServicesInputSchema`).
+  Na página Novo/Editar (OPE-211, `ComposeReadProvider`/`useComposeRead`, `hooks/useFormComposeRead.tsx`) a leitura é
+  **automática e única para a página toda** (sugestões da Origem, Recursos e Serviços): sai na hora ao abrir (ou quando a
+  origem fica completa) e de novo quando a origem muda, depois de 800 ms parada (`COMPOSE_READ_DEBOUNCE_MS`); pede sempre
+  **todos** os serviços (`services: []`: a lista marca os que ficam fora do ambiente). "Ler de novo" no cabeçalho dos
+  Serviços do compose. A leitura não preenche limites nem mostra toast. Falha: 502 `ENVIRONMENT_COMPOSE_READ_FAILED`
+  com a última linha do erro (nunca o JSON) e o aviso com "Tentar novamente" na seção Serviços. Com a origem
+  incompleta (ex.: Novo sem a central), nada é lido (`composeServicesInputSchema`) e a seção diz "Escolha a origem
+  para ver os serviços". O DTO traz também o `limitStyle` de cada serviço (para a prévia do override).
 - **Editar abre com o que vale**: os limites **configurados**, mesmo vazios ("sem limite" salvo reabre vazio); nunca
   configurados (`limits` ausente/`null`: ambiente antigo, adotado, criado pela ferramenta sem `limits`), os
   **aplicados** hoje nos containers (`docker inspect` no snapshot: `HostConfig.Memory`/`MemorySwap`/`NanoCpus`/
@@ -330,23 +355,35 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
   ao separar por `:` (porta publicada e destino do volume aceitam `${VAR}`). Porta ou volume que não dá para ler na forma da
   tela (ex.: alvo `${VAR}`) vem em `unreadable` e o campo avisa "Não foi possível ler este item do compose: …" (ao
   personalizar, ele sai do serviço), em vez de sumir calado.
-- **Tela** (`EnvironmentServicesField` + `components/services/`), entre os limites e as portas:
-  - Bloco **recolhido** até o dono abrir (aberto quando já há ajustes salvos; recolhido, mostra o resumo). Em Editar, abrir
-    lê o compose **uma vez** sozinho para mostrar os valores "Do compose" (sem preencher os limites).
-  - **Uma leitura serve os dois blocos** (`ComposeReadProvider`/`useComposeRead`, `hooks/useFormComposeRead.tsx`, dentro do
-    diálogo: fechar descarta). O "Ler compose" pedido pelo dono (de qualquer bloco) também preenche os limites declarados.
-  - Abas (`OptionTabs`): **Guiado** e **YAML avançado** (as duas são salvas). Guiado: um item recolhível por serviço com os
-    selos "imagem própria", "N personalizados" e "não está no compose", remover os ajustes e **Adicionar serviço**
-    (`SearchPicker` com os serviços lidos ou, antes da leitura, os do host). Cada campo tem o interruptor **Personalizar**
-    (`OverrideToggle`): desligado mostra "Do compose: …" (ou "não declarado"); ligar começa com o valor do compose (ou
-    vazio, sem leitura). Editores: imagem (`Input`), command/entrypoint (um argumento por linha), environment e labels
-    (`KeyValueRows`, compartilhado com as Variáveis extras), portas, volumes e dependências em linhas (`OptionTabs` para
-    protocolo, tipo e condição; serviço da dependência por `SearchPicker`), restart (`OptionTabs`) e healthcheck
-    (Shell/Exec/Desligado + durações). Avisos: chave do environment também nas Variáveis extras e, executando no PC, porta
-    publicada fora de **Portas** (o repasse não é automático).
-  - YAML avançado: o `ComposeEditorField` (limite de 64 KB, exemplo e ajuda próprios) com o erro em tempo real.
-  - Falha da leitura: aviso com "Tentar novamente"; Salvar continua livre (campo desligado não grava nada). Skeleton dos
-    itens durante a leitura (`ServicesSkeleton`, mesma caixa e cabeçalho do item).
+- **Tela** (seção **Serviços do compose** da página Novo/Editar, `ServicesSection`, OPE-211 v2): **lista e painel**.
+  - **Lista** (`ServiceList`, à esquerda no `lg`; abaixo, um `SearchPicker` "Serviço: app" acima do painel): os serviços do
+    compose lido, na ordem do compose, e depois os que têm ajuste ou limite salvo mas não estão no compose
+    (`serviceListItems`, `services-form.ts`). Selos: "build" ou a imagem do compose, "imagem própria", "N ajustes", "fora do
+    ambiente" (não está entre os escolhidos na Origem) e "não está no compose". Escolha por clique ou ↑/↓; o escolhido vai
+    na URL (`?servico=`) e o primeiro vem escolhido. Lendo: skeleton das linhas; sem serviços, estado vazio.
+  - **Painel** (`ServicePanel`): nome, resumo dos ajustes e "Desfazer os ajustes deste serviço" (com confirmação). Campos
+    em grupos (`SERVICE_FIELD_GROUPS`): **Imagem e comando** (imagem, command, entrypoint), **Rede** (portas publicadas,
+    depende de), **Armazenamento** (volumes), **Saúde e ciclo** (healthcheck, restart), **Variáveis e labels**
+    (environment, labels) e **Recursos** (ver "Limites de recursos"). Cada campo (`ServiceFieldRow`) mostra o valor do
+    compose com o selo "do compose" e **Editar**, que abre o editor no lugar já com o valor do compose (ou vazio, sem
+    leitura); personalizado, mostra o editor, "No compose: …" e **Voltar ao do compose** (grava `null`, com "Desfazer" no
+    toast). O serviço entra nos ajustes no primeiro campo editado e sai quando nenhum campo fica personalizado
+    (`setOverrideField`). Editores: imagem (`Input`); command/entrypoint como **Linha de comando** (dividida como o
+    compose faz, `splitCommandLine`) ou **Um argumento por linha**; environment e labels (`KeyValueRows`, compartilhado com
+    as Variáveis extras); portas, volumes e dependências em tabelas com cabeçalho de coluna (`TableHeader`; abaixo do `sm`
+    as linhas empilham), "Adicionar …" no fim, `OptionTabs` para protocolo, tipo e condição e o serviço da dependência por
+    `SearchPicker`; restart em `OptionTabs` (Nunca, Sempre, Se falhar, Até ser parado); healthcheck Shell/Exec/Desligado
+    com as durações. Avisos no campo: item do compose não lido, chave do environment também nas Variáveis extras e,
+    executando no PC, porta publicada fora de Execução › Portas. As chaves do YAML avançado do serviço aparecem como chips
+    no fim do painel, com "Abrir o YAML avançado".
+  - **YAML avançado** (bloco recolhível, aberto quando há YAML salvo): o `ComposeEditorField` (limite de 64 KB, exemplo e
+    ajuda próprios) com o erro em tempo real.
+  - **O que muda no deploy** (bloco recolhível, `DeployPreview`): o `docker-compose.opex.yml` que o próximo deploy vai
+    gerar com o que está na tela, pela mesma função do deploy (`deployPreview` → `overrideYaml`, `editor-sections.ts`):
+    valores do environment como `[valor oculto]`, só os serviços escolhidos na Origem, `env_file` só com Variáveis extras e
+    a imagem do registry com marcadores (`localhost:<porta>/opex-env/<slug>-<serviço>:<commit>`). No Editar de ambiente
+    implantado, o selo "Difere do implantado"/"Igual ao implantado" e o resumo do implantado.
+  - Falha da leitura: aviso com "Tentar novamente"; os ajustes salvos continuam na lista e Salvar fica livre.
 - **Linha**: "serviços: app imagem nginx:1.27 · 3 ajustes" (os implantados) e o selo **"Ajustes dos serviços salvos diferem
   dos implantados: faça Deploy"** (`composeOverridesPendingDeploy`: salvo × `deployedComposeOverrides`, só em ambiente
   implantado; serviço sem campo personalizado, ordem e espaços nas pontas do YAML não contam).
@@ -603,7 +640,8 @@ mesma validação, auditoria, Pusher e erros.
   `BuilderConfirmDialog`),
   `compose-config.ts`, `pipeline.ts`, `view.ts`, `opex-format.ts`, `managed-compose.ts` (regras puras do compose
   gerenciado), `service-overrides.ts`, `override-yaml.ts` e `services-form.ts` (serviços do compose, puros),
-  `hooks/useFormComposeRead.tsx`, `components/EnvironmentServicesField.tsx` e `components/services/`, `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
+  `hooks/useFormComposeRead.tsx`, `hooks/useEnvironmentEditor.ts`, `editor-sections.ts`, `environment-editor-layout.ts`,
+  `components/editor/` (página Novo/Editar, OPE-211) e `components/services/` (editores dos campos), `server/compose-revisions.ts`, `hooks/useEnvironmentCompose.ts`, `components/` (tela do dono;
   `EnvironmentStatus.tsx` com o botão e os selos compartilhados com o portal), `hooks/`,
   `portal/` (página, linha e hooks do portal) e `server/` (`models`, `service`, `deploy`, `resume`,
   `hub`, `stream`, `forwards`, `registry`, `settings`, `opex-notice`, `portal`).
@@ -618,7 +656,7 @@ mesma validação, auditoria, Pusher e erros.
   gerenciado, sem TTL; saem ao apagar o ambiente), `environments_state`; auditoria
   `entidade: "Ambiente"`.
 - Testes: `__tests__/features/environments/` (`commands`, `deploy`, `resume`, `environments-ui`, `managed-compose`,
-  `compose-revisions`, `compose-ui`, `service-overrides`, `services-ui`,
+  `compose-revisions`, `compose-ui`, `service-overrides`, `editor-sections`, `environment-editor-ui`,
   `opex-tools`, `portal`, `portal-ui`, `builder-commands`, `builder`, `builder-ui`),
   `__tests__/features/agentic/build-queue.test.ts` (`runExclusiveBuild` e a recriação pendente antes da
   próxima mesa), `__tests__/features/opex-agent/client-tools.test.ts` (grupo do portal).

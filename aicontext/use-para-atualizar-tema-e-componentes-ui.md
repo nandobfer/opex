@@ -159,6 +159,14 @@ sua com os endpoints dela. Na mesa, use `AttachableTextarea` (`features/agentic`
 - Ações do formulário ficam num **rodapé em linha**, nunca em barra flutuante/`sticky`:
   `flex flex-wrap justify-end gap-2 border-t pt-6` com todos os botões à direita
   (`FormFooter` de `src/components/ui/form-footer.tsx`, `DetailActions`, `TabFooter`).
+- Páginas Novo/Editar usam o kit de `src/components/form-page/` (OPE-211): `FormPageHeader` (voltar,
+  título, descrição, status e ações à direita; o `ServiceForm` do Financeiro e o ambiente usam),
+  `FormSection` (card com âncora `scroll-mt-6`, título, descrição e ações), `FormSectionNav` (índice das
+  seções: seção visível por `IntersectionObserver`, ponto nas alteradas, alerta nas com erro; preso à
+  lateral só no `lg`, faixa no topo abaixo dele; `scrollToSection` rola e foca o campo inválido) e
+  `useUnsavedChangesGuard(dirty)` ("Descartar alterações?" no Cancelar/voltar, nos links internos do app
+  e `beforeunload`; voltar/avançar do navegador não passam por ele). Formulário longo: seções em cards com
+  o índice, ações no cabeçalho e no `FormFooter`.
 - Escolha múltipla em lista longa usa `MultiAutocomplete` (`src/components/ui/multi-autocomplete.tsx`):
   busca tolerante (fuse.js), teclado (↑/↓/Enter/Esc, Backspace remove o último), grupos com
   "Selecionar todas" opcional e os escolhidos como chips abaixo do campo. Valores livres usam
