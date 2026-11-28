@@ -66,6 +66,11 @@ export interface IEvolutionContact {
     lastMessage: IEvolutionLastMessage | null
     /** Não lidas do WhatsApp (o Opex só mostra; nunca marca como lida ao abrir a conversa). */
     unreadCount: number
+    /**
+     * `<lid>@lid` da mesma pessoa (contato com número), aprendido do `remoteJidAlt` das mensagens: a Evolution grava
+     * a conversa em dois `remoteJid` quando o WhatsApp passa a endereçá-la por LID (OPE-207).
+     */
+    lidJid?: string | null
     updatedAt: Date
 }
 
@@ -124,11 +129,13 @@ const contactSchema = new Schema<IEvolutionContact>(
         lastMessageAt: { type: Date, default: null },
         lastMessage: { type: new Schema({ text: String, kind: String, fromMe: Boolean }, { _id: false }), default: null },
         unreadCount: { type: Number, default: 0 },
+        lidJid: { type: String, default: null },
         updatedAt: { type: Date, default: () => new Date() },
     },
     { collection: "evolution_contacts", versionKey: false },
 )
 contactSchema.index({ instance: 1, jid: 1 }, { unique: true, name: "instance_jid" })
+contactSchema.index({ instance: 1, lidJid: 1 }, { name: "instance_lid", partialFilterExpression: { lidJid: { $type: "string" } } })
 
 export const EvolutionInstanceState: Model<IEvolutionInstanceState> =
     (models.EvolutionInstanceState as Model<IEvolutionInstanceState>) ?? model<IEvolutionInstanceState>("EvolutionInstanceState", instanceSchema)

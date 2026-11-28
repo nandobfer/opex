@@ -88,6 +88,8 @@ export const evolutionChatSchema = z.looseObject({
     profilePicUrl: str,
     updatedAt: str,
     unreadMessages: z.number().nullish(),
+    /** Última mensagem da conversa: só a chave interessa (correspondência LID ↔ número pelo `remoteJidAlt`). */
+    lastMessage: z.looseObject({ key: evolutionMessageKeySchema }).nullish().catch(null),
 })
 export type EvolutionChat = z.infer<typeof evolutionChatSchema>
 

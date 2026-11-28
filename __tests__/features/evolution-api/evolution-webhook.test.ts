@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
     updateContact: vi.fn(),
     publishChat: vi.fn(),
     ownerJid: null as string | null,
+    lidOwner: vi.fn(),
 }))
 
 vi.mock("@/lib/after-response", () => ({ runAfterResponse: mocks.runAfter }))
@@ -19,7 +20,7 @@ vi.mock("@/features/evolution-api/server/shared", () => ({ evolutionLog: { warn:
 vi.mock("@/features/evolution-api/server/models", () => ({
     evolutionDb: vi.fn(),
     contactKey: (instance: string, jid: string) => `${instance}:${jid}`,
-    EvolutionContact: { bulkWrite: mocks.bulkWrite, updateOne: mocks.updateContact },
+    EvolutionContact: { bulkWrite: mocks.bulkWrite, updateOne: mocks.updateContact, findOne: (filter: unknown) => ({ select: () => ({ lean: async () => mocks.lidOwner(filter) }) }) },
     EvolutionInstanceState: {
         exists: vi.fn(async () => null),
         findById: () => ({ lean: async () => null, select: () => ({ lean: async () => (mocks.ownerJid ? { ownerJid: mocks.ownerJid } : null) }) }),
@@ -104,6 +105,27 @@ describe("processEvolutionEvent", () => {
         expect(mocks.publishChat).toHaveBeenCalledWith("opex", ["5531999999999@s.whatsapp.net"])
         await processEvolutionEvent({ event: "messages.update", instance: "opex", data: { keyId: "A", remoteJid: "5521988887777@s.whatsapp.net", status: "READ" } } as never)
         expect(mocks.publishChat).toHaveBeenLastCalledWith("opex", ["5521988887777@s.whatsapp.net"])
+    })
+
+    it("OPE-207: @lid com remoteJidAlt grava a correspondência no contato do número e a prévia fica na conversa do número", async () => {
+        const lid = "158879933534209@lid"
+        const pn = "554196988060@s.whatsapp.net"
+        await processEvolutionEvent({ ...message("L1"), data: { key: { id: "L1", remoteJid: lid, remoteJidAlt: pn, fromMe: false }, message: { conversation: "Como foram as interviews?" } } } as never)
+        const ops = mocks.bulkWrite.mock.calls.flatMap((call) => call[0] as { updateOne: { filter: { _id: string }; update: { $set: Record<string, unknown> } } }[])
+        expect(ops).toContainEqual(expect.objectContaining({ updateOne: expect.objectContaining({ filter: { _id: `opex:${pn}` }, update: expect.objectContaining({ $set: { lidJid: lid, hasChat: true } }) }) }))
+        expect(mocks.updateContact).toHaveBeenCalledWith({ _id: `opex:${pn}` }, expect.anything())
+        expect(mocks.publishChat).toHaveBeenCalledWith("opex", [pn])
+    })
+
+    it("OPE-207: @lid sem remoteJidAlt com correspondência conhecida cai na conversa do número; sem correspondência, fica no LID", async () => {
+        const lid = "158879933534209@lid"
+        const pn = "554196988060@s.whatsapp.net"
+        mocks.lidOwner.mockImplementation(async (filter: { lidJid?: string }) => (filter.lidJid === lid ? { jid: pn } : null))
+        await processEvolutionEvent({ ...message("L2"), data: { key: { id: "L2", remoteJid: lid, fromMe: true }, message: { conversation: "tudo certo" } } } as never)
+        expect(mocks.updateContact).toHaveBeenLastCalledWith({ _id: `opex:${pn}` }, { $set: { lastMessage: { text: "tudo certo", kind: "text", fromMe: true }, unreadCount: 0 } })
+        expect(mocks.forward).toHaveBeenLastCalledWith("opex", expect.objectContaining({ chatJid: pn }))
+        await processEvolutionEvent({ ...message("L3"), data: { key: { id: "L3", remoteJid: "999@lid", fromMe: false }, message: { conversation: "oi" } } } as never)
+        expect(mocks.updateContact).toHaveBeenLastCalledWith({ _id: "opex:999@lid" }, expect.anything())
     })
 
     it("não grava nem loga a chave que a Evolution manda no corpo", async () => {

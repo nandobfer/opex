@@ -4,6 +4,8 @@ import { getLocalUser } from "@/lib/local-user"
 import { agentMemoryContext } from "@/features/ai/server/agent-memory-context"
 import { selfMemoryEnabled } from "@/features/ai/server/self-memory/settings"
 import { selfMemoryTools } from "@/features/ai/server/self-memory/tools"
+import { recentConversationMessages } from "@/features/evolution-api/server/chat"
+import { conversationJids } from "@/features/evolution-api/server/lid"
 import { evolution } from "@/features/evolution-api/server/client"
 import { mentionsOwner, messageDisplayText, parseEvolutionMessage, type ParsedMessage } from "@/features/evolution-api/message"
 import { evaluateAudience } from "../criteria"
@@ -66,9 +68,12 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         if (!settings.enabled || !settings.main.provider || !settings.main.model || settings.instance !== instance) return await decide("disabled", "Agente desligado ou instância alterada.")
         // Etapa 1 dos critérios antes de qualquer custo: quem não pode ser respondido não tem a mídia baixada nem lida.
         const mentioned = messages.some((item) => mentionsOwner(item, ownerJid, ownerLid))
-        const audience = evaluateAudience(settings.criteria, { jid: message.chatJid, isGroup: message.isGroup, mentioned })
+        // A conversa pode ter estado salvo na outra identidade (número ↔ `@lid`, OPE-207): "Nunca responder", "escolhidos" e pausa valem para as duas.
+        const aliases = message.isGroup ? [] : (await conversationJids(instance, message.chatJid)).filter((item) => item !== message.chatJid)
+        const audience = evaluateAudience(settings.criteria, { jid: message.chatJid, aliases, isGroup: message.isGroup, mentioned })
         if (audience.failure) return await decide("ignored", audience.failure.reason)
         if (state.pausedUntil && state.pausedUntil > new Date()) return await decide("paused", PAUSED_MESSAGE_REASON)
+        if (aliases.length && await SecretaryConversation.exists({ instance, jid: { $in: aliases }, pausedUntil: { $gt: new Date() } })) return await decide("paused", PAUSED_MESSAGE_REASON)
         const now = new Date()
         const [repliesLastHour, spent] = await Promise.all([
             SecretaryDecisionRecord.countDocuments({ instance, chatId, at: { $gte: lastHourSince(now) }, decision: { $in: ["replied", "asked-owner"] } }),
@@ -92,11 +97,11 @@ export async function runSecretaryTurn({ id, instance, chatId, ownerJid, ownerLi
         let historyCache: Promise<{ owner: boolean; text: string }[]> | null = null
         const writeMemory = selfMemoryEnabled("secretario")
         const plan = await planSecretaryReply({
-            settings, chatJid: message.chatJid, isGroup: message.isGroup, mentioned,
+            settings, chatJid: message.chatJid, aliases, isGroup: message.isGroup, mentioned,
             text, ownerAnswer, id: token, subject: token, origins: { reply: SECRETARY_CONSUMPTION_ORIGIN, decision: SECRETARY_DECISION_CONSUMPTION_ORIGIN }, observing,
         }, {
-            history: () => (historyCache ??= evolution.findMessages(instance, { remoteJid: message.chatJid, pageSize: SECRETARY_HISTORY_LIMIT })
-                .then((page) => page.records.filter((item) => !pendingIds.has(item.key.id)).reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) })))),
+            history: () => (historyCache ??= recentConversationMessages(instance, message.chatJid, SECRETARY_HISTORY_LIMIT)
+                .then((records) => records.filter((item) => !pendingIds.has(item.key.id)).reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) })))),
             contact: () => resolveSecretaryContact({ jid: message.chatJid, participant: message.participant, pushName: message.pushName, instance }),
             memory: (focus) => agentMemoryContext("secretario", turn, { focus }),
             personality: async () => (await loadPersonality()).snapshot,

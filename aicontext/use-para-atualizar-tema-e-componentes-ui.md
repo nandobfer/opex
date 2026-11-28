@@ -593,6 +593,9 @@ Listas filtráveis usam um hook `useUrlFilters` no padrão do Smart Desk: a quer
 - Parâmetros alheios ao schema, `history.state` e hash são preservados.
 - Cada tela declara schema e defaults tipados no dono do estado, não no componente visual.
 - Paginação, modais e buscas internas de popovers não fazem parte do contrato.
+- Link que só muda a query da **mesma** página (ex.: trocar de aba levando um parâmetro) usa `navigateInPage(href)` no
+  `onClick` do `<Link>` (só no clique simples, sem tecla modificadora): `pushState` + o evento do `useUrlFilters`,
+  troca imediata sem a ida ao servidor do `router.push`; caminho diferente devolve `false` e segue a navegação normal.
 
 ### Filtro de período (janela de datas)
 

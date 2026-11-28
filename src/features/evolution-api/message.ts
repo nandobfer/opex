@@ -1,4 +1,4 @@
-import { isGroupJid, jidNumber, LID_JID_SUFFIX, normalizeJid } from "./constants"
+import { isGroupJid, jidNumber, LID_JID_SUFFIX, normalizeJid, USER_JID_SUFFIX } from "./constants"
 import type { EvolutionMessage } from "./evolution-dto"
 
 /**
@@ -51,6 +51,17 @@ export function chatJidOf(key: { remoteJid: string; remoteJidAlt?: string | null
     const jid = normalizeJid(key.remoteJid)
     if (jid.endsWith(LID_JID_SUFFIX) && key.remoteJidAlt) return normalizeJid(key.remoteJidAlt)
     return jid
+}
+
+/**
+ * Correspondência LID ↔ número de uma conversa individual: a Evolution grava a mensagem no `<lid>@lid` e manda o número
+ * em `remoteJidAlt`. Sem número real (`@s.whatsapp.net`) no alias, não há correspondência.
+ */
+export function lidAliasOf(key: { remoteJid: string; remoteJidAlt?: string | null }): { lid: string; pn: string } | null {
+    const lid = normalizeJid(key.remoteJid)
+    if (!lid.endsWith(LID_JID_SUFFIX) || !key.remoteJidAlt) return null
+    const pn = normalizeJid(key.remoteJidAlt)
+    return pn.endsWith(USER_JID_SUFFIX) ? { lid, pn } : null
 }
 
 export function parseEvolutionMessage(message: EvolutionMessage): ParsedMessage {

@@ -42,6 +42,7 @@ export interface ChatTimelinePageDto {
     effects: ChatEffects
     decisions: TimelineDecisionDto[]
     agentMessageIds: string[]
-    page: number
     hasOlder: boolean
+    /** Cursor (`?antes=`) da página anterior; `null` quando não há mais mensagens. */
+    nextBefore: string | null
 }

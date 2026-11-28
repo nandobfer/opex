@@ -10,7 +10,8 @@ import { CONVERSATION_STATE_LABELS, type ConversationAgentState } from "../../co
 import { CONVERSATION_FILTERS } from "../../chat-timeline"
 import { CONVERSATION_PARAM } from "../../memory-focus"
 import { useSecretaryChatRealtime, useSecretaryConversations } from "../../hooks/useSecretaryChat"
-import { CHAT_BG, INBOX_HEIGHT, LIST_COLUMN } from "./chat-layout"
+import { CHAT_BG, LIST_COLUMN } from "./chat-layout"
+import { useInboxHeight } from "./useInboxHeight"
 import { ConversationListPane, type InboxListFilters } from "./ConversationListPane"
 import { ConversationView, ConversationViewSkeleton } from "./ConversationView"
 
@@ -30,6 +31,7 @@ const SCHEMA: UrlFilterSchema<InboxUrl> = {
  */
 export function ConversationsInbox({ minutes, contacts }: { minutes: number; contacts: EvolutionContactDto[] }) {
     const reduceMotion = useReducedMotion()
+    const { ref: boxRef, style: boxStyle, className: boxClass } = useInboxHeight()
     const [url, setUrl] = useUrlFilters(DEFAULTS, SCHEMA)
     const list = useSecretaryConversations()
     const activeId = url[CONVERSATION_PARAM] || null
@@ -40,7 +42,7 @@ export function ConversationsInbox({ minutes, contacts }: { minutes: number; con
     const setFilters = useCallback((patch: Partial<InboxListFilters>) => setUrl((current) => ({ ...current, ...patch })), [setUrl])
 
     return (
-        <div className={cn("flex overflow-hidden rounded-lg border border-border bg-card", INBOX_HEIGHT)} data-testid="secretary-inbox">
+        <div ref={boxRef} style={boxStyle} className={cn("flex overflow-hidden rounded-lg border border-border bg-card", boxClass)} data-testid="secretary-inbox">
             <aside className={cn("flex min-h-0 flex-1 overflow-hidden border-r border-border md:flex-none md:shrink-0", LIST_COLUMN, activeId && "hidden md:flex")} aria-label="Conversas">
                 <ConversationListPane
                     rows={list.data}

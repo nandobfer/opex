@@ -28,6 +28,8 @@ const mocks = vi.hoisted(() => ({
     noticeUpsert: vi.fn(async () => ({ upsertedCount: 1 })),
     memoryTools: [] as unknown[],
     enqueue: vi.fn(async () => "pendente:x"),
+    aliases: [] as string[],
+    aliasPaused: false,
     contacts: vi.fn(async (): Promise<Map<string, { name: string }>> => new Map([["5531999999999@s.whatsapp.net", { name: "Alfredo Petri" }], ["123@g.us", { name: "Família" }], ["5531911112222@s.whatsapp.net", { name: "João Silva" }]])),
 }))
 vi.mock("@/features/evolution-api/server/contacts", () => ({ contactsByJid: mocks.contacts }))
@@ -42,6 +44,7 @@ vi.mock("@/features/engramind/server/pending-writes", () => ({ enqueuePendingWri
 vi.mock("@/features/evolution-api/server/client", () => ({
     evolution: { findMessages: async () => ({ records: [] }), markAsRead: mocks.markAsRead, sendPresence: mocks.presence },
 }))
+vi.mock("@/features/evolution-api/server/lid", () => ({ conversationJids: async (_instance: string, jid: string) => [jid, ...mocks.aliases] }))
 vi.mock("@/lib/pusher/channels", () => ({ publishAppEvent: vi.fn() }))
 vi.mock("@/features/secretary-agent/server/inbound", async (original) => {
     const actual = (await original()) as typeof import("@/features/secretary-agent/server/inbound")
@@ -58,7 +61,7 @@ vi.mock("@/features/secretary-agent/server/owner-questions", () => ({ askOwner: 
 vi.mock("@/features/secretary-agent/server/models", () => ({
     SecretaryConversation: {
         findOneAndUpdate: () => ({ lean: async () => mocks.state }),
-        exists: async () => (++mocks.currentCalls > mocks.currentAfter ? null : mocks.current ? { _id: "x" } : null),
+        exists: async (filter: { jid?: unknown }) => filter.jid ? (mocks.aliasPaused ? { _id: "lid" } : null) : (++mocks.currentCalls > mocks.currentAfter ? null : mocks.current ? { _id: "x" } : null),
         updateOne: vi.fn(),
     },
     SecretaryDecisionRecord: {
@@ -87,7 +90,7 @@ beforeEach(() => {
     vi.clearAllMocks()
     mocks.decisionsById.clear()
     mocks.costsById.clear()
-    Object.assign(mocks, { state: { pending: [msg()], lastOwnerMessageAt: null, pausedUntil: null }, current: true, currentAfter: Infinity, currentCalls: 0, replies: 0, spent: 0, subject: null })
+    Object.assign(mocks, { state: { pending: [msg()], lastOwnerMessageAt: null, pausedUntil: null }, current: true, currentAfter: Infinity, currentCalls: 0, replies: 0, spent: 0, subject: null, aliases: [], aliasPaused: false })
     mocks.settings = {
         ...DEFAULT_SECRETARY_SETTINGS,
         enabled: true,
@@ -203,6 +206,24 @@ describe("runSecretaryTurn", () => {
         expect(decisions()).toEqual([decision])
         expect(mocks.markAsRead).not.toHaveBeenCalled()
         expect(mocks.send.mock.calls.filter((call) => (call as unknown[])[1] === CONTACT)).toHaveLength(0)
+    })
+
+    it.each([
+        ["bloqueada (Nunca responder) enquanto era só @lid", () => withCriteria({ audience: { blocked: ["158879933534209@lid"] } }), "ignored"],
+        ["pausada enquanto era só @lid", () => (mocks.aliasPaused = true), "paused"],
+    ])("OPE-207: conversa %s continua sem resposta depois de aprender o número", async (_label, setup, decision) => {
+        mocks.aliases = ["158879933534209@lid"]
+        setup()
+        await turn()
+        expect(decisions()).toEqual([decision])
+        expect(mocks.send.mock.calls.filter((call) => (call as unknown[])[1] === CONTACT)).toHaveLength(0)
+    })
+
+    it("OPE-207: escolhido pelo @lid continua escolhido depois de aprender o número", async () => {
+        mocks.aliases = ["158879933534209@lid"]
+        withCriteria({ audience: { mode: "selected", selected: ["158879933534209@lid"] } })
+        await turn()
+        expect(decisions()).toEqual(["replied"])
     })
 
     it("assunto bloqueado não avisa o dono", async () => {

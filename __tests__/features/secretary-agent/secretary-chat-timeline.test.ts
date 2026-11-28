@@ -6,7 +6,7 @@ import type { ChatTimelinePageDto } from "@/features/secretary-agent/types"
 const message = (id: string, timestamp: string, fromMe = false): ChatMessageDto => ({
     id, chatJid: "x", fromMe, author: null, authorName: null, timestamp, kind: "text", text: id, media: null, quoted: null, location: null, contacts: [], reactions: [], edited: false, status: null,
 })
-const page = (n: number, items: ChatMessageDto[], decisions: ChatTimelinePageDto["decisions"] = [], agentMessageIds: string[] = [], effects: ChatTimelinePageDto["effects"] = { reactions: [], edits: [], revoked: [] }): ChatTimelinePageDto => ({ page: n, items, effects, decisions, agentMessageIds, hasOlder: false })
+const page = (n: number, items: ChatMessageDto[], decisions: ChatTimelinePageDto["decisions"] = [], agentMessageIds: string[] = [], effects: ChatTimelinePageDto["effects"] = { reactions: [], edits: [], revoked: [] }): ChatTimelinePageDto => ({ items, effects, decisions, agentMessageIds, hasOlder: n > 0, nextBefore: null })
 
 describe("linha do tempo da aba Conversas (OPE-197)", () => {
     it("junta as páginas sem repetir mensagens nem decisões e em ordem", () => {

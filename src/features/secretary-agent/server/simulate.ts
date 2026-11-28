@@ -4,7 +4,7 @@ import { DomainError } from "@/lib/api/route"
 import { agentMemoryContext } from "@/features/ai/server/agent-memory-context"
 import { isGroupJid } from "@/features/evolution-api/constants"
 import { messageDisplayText, parseEvolutionMessage } from "@/features/evolution-api/message"
-import { evolution } from "@/features/evolution-api/server/client"
+import { recentConversationMessages } from "@/features/evolution-api/server/chat"
 import { SECRETARY_HISTORY_LIMIT, SECRETARY_SIMULATION_CONSUMPTION_ORIGIN } from "../constants"
 import { conversationIdOfJid } from "../conversation-id"
 import type { CriteriaStep, CriteriaVerdict } from "../criteria"
@@ -47,8 +47,8 @@ const CHANNEL_LABEL = { "secretary-global": "Global do Secretário", "secretary-
 
 async function realHistory(settings: SecretarySettings, jid: string) {
     if (!settings.instance) throw new DomainError(409, "Escolha a instância do WhatsApp na aba Geral para continuar a conversa real.", "SECRETARY_INSTANCE_REQUIRED")
-    const page = await evolution.findMessages(settings.instance, { remoteJid: jid, pageSize: SECRETARY_HISTORY_LIMIT })
-    return page.records.reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) }))
+    const records = await recentConversationMessages(settings.instance, jid, SECRETARY_HISTORY_LIMIT)
+    return records.reverse().map((item) => ({ owner: item.key.fromMe, text: messageDisplayText(parseEvolutionMessage(item)) }))
 }
 
 async function realState(settings: SecretarySettings, chatId: string | null) {
