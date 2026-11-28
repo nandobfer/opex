@@ -11,13 +11,14 @@ import { healthOf } from "../view"
 import { runEnvironmentAction } from "./deploy"
 import { Environment, environmentsDb, type IEnvironment } from "./models"
 import { environmentItems } from "./service"
-import { envLog, runEnvHost, type EnvironmentChange } from "./settings"
+import { envLog, loadEnvironmentsSettings, runEnvHost, type EnvironmentChange } from "./settings"
 
 /**
  * Ambientes no **portal do cliente** (`/cliente/ambientes`). O cliente vê só os ambientes de origem
  * **central** cujo repositório (`AgenticCentral.projectId`) está em `client.projectIds` — o vínculo é
  * conferido em toda requisição; projetos adotados ficam só com o dono. A visão é reduzida (sem
- * variáveis, máquinas, caminhos, portas, containers nem log) e as ações são só implantar a ref salva,
+ * variáveis, máquinas, caminhos, CPU/RAM, limites nem log; por serviço, só o estado e as portas que ele
+ * escuta, OPE-211) e as ações são só implantar a ref salva,
  * levantar e reiniciar, pelo admin do cliente, chamando os mesmos serviços do dono.
  */
 
@@ -41,7 +42,7 @@ async function clientEnvironments(client: PortalClient): Promise<IEnvironment[]>
 }
 
 /** Visão reduzida do ambiente para o portal (puro). */
-export function toPortalEnvironment(env: EnvironmentDto): PortalEnvironmentDto {
+export function toPortalEnvironment(env: EnvironmentDto, portLinkHost: string | null = null): PortalEnvironmentDto {
     const last = env.lastDeploy
     return {
         id: env.id,
@@ -50,7 +51,8 @@ export function toPortalEnvironment(env: EnvironmentDto): PortalEnvironmentDto {
         ref: env.source.kind === "central" ? env.source.ref : "",
         health: healthOf(env),
         deployedVersion: env.deployedVersion,
-        services: env.services.map((service) => ({ service: service.service, state: service.state, status: service.status, version: service.version })),
+        services: env.services.map((service) => ({ service: service.service, state: service.state, status: service.status, version: service.version, listen: service.listen })),
+        portLinkHost,
         lastDeploy: last && last.kind !== "delete" ? { status: last.status, startedAt: last.startedAt, finishedAt: last.finishedAt, durationMs: last.durationMs, version: last.version } : null,
         deploying: last?.status === "running",
     }
@@ -59,8 +61,8 @@ export function toPortalEnvironment(env: EnvironmentDto): PortalEnvironmentDto {
 export async function listPortalEnvironments(client: PortalClient, run: HostRunner = runEnvHost): Promise<PortalEnvironmentDto[]> {
     const envs = await clientEnvironments(client)
     if (!envs.length) return []
-    const { items } = await environmentItems(envs, run)
-    return items.map(toPortalEnvironment)
+    const [{ items }, settings] = await Promise.all([environmentItems(envs, run), loadEnvironmentsSettings()])
+    return items.map((item) => toPortalEnvironment(item, settings.portLinkHost || null))
 }
 
 /** Ambiente do cliente ou 404 (ambiente de outro cliente, adotado ou inexistente: mesma resposta). */

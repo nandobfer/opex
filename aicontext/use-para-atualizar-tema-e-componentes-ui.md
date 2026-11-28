@@ -405,6 +405,9 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
 - Listas de **nome e valor** (variáveis, environment, labels) usam `KeyValueRows` (`src/components/ui/key-value-rows.tsx`,
   controlado, com entrada/saída animadas e `KEY_VALUE_ROW` para o skeleton). Linhas de lista sem id próprio que animam
   entrada e saída usam `useRowIds(length)` do mesmo arquivo (chaves estáveis; `removeAt` antes de tirar a linha).
+- **Copiar um valor** (link, token, comando) usa `CopyButton` (`src/components/ui/copy-button.tsx`, OPE-211): botão de
+  ícone com `label` (rótulo acessível e `title`), `navigator.clipboard`, toast `successMessage` e o ícone de copiado
+  animado que volta em 1,5 s (`resetMs={null}` mantém). O `SecretReveal` usa o mesmo botão; não escreva outro copiar.
 - **Provedor e modelo de IA** usam sempre os componentes de `src/features/ai/components`: `AiProviderTabs`
   (só os conectados; desconectado desabilitado com "X: não conectado"; `allowed`, `extraOptions` como
   "Local"/"Desligado" e `emptyText`) + `ModelPickerField` (+ `VariantSelectField`). Usados em

@@ -299,10 +299,16 @@ export const environmentsSettingsSchema = z.object({
     baseDir: relativeFileSchema,
     registryPort: z.number().int().min(1024).max(65535),
     keepTags: z.number().int().min(1, "Mantenha ao menos 1").max(50),
+    /** Host dos links das portas dos containers (OPE-211); vazio = o endereço com que a tela foi aberta. */
+    portLinkHost: z
+        .string()
+        .trim()
+        .max(200)
+        .regex(/^[A-Za-z0-9.-]*$/, "Informe só o host (ex.: 192.168.0.64)"),
 })
 export type EnvironmentsSettings = z.infer<typeof environmentsSettingsSchema>
 
-export const DEFAULT_ENVIRONMENTS_SETTINGS: EnvironmentsSettings = { baseDir: "opex-envs", registryPort: 5050, keepTags: 5 }
+export const DEFAULT_ENVIRONMENTS_SETTINGS: EnvironmentsSettings = { baseDir: "opex-envs", registryPort: 5050, keepTags: 5, portLinkHost: "" }
 
 /** Nome do builder do buildx (entra em comandos: só caracteres seguros). */
 export const builderNameSchema = z

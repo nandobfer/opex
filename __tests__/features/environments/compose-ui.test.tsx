@@ -5,7 +5,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { framerMotionMock } from '../../helpers/framer-motion'
 import type { EnvironmentComposeDto, EnvironmentDto } from '@/features/environments/types'
 
-/** Compose gerenciado (OPE-191): origem no formulário, linha, diálogo Compose (revisões) e apagar. */
+/** Compose gerenciado (OPE-191): origem no formulário, card, diálogo Compose (revisões) e apagar. */
 
 const V1 = 'services:\n  minio:\n    image: minio/minio\n'
 const V3 = `${V1}    ports:\n      - "9000:9000"\n`
@@ -42,7 +42,7 @@ import { ComposeDialog } from '@/features/environments/components/ComposeDialog'
 import { DeleteEnvironmentDialog } from '@/features/environments/components/DeleteEnvironmentDialog'
 import { EnvironmentEditorForm } from '@/features/environments/components/editor/EnvironmentEditorForm'
 import { NO_HOSTS } from '@/features/environments/view'
-import { EnvironmentRow } from '@/features/environments/components/EnvironmentRow'
+import { EnvironmentCard } from '@/features/environments/components/EnvironmentCard'
 
 const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   id: 'e1',
@@ -54,6 +54,11 @@ const env = (overrides: Partial<EnvironmentDto> = {}): EnvironmentDto => ({
   healthUrl: null,
   buildOn: 'server',
   runOn: 'server',
+  limits: { mode: 'shared', memoryGb: null, cpus: null, swapGb: null },
+  limitsConfigured: false,
+  deployedLimits: null,
+  composeOverrides: null,
+  deployedComposeOverrides: null,
   deployedOn: { buildOn: 'server', runOn: 'server' },
   deployedVersion: null,
   deployedComposeVersion: 2,
@@ -121,22 +126,26 @@ describe('página do ambiente: origem', () => {
   })
 })
 
-describe('linha do ambiente gerenciado', () => {
-  it('badge Gerenciado com a revisão vigente, aviso de compose não implantado e o botão Compose', () => {
+const openMenu = () => fireEvent.pointerDown(screen.getByRole('button', { name: 'Mais ações de MinIO' }), { button: 0, pointerType: 'mouse' })
+
+describe('card do ambiente gerenciado', () => {
+  it('selo Gerenciado com a revisão vigente, aviso de compose não implantado e Compose no menu', () => {
     const onIntent = vi.fn()
-    render(<EnvironmentRow env={env()} pcAvailable onIntent={onIntent} />)
+    render(<EnvironmentCard env={env()} pcAvailable linkHost="h" onIntent={onIntent} />)
     expect(screen.getByText('Gerenciado v3')).toBeTruthy()
-    expect(screen.getByText(/Há compose novo não implantado \(implantada: v2\)/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Compose' }))
+    expect(screen.getByText(/Mudanças salvas ainda não implantadas: compose v3 \(implantado: v2\)/)).toBeTruthy()
+    openMenu()
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Compose' }))
     expect(onIntent).toHaveBeenCalledWith({ kind: 'compose' })
   })
 
-  it('revisão vigente já implantada: sem aviso; central não tem o botão Compose', () => {
-    render(<EnvironmentRow env={env({ deployedComposeVersion: 3 })} pcAvailable onIntent={vi.fn()} />)
-    expect(screen.queryByText(/Há compose novo/)).toBeNull()
+  it('revisão vigente já implantada: sem aviso; central não tem Compose no menu', () => {
+    render(<EnvironmentCard env={env({ deployedComposeVersion: 3 })} pcAvailable linkHost="h" onIntent={vi.fn()} />)
+    expect(screen.queryByText(/Mudanças salvas/)).toBeNull()
     cleanup()
-    render(<EnvironmentRow env={env({ source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } })} pcAvailable onIntent={vi.fn()} />)
-    expect(screen.queryByRole('button', { name: 'Compose' })).toBeNull()
+    render(<EnvironmentCard env={env({ source: { kind: 'central', centralId: 'c1', ref: 'main', composeFile: 'docker-compose.yml', services: [], projectName: 'loja' } })} pcAvailable linkHost="h" onIntent={vi.fn()} />)
+    openMenu()
+    expect(screen.queryByRole('menuitem', { name: 'Compose' })).toBeNull()
   })
 })
 

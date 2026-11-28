@@ -1,3 +1,4 @@
+import type { ContainerPortDto } from "./container-ports"
 import type { ResourceLimits } from "./resource-limits"
 import type { BuilderAction, ComposeOverrides, EnvironmentLimits, ServiceValues, EnvironmentSource, EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
@@ -10,6 +11,8 @@ export interface ServiceStatusDto {
     state: string
     status: string
     ports: string
+    /** Portas que o container escuta, onde estão publicadas e como abrem no navegador (OPE-211). */
+    listen: ContainerPortDto[]
     cpu: string | null
     memory: string | null
     /** Versão do `package.json` do app no container (`null` = sem o arquivo ou parado). */
@@ -120,6 +123,8 @@ export interface EnvironmentsListDto {
     pcReason: string | null
     /** CPUs e memória de cada máquina (`null` = não lidas). */
     hosts: Record<Machine, HostCapacityDto | null>
+    /** Host dos links das portas (Configurações; `null` = o endereço com que a tela foi aberta). */
+    portLinkHost: string | null
     checkedAt: string
 }
 
@@ -228,7 +233,8 @@ export interface BuilderResultDto {
 
 /**
  * Ambiente visto no **portal do cliente** (só os de central cujo repositório está vinculado ao
- * cliente). Sem variáveis, máquinas, caminhos, portas, containers nem log: só o estado.
+ * cliente). Sem variáveis, máquinas, caminhos, CPU/RAM, limites nem log: o estado e, por serviço, as
+ * portas que ele escuta (OPE-211).
  */
 export interface PortalEnvironmentDto {
     id: string
@@ -239,7 +245,9 @@ export interface PortalEnvironmentDto {
     health: "running" | "partial" | "stopped" | "never"
     /** Versão do código no ar (último deploy com sucesso). */
     deployedVersion: string | null
-    services: { service: string; state: string; status: string; version: string | null }[]
+    services: { service: string; state: string; status: string; version: string | null; listen: ContainerPortDto[] }[]
+    /** Host dos links das portas (`null` = o endereço com que a tela foi aberta). */
+    portLinkHost: string | null
     lastDeploy: { status: DeployStatus; startedAt: string; finishedAt: string | null; durationMs: number | null; version: string | null } | null
     /** Há um deploy em andamento (as ações ficam bloqueadas). */
     deploying: boolean

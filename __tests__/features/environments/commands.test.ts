@@ -409,6 +409,24 @@ describe('limites de recursos (OPE-193)', () => {
     expect(command).toContain("docker --context opex-local info --format '{{.NCPU}}|{{.MemTotal}}'")
   })
 
+  it('snapshot (OPE-211): portas de cada container pelo inspect (inclusive parado), sem quebrar os limites', () => {
+    const output = [
+      ['loja', 'app', 'loja-app-1', 'running', 'Up', '0.0.0.0:4100->3000/tcp, :::4100->3000/tcp', '/home/u/loja', '/home/u/loja/docker-compose.yml', 'abc123'].join('\t'),
+      ['loja', 'db', 'loja-db-1', 'exited', 'Exited (0)', '', '/home/u/loja', '/home/u/loja/docker-compose.yml', 'def456'].join('\t'),
+      '---',
+      '---',
+      ['/loja-app-1', String(4 * 1024 ** 3), '0', '0', '0', '0', '{"3000/tcp":{}}', '{"3000/tcp":[{"HostIp":"","HostPort":"4100"}]}'].join('\t'),
+      ['/loja-db-1', '0', '0', '0', '0', '0', '{"5432/tcp":{}}', '{}'].join('\t'),
+      '---',
+    ].join('\n')
+    const [app, db] = parseSnapshot(output)
+    expect(app!.listen).toEqual([{ container: 3000, protocol: 'tcp', published: 4100, hostIp: null }])
+    expect(app!.limits!.memoryGb).toBe(4)
+    expect(db!.listen).toEqual([{ container: 5432, protocol: 'tcp', published: null, hostIp: null }])
+    expect(snapshotCommand('server', 'x')).toContain('{{json .Config.ExposedPorts}}')
+    expect(snapshotCommand('server', 'x')).toContain('{{json .HostConfig.PortBindings}}')
+  })
+
   it('schema: swap sem RAM, serviços repetidos e os dois modos', () => {
     expect(environmentLimitsSchema.safeParse({ mode: 'shared', memoryGb: 4, swapGb: 0, cpus: 2.5 }).success).toBe(true)
     const noRam = environmentLimitsSchema.safeParse({ mode: 'shared', memoryGb: null, swapGb: 1, cpus: null })

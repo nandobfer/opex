@@ -7,6 +7,7 @@ import { quote } from "@/features/local-docker/commands"
 import { LocalDockerPreview } from "@/features/local-docker/server/models"
 import { containerVersionsCommand, envDir, gitDirsCommand, parseContainerVersions, parseGitDirs, parseSnapshot, parseSnapshotHost, snapshotCommand, type ComposeContainer, type ComposePlan } from "../commands"
 import { ENVIRONMENTS_AUDIT_ENTITY, MANAGED_COMPOSE_FILE, REGISTRY_CONTAINER } from "../constants"
+import { withReach } from "../container-ports"
 import { composeBytes, composeContentProblem } from "../managed-compose"
 import { type AdoptInput, type EnvironmentInput, type EnvironmentsSettings, type Machine } from "../schemas"
 import { environmentLimitsOf, environmentLimitsText } from "../resource-limits"
@@ -14,7 +15,7 @@ import { composeOverridesText } from "../service-overrides"
 import type { EnvironmentDeployDto, EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentEnvValuesDto, EnvironmentsListDto, HostCapacityDto, ServiceStatusDto, UnmanagedProjectDto } from "../types"
 import { deployLogSoFar } from "./hub"
 import { Environment, EnvironmentComposeVersion, EnvironmentDeploy, environmentsDb, type IEnvironment, type IEnvironmentDeploy } from "./models"
-import { envLog, machineAccess, publishEnvironment, runEnvHost } from "./settings"
+import { envLog, loadEnvironmentsSettings, machineAccess, publishEnvironment, runEnvHost } from "./settings"
 import type { HostRunner } from "@/features/local-docker/server/shell"
 
 /** Pasta e arquivos do compose de um ambiente (puro). */
@@ -71,7 +72,7 @@ export function toEnvironmentDto(env: IEnvironment, lastDeploy: IEnvironmentDepl
     }
 }
 
-const toService = (item: ComposeContainer): ServiceStatusDto => ({ service: item.service, container: item.name, state: item.state, status: item.status, ports: item.ports, cpu: item.cpu, memory: item.memory, version: versionCache().get(item.id) ?? null, limits: item.limits })
+const toService = (item: ComposeContainer, reach: { runOn: Machine; forwarded: readonly number[] }): ServiceStatusDto => ({ service: item.service, container: item.name, state: item.state, status: item.status, ports: item.ports, listen: withReach(item.listen ?? [], reach), cpu: item.cpu, memory: item.memory, version: versionCache().get(item.id) ?? null, limits: item.limits })
 
 /** Versão do `package.json` por id de container (por processo): o id muda quando o compose recria o container. */
 const VERSIONS_KEY = Symbol.for("opex.environments.container-versions")
@@ -170,7 +171,7 @@ async function itemsOf(envs: IEnvironment[], byMachine: Record<Machine, ComposeC
     void import("./resume").then(({ scheduleDeployResume }) => scheduleDeployResume(run)).catch((error: unknown) => envLog.warn({ err: error }, "[environments] Falha ao retomar deploys interrompidos"))
     const items = envs.map((env) => {
         const on = env.deployedOn?.runOn ?? env.runOn
-        const services = byMachine[on].filter((item) => item.project === composeProjectOf(env)).map(toService)
+        const services = byMachine[on].filter((item) => item.project === composeProjectOf(env)).map((item) => toService(item, { runOn: on, forwarded: env.ports }))
         return toEnvironmentDto(env, (env.lastDeployId && deploys.get(env.lastDeployId)) || null, services)
     })
     return { items, byMachine }
@@ -180,11 +181,12 @@ async function itemsOf(envs: IEnvironment[], byMachine: Record<Machine, ComposeC
 export async function listEnvironments(run: HostRunner = runEnvHost): Promise<EnvironmentsListDto> {
     await environmentsDb()
     const access = await machineAccess(run)
-    const [envs, server, pc, previews] = await Promise.all([
+    const [envs, server, pc, previews, settings] = await Promise.all([
         Environment.find().sort({ name: 1 }).lean<IEnvironment[]>(),
         snapshot("server", access.targets.server.context, run),
         access.pcAvailable ? snapshot("pc", access.targets.pc.context, run) : Promise.resolve(EMPTY_SNAPSHOT),
         previewProjects(),
+        loadEnvironmentsSettings(),
     ])
     const { items, byMachine } = await itemsOf(envs, { server: server.containers, pc: pc.containers }, access, run)
     const managed = new Set(envs.map(composeProjectOf))
@@ -196,7 +198,7 @@ export async function listEnvironments(run: HostRunner = runEnvHost): Promise<En
         const git = dirs.length ? parseGitDirs((await run(gitDirsCommand(machine, dirs), 20_000, { retryOnLost: true })).output) : new Set<string>()
         unmanaged.push(...groupUnmanaged(machine, containers, excluded, git))
     }
-    return { items, unmanaged, pcAvailable: access.pcAvailable, pcReason: access.pcReason, hosts: { server: server.host, pc: pc.host }, checkedAt: new Date().toISOString() }
+    return { items, unmanaged, pcAvailable: access.pcAvailable, pcReason: access.pcReason, hosts: { server: server.host, pc: pc.host }, portLinkHost: settings.portLinkHost || null, checkedAt: new Date().toISOString() }
 }
 
 export const composeProjectOf = (env: Pick<IEnvironment, "source">) => env.source.projectName

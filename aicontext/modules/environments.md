@@ -10,10 +10,39 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
 - **Builder do servidor** (OPE-186): card fixo **acima** dos grupos Servidor/PC (`components/builder/`), para o
   builder do buildx do Docker do servidor (o `buildx_buildkit_<nome>0` do `docker stats`). Ver "Builder do
   servidor" abaixo.
-- Lista (kit `src/components/list`) agrupada em **Servidor** e **PC** (máquina de execução). Cada
-  ambiente mostra o estado (No ar / Parcial / Parado / Nunca implantado / Implantando), portas,
-  serviços no ar, CPU/RAM (a lista é consultada a cada 10 s), onde foi o build e o último deploy
-  (ref @ commit; clique abre o log).
+- **Lista em cards** (OPE-211, `EnvironmentCard`; peças compartilhadas com o portal em `components/card/`), agrupada em
+  **Servidor** e **PC** (máquina de execução, com a contagem). Um card largo por ambiente, um embaixo do outro
+  (`ENV_CARD_LIST_CLASS`), consultada a cada 10 s e em tempo real:
+  - **Cabeçalho**: ponto de estado (`EnvironmentStateDot`: verde pulsando No ar, amarelo Parcial, cinza Parado, vazado
+    Nunca implantado, primário Implantando; pulso parado com movimento reduzido), o nome (`ItemNameLink` para o Editar) e o
+    slug, e os selos de origem (Central / Gerenciado vN / Adotado / Adotado (sem git)), onde está (`placementLabel`) e a
+    versão. À direita, **Deploy/Redeploy** (`DeployMenu`), **Logs** (botão com rótulo) e o menu **⋯**
+    (`EnvironmentActionsMenu`): Levantar, Derrubar, Reiniciar | Compose (só gerenciado), Histórico de deploys, Editar,
+    Mover | Apagar (vermelho, depois de um separador). Item desligado mostra o motivo abaixo do rótulo (PC indisponível,
+    ainda não implantado, ação em andamento, adotado do PC no Mover, deploy em andamento no Editar).
+  - **Faixa de aviso** (`PendingDeployNotice`, `pendingDeployItems`), só com algo salvo e não implantado: uma linha
+    "Mudanças salvas ainda não implantadas: limites, ajustes dos serviços e compose v4 (implantado: v3)." com **Fazer
+    deploy** (a mesma ação do Deploy, a ref salva); o detalhe do que está salvo fica no `title`.
+  - **Containers** (`ContainerList`), um por linha, em colunas no `md` (Serviço · Situação · Portas · Recursos) e
+    empilhados com rótulos abaixo: ponto e nome do serviço (o container no `title`), o `status` do Docker, as **portas**
+    (ver "Portas de cada container") e CPU/RAM em uso com o limite aplicado. Sem containers: "Nunca implantado: faça o
+    deploy…" ou "Nenhum container encontrado…".
+  - **Rodapé**: o último deploy (ícone por status, "há 2 horas", ref @ commit; link para a página do log), "2/3 no ar"
+    e, executando no PC, "Portas liberadas: 4100" (as repassadas ao servidor).
+  - Skeleton `EnvironmentCardSkeleton` com as mesmas classes (`environment-card-layout.ts`).
+- **Portas de cada container** (OPE-211, `container-ports.ts`, puro): o snapshot junta o `{{.Ports}}` do `docker ps`
+  (só no ar) com `{{json .Config.ExposedPorts}}` e `{{json .HostConfig.PortBindings}}` do `docker inspect` que já lia os
+  limites (vale também parado; nenhum comando novo). `parseContainerPorts` tira as repetições (`0.0.0.0` e `::` da mesma
+  porta; a exposta some quando a mesma porta está publicada), expande faixas (até 64) e ordena pela porta do container.
+  Cada porta vai no DTO (`ServiceStatusDto.listen`) com o alcance (`portReach`): `link` (publicada; no PC, só se estiver
+  em Portas, repassada ao servidor), `pc` (publicada só no PC), `local` (só em `127.0.0.1`), `udp` e `internal` (sem
+  publicação). O chip (`PortChip`) mostra "3000/tcp → :4100"; com `link`, o publicado é link para
+  `http://<host>:<porta>` em aba nova, com o botão de copiar o link (`CopyButton`, toast "Link copiado."); os outros
+  alcances ficam em texto com a dica no `title`. App que escuta numa porta fora do `EXPOSE` e do `ports` do compose
+  aparece como "sem porta declarada" (o Docker não sabe dela).
+- **Host dos links** (`usePortLinkHost`): o **Endereço dos links das portas** das Configurações (`portLinkHost`, vai na
+  lista como `EnvironmentsListDto.portLinkHost`) ou, vazio, o endereço com que a tela foi aberta (`window.location.hostname`).
+  Abrindo o Opex por um domínio (atrás da Cloudflare), configure o IP ou host do servidor.
 - **Versão do app** em cada ambiente: lida do `package.json` do `WORKDIR` de cada container no ar
   (`docker exec <id> head -c 200000 package.json`, `containerVersionsCommand`/`parseContainerVersions`),
   com cache em memória **pelo id do container** (`{{.ID}}` no snapshot) — só roda de novo quando o
@@ -69,8 +98,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
   - **Tempo real**: o formulário é montado uma vez por ambiente (um evento não reseta o que está sendo editado). Versão
     **mais nova** do ambiente no servidor (`updatedAt`) mostra "Este ambiente foi alterado em outro lugar" com
     **Recarregar** (descarta e relê) e **Manter o que estou editando**.
-- A linha do ambiente mostra os limites **aplicados** nos containers ("limites: RAM 4 GiB · swap padrão · 2 CPUs"
-  ou por serviço) e o selo "Limites salvos diferem dos aplicados: faça Deploy" (ver "Limites de recursos").
+- O card mostra os limites **aplicados** em cada container ("limite: RAM 4 GiB · swap padrão · 2 CPUs") e, com limites
+  salvos diferentes dos aplicados, "limites" na faixa de aviso (ver "Limites de recursos").
 - **Variáveis extras no formulário** (OPE-175):
   - Em **Editar**, os valores salvos são lidos à parte (`GET /api/environments/[id]/env`, só o dono,
     `readEnvValues`: decifra um a um; o que falhar volta `null`) e aparecem legíveis no campo **Valor**
@@ -176,8 +205,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
 - **Sem variáveis extras** o deploy apaga o `.env.opex` (`removeEnvFileCommand`): o compose usa o
   arquivo sempre que ele existe, e o de um deploy anterior não pode continuar valendo.
 - **Configurações** (engrenagem): pasta base no servidor (`opex-envs`), porta do registry
-  (`5050`, só `127.0.0.1`) e tags mantidas por ambiente (`5`). A conexão com o PC é a do Builder
-  Machine.
+  (`5050`, só `127.0.0.1`), tags mantidas por ambiente (`5`) e o **Endereço dos links das portas** (`portLinkHost`,
+  só o host; vazio = o endereço da tela; OPE-211). A conexão com o PC é a do Builder Machine.
 
 ### Compose gerenciado (OPE-191)
 
@@ -631,14 +660,19 @@ mesma validação, auditoria, Pusher e erros.
 ### Portal do cliente (`/cliente/ambientes`)
 
 - Item **Ambientes** no menu do portal (`clienteNav`), para **todos** os usuários do cliente; a página
-  (`ClienteAmbientesPage`) lista os ambientes com estado ("No ar", "Parcial", "Parado", "Nunca
-  implantado", "Implantando"), versão em execução (ou a implantada), ref, serviços no ar e quando foi o
-  último deploy. Atualiza a cada 15 s e em tempo real.
+  (`ClienteAmbientesPage`) lista os ambientes **no mesmo card do dono** (OPE-211, `PortalEnvironmentCard` com as peças de
+  `components/card/`): estado ("No ar", "Parcial", "Parado", "Nunca implantado", "Implantando"), nome (sem link), slug,
+  ref e versão em execução (ou a implantada); os containers com serviço, situação e **portas** (link e copiar, com o
+  host das Configurações do dono, `PortalEnvironmentDto.portLinkHost`, ou o da página), sem CPU/RAM nem limites; no
+  rodapé, o último deploy (texto) e "N/M no ar". Admin: **Implantar** visível e Levantar/Reiniciar no menu ⋯. Skeleton
+  `EnvironmentCardSkeleton variant="portal"`. Atualiza a cada 15 s e em tempo real.
 - **Vínculo**: o cliente vê só ambientes de origem **central** cuja central (`AgenticCentral.projectId`)
   está em `client.projectIds`, conferido em **toda** requisição (`server/portal.ts`). Projetos
   **adotados**, **compose gerenciado** e ambientes de outro cliente nunca aparecem e respondem 404 nas ações.
-- **Visão reduzida** (`PortalEnvironmentDto`, `toPortalEnvironment`): sem variáveis, máquinas,
-  portas, caminhos, containers, CPU/RAM, commit, erro nem log do deploy.
+- **Visão reduzida** (`PortalEnvironmentDto`, `toPortalEnvironment`): sem variáveis, máquinas, portas liberadas do
+  ambiente, caminhos, nome dos containers, CPU/RAM, limites, commit, erro nem log do deploy. Por serviço vai só o estado,
+  a situação, a versão e as portas que ele escuta (`listen`, OPE-211, decisão do dono; o Agente Opex do portal também as
+  vê, por ler o mesmo DTO).
 - **Ações só do admin do cliente** (`assertClientAdmin`, 403 para os demais): **Implantar** (sempre a
   ref salva, sem trocar de ref nem de máquina), **Levantar** e **Reiniciar** — `POST
   /api/cliente/ambientes/[id]/actions` `{ action: "deploy" | "up" | "restart" }`, chamando

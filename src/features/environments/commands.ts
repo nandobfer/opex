@@ -1,6 +1,7 @@
 import { posix } from "node:path"
 import { cancelForwardCommand, cancelReverseForwardCommand, forwardPortCommand, muxCommand, quote, reverseForwardCommand } from "@/features/local-docker/commands"
 import { COMPOSE_LABELS, DEPLOYED_STORE, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
+import { parseContainerPorts, type ContainerPort } from "./container-ports"
 import { appliedLimits, round2, type ResourceLimits } from "./resource-limits"
 import type { EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
@@ -396,7 +397,7 @@ const PS_FORMAT = [`{{.Label "${COMPOSE_LABELS.project}"}}`, `{{.Label "${COMPOS
 
 const docker = (machine: Machine, context: string) => (machine === "pc" ? `docker --context ${context}` : "docker")
 
-const LIMITS_FORMAT = ["{{.Name}}", "{{.HostConfig.Memory}}", "{{.HostConfig.MemorySwap}}", "{{.HostConfig.NanoCpus}}", "{{.HostConfig.CpuPeriod}}", "{{.HostConfig.CpuQuota}}"].join(SEP)
+const LIMITS_FORMAT = ["{{.Name}}", "{{.HostConfig.Memory}}", "{{.HostConfig.MemorySwap}}", "{{.HostConfig.NanoCpus}}", "{{.HostConfig.CpuPeriod}}", "{{.HostConfig.CpuQuota}}", "{{json .Config.ExposedPorts}}", "{{json .HostConfig.PortBindings}}"].join(SEP)
 
 /**
  * Containers de projetos do compose, o uso de CPU/RAM, os limites aplicados (`docker inspect`) e a
@@ -425,6 +426,8 @@ export interface ComposeContainer {
     state: string
     status: string
     ports: string
+    /** Portas que o container escuta e onde estão publicadas (inclusive parado; OPE-211). */
+    listen: ContainerPort[]
     workingDir: string
     configFiles: string[]
     cpu: string | null
@@ -446,9 +449,13 @@ export function parseSnapshot(output: string): ComposeContainer[] {
         if (name && cpu) usage.set(name, { cpu, memory: memory ?? "" })
     }
     const limits = new Map<string, ResourceLimits>()
+    const declared = new Map<string, { exposed?: string; bindings?: string }>()
     for (const line of inspect.split("\n")) {
-        const [name = "", memory, swap, nano, period, quota] = line.trim().split(SEP)
-        if (name && memory !== undefined) limits.set(name.replace(/^\//, ""), appliedLimits({ memoryBytes: integer(memory), memorySwapBytes: integer(swap), nanoCpus: integer(nano), cpuPeriod: integer(period), cpuQuota: integer(quota) }))
+        const [name = "", memory, swap, nano, period, quota, exposed, bindings] = line.trim().split(SEP)
+        if (!name || memory === undefined) continue
+        const key = name.replace(/^\//, "")
+        limits.set(key, appliedLimits({ memoryBytes: integer(memory), memorySwapBytes: integer(swap), nanoCpus: integer(nano), cpuPeriod: integer(period), cpuQuota: integer(quota) }))
+        declared.set(key, { exposed, bindings })
     }
     return ps
         .split("\n")
@@ -457,7 +464,8 @@ export function parseSnapshot(output: string): ComposeContainer[] {
         .map((line) => {
             const [project = "", service = "", name = "", state = "", status = "", ports = "", workingDir = "", configFiles = "", id = ""] = line.split(SEP)
             const stat = usage.get(name)
-            return { id: id.trim(), project, service, name, state, status, ports, workingDir, configFiles: configFiles ? configFiles.split(",").filter(Boolean) : [], cpu: stat?.cpu ?? null, memory: stat?.memory ?? null, limits: limits.get(name) ?? null }
+            const inspected = declared.get(name)
+            return { id: id.trim(), project, service, name, state, status, ports, listen: parseContainerPorts(ports, inspected?.exposed, inspected?.bindings), workingDir, configFiles: configFiles ? configFiles.split(",").filter(Boolean) : [], cpu: stat?.cpu ?? null, memory: stat?.memory ?? null, limits: limits.get(name) ?? null }
         })
         .filter((item) => item.project)
 }

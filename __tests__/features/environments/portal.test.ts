@@ -22,7 +22,7 @@ vi.mock('@/features/environments/server/models', async () => {
 })
 vi.mock('@/features/environments/server/deploy', () => ({ runEnvironmentAction: mocks.runAction }))
 vi.mock('@/features/environments/server/service', () => ({ environmentItems: mocks.items }))
-vi.mock('@/features/environments/server/settings', () => ({ envLog: { info: vi.fn(), warn: vi.fn() }, runEnvHost: 'host' }))
+vi.mock('@/features/environments/server/settings', () => ({ envLog: { info: vi.fn(), warn: vi.fn() }, runEnvHost: 'host', loadEnvironmentsSettings: async () => ({ baseDir: 'opex-envs', registryPort: 5050, keepTags: 5, portLinkHost: '189.24.7.73' }) }))
 vi.mock('@/lib/pusher/channels', () => ({ publishToChannels: mocks.publish }))
 
 import { AgenticCentral } from '@/lib/db/models/Agentic'
@@ -50,7 +50,7 @@ const dto = (env: Record<string, unknown>, overrides: Partial<EnvironmentDto> = 
   deployedOn: { buildOn: 'pc', runOn: 'server' },
   deployedVersion: '1.2.0',
   lastDeploy: { id: 'd0', kind: 'deploy', status: 'success', ref: 'main', commit: 'abc', buildOn: 'pc', runOn: 'server', error: '/home/u/segredo falhou', startedAt: '2026-10-01T10:00:00.000Z', finishedAt: '2026-10-01T10:02:00.000Z', durationMs: 120000, version: '1.2.0', skipBuild: false, resumed: false },
-  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up 2 hours', ports: '0.0.0.0:8080->3000/tcp', cpu: '1%', memory: '100MiB / 1GiB', version: '1.2.0' }],
+  services: [{ service: 'app', container: 'loja-app-1', state: 'running', status: 'Up 2 hours', ports: '0.0.0.0:8080->3000/tcp', listen: [{ container: 3000, protocol: 'tcp', published: 8080, hostIp: null, reach: 'link' }], cpu: '1%', memory: '100MiB / 1GiB', version: '1.2.0', limits: { memoryGb: 1, swapGb: null, cpus: 1 } }],
   createdAt: '2026-10-01T00:00:00.000Z',
   updatedAt: '2026-10-01T00:00:00.000Z',
   ...overrides,
@@ -85,12 +85,15 @@ describe('ambientes no portal do cliente', () => {
       ref: 'main',
       health: 'running',
       deployedVersion: '1.2.0',
-      services: [{ service: 'app', state: 'running', status: 'Up 2 hours', version: '1.2.0' }],
+      services: [{ service: 'app', state: 'running', status: 'Up 2 hours', version: '1.2.0', listen: [{ container: 3000, protocol: 'tcp', published: 8080, hostIp: null, reach: 'link' }] }],
+      portLinkHost: '189.24.7.73',
       lastDeploy: { status: 'success', startedAt: '2026-10-01T10:00:00.000Z', finishedAt: '2026-10-01T10:02:00.000Z', durationMs: 120000, version: '1.2.0' },
       deploying: false,
     })
-    // Variáveis, portas, máquinas, caminhos, containers e erro com caminho nunca saem para o portal.
-    expect(JSON.stringify(list)).not.toMatch(/TOKEN|8080|server|pc|loja-app-1|segredo|docker-compose/)
+    // Variáveis, máquinas, caminhos, nome do container, CPU/RAM/limites, portas liberadas do ambiente e erro com
+    // caminho nunca saem para o portal; as portas de cada serviço, sim (OPE-211, decisão do dono).
+    expect(JSON.stringify(list)).not.toMatch(/TOKEN|server|"pc"|loja-app-1|segredo|docker-compose|MiB|memoryGb|cpu|localhost/)
+    expect(list[0]).not.toHaveProperty('ports')
   })
 
   it('cliente sem repositórios vinculados não vê nada (nem consulta o Docker)', async () => {

@@ -188,7 +188,7 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
 }
 
 export function mergeSettingsPatch(current: EnvironmentsSettings, patch: Partial<EnvironmentsSettings>): EnvironmentsSettings {
-    return { baseDir: patch.baseDir ?? current.baseDir, registryPort: patch.registryPort ?? current.registryPort, keepTags: patch.keepTags ?? current.keepTags }
+    return { baseDir: patch.baseDir ?? current.baseDir, registryPort: patch.registryPort ?? current.registryPort, keepTags: patch.keepTags ?? current.keepTags, portLinkHost: patch.portLinkHost ?? current.portLinkHost }
 }
 
 /** Patch do builder: só os campos enviados mudam; `null` em um limite tira o limite. */

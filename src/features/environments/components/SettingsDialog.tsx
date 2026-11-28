@@ -15,7 +15,7 @@ const numberField = (name: "registryPort" | "keepTags", id: string, control: Con
     <Controller control={control} name={name} render={({ field }) => <Input id={id} type="number" value={Number.isNaN(field.value) ? "" : field.value} onChange={(event) => field.onChange(event.target.value === "" ? Number.NaN : Number(event.target.value))} />} />
 )
 
-/** Configurações (engrenagem): pasta base no servidor, porta do registry e quantas tags manter. */
+/** Configurações (engrenagem): pasta base no servidor, porta do registry, quantas tags manter e o host dos links das portas. */
 export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
     const query = useEnvironmentsSettings(open)
     const registry = useRegistryStatus(open)
@@ -43,6 +43,12 @@ export function SettingsDialog({ open, onClose }: { open: boolean; onClose: () =
                         </Field>
                         <Field id="environments-keep-tags" label="Tags mantidas por ambiente" error={errors.keepTags?.message}>
                             {numberField("keepTags", "environments-keep-tags", form.control)}
+                        </Field>
+                        <Field id="environments-port-link-host" label="Endereço dos links das portas" error={errors.portLinkHost?.message}>
+                            <Input id="environments-port-link-host" className="font-mono" placeholder="192.168.0.64" aria-describedby="environments-port-link-host-hint" {...form.register("portLinkHost")} />
+                            <p id="environments-port-link-host-hint" className="text-xs text-muted-foreground">
+                                Vazio = o endereço com que a tela foi aberta. Abrindo o Opex por um domínio (ex.: atrás da Cloudflare), informe o IP ou host do servidor, senão os links não abrem.
+                            </p>
                         </Field>
                     </div>
                     <DialogFooter>
