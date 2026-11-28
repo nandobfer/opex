@@ -304,8 +304,11 @@ transcrição sob demanda do áudio, que depende do recurso de transcrição do 
   para a pausa e os contatos pelas mesmas chaves de cache, com skeleton na estrutura do inbox e erro com "Tentar
   novamente"). O tempo real do Secretário é o mesmo nas duas (`useSecretaryRealtime`). **Abrir memórias** vai para a
   aba Memórias da tela em que a pessoa está: em Integrações, a seção Memórias; na página do agente,
-  `?aba=memorias&conversa=<id>` (contexto `SecretaryMemoriesLinkProvider`).
-- **Layout**: card na altura visível da tela (mínimo 480 px), lista à esquerda (340/380 px) e conversa à direita; no
+  `?aba=memorias&conversa=<id>` (contexto `SecretaryMemoriesLinkProvider`). A troca é imediata, sem ida ao servidor
+  (`navigateInPage` no clique simples; o Voltar do navegador retorna à conversa; Ctrl/Cmd+clique abre como link).
+- **Layout**: card com a altura restante da área visível até o fim da página, medida a partir do topo do card
+  (`useInboxHeight` sobre `useFillViewportHeight`, igual no inbox, no skeleton e no erro; mínimo 480 px, abaixo disso
+  a página rola), lista à esquerda (340/380 px) e conversa à direita; no
   celular, uma de cada vez, com Voltar. A conversa aberta e os filtros ficam na URL (`conversa=<id>`, `busca`, `filtro`,
   `secretario`); a troca de conversa é animada e, sem nenhuma aberta, aparece "Selecione uma conversa".
 - **Lista** (`GET /api/secretary/conversations`, cache `evolution_contacts`): foto, nome, horário da última mensagem no

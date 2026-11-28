@@ -1,11 +1,12 @@
 "use client"
 
-import { useState } from "react"
+import { useState, type MouseEvent } from "react"
 import Link from "next/link"
 import { Ban, Brain, MoreVertical, Pause, Play, Undo2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ConfirmDialog } from "@/components/ui/confirm-dialog"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { navigateInPage } from "@/hooks/useUrlFilters"
 import { cn } from "@/lib/utils"
 import { useConversationAction } from "../../hooks/useSecretaryChat"
 import type { SecretaryConversationDto } from "../../types"
@@ -43,6 +44,12 @@ export function useConversationActions(row: Row, minutes: number) {
 
 type Actions = ReturnType<typeof useConversationActions>
 
+/** Clique simples em "Abrir memórias" na mesma página troca a aba na hora; com tecla modificadora, abre como link. */
+function openInPage(event: MouseEvent<HTMLAnchorElement>, href: string) {
+    if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey || event.altKey) return
+    if (navigateInPage(href)) event.preventDefault()
+}
+
 export function ConversationActionsMenu({ actions, label, className }: { actions: Actions; label: string; className?: string }) {
     return (
         <DropdownMenu>
@@ -60,7 +67,7 @@ export function ConversationActionsMenu({ actions, label, className }: { actions
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem asChild>
-                    <Link href={actions.memoriesHref}>
+                    <Link href={actions.memoriesHref} onClick={(event) => openInPage(event, actions.memoriesHref)}>
                         <Brain className="h-4 w-4" aria-hidden /> Abrir memórias
                     </Link>
                 </DropdownMenuItem>

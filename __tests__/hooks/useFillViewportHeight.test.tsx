@@ -45,6 +45,22 @@ describe('useFillViewportHeight', () => {
     await waitFor(() => expect(document.querySelector('[data-testid="probe"]')!.textContent).toBe('320'))
   })
 
+  it('settleMs mede de novo depois da entrada animada (deslocamento não muda tamanho)', async () => {
+    function Settling() {
+      const ref = useRef<HTMLDivElement>(null)
+      const height = useFillViewportHeight(ref, true, 100, 50)
+      return <div ref={ref} data-testid="settle">{height ?? 'sem-medida'}</div>
+    }
+    const { container } = render(<main style={{ overflowY: 'auto' }}><Settling /></main>)
+    const main = container.querySelector('main')!
+    Object.defineProperty(main, 'clientHeight', { configurable: true, value: 600 })
+    main.getBoundingClientRect = () => rect(0)
+    const probe = container.querySelector('[data-testid="settle"]') as HTMLElement
+    // Sem disparar resize: só a medida atrasada pega a posição final do bloco.
+    probe.getBoundingClientRect = () => rect(200)
+    await waitFor(() => expect(probe.textContent).toBe('400'))
+  })
+
   it('desligado não mede', () => {
     mount({ containerHeight: 600, offset: 200, enabled: false })
     expect(document.querySelector('[data-testid="probe"]')!.textContent).toBe('sem-medida')

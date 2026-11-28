@@ -3,8 +3,14 @@
  * ter a mesma estrutura do resultado final.
  */
 
-/** Card na altura visível da tela (mínimo 480 px). */
+/** Altura mínima do card (abaixo dela, a página rola). */
+export const INBOX_MIN_HEIGHT_PX = 480
+/**
+ * Altura do card antes da primeira medida (sem salto no carregamento); medido, o card ocupa o restante da área visível
+ * até o fim do `<main>` (`useInboxHeight`, OPE-207).
+ */
 export const INBOX_HEIGHT = "h-[calc(100dvh-15rem)] min-h-[480px]"
+export const INBOX_MEASURED_HEIGHT = "min-h-[480px]"
 /** Coluna da lista (340/380 px no desktop; tela inteira no celular). */
 export const LIST_COLUMN = "md:w-[340px] lg:w-[380px]"
 export const CHAT_HEADER_HEIGHT = "h-16"

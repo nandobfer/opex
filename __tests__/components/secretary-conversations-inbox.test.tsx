@@ -14,6 +14,7 @@ const mocks = vi.hoisted(() => ({
     toastError: vi.fn(),
 }))
 vi.mock("framer-motion", () => framerMotionMock())
+vi.mock("next/link", () => ({ default: ({ href, children, ...rest }: { href: string; children: React.ReactNode }) => <a href={href} {...rest}>{children}</a> }))
 vi.mock("sonner", () => ({ toast: { error: mocks.toastError, success: vi.fn(), info: vi.fn() } }))
 vi.mock("@/lib/api", () => ({ api: { post: mocks.post }, apiErrorMessage: (_error: unknown, fallback: string) => fallback }))
 vi.mock("@/features/evolution-api/components/EvolutionSyncAction", () => ({ EvolutionSyncAction: () => null }))
@@ -30,6 +31,7 @@ import { ConversationsInbox } from "@/features/secretary-agent/components/conver
 import { chatOutbox } from "@/features/secretary-agent/hooks/chat-outbox"
 import { useConversationActions } from "@/features/secretary-agent/components/conversations/ConversationActions"
 import { SecretaryMemoriesLinkProvider } from "@/features/secretary-agent/components/conversations/memories-link"
+import { SecretaryConversationsSkeleton } from "@/features/secretary-agent/components/conversations/SecretaryConversationsTab"
 import { SECRETARY_PAGE_TABS, secretaryPagePath, secretarySectionPath } from "@/features/secretary-agent/links"
 import { CONVERSATION_PARAM } from "@/features/secretary-agent/memory-focus"
 
@@ -59,6 +61,7 @@ beforeEach(() => {
 afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+    vi.restoreAllMocks()
 })
 
 describe("Abrir memórias depende da tela (OPE-207)", () => {
@@ -69,10 +72,74 @@ describe("Abrir memórias depende da tela (OPE-207)", () => {
         expect(result.current.memoriesHref).toBe(secretarySectionPath("memorias", { [CONVERSATION_PARAM]: "5531999999999" }))
     })
 
+    it("clique simples troca a aba na hora pelo histórico (sem ida ao servidor); Ctrl+clique segue como link", async () => {
+        window.history.replaceState(null, "", "/agente-secretario")
+        const href = (chatId: string) => secretaryPagePath(SECRETARY_PAGE_TABS.memorias, { [CONVERSATION_PARAM]: chatId })
+        const client = new QueryClient()
+        render(
+            <QueryClientProvider client={client}>
+                <SecretaryMemoriesLinkProvider href={href}>
+                    <ConversationsInbox minutes={30} contacts={[]} />
+                </SecretaryMemoriesLinkProvider>
+            </QueryClientProvider>,
+        )
+        const openMenu = async () => {
+            const trigger = screen.getByRole("button", { name: "Ações da conversa com Ana" })
+            fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false, pointerType: "mouse" })
+            return await screen.findByRole("menuitem", { name: "Abrir memórias" })
+        }
+        const pushState = vi.spyOn(window.history, "pushState")
+        const modified = await openMenu()
+        expect(fireEvent.click(modified, { ctrlKey: true })).toBe(true)
+        expect(pushState).not.toHaveBeenCalled()
+        const item = screen.queryByRole("menuitem", { name: "Abrir memórias" }) ?? await openMenu()
+        // `false`: o clique foi cancelado (sem a navegação do Next) e a URL trocou pelo histórico.
+        expect(fireEvent.click(item)).toBe(false)
+        expect(pushState).toHaveBeenCalledTimes(1)
+        const params = new URLSearchParams(window.location.search)
+        expect(window.location.pathname).toBe("/agente-secretario")
+        expect(params.get("aba")).toBe(SECRETARY_PAGE_TABS.memorias)
+        expect(params.get(CONVERSATION_PARAM)).toBe("5531999999999")
+        pushState.mockRestore()
+    })
+
     it("com o provider da página do agente: aba Memórias da própria página", () => {
         const href = (chatId: string) => secretaryPagePath(SECRETARY_PAGE_TABS.memorias, { [CONVERSATION_PARAM]: chatId })
         const { result } = renderHook(() => useConversationActions(conversation, 30), { wrapper: ({ children }) => <SecretaryMemoriesLinkProvider href={href}>{children}</SecretaryMemoriesLinkProvider> })
         expect(result.current.memoriesHref).toBe(secretaryPagePath(SECRETARY_PAGE_TABS.memorias, { [CONVERSATION_PARAM]: "5531999999999" }))
+    })
+})
+
+describe("altura do card: o restante da área visível (OPE-207)", () => {
+    function mountInMain(clientHeight: number) {
+        const client = new QueryClient()
+        const view = render(
+            <main style={{ overflowY: "auto" }}>
+                <QueryClientProvider client={client}>
+                    <ConversationsInbox minutes={30} contacts={[]} />
+                </QueryClientProvider>
+                <SecretaryConversationsSkeleton />
+            </main>,
+        )
+        const main = view.container.querySelector("main")!
+        Object.defineProperty(main, "clientHeight", { configurable: true, value: clientHeight })
+        vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockImplementation(function (this: HTMLElement) {
+            const top = this === main ? 0 : 150
+            return { top, left: 0, right: 0, bottom: top, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) } as DOMRect
+        })
+        fireEvent(window, new Event("resize"))
+    }
+    const heights = () => [screen.getByTestId("secretary-inbox"), screen.getByTestId("secretary-inbox-skeleton")].map((element) => element.style.height)
+
+    it("inbox e skeleton com a mesma altura medida até o fim do <main>", async () => {
+        mountInMain(800)
+        await waitFor(() => expect(heights()).toEqual(["650px", "650px"]))
+        expect(screen.getByTestId("secretary-inbox").className).not.toContain("100dvh")
+    })
+
+    it("tela baixa: fica no mínimo de 480 px (a página rola)", async () => {
+        mountInMain(500)
+        await waitFor(() => expect(heights()).toEqual(["480px", "480px"]))
     })
 })
 

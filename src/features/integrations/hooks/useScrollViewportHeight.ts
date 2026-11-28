@@ -46,9 +46,10 @@ export function useScrollViewportHeight(ref: RefObject<HTMLElement | null>, enab
  * Altura para um bloco preencher a área visível do contêiner rolável a partir do seu próprio topo.
  * A medida é estável (não muda com a rolagem) e nunca fica abaixo de `minHeight`, para o conteúdo
  * não colapsar quando o cabeçalho/filtros acima forem altos — nesse caso a própria página rola.
- * Acompanha o resize da janela e mudanças de altura do que está acima (via `ResizeObserver`).
+ * Acompanha o resize da janela e mudanças de altura do que está acima (via `ResizeObserver`). `settleMs` mede mais uma
+ * vez depois desse tempo: a entrada animada (deslocamento vertical) não muda tamanho e deixaria a primeira medida curta.
  */
-export function useFillViewportHeight(ref: RefObject<HTMLElement | null>, enabled = true, minHeight = 320): number | undefined {
+export function useFillViewportHeight(ref: RefObject<HTMLElement | null>, enabled = true, minHeight = 320, settleMs?: number): number | undefined {
     const [height, setHeight] = useState<number>()
 
     useEffect(() => {
@@ -70,12 +71,14 @@ export function useFillViewportHeight(ref: RefObject<HTMLElement | null>, enable
         const page = container.firstElementChild
         if (page) observer.observe(page)
         compute()
+        const settle = settleMs === undefined ? undefined : window.setTimeout(compute, settleMs)
         window.addEventListener("resize", compute)
         return () => {
             observer.disconnect()
+            window.clearTimeout(settle)
             window.removeEventListener("resize", compute)
         }
-    }, [ref, enabled, minHeight])
+    }, [ref, enabled, minHeight, settleMs])
 
     return enabled ? height : undefined
 }
