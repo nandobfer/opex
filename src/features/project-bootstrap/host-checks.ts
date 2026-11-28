@@ -80,6 +80,11 @@ export interface VerificationTarget {
     port: number
     /** Nome do repositório: o rótulo esperado da reserva em `/home/used_ports`. */
     project: string
+    /**
+     * Projeto do compose do ambiente já criado para este bootstrap (`source.projectName`): o container dele roda em
+     * outra pasta (a do ambiente) e pode seguir de pé depois de um deploy com falha — conta como próprio.
+     */
+    composeProject?: string | null
 }
 
 const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
@@ -90,7 +95,7 @@ const escapeRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$
  * não está ocupada por outro container ou processo (um container deste diretório pode usá-la).
  */
 export function verificationCommand(target: VerificationTarget): string {
-    const { directory, branch, port, project } = target
+    const { directory, branch, port, project, composeProject } = target
     const dir = shq(directory)
     const ref = shq(`refs/heads/${branch}`)
     const reservation = shq(`^[[:space:]]*${port}[[:space:]]*->[[:space:]]*${escapeRegex(project)}([[:space:]]|$)`)
@@ -107,8 +112,10 @@ export function verificationCommand(target: VerificationTarget): string {
         `[ -f docker-compose.yml ] && echo COMPOSE=ok || echo COMPOSE=missing`,
         `grep -Eiq ${reservation} ${shq(USED_PORTS_FILE)} 2>/dev/null && echo PORT=ok || echo PORT=missing`,
         `HERE=$(pwd -P)`,
-        `OWN=$(docker ps --format '{{.Label "com.docker.compose.project.working_dir"}}|{{.Ports}}' 2>/dev/null | grep -F ${published} | awk -F'|' -v a=${dir} -v b="$HERE" '$1==a || $1==b' | head -n1)`,
-        `OTHER=$(docker ps --format '{{.Label "com.docker.compose.project.working_dir"}}|{{.Ports}}' 2>/dev/null | grep -F ${published} | awk -F'|' -v a=${dir} -v b="$HERE" '$1!=a && $1!=b' | head -n1)`,
+        // Próprio: container deste diretório ou do ambiente deste bootstrap (projeto do compose); o resto é de outro projeto.
+        `CONTAINERS=$(docker ps --format '{{.Label "com.docker.compose.project"}}|{{.Label "com.docker.compose.project.working_dir"}}|{{.Ports}}' 2>/dev/null | grep -F ${published})`,
+        `OWN=$(printf '%s\\n' "$CONTAINERS" | awk -F'|' -v a=${dir} -v b="$HERE" -v p=${shq(composeProject ?? "")} 'NF && ($2==a || $2==b || (p!="" && $1==p))' | head -n1)`,
+        `OTHER=$(printf '%s\\n' "$CONTAINERS" | awk -F'|' -v a=${dir} -v b="$HERE" -v p=${shq(composeProject ?? "")} 'NF && $2!=a && $2!=b && (p=="" || $1!=p)' | head -n1)`,
         `if [ -n "$OTHER" ]; then echo PORTFREE=missing; elif [ -z "$OWN" ] && ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq ':${port}$'; then echo PORTFREE=missing; else echo PORTFREE=ok; fi`,
     ].join("\n")
 }

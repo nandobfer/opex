@@ -350,7 +350,11 @@ async function afterTurn(activation: Activation, result: BootstrapResult): Promi
     publishWorkbenchEvent(activation.id, { type: "notice", level: "info", message: "Conferindo as entregas no host…" })
     let missing
     try {
-        missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port: fixed.port, project: doc.name, repo: doc.repo })
+        // Depois de um deploy com falha, o container do ambiente deste bootstrap pode seguir na porta: conta como próprio.
+        const { Environment } = await import("@/features/environments/server/models")
+        const environment = doc.created?.environmentId ? await Environment.findById(doc.created.environmentId).select({ slug: 1, source: 1 }).lean() : null
+        const composeProject = environment ? (environment.source?.projectName ?? environment.slug) : null
+        missing = await verifyDeliverables({ directory: doc.directory, branch: fixed.branch, port: fixed.port, project: doc.name, repo: doc.repo, composeProject })
     } catch (error) {
         await fail(activation, `${errorText(error)}: use Tentar novamente.`)
         return null

@@ -51,7 +51,8 @@ você, destructive = falhou, success = concluída). A etapa atual abre por padr�
      para **este** repositório (o remoto é lido sem credenciais), push do `HEAD` em `refs/heads/<branch>`, árvore limpa,
      `.env` existente e ignorado, `docker-compose.yml`, a reserva da porta em `/home/used_ports` com o nome do repositório
      (`<porta> -> <nome>`; reserva de outro projeto não conta) e a porta livre (nenhum container de outro diretório a
-     publica e nenhum outro processo escuta nela; um container deste diretório pode usá-la). Faltou algo: a etapa falha listando o que faltou; **Tentar novamente** pede ao agente, na mesma
+     publica e nenhum outro processo escuta nela; um container deste diretório, ou o do ambiente já criado para este bootstrap
+     — identificado pelo projeto do compose, que segue de pé depois de um deploy com falha —, pode usá-la). Faltou algo: a etapa falha listando o que faltou; **Tentar novamente** pede ao agente, na mesma
      conversa, que complete. A branch é sempre a decidida na etapa 1.
 3. **Amarração** (`LinkPanel`): `createLink` (vínculo em Integrações › GitHub, que cria o Projeto) e `createCentral` +
    `updateCentral` com `bootstrapCentralConfig` (branch base e destino do PR = a branch do push; backup do banco **só**

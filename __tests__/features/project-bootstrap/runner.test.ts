@@ -134,7 +134,7 @@ vi.mock('@/features/environments/server/service', () => ({
     getDeploy: vi.fn(async () => ({ log: 'compilando\nERRO: porta ocupada' })),
 }))
 vi.mock('@/features/environments/server/models', () => ({
-    Environment: { find: () => ({ select: () => ({ lean: async () => mocks.envs }) }), findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => mocks.savedEnv, select: () => ({ lean: async () => ({ lastDeployId: null }) }) }) },
+    Environment: { find: () => ({ select: () => ({ lean: async () => mocks.envs }) }), findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => mocks.savedEnv, select: () => ({ lean: async () => ({ ...mocks.savedEnv, lastDeployId: null }) }) }) },
     EnvironmentDeploy: { findById: () => ({ select: () => ({ lean: async () => ({ status: mocks.deployOutcome, error: mocks.deployOutcome === 'failed' ? 'Build falhou' : null }) }) }) },
 }))
 vi.mock('@/features/environments/server/deploy', () => {
@@ -502,7 +502,19 @@ describe('achados da revisão (rodada 3)', () => {
         const id = seed()
         await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
         await settle()
-        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toEqual({ directory: '/home/u/code/app', branch: 'main', port: 4014, project: 'app', repo: 'org/app' })
+        expect(vi.mocked(verifyDeliverables).mock.calls[0]![0]).toEqual({ directory: '/home/u/code/app', branch: 'main', port: 4014, project: 'app', repo: 'org/app', composeProject: null })
+    })
+
+    it('volta depois do deploy com falha: a conferência trata o container do ambiente deste bootstrap como próprio', async () => {
+        const { verifyDeliverables } = await import('@/features/project-bootstrap/server/host')
+        mocks.savedEnv = { name: 'app', slug: 'app-3', source: { projectName: 'app-3' }, limits: null, composeOverrides: null }
+        mocks.deployQueue = ['failed', 'success']
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        const calls = vi.mocked(verifyDeliverables).mock.calls.map(([input]) => (input as { composeProject: string | null }).composeProject)
+        expect(calls).toEqual([null, 'app-3'])
+        expect(current(id).status).toBe('done')
     })
 
     it('dois envios ao mesmo tempo para o mesmo repositório: só um bootstrap abre', async () => {

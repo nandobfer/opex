@@ -1,3 +1,7 @@
+import { execSync } from 'node:child_process'
+import { chmodSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { classifyDirectory, describeMissing, missingDeliverables, verificationCommand } from '@/features/project-bootstrap/host-checks'
 import { parseBootstrapResult } from '@/features/project-bootstrap/result'
@@ -50,6 +54,28 @@ describe('conferência do fim da etapa 2', () => {
         expect(command).toContain('ss -ltnH')
         expect(command).toContain("sed -E 's#//[^@/]*@#//#'")
         expect(command).not.toMatch(/cat .*\.env/)
+    })
+
+    it('o container do ambiente deste bootstrap (projeto do compose, outra pasta) conta como próprio; o de outro projeto não', () => {
+        // Roda o comando de verdade, com `docker` e `ss` falsos no PATH (o resto da conferência não importa aqui).
+        const bin = mkdtempSync(join(tmpdir(), 'bootstrap-bin-'))
+        const dir = mkdtempSync(join(tmpdir(), 'bootstrap-dir-'))
+        const containers = ['app-3|/home/u/opex-envs/app-3|0.0.0.0:4014->4014/tcp', 'outro|/home/outro|0.0.0.0:5000->5000/tcp'].join('\\n')
+        writeFileSync(join(bin, 'docker'), `#!/bin/sh\nprintf '${containers}\\n'\n`)
+        writeFileSync(join(bin, 'ss'), '#!/bin/sh\nprintf "LISTEN 0 4096 0.0.0.0:4014 0.0.0.0:*\\n"\n')
+        chmodSync(join(bin, 'docker'), 0o755)
+        chmodSync(join(bin, 'ss'), 0o755)
+        const portFree = (input: { port: number; composeProject?: string | null }) =>
+            /PORTFREE=(\w+)/.exec(execSync(verificationCommand({ directory: dir, branch: 'main', project: 'app', ...input }), { shell: '/bin/sh', env: { ...process.env, PATH: `${bin}:${process.env.PATH}` } }).toString())![1]
+        try {
+            expect(portFree({ port: 4014, composeProject: 'app-3' })).toBe('ok')
+            expect(portFree({ port: 4014, composeProject: null })).toBe('missing')
+            expect(portFree({ port: 4014, composeProject: 'outro' })).toBe('missing')
+            expect(portFree({ port: 5000, composeProject: 'app-3' })).toBe('missing')
+        } finally {
+            rmSync(bin, { recursive: true, force: true })
+            rmSync(dir, { recursive: true, force: true })
+        }
     })
 })
 
