@@ -63,8 +63,8 @@ importers:
         specifier: ^5.2.2
         version: 5.9.1(@standard-schema/spec@1.1.0)(react-hook-form@7.89.0(@types/react@19.3.0)(react@19.2.3))(zod@4.6.5)
       '@nandobfer/integracoes':
-        specifier: github:nandobfer/integracoes#v0.2.1
-        version: https://codeload.github.com/nandobfer/integracoes/tar.gz/cc006bc91ccebb175d642e8fe10694ad8e908ef5(70524f4d062ad7d297aeaf3e325b4799)
+        specifier: github:nandobfer/integracoes#v0.2.2
+        version: https://codeload.github.com/nandobfer/integracoes/tar.gz/386c728167fb60461a0bdacedfb7641fdbbbbc66(70524f4d062ad7d297aeaf3e325b4799)
       '@opencode/client':
         specifier: 2.0.24
         version: 2.0.24
@@ -1281,9 +1281,9 @@ packages:
     cpu: [x64]
     os: [win32]
 
-  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/cc006bc91ccebb175d642e8fe10694ad8e908ef5':
-    resolution: {gitHosted: true, integrity: sha512-RDAREc2cEl8MH7DoWNU2rjN//505jW45Lwe/cx82Et5QcckZ7J2iW3WqI9znNl7mHKdRx1Tq8ofuHNzFlomp1w==, tarball: https://codeload.github.com/nandobfer/integracoes/tar.gz/cc006bc91ccebb175d642e8fe10694ad8e908ef5}
-    version: 0.2.1
+  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/386c728167fb60461a0bdacedfb7641fdbbbbc66':
+    resolution: {gitHosted: true, integrity: sha512-rKH8H3b4RCyMHVbAKM73UqU5hUOzByyVRMsPzmR+GyqsSJroAHi5F7CwmlvpDP+vlDAmV8TNCtk+8DO4er3/Xw==, tarball: https://codeload.github.com/nandobfer/integracoes/tar.gz/386c728167fb60461a0bdacedfb7641fdbbbbc66}
+    version: 0.2.2
     engines: {node: '>=20'}
     peerDependencies:
       '@ai-sdk/anthropic': '>=4.0.82'
@@ -1291,12 +1291,12 @@ packages:
       '@ai-sdk/google': '>=4.0.92'
       '@ai-sdk/openai': '>=4.0.96'
       '@ai-sdk/openai-compatible': '>=3.0.71'
-      '@aws-sdk/client-s3': '>=3.1178.0'
-      '@aws-sdk/s3-request-presigner': '>=3.1178.0'
+      '@aws-sdk/client-s3': '>=3.1149.0'
+      '@aws-sdk/s3-request-presigner': '>=3.1149.0'
       '@dnd-kit/core': '>=6.3.1'
       '@dnd-kit/sortable': '>=10.0.0'
       '@dnd-kit/utilities': '>=3.2.2'
-      '@hookform/resolvers': '>=5.9.2'
+      '@hookform/resolvers': '>=5.9.1'
       '@opencode/client': '>=2.0.24'
       '@radix-ui/react-alert-dialog': ^1.1.0
       '@radix-ui/react-dialog': ^1.1.0
@@ -1306,8 +1306,8 @@ packages:
       '@radix-ui/react-select': ^2.1.0
       '@radix-ui/react-slot': ^1.1.0
       '@radix-ui/react-tooltip': ^1.1.0
-      '@tanstack/react-query': '>=5.108.4'
-      '@tanstack/react-virtual': '>=3.14.28'
+      '@tanstack/react-query': '>=5.104.1'
+      '@tanstack/react-virtual': '>=3.14.13'
       '@xterm/addon-fit': '>=0.11.0'
       '@xterm/addon-search': '>=0.16.0'
       '@xterm/xterm': '>=6.0.0'
@@ -1317,7 +1317,7 @@ packages:
       framer-motion: '>=12.43.0'
       fuse.js: '>=7.5.0'
       lucide-react: '>=0.563.0'
-      mongoose: '>=9.13.1'
+      mongoose: '>=9.11.0'
       next: '>=16.4.5'
       nodemailer: '>=7.0.13'
       pusher: '>=5.3.4'
@@ -1325,8 +1325,8 @@ packages:
       react: ^19.0.0
       react-day-picker: '>=10.0.2'
       react-dom: ^19.0.0
-      react-hook-form: '>=7.92.0'
-      recharts: '>=3.11.1'
+      react-hook-form: '>=7.89.0'
+      recharts: '>=3.10.1'
       sonner: '>=2.0.8'
       zod: ^4.0.0
     peerDependenciesMeta:
@@ -6369,7 +6369,7 @@ snapshots:
   '@msgpackr-extract/msgpackr-extract-win32-x64@3.0.4':
     optional: true
 
-  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/cc006bc91ccebb175d642e8fe10694ad8e908ef5(70524f4d062ad7d297aeaf3e325b4799)':
+  '@nandobfer/integracoes@https://codeload.github.com/nandobfer/integracoes/tar.gz/386c728167fb60461a0bdacedfb7641fdbbbbc66(70524f4d062ad7d297aeaf3e325b4799)':
     dependencies:
       class-variance-authority: 0.7.1
       clsx: 2.1.1

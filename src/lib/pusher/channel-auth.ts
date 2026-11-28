@@ -11,6 +11,9 @@
  * - `private-opex-{clientId}-{userId}`: o **Agente Opex** do próprio usuário no cliente (sessões e
  *   configuração). O usuário de cliente só assina o seu; o dono assina o do `userId` local.
  * - `private-plugin-{pluginId}`: logs de debug de um plugin (OPE-172), só o **dono**.
+ *
+ * `private-integration-{id}` só vale para uma integração que existe: as do registro e as criadas em
+ * tempo de execução (provedores de IA customizados, `ai_custom_<slug>`), conferidas na central.
  */
 
 import { isIntegrationId } from "@/features/integrations/registry/definitions"
@@ -48,14 +51,31 @@ export function parseChannel(channel: string): ParsedChannel {
     return { kind: "unknown" }
 }
 
+export interface ChannelAuthDeps {
+    /** A integração existe (fixa ou criada em tempo de execução)? */
+    integrationExists?: (id: string) => Promise<boolean>
+}
+
+/**
+ * Integração do registro ou dinâmica existente. Os ids dinâmicos são resolvidos pela central, que só
+ * consulta o banco para ids no padrão de algum adaptador com filhos dinâmicos (`ai_custom_<slug>`).
+ */
+async function integrationExists(id: string): Promise<boolean> {
+    if (isIntegrationId(id)) return true
+    await import("@/lib/integrations/runtime")
+    const { getDefinition } = await import("@nandobfer/integracoes/server")
+    return (await getDefinition(id)) !== undefined
+}
+
 /** Autoriza a assinatura do canal conforme a sessão (assinada pelo servidor). */
-export function isChannelAuthorized(channel: string, session: SessionPayload | null): boolean {
+export async function isChannelAuthorized(channel: string, session: SessionPayload | null, deps: ChannelAuthDeps = {}): Promise<boolean> {
     const parsed = parseChannel(channel)
     switch (parsed.kind) {
         case "app":
             return session?.kind === "admin"
         case "integration":
-            return session?.kind === "admin" && isIntegrationId(parsed.integrationId)
+            if (session?.kind !== "admin" || !parsed.integrationId) return false
+            return (deps.integrationExists ?? integrationExists)(parsed.integrationId)
         case "plugin":
             return session?.kind === "admin"
         case "client":

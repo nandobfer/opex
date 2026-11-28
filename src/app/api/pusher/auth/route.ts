@@ -24,7 +24,7 @@ export async function POST(request: NextRequest) {
 
     try {
         const session = await sessionFromRequest(request)
-        if (!isChannelAuthorized(channel, session)) return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
+        if (!(await isChannelAuthorized(channel, session))) return NextResponse.json({ error: "Acesso negado" }, { status: 403 })
         return NextResponse.json(pusher.authorizeChannel(socketId, channel))
     } catch (error) {
         logger.error({ err: error, channel }, "[pusher] Erro ao autorizar canal")

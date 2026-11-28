@@ -44,8 +44,12 @@ vai para o Engramind; `src/lib/integrations/runtime.ts`).
   `src/app/api/ai/[...path]`); o resto (`keys`, `models`, `consumption`, teste) pelas rotas de sempre do
   provedor e da integração `ai_custom_<slug>`.
 - **Tempo real**: `ai-custom-providers-updated` (`{ slug, action: "created" | "updated" | "deleted" }`) em
-  `private-app`; o canal `private-integration-ai_custom_<slug>` é aceito pelo `channel-auth` quando o id
-  existe no registro.
+  `private-app`; o canal `private-integration-ai_custom_<slug>` (logs e status) é aceito pelo `channel-auth`
+  (assíncrono) para o dono quando o provedor existe: os ids fora do registro fixo são resolvidos pela central
+  (`getDefinition`, que só consulta o banco para ids no padrão `ai_custom_`); inexistente recebe 403.
+- **User-Agent**: o Opex se identifica ao OpenCode Go e ao Command Code com
+  `configureIa({ userAgent: { name: "Opex", url: "https://github.com/nandobfer/opex" } })` (o mesmo `User-Agent` de
+  antes); sem essa configuração, a biblioteca usa a identidade neutra dela.
 
 ## Provedores
 

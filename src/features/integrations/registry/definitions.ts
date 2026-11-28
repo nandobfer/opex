@@ -18,6 +18,8 @@ import { OPEX_CONSUMPTION_ORIGIN_LABELS } from "./origin-labels"
 
 configureIa({
     appName: "Opex",
+    // `User-Agent` próprio exigido pelo OpenCode Go e pelo Command Code (o mesmo de antes da biblioteca).
+    userAgent: { name: "Opex", url: "https://github.com/nandobfer/opex" },
     originLabels: OPEX_CONSUMPTION_ORIGIN_LABELS,
     // Engramind (Redator/embedding) aceita uma só chave: recebe a principal destes provedores.
     keyRingNotes: Object.fromEntries(["gemini", "anthropic", "openai", "deepseek"].map((provider) => [provider, "O Engramind aceita uma só chave: ele recebe a chave principal."])),

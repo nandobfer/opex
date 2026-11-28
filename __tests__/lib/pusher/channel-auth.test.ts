@@ -7,79 +7,98 @@ const ADMIN: SessionPayload = { iat: 0, exp: 9_999_999_999, kind: 'admin' }
 const CLIENT = (clientId?: string): SessionPayload => ({ iat: 0, exp: 9_999_999_999, kind: 'client', userId: 'u1', clientId })
 
 describe('autorização dos canais privados', () => {
-  it('interpreta os nomes de canal', () => {
+  it('interpreta os nomes de canal', async () => {
     expect(parseChannel('private-app')).toEqual({ kind: 'app' })
     expect(parseChannel('private-integration-crons')).toEqual({ kind: 'integration', integrationId: 'crons' })
     expect(parseChannel('private-client-abc')).toEqual({ kind: 'client', clientId: 'abc' })
     expect(parseChannel('public-qualquer')).toEqual({ kind: 'unknown' })
   })
 
-  it('nomes gerados pelos helpers batem com as regras', () => {
+  it('nomes gerados pelos helpers batem com as regras', async () => {
     expect(appChannel()).toBe('private-app')
     expect(integrationChannel('pusher')).toBe('private-integration-pusher')
     expect(clientChannel('abc')).toBe('private-client-abc')
   })
 
-  it('o canal do app e os de integração são só do dono', () => {
-    expect(isChannelAuthorized(appChannel(), ADMIN)).toBe(true)
-    expect(isChannelAuthorized(appChannel(), CLIENT('c1'))).toBe(false)
-    expect(isChannelAuthorized(appChannel(), null)).toBe(false)
+  it('o canal do app e os de integração são só do dono', async () => {
+    expect(await isChannelAuthorized(appChannel(), ADMIN)).toBe(true)
+    expect(await isChannelAuthorized(appChannel(), CLIENT('c1'))).toBe(false)
+    expect(await isChannelAuthorized(appChannel(), null)).toBe(false)
 
-    expect(isChannelAuthorized('private-integration-pusher', ADMIN)).toBe(true)
-    expect(isChannelAuthorized('private-integration-crons', ADMIN)).toBe(true)
-    expect(isChannelAuthorized('private-integration-smtp', ADMIN)).toBe(true)
-    expect(isChannelAuthorized('private-integration-storage_s3', ADMIN)).toBe(true)
-    expect(isChannelAuthorized('private-integration-inexistente', ADMIN)).toBe(false)
-    expect(isChannelAuthorized('private-integration-pusher', CLIENT('c1'))).toBe(false)
+    expect(await isChannelAuthorized('private-integration-pusher', ADMIN)).toBe(true)
+    expect(await isChannelAuthorized('private-integration-crons', ADMIN)).toBe(true)
+    expect(await isChannelAuthorized('private-integration-smtp', ADMIN)).toBe(true)
+    expect(await isChannelAuthorized('private-integration-storage_s3', ADMIN)).toBe(true)
+    expect(await isChannelAuthorized('private-integration-inexistente', ADMIN)).toBe(false)
+    expect(await isChannelAuthorized('private-integration-pusher', CLIENT('c1'))).toBe(false)
   })
 
-  it('o canal do cliente é do próprio cliente (ou do dono em pré-visualização)', () => {
-    expect(isChannelAuthorized(clientChannel('c1'), CLIENT('c1'))).toBe(true)
-    expect(isChannelAuthorized(clientChannel('c2'), CLIENT('c1'))).toBe(false)
-    expect(isChannelAuthorized(clientChannel('c1'), CLIENT())).toBe(false)
-    expect(isChannelAuthorized(clientChannel('c1'), ADMIN)).toBe(true)
-    expect(isChannelAuthorized(clientChannel('c1'), null)).toBe(false)
+  it('o canal do cliente é do próprio cliente (ou do dono em pré-visualização)', async () => {
+    expect(await isChannelAuthorized(clientChannel('c1'), CLIENT('c1'))).toBe(true)
+    expect(await isChannelAuthorized(clientChannel('c2'), CLIENT('c1'))).toBe(false)
+    expect(await isChannelAuthorized(clientChannel('c1'), CLIENT())).toBe(false)
+    expect(await isChannelAuthorized(clientChannel('c1'), ADMIN)).toBe(true)
+    expect(await isChannelAuthorized(clientChannel('c1'), null)).toBe(false)
   })
 
-  it('o canal do histórico de repositórios é do próprio ator', () => {
+  it('o canal do histórico de repositórios é do próprio ator', async () => {
     expect(parseChannel('private-repo-recents-local')).toEqual({ kind: 'repoRecents', actorId: 'local' })
     expect(repoRecentsChannel('u1')).toBe('private-repo-recents-u1')
 
-    expect(isChannelAuthorized(repoRecentsChannel('local'), ADMIN)).toBe(true)
-    expect(isChannelAuthorized(repoRecentsChannel('u1'), ADMIN)).toBe(false)
+    expect(await isChannelAuthorized(repoRecentsChannel('local'), ADMIN)).toBe(true)
+    expect(await isChannelAuthorized(repoRecentsChannel('u1'), ADMIN)).toBe(false)
 
-    expect(isChannelAuthorized(repoRecentsChannel('u1'), CLIENT())).toBe(true)
-    expect(isChannelAuthorized(repoRecentsChannel('u2'), CLIENT())).toBe(false)
-    expect(isChannelAuthorized(repoRecentsChannel('local'), CLIENT())).toBe(false)
+    expect(await isChannelAuthorized(repoRecentsChannel('u1'), CLIENT())).toBe(true)
+    expect(await isChannelAuthorized(repoRecentsChannel('u2'), CLIENT())).toBe(false)
+    expect(await isChannelAuthorized(repoRecentsChannel('local'), CLIENT())).toBe(false)
 
-    expect(isChannelAuthorized(repoRecentsChannel('local'), null)).toBe(false)
-    expect(isChannelAuthorized('private-repo-recents-', ADMIN)).toBe(false)
+    expect(await isChannelAuthorized(repoRecentsChannel('local'), null)).toBe(false)
+    expect(await isChannelAuthorized('private-repo-recents-', ADMIN)).toBe(false)
   })
 
-  it('o canal do Agente Opex é do próprio usuário no cliente (e do dono local)', () => {
+  it('o canal do Agente Opex é do próprio usuário no cliente (e do dono local)', async () => {
     expect(parseChannel(opexChannel('c1', 'u1'))).toEqual({ kind: 'opex', clientId: 'c1', userId: 'u1' })
-    expect(isChannelAuthorized(opexChannel('c1', 'u1'), CLIENT('c1'))).toBe(true)
-    expect(isChannelAuthorized(opexChannel('c2', 'u1'), CLIENT('c1'))).toBe(false)
-    expect(isChannelAuthorized(opexChannel('c1', 'u2'), CLIENT('c1'))).toBe(false)
-    expect(isChannelAuthorized(opexChannel('c1', 'local'), ADMIN)).toBe(true)
-    expect(isChannelAuthorized(opexChannel('c1', 'u1'), ADMIN)).toBe(false)
-    expect(isChannelAuthorized(opexChannel('c1', 'u1'), null)).toBe(false)
+    expect(await isChannelAuthorized(opexChannel('c1', 'u1'), CLIENT('c1'))).toBe(true)
+    expect(await isChannelAuthorized(opexChannel('c2', 'u1'), CLIENT('c1'))).toBe(false)
+    expect(await isChannelAuthorized(opexChannel('c1', 'u2'), CLIENT('c1'))).toBe(false)
+    expect(await isChannelAuthorized(opexChannel('c1', 'local'), ADMIN)).toBe(true)
+    expect(await isChannelAuthorized(opexChannel('c1', 'u1'), ADMIN)).toBe(false)
+    expect(await isChannelAuthorized(opexChannel('c1', 'u1'), null)).toBe(false)
   })
 
-  it('qualquer outro canal é negado', () => {
-    expect(isChannelAuthorized('private-company-abc-all', ADMIN)).toBe(false)
-    expect(isChannelAuthorized('presence-app', ADMIN)).toBe(false)
-    expect(isChannelAuthorized('', ADMIN)).toBe(false)
+  it('qualquer outro canal é negado', async () => {
+    expect(await isChannelAuthorized('private-company-abc-all', ADMIN)).toBe(false)
+    expect(await isChannelAuthorized('presence-app', ADMIN)).toBe(false)
+    expect(await isChannelAuthorized('', ADMIN)).toBe(false)
   })
 })
 
 describe('canal de logs de plugin (OPE-172)', () => {
-  it('private-plugin-{id} é só do dono; id fora do padrão é desconhecido', () => {
+  it('private-plugin-{id} é só do dono; id fora do padrão é desconhecido', async () => {
     expect(pluginDebugChannel('relogio')).toBe('private-plugin-relogio')
     expect(parseChannel('private-plugin-relogio')).toEqual({ kind: 'plugin', pluginId: 'relogio' })
     expect(parseChannel('private-plugin-../x')).toEqual({ kind: 'unknown' })
-    expect(isChannelAuthorized(pluginDebugChannel('relogio'), ADMIN)).toBe(true)
-    expect(isChannelAuthorized(pluginDebugChannel('relogio'), CLIENT('c1'))).toBe(false)
-    expect(isChannelAuthorized(pluginDebugChannel('relogio'), null)).toBe(false)
+    expect(await isChannelAuthorized(pluginDebugChannel('relogio'), ADMIN)).toBe(true)
+    expect(await isChannelAuthorized(pluginDebugChannel('relogio'), CLIENT('c1'))).toBe(false)
+    expect(await isChannelAuthorized(pluginDebugChannel('relogio'), null)).toBe(false)
+  })
+})
+
+describe('canal de integração criada em tempo de execução (provedor customizado, OPE-212)', () => {
+  const exists = (ids: string[]) => ({ integrationExists: async (id: string) => ids.includes(id) })
+
+  it('o dono assina o canal de um provedor customizado que existe', async () => {
+    expect(await isChannelAuthorized(integrationChannel('ai_custom_groq'), ADMIN, exists(['ai_custom_groq']))).toBe(true)
+  })
+
+  it('provedor customizado inexistente, sessão de cliente ou sem sessão são recusados', async () => {
+    expect(await isChannelAuthorized(integrationChannel('ai_custom_sumiu'), ADMIN, exists(['ai_custom_groq']))).toBe(false)
+    const lookups: string[] = []
+    const spy = { integrationExists: async (id: string) => (lookups.push(id), true) }
+    expect(await isChannelAuthorized(integrationChannel('ai_custom_groq'), CLIENT('c1'), spy)).toBe(false)
+    expect(await isChannelAuthorized(integrationChannel('ai_custom_groq'), null, spy)).toBe(false)
+    expect(await isChannelAuthorized('private-integration-', ADMIN, spy)).toBe(false)
+    // Sem sessão do dono, nem consulta a existência.
+    expect(lookups).toEqual([])
   })
 })
