@@ -144,7 +144,7 @@ ignora o campo).
 - `conversationJids` devolve as duas metades (número primeiro); a linha do tempo e o histórico do Secretário leem as
   duas (a do `@lid` cobre as mensagens sem `remoteJidAlt`). Ao abrir a conversa, as mensagens do `@lid` com o número em
   `remoteJidAlt` também ensinam a correspondência (`rememberLidAliases` em segundo plano; falha só no log). Quando um
-  mesmo segundo sozinho passa de uma página, a página traz o segundo inteiro (até 1000) antes de o cursor recuar.
+  mesmo segundo sozinho passa de uma página, a página traz o segundo inteiro (todas as páginas de 1000 da Evolution) antes de o cursor recuar.
 - Estado do Secretário salvo em qualquer das identidades vale para a conversa: "Nunca responder", "escolhidos" e pausa
   no turno (`aliases` em `evaluateAudience`), estado da linha na lista, e "Voltar a responder"/"Retomar" limpam as duas. `lidAliases` devolve LID → número, para a lista de conversas juntar a metade LID na do número. A análise de
   personalidade ainda lê cada conversa pelo próprio JID (pendência).

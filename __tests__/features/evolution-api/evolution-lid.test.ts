@@ -101,9 +101,23 @@ describe("fetchConversationMessages (OPE-207)", () => {
         expect(first.records.map((item) => item.key.id)).toEqual(["A", "B"])
         expect(first.nextBefore).toEqual(new Date(500 * 1000))
         const second = await fetchConversationMessages("opex", [PN], { limit: 2, before: first.nextBefore })
-        expect(mocks.findMessages).toHaveBeenLastCalledWith("opex", expect.objectContaining({ from: new Date(500 * 1000), to: new Date(500 * 1000), pageSize: 1000 }), undefined)
+        expect(mocks.findMessages).toHaveBeenLastCalledWith("opex", expect.objectContaining({ from: new Date(500 * 1000), to: new Date(500 * 1000), pageSize: 1000, page: 1 }), undefined)
         expect(second.records.map((item) => item.key.id).sort()).toEqual(["A", "B", "C", "D", "E"])
         expect(second.nextBefore).toEqual(new Date(499 * 1000))
+    })
+
+    it("segundo com mais registros do que uma página de leitura: lê todas as páginas antes de recuar o cursor", async () => {
+        const all = Array.from({ length: 2500 }, (_, index) => record(`M${index}`, 500))
+        mocks.findMessages.mockImplementation(async (_instance: string, input: { pageSize: number; page?: number; from?: Date }) => {
+            if (!(input.from && input.from.getTime() === 500 * 1000)) return { total: 2500, pages: 50, page: 1, records: all.slice(0, input.pageSize) }
+            const page = input.page ?? 1
+            return { total: 2500, pages: Math.ceil(2500 / input.pageSize), page, records: all.slice((page - 1) * input.pageSize, page * input.pageSize) }
+        })
+        const result = await fetchConversationMessages("opex", [PN], { limit: 50, before: new Date(500 * 1000) })
+        expect(result.records).toHaveLength(2500)
+        expect(new Set(result.records.map((item) => item.key.id)).size).toBe(2500)
+        expect(mocks.findMessages.mock.calls.map(([, input]) => input.page).filter(Boolean)).toEqual([1, 2, 3])
+        expect(result.nextBefore).toEqual(new Date(499 * 1000))
     })
 })
 

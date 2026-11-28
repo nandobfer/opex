@@ -16,7 +16,7 @@ const log = loggerFor({ feature: "evolution-api" })
  */
 
 export const CHAT_PAGE_SIZE = 50
-/** Teto de mensagens lidas de um mesmo segundo quando ele sozinho passa de uma página. */
+/** Tamanho de cada página ao ler um segundo inteiro que sozinho passa de uma página da conversa. */
 const SAME_SECOND_MAX = 1000
 
 export interface ChatTimelinePage {
@@ -46,16 +46,25 @@ function secondsOf(message: EvolutionMessage): number {
  * (até `before`, inclusivo), junta, descarta ids repetidos (a Evolution grava linhas duplicadas) e corta em `limit`.
  * A consulta de um número leva `remoteJidAlt` igual a ele: traz também a metade `@lid`, mesmo sem correspondência conhecida.
  * O cursor seguinte é o segundo da mais antiga; se ele não andou (mais de `limit` no mesmo segundo), a página traz o
- * segundo inteiro e o cursor recua 1 s.
+ * segundo inteiro (todas as páginas da Evolution) e o cursor recua 1 s.
  */
 export async function fetchConversationMessages(instance: string, jids: readonly string[], input: { before?: Date | null; limit: number }, options?: { signal?: AbortSignal }): Promise<ConversationMessages> {
     const { before, limit } = input
-    const read = (from: Date | null, to: Date | null, pageSize: number) => Promise.all(jids.map((jid) => evolution.findMessages(instance, {
+    const query = (jid: string, from: Date | null, to: Date | null, pageSize: number, page?: number) => evolution.findMessages(instance, {
         remoteJid: jid,
         ...(jid.endsWith(USER_JID_SUFFIX) ? { remoteJidAlt: jid } : {}),
+        ...(page ? { page } : {}),
         pageSize,
         ...(to ? { from: from ?? new Date(0), to } : {}),
-    }, options)))
+    }, options)
+    const read = (from: Date | null, to: Date | null, pageSize: number) => Promise.all(jids.map((jid) => query(jid, from, to, pageSize)))
+    /** Todas as páginas de um segundo exato (o teto vale por página, não para o segundo). */
+    const readSecond = (at: Date) => Promise.all(jids.map(async (jid) => {
+        const first = await query(jid, at, at, SAME_SECOND_MAX, 1)
+        const rest = []
+        for (let page = 2; page <= first.pages; page++) rest.push(await query(jid, at, at, SAME_SECOND_MAX, page))
+        return { records: [first, ...rest].flatMap((item) => item.records) }
+    }))
     const pages = await read(null, before ?? null, limit)
     const byId = new Map<string, EvolutionMessage>()
     const add = (list: readonly { records: EvolutionMessage[] }[]) => { for (const page of list) for (const record of page.records) if (!byId.has(record.key.id)) byId.set(record.key.id, record) }
@@ -71,7 +80,7 @@ export async function fetchConversationMessages(instance: string, jids: readonly
             // antes de recuar, para nenhuma ficar de fora.
             const second = Math.floor(before.getTime() / 1000)
             byId.clear()
-            add(await read(new Date(second * 1000), new Date(second * 1000), SAME_SECOND_MAX))
+            add(await readSecond(new Date(second * 1000)))
             records = [...byId.values()]
             cursor = second - 1
         }
