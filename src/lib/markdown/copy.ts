@@ -9,7 +9,7 @@
  * Só DOM, sem React.
  */
 
-import { MD_CONTROL_SELECTOR, rangeText, textNodes } from "./selection"
+import { MD_CONTROL_SELECTOR, rangeText } from "./selection"
 
 export { MD_CONTROL_SELECTOR }
 
@@ -62,6 +62,26 @@ const rootAnnot = (root: Element, source: string): Annot => ({ node: root, tag: 
 
 const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(char)
 
+const CHARACTER_REFERENCE = /^&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,31}));/
+
+/**
+ * Tamanho da referência de caractere (`&copy;`, `&#169;`, `&#xA9;`) que começa em `at` e virou `char`
+ * na tela; 0 quando não há. Numéricas são conferidas; nomeadas valem pelo caractere renderizado (o
+ * micromark só decodifica nomes válidos; um nome inválido fica literal e casa caractere a caractere).
+ */
+function referenceLength(source: string, at: number, char: string): number {
+    if (source[at] !== "&") return 0
+    const match = CHARACTER_REFERENCE.exec(source.slice(at, at + 40))
+    if (!match) return 0
+    const code = match[1] ? Number(match[1]) : match[2] ? parseInt(match[2], 16) : null
+    if (code !== null) {
+        const decoded = code === 0 || code > 0x10ffff ? "\ufffd" : String.fromCodePoint(code)
+        return decoded === char ? match[0].length : 0
+    }
+    if (char === "&") return /^&amp;$/i.test(match[0]) ? match[0].length : 0
+    return match[0].length
+}
+
 /**
  * Avança `from` no fonte acompanhando o texto renderizado: caractere igual anda nos dois, espaço casa
  * com espaço (ou é pulado quando o fonte não tem) e o resto do fonte (marcação, `\`, `> `, indentação)
@@ -74,9 +94,12 @@ export function alignRenderedOffset(source: string, rendered: string, from: numb
             if (cursor < limit && isSpace(source[cursor])) cursor++
             continue
         }
-        while (cursor < limit && source[cursor] !== char) cursor++
+        let reference = 0
+        while (cursor < limit && source[cursor] !== char && !(reference = referenceLength(source, cursor, char))) cursor++
+        // `&amp;` renderizado como `&`: a referência inteira, não só o `&` literal.
+        if (cursor < limit && source[cursor] === "&" && char === "&") reference = referenceLength(source, cursor, char)
         if (cursor >= limit) return null
-        cursor++
+        cursor += reference && cursor + reference <= limit ? reference : 1
     }
     return cursor
 }
@@ -214,6 +237,12 @@ function dedent(source: string, start: number, body: string): string {
         .join("\n")
 }
 
+/** O intervalo tem conteúdo: texto (fora dos controles) ou mídia anotada, que não tem nó de texto. */
+function hasContent(root: Element, range: Range): boolean {
+    if (rangeText(range).trim()) return true
+    return Array.from(root.querySelectorAll("[data-md-tag='img']")).some((media) => range.intersectsNode(media))
+}
+
 const tidy = (text: string) => text.replace(/^(\s*\n)+/, "").replace(/(\n\s*)+$/, "")
 
 /** Markdown do intervalo dentro de `root` (cortado à raiz); `null` sem conteúdo ou sem alinhamento. */
@@ -221,7 +250,7 @@ export function markdownOfRange(root: Element, source: string, input: Range): st
     const range = input.cloneRange()
     if (!root.contains(range.startContainer)) range.setStart(root, 0)
     if (!root.contains(range.endContainer)) range.setEnd(root, root.childNodes.length)
-    if (range.collapsed || !rangeText(range).trim()) return null
+    if (range.collapsed || !hasContent(root, range)) return null
 
     const startPoint = normalize(root, { node: range.startContainer, offset: range.startOffset }, "start")
     const endPoint = normalize(root, { node: range.endContainer, offset: range.endOffset }, "end")
@@ -239,10 +268,16 @@ export function markdownOfRange(root: Element, source: string, input: Range): st
     if (common.some((annot) => annot.tag === "pre")) return rangeText(range) || null
 
     // Tudo num inline: inteiro leva a marcação; em parte, o texto puro (D3).
-    const commonInline = [...common].reverse().find((annot) => INLINE_TAGS.has(annot.tag))
-    if (commonInline) {
-        const full = !hasTextBefore(commonInline, startPoint) && !hasTextAfter(commonInline, endPoint)
-        return full ? source.slice(commonInline.start, commonInline.end) : rangeText(range)
+    // O inline comum mais interno decide; inteiro, sobe enquanto os de fora também estiverem inteiros.
+    const commonInlines = common.filter((annot) => INLINE_TAGS.has(annot.tag))
+    if (commonInlines.length) {
+        const full = (annot: Annot) => !hasTextBefore(annot, startPoint) && !hasTextAfter(annot, endPoint)
+        let chosen: Annot | null = null
+        for (const inline of commonInlines) {
+            if (!full(inline)) break
+            chosen = inline
+        }
+        return chosen ? source.slice(chosen.start, chosen.end) : rangeText(range)
     }
 
     let start = s0
@@ -364,7 +399,7 @@ export function selectionClipboard(selection: Selection | null): { text: string;
         inside.selectNodeContents(root)
         if (range.compareBoundaryPoints(Range.START_TO_START, inside) > 0) inside.setStart(range.startContainer, range.startOffset)
         if (range.compareBoundaryPoints(Range.END_TO_END, inside) < 0) inside.setEnd(range.endContainer, range.endOffset)
-        if (!textNodes(root).length || !rangeText(inside).trim()) continue
+        if (!hasContent(root, inside)) continue
         if (!root.contains(cursor.node)) gap(before(root))
         const markdown = markdownOfRange(root, markdownSourceOf(root)!, inside)
         if (markdown === null) return null

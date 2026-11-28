@@ -18,6 +18,14 @@ describe("alignRenderedOffset", () => {
         expect(alignRenderedOffset(source, "a\n\nb", 2)).toBe(source.length)
     })
 
+    it("referências de caractere consomem a entidade inteira", () => {
+        expect(alignRenderedOffset("a &copy; b", "a ©", 0)).toBe(8)
+        expect(alignRenderedOffset("&#169;x", "©x", 0)).toBe(7)
+        expect(alignRenderedOffset("&#xA9;", "©", 0)).toBe(6)
+        expect(alignRenderedOffset("&amp; x", "&", 0)).toBe(5)
+        expect(alignRenderedOffset("&#65;", "©", 0)).toBeNull()
+    })
+
     it("devolve null quando um caractere renderizado não aparece até o limite", () => {
         expect(alignRenderedOffset("abc", "abz", 0)).toBeNull()
         expect(alignRenderedOffset("abc def", "abc d", 0, 4)).toBeNull()

@@ -513,9 +513,11 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   raiz leva `data-md-root` e o fonte fica num `WeakMap` (`registerMarkdownSource`); um único listener `copy` no
   documento vive enquanto houver um `Markdown` montado. Cada ponta da seleção é alinhada ao fonte dentro do
   elemento anotado mais interno (caractere igual anda nos dois, espaço casa com espaço, o resto do fonte —
-  marcação, `\`, entidades, `> `, indentação — é pulado). Regras (decisões do dono no plano):
+  marcação, `\`, `> `, indentação — é pulado; uma referência de caractere (`&copy;`, `&#169;`, `&#xA9;`,
+  `&amp;`) casa inteira com o caractere que ela virou). Regras (decisões do dono no plano):
   - **inline** (negrito, itálico, tachado, link, código inline) só leva a marcação quando está inteiro na
-    seleção; em parte, vai o texto puro do pedaço;
+    seleção; em parte, vai o texto puro do pedaço. Com inline aninhado decide o mais interno: só `ênfase` de
+    `**texto com *ênfase* final**` copia `*ênfase*`;
   - **bloco** (título, item, citação) ganha o marcador quando a seleção cobre o conteúdo dele desde o começo até
     o fim ou além: só "Tít" do começo de um título copia "Tít"; o título inteiro, "## Título";
   - **bloco de código**: seleção toda dentro de um bloco copia o código puro (como o botão); cortando o bloco, o
@@ -523,7 +525,8 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   - **tabela** cortada entre células vira linhas inteiras, com o cabeçalho e a linha delimitadora quando a
     seleção começa depois deles; dentro de uma célula, sem pipes;
   - **indentação**: o prefixo de contêiner (espaços de lista, `> ` de citação) que a primeira linha perdeu no
-    corte sai também das seguintes; imagem/mídia entra inteira (`![alt](url)`);
+    corte sai também das seguintes; imagem/mídia entra inteira (`![alt](url)`), inclusive selecionada sozinha
+    (sem texto na seleção);
   - **seleção mista** (Markdown e interface, ex.: várias mensagens com nome e horário): as partes renderizadas
     em Markdown e o texto da tela entre elas como hoje (`Range.toString()`, sem as quebras que a cópia nativa
     poria entre blocos), juntos por linha em branco.

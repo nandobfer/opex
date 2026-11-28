@@ -246,6 +246,43 @@ describe("copiar o Markdown renderizado", () => {
         expect(copied()).toBe("2 \\* 3 &amp; mais ![logo](https://x.dev/l.png) depois")
     })
 
+    it("entidade cujo caractere não existe no fonte (`&copy;`) mantém a marcação do resto", () => {
+        const source = "**Licença** &copy; **Empresa** &#169; &#xA9; &amp; fim"
+        const root = mount(source)
+        selectAll(root)
+        expect(copied()).toBe(source)
+        select(at(root, "©"), end(root, "Empresa"))
+        expect(copied()).toBe("&copy; **Empresa**")
+        select(at(root, "Licença"), end(root, "©"))
+        expect(copied()).toBe("**Licença** &copy;")
+    })
+
+    it("inline aninhado selecionado por inteiro leva a própria marcação, não a do de fora", () => {
+        const root = mount("**texto com *ênfase* final** e [ver **forte** aqui](https://x.dev)")
+        select(at(root, "ênfase"), end(root, "ênfase"))
+        expect(copied()).toBe("*ênfase*")
+        select(at(root, "forte"), end(root, "forte"))
+        expect(copied()).toBe("**forte**")
+        select(at(root, "ênfase", 2), end(root, "ênfase"))
+        expect(copied()).toBe("fase")
+    })
+
+    it("imagem selecionada sozinha sai como `![alt](url)`, na raiz só com ela e entre blocos", () => {
+        const only = mount("![logo](https://exemplo.dev/logo.png)")
+        selectAll(only)
+        const { data, prevented } = copy()
+        expect(prevented).toBe(true)
+        expect(data.get("text/plain")).toBe("![logo](https://exemplo.dev/logo.png)")
+        cleanup()
+        const between = mount("Antes.\n\n![logo](https://exemplo.dev/logo.png)\n\nDepois.")
+        const paragraph = between.querySelector("img")!.parentElement!
+        const range = document.createRange()
+        range.selectNodeContents(paragraph)
+        window.getSelection()!.removeAllRanges()
+        window.getSelection()!.addRange(range)
+        expect(copied()).toBe("![logo](https://exemplo.dev/logo.png)")
+    })
+
     it("o registrador do Vim recebe o mesmo Markdown da área de transferência", () => {
         configureVim()
         const root = mount("Use **isto** agora")
