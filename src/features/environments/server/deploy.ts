@@ -28,6 +28,8 @@ import {
     removeGeneratedCommand,
     removeWorktreeCommand,
     restartCommand,
+    restoreDeployedFilesCommand,
+    saveDeployedFilesCommand,
     startCommand,
     writeFileCommand,
     type ComposePlan,
@@ -201,6 +203,10 @@ async function prepareSource(ctx: DeployContext, env: IEnvironment, settings: En
  */
 async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: EnvironmentsSettings, plan: ComposePlan, access: MachineAccess, target: { buildOn: Machine; runOn: Machine }, tag: string): Promise<{ services: ComposeService[]; envFiles: string[]; composeVersion: number | null; ownImages: string[] }> {
     const overrides = composeOverridesOf(env.composeOverrides)
+    // Ambiente implantado antes da cópia do último deploy existir: a cópia sai dos arquivos de agora, antes de regravá-los.
+    if (env.deployedOn && env.deployedOn.buildOn === target.buildOn && env.deployedOn.runOn === target.runOn) {
+        await runStep(ctx, { label: "Cópia do último deploy", command: saveDeployedFilesCommand(plan, { bootstrap: true }), timeoutMs: 30_000 }, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} do último deploy (se ainda não guardados)` })
+    }
     const ownImages = ownImageServices(overrides)
     const composeVersion = env.source.kind === "managed" ? await writeManagedCompose(ctx, env, plan) : null
     const vars = envVarsOf(env)
@@ -241,6 +247,24 @@ async function prepareCompose(ctx: DeployContext, env: IEnvironment, settings: E
     // Antes de qualquer build: YAML avançado ruim ou um Compose sem `!reset`/`!override` (< 2.24.4) falham aqui.
     if (overrideServiceNames(overrides).length) await checkOverride(ctx, plan, access, overrides, overrideYaml({ ...overrideInput, overrides: null }))
     return { services, envFiles, composeVersion, ownImages }
+}
+
+/** Guarda o override e o `.env.opex` do deploy que acabou de dar certo (a próxima falha volta a eles). */
+async function saveDeployedFiles(ctx: DeployContext, plan: ComposePlan): Promise<void> {
+    await runStep(ctx, { label: "Guardando os arquivos do deploy", command: saveDeployedFilesCommand(plan), timeoutMs: 30_000 }, { redactedAs: `guardar ${OVERRIDE_FILE} e ${ENV_FILE} deste deploy` })
+}
+
+/**
+ * Deploy que falhou (em qualquer passo antes do sucesso): o override e o `.env.opex` voltam aos do último deploy
+ * concluído, para Levantar, Reiniciar e Derrubar seguirem com a configuração implantada. Falhar aqui só avisa.
+ */
+async function restoreDeployedFiles(ctx: DeployContext, plan: ComposePlan): Promise<void> {
+    try {
+        const result = await ctx.run(restoreDeployedFilesCommand(plan), 30_000, { redactedAs: `voltar ${OVERRIDE_FILE} e ${ENV_FILE} aos do último deploy` })
+        if (result.exitCode === 0 && result.output.includes("restored")) ctx.write(`\nOverride e variáveis extras voltaram aos do último deploy concluído.\n`)
+    } catch (error) {
+        envLog.warn({ deployId: ctx.deployId, err: error instanceof Error ? error.message : String(error) }, "[environments] Não foi possível voltar os arquivos do último deploy")
+    }
 }
 
 /** Textos dos ajustes que podem ser segredo (valores do environment, dos labels e do YAML avançado). */
@@ -387,9 +411,12 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
     const target = { buildOn: env.buildOn, runOn: env.runOn }
     let commit: string | null = null
     let tag: string | null = null
+    let plan: ComposePlan | null = null
+    // Mesmo lugar do último deploy concluído: a falha volta os arquivos gerados aos dele (mover não tem o que voltar).
+    const samePlace = Boolean(env.deployedOn && env.deployedOn.buildOn === target.buildOn && env.deployedOn.runOn === target.runOn)
     try {
         const settings = await loadEnvironmentsSettings()
-        const plan = composePlanOf(env, settings)
+        plan = composePlanOf(env, settings)
         ctx.write(`Deploy de ${env.name}: build no ${machineName(target.buildOn)}, execução no ${machineName(target.runOn)}.\n`)
         commit = await prepareSource(ctx, env, settings, plan, ref, kind)
         tag = commit ?? `t${Date.now()}`
@@ -406,8 +433,10 @@ async function executeDeploy(env: IEnvironment, deployId: string, ref: string | 
         const checkpoint: DeployCheckpoint = { step: 0, failure: null, ref, commit, tag, version, buildServices, skipBuild, from: env.deployedOn?.runOn ?? null, limits: environmentLimitsOf(env.limits), composeVersion, overrides: env.composeOverrides ?? null, pullServices }
         await EnvironmentDeploy.updateOne({ _id: deployId }, { $set: { checkpoint, version, skipBuild } })
         await runExecution(ctx, env, settings, plan, access, checkpoint)
+        await saveDeployedFiles(ctx, plan)
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
+        if (plan && samePlace) await restoreDeployedFiles(ctx, plan)
         await failDeploy(String(env._id), deployId, recorder, error, commit, tag)
     } finally {
         await recorder.stop()
@@ -491,6 +520,8 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
     const recorder = deployRecorder(deployId, deploy.log ?? "")
     const ctx: DeployContext = { deployId, run, write: recorder.write }
     const checkpoint = deploy.checkpoint ?? null
+    let plan: ComposePlan | null = null
+    let samePlace = false
     busy().add(envId)
     try {
         if (!checkpoint) throw new StepError(INTERRUPTED_BEFORE_EXECUTION)
@@ -501,9 +532,13 @@ export async function resumeDeploy(deploy: IEnvironmentDeploy, run: HostRunner =
         const settings = await loadEnvironmentsSettings()
         ctx.write(`\n\u001b[33m↻ O app reiniciou durante o deploy: retomando no passo ${checkpoint.step + 1}.\u001b[0m\n`)
         envLog.info({ id: envId, deployId, step: checkpoint.step }, "[environments] Retomando deploy interrompido")
-        await runExecution(ctx, env, settings, composePlanOf(env, settings), access, checkpoint)
+        plan = composePlanOf(env, settings)
+        samePlace = Boolean(saved.deployedOn && saved.deployedOn.buildOn === env.buildOn && saved.deployedOn.runOn === env.runOn)
+        await runExecution(ctx, env, settings, plan, access, checkpoint)
+        await saveDeployedFiles(ctx, plan)
         await completeDeploy(env, deployId, recorder, checkpoint)
     } catch (error) {
+        if (plan && samePlace) await restoreDeployedFiles(ctx, plan)
         await failDeploy(envId, deployId, recorder, error, checkpoint?.commit ?? deploy.commit, checkpoint?.tag ?? deploy.imageTag)
     } finally {
         busy().delete(envId)

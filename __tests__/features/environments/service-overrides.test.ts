@@ -172,6 +172,25 @@ describe('override com os ajustes dos serviços', () => {
     expect(runOnPcProblem(withOverrideMounts(withBind, overrides([override('app', { volumes: [] })])))).toBeNull()
     expect(runOnPcProblem(withOverrideMounts(services, overrides([override('db', { volumes: [{ type: 'bind', source: './x', target: '/x', readOnly: false }] })])))).toContain('bind mount em db (./x:/x)')
   })
+
+  it('regressão: volumes do YAML avançado com !override ou !reset substituem os binds do compose; sem tag, somam', () => {
+    const withBind = parseComposeConfig(JSON.stringify({ services: { app: { image: 'a', volumes: [{ type: 'bind', source: '/srv/app', target: '/app' }] } } }))!
+    expect(runOnPcProblem(withOverrideMounts(withBind, overrides([], 'app:\n  volumes: !override\n    - dados:/data\n')))).toBeNull()
+    expect(runOnPcProblem(withOverrideMounts(withBind, overrides([], 'app:\n  volumes: !reset []\n')))).toBeNull()
+    expect(runOnPcProblem(withOverrideMounts(withBind, overrides([], 'app:\n  volumes: !reset null\n')))).toBeNull()
+    expect(runOnPcProblem(withOverrideMounts(withBind, overrides([], 'app:\n  volumes:\n    - dados:/data\n')))).toContain('bind mount em app (/srv/app:/app)')
+    // Com !override, um bind no próprio YAML continua bloqueando.
+    expect(runOnPcProblem(withOverrideMounts(withBind, overrides([], 'app:\n  volumes: !override\n    - ./x:/x\n')))).toContain('bind mount em app (./x:/x)')
+  })
+
+  it('regressão: image: !reset null no YAML avançado não é imagem própria (o build do compose continua)', () => {
+    const value = overrides([], 'app:\n  image: !reset null\n')
+    expect(ownImageServices(value)).toEqual([])
+    expect(ownImageServices(overrides([], 'app:\n  image: ""\n'))).toEqual([])
+    const yaml = overrideYaml({ services, images: { app: registryImage(settings, 'loja', 'app', 'abc') }, withEnvFile: false, overrides: value })
+    expect(yaml).not.toContain('build: !reset')
+    expect(yaml).toContain('image: !reset null')
+  })
 })
 
 describe('YAML avançado e validação', () => {

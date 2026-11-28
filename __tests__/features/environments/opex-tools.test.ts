@@ -178,7 +178,8 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     Object.assign(LIST_ITEM, { composeOverrides: saved, deployedComposeOverrides: null })
     try {
       const detail = (await run('get_environment', { environment: 'loja' })) as { ajustesDosServicos: Record<string, unknown> }
-      expect(detail.ajustesDosServicos).toMatchObject({ salvos: 'app imagem nginx:1.27, environment (1: A)', implantados: 'sem ajustes', diferem: true, configuracao: saved })
+      expect(detail.ajustesDosServicos).toMatchObject({ salvos: 'app imagem nginx:1.27, environment (1: A)', implantados: 'sem ajustes', diferem: true, configuracao: { services: [{ ...app, environment: [{ key: 'A', value: '[valor oculto]' }] }], yaml: '' } })
+      expect(JSON.stringify(detail)).not.toContain('texto')
       const list = (await run('list_environments', {})) as { pc: Record<string, unknown>[] }
       expect(list.pc[0]).toMatchObject({ ajustesNaoImplantados: true })
     } finally {
@@ -194,6 +195,16 @@ describe('ferramentas do Agente Opex para os ambientes', () => {
     expect(mocks.updateEnvironment).toHaveBeenLastCalledWith('e1', expect.objectContaining({ composeOverrides: null }), 'local')
     // A mesma validação da tela: chave no guiado e no YAML avançado é recusada.
     expect(() => find('update_environment').input.parse({ environment: 'loja', composeOverrides: { services: [app], yaml: 'app:\n  image: outra\n' } })).toThrow(/bloco guiado e no YAML avançado/)
+
+    // Card e histórico (redact): sem os valores do environment, dos labels e do YAML avançado; chaves e tags ficam.
+    const secret = { services: [{ ...app, labels: [{ key: 'traefik.auth', value: 'user:hash-secreto' }] }], yaml: 'worker:\n  extra_hosts: !override\n    - "db:10.0.0.9"\n  stop_signal: SIGINT-secreto\n' }
+    for (const name of ['create_environment', 'update_environment']) {
+      const redacted = JSON.stringify(find(name).redact!({ environment: 'loja', name: 'Nova', centralId: 'c1', composeOverrides: secret } as never))
+      for (const value of ['texto', 'hash-secreto', '10.0.0.9', 'SIGINT-secreto']) expect(redacted).not.toContain(value)
+      expect(redacted).toContain('traefik.auth')
+      expect(redacted).toContain('stop_signal')
+      expect(redacted).toContain('!override')
+    }
 
     await run('create_environment', { name: 'Nova', centralId: 'c1', composeOverrides: saved })
     expect(mocks.createEnvironment).toHaveBeenLastCalledWith(expect.objectContaining({ composeOverrides: saved }), 'local')

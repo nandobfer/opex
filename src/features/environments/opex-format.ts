@@ -1,7 +1,9 @@
 import { BUILDER_STATUS_LABELS, builderNotices } from "./builder-view"
 import { limitsPendingDeploy } from "./limits-form"
 import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource-limits"
-import { MACHINE_LABELS, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
+import { visit } from "yaml"
+import { parseOverrideYaml } from "./override-yaml"
+import { MACHINE_LABELS, type ComposeOverrides, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
 import { composeNotDeployed } from "./managed-compose"
 import { composeOverridesPendingDeploy, composeOverridesText } from "./service-overrides"
@@ -104,7 +106,8 @@ export function environmentDetailView(env: EnvironmentDto) {
         urlSaude: env.healthUrl,
         limites: { salvos: environmentLimitsText(env.limits), configuracao: env.limits, aplicados: appliedLimitsText(env.services), diferem: limitsPendingDeploy(env) },
         // Ajustes dos serviços do compose (OPE-211): texto simples, por decisão do dono.
-        ajustesDosServicos: { salvos: composeOverridesText(env.composeOverrides) || "sem ajustes", configuracao: env.composeOverrides, implantados: composeOverridesText(env.deployedComposeOverrides) || "sem ajustes", diferem: composeOverridesPendingDeploy(env) },
+        // A configuração vai sem os valores do environment, dos labels e do YAML avançado (podem ser segredo).
+        ajustesDosServicos: { salvos: composeOverridesText(env.composeOverrides) || "sem ajustes", configuracao: redactComposeOverrides(env.composeOverrides), implantados: composeOverridesText(env.deployedComposeOverrides) || "sem ajustes", diferem: composeOverridesPendingDeploy(env) },
         servicos: env.services.map((service) => ({
             servico: service.service,
             container: service.container,
@@ -121,10 +124,35 @@ export function environmentDetailView(env: EnvironmentDto) {
     }
 }
 
-/** Entrada sem os valores das variáveis (card e histórico do chat). */
-export function redactEnvValues<T extends { env?: { key: string; value?: string }[] }>(input: T): T {
-    if (!input.env) return input
-    return { ...input, env: input.env.map((item) => ({ key: item.key, value: HIDDEN_VALUE })) }
+/** YAML avançado com todo valor escalar (não as chaves nem as tags) trocado por `[valor oculto]`. */
+function redactOverrideYaml(yaml: string): string {
+    if (!yaml.trim()) return yaml
+    const doc = parseOverrideYaml(yaml)
+    if (!doc || doc.errors.length) return HIDDEN_VALUE
+    visit(doc, {
+        Scalar(key, node) {
+            if (key !== "key" && node.value !== null) node.value = HIDDEN_VALUE
+        },
+    })
+    return doc.toString()
+}
+
+/**
+ * Ajustes dos serviços sem os valores que podem ser segredo (OPE-211): os do `environment` e dos `labels`
+ * (ficam as chaves) e os do YAML avançado (ficam as chaves e as tags). Para o modelo, o card e o histórico.
+ */
+export function redactComposeOverrides<T extends ComposeOverrides | null | undefined>(overrides: T): T {
+    if (!overrides) return overrides
+    const hide = (items: { key: string; value: string }[] | null) => (items ? items.map((item) => ({ key: item.key, value: HIDDEN_VALUE })) : items)
+    return { ...overrides, services: overrides.services.map((item) => ({ ...item, environment: hide(item.environment), labels: hide(item.labels) })), yaml: redactOverrideYaml(overrides.yaml) }
+}
+
+/** Entrada sem os valores das variáveis nem os dos ajustes dos serviços (card e histórico do chat). */
+export function redactEnvValues<T extends { env?: { key: string; value?: string }[]; composeOverrides?: ComposeOverrides | null }>(input: T): T {
+    const result = { ...input }
+    if (input.env) result.env = input.env.map((item) => ({ key: item.key, value: HIDDEN_VALUE }))
+    if (input.composeOverrides) result.composeOverrides = redactComposeOverrides(input.composeOverrides)
+    return result
 }
 
 export interface EnvironmentPatch {

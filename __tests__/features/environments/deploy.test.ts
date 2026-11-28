@@ -664,6 +664,16 @@ describe('serviços do compose no deploy (OPE-211)', () => {
     expect(String(deploys.docs[0]!.log)).toContain('▸ Build no servidor')
   })
 
+  it('regressão: image: !reset null no YAML avançado mantém o build do serviço (não vira imagem própria)', async () => {
+    const env = await createEnvironment(input({ composeOverrides: { services: [], yaml: 'app:\n  image: !reset null\n' } }), 'local')
+    const { run, calls } = host()
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    expect(String(deploys.docs[0]!.log)).toContain('▸ Build no servidor')
+    expect(String(deploys.docs[0]!.log)).not.toContain('Pull das imagens prontas')
+    expect(lastOverride(calls)).not.toContain('build: !reset')
+  })
+
   it('falha na conferência do override para antes de qualquer build; os ajustes não viram implantados', async () => {
     const env = await createEnvironment(input({ composeOverrides: { services: [service('db', { restart: 'always' })], yaml: '' } }), 'local')
     const { run, calls } = host({ fail: 'config --quiet' })
@@ -698,6 +708,70 @@ describe('serviços do compose no deploy (OPE-211)', () => {
     // O override válido é regravado depois da conferência que falhou.
     const check = calls.findIndex((command) => command.includes('config --quiet'))
     expect(calls.findLastIndex((command) => command.includes('docker-compose.opex.yml') && command.includes('base64 -d'))).toBeGreaterThan(check)
+  })
+
+  it('regressão: deploy que falha volta o override do último deploy concluído (Derrubar e Levantar seguem com os ajustes implantados)', async () => {
+    // Host com os arquivos gerados na pasta: o override, o `.env.opex` e a cópia do último deploy concluído.
+    const files = new Map<string, string>()
+    const base = host({ fail: 'never-fails' })
+    const fail = { on: '' }
+    const run = vi.fn(async (command: string, timeout?: number, opts?: { onOutput?: (chunk: string) => void }): Promise<HostResult> => {
+      if (fail.on && command.includes(fail.on)) {
+        base.calls.push(command)
+        return { exitCode: 1, output: 'erro' }
+      }
+      const write = /printf %s '([^']+)' \| base64 -d > \S+\/(\S+)$/.exec(command)
+      if (write) files.set(write[2]!, Buffer.from(write[1]!, 'base64').toString('utf8'))
+      if (command.includes('rm -f') && command.endsWith('/.env.opex')) files.delete('.env.opex')
+      if (command.includes('.opex-deployed')) {
+        const saving = command.includes('cp -p "$f" .opex-deployed')
+        if (saving && !(command.includes('if [ ! -d .opex-deployed ]') && [...files.keys()].some((key) => key.startsWith('.opex-deployed/')))) {
+          for (const name of ['docker-compose.opex.yml', '.env.opex']) {
+            if (files.has(name)) files.set(`.opex-deployed/${name}`, files.get(name)!)
+            else files.delete(`.opex-deployed/${name}`)
+          }
+        }
+        if (!saving && [...files.keys()].some((key) => key.startsWith('.opex-deployed/'))) {
+          for (const name of ['docker-compose.opex.yml', '.env.opex']) {
+            if (files.has(`.opex-deployed/${name}`)) files.set(name, files.get(`.opex-deployed/${name}`)!)
+            else files.delete(name)
+          }
+          base.calls.push(command)
+          return { exitCode: 0, output: 'restored\n' }
+        }
+      }
+      return base.run(command, timeout, opts)
+    })
+    const env = await createEnvironment(input({ composeOverrides: { services: [service('app', { image: 'ghcr.io/loja/app:2', restart: 'always' })], yaml: '' } }), 'local')
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[0]!.status).toBe('success')
+    const deployed = files.get('docker-compose.opex.yml')!
+    expect(deployed).toContain('image: ghcr.io/loja/app:2')
+    expect(files.get('.opex-deployed/docker-compose.opex.yml')).toBe(deployed)
+
+    // Nova configuração inválida: a conferência falha e o arquivo no host volta ao do deploy anterior.
+    await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'always' })], yaml: 'app:\n  ports: abc\n' } }), 'local')
+    fail.on = 'config --quiet'
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[1]!.status).toBe('failed')
+    expect(files.get('docker-compose.opex.yml')).toBe(deployed)
+    expect(files.get('.env.opex')).toContain('TOKEN=')
+    expect(String(deploys.docs[1]!.log)).toContain('voltaram aos do último deploy concluído')
+    expect(envs.docs[0]!.deployedComposeOverrides).toEqual({ services: [service('app', { image: 'ghcr.io/loja/app:2', restart: 'always' })], yaml: '' })
+
+    // Derrubar e Levantar usam o arquivo que ficou na pasta: o do deploy concluído.
+    fail.on = ''
+    await runEnvironmentAction(String(env._id), { action: 'down' }, 'local', run)
+    await runEnvironmentAction(String(env._id), { action: 'up' }, 'local', run)
+    expect(base.calls.at(-1)).toContain('-f docker-compose.opex.yml')
+    expect(files.get('docker-compose.opex.yml')).toBe(deployed)
+
+    // Falha depois da conferência (no build) também volta.
+    await updateEnvironment(String(env._id), input({ composeOverrides: { services: [service('app', { restart: 'no' })], yaml: '' } }), 'local')
+    fail.on = 'up -d'
+    await startDeploy(String(env._id), 'local', { kind: 'deploy', run, wait: true })
+    expect(deploys.docs[2]!.status).toBe('failed')
+    expect(files.get('docker-compose.opex.yml')).toBe(deployed)
   })
 
   it('log sem os valores do environment; serviço fora do compose avisa e não bloqueia; o override não aparece no debug', async () => {

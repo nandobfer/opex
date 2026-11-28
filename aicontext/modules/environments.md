@@ -326,7 +326,8 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
   tags `!reset`/`!override`. A validação (`overrideYamlProblem`, a mesma na tela e no servidor) recusa YAML inválido (com a
   linha), conteúdo que não seja mapa de serviços, as chaves que o Opex controla (`env_file`, `build`, `deploy`, `mem_limit`,
   `memswap_limit`, `cpus`) e a mesma chave personalizada no bloco guiado do mesmo serviço ("app.image está no bloco guiado e
-  no YAML avançado: deixe em um só"). `image` no YAML avançado também conta como imagem própria.
+  no YAML avançado: deixe em um só"). `image` no YAML avançado com uma referência (texto não vazio) também conta como
+  imagem própria; `image: !reset null` (ou vazia) só tira a imagem e o build do compose continua.
 - **Deploy** (`server/deploy.ts`, `overrideYaml`, `serviceOverrideLines`):
   1. Ordem no serviço: imagem do registry ou nenhuma (imagem própria), `env_file`, limites, campos guiados, `build: !reset
      null` (imagem própria) e, por último, as chaves do YAML avançado.
@@ -337,17 +338,24 @@ compose gerenciado, por cima da revisão vigente). Entram no override `docker-co
      de retomada (`checkpoint.pullServices`).
   3. Serviço dos ajustes que não está no compose: "Ajustes do serviço X ignorados: o serviço não está no compose." (não
      bloqueia).
-  4. Executar no PC: os bind mounts dos ajustes entram no bloqueio (`withOverrideMounts`; volumes personalizados substituem
-     os do compose).
+  4. Executar no PC: os bind mounts dos ajustes entram no bloqueio (`withOverrideMounts`; volumes personalizados no bloco
+     guiado e `volumes: !override`/`!reset` do YAML avançado substituem os do compose; `volumes` sem tag no YAML soma).
   5. Log: "Serviços: app imagem nginx:1.27, ports (2); db environment (3: A, B, C)" e "YAML avançado: serviços app,
      worker". O override é gravado com o debug "gravar docker-compose.opex.yml (conteúdo omitido)".
   6. **Conferência do override** (só com ajustes): passo "Conferindo o override" (`docker compose … -f
      docker-compose.opex.yml config --quiet`) antes de qualquer build. YAML avançado ruim ou um Compose sem as
      tags (exigem v2.24.4 ou mais nova; o servidor tem a v5) falham aqui. A saída da conferência **nunca vai para o log**:
      o erro do deploy leva só a última linha, com os valores do environment, dos labels e do YAML avançado trocados por
-     `[valor oculto]`. Na falha, o override volta a ser gravado **sem os ajustes** (passo "Override sem os ajustes (a
-     conferência falhou)"), para Reiniciar, Derrubar e Levantar não ficarem presos a um override quebrado.
-  7. Sucesso: `deployedComposeOverrides`. Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
+     `[valor oculto]`. Na falha, o override é regravado **sem os ajustes** (passo "Override sem os ajustes (a
+     conferência falhou)") e, em seguida, a regra do item 8 o volta ao do último deploy concluído, quando existe.
+  7. Sucesso: `deployedComposeOverrides` e a cópia dos arquivos gerados (passo "Guardando os arquivos do deploy": o
+     override e o `.env.opex` vão para `.opex-deployed/` na pasta do ambiente, fora da checagem de pasta limpa e apagada
+     junto com os arquivos gerados). Reiniciar e Levantar usam o override do último deploy (não aplicam ajustes novos).
+  8. **Deploy que falha** (em qualquer passo antes do sucesso, inclusive a retomada; no mesmo lugar do último deploy,
+     não no mover): o override e o `.env.opex` voltam aos de `.opex-deployed/` ("Override e variáveis extras voltaram aos
+     do último deploy concluído"), para Derrubar, Levantar e Reiniciar seguirem com a configuração implantada. Ambiente
+     implantado antes dessa cópia existir ganha a cópia no começo do deploy seguinte (passo "Cópia do último deploy",
+     antes de regravar os arquivos). Sem cópia (nunca implantado), nada é restaurado.
 - **"Ler compose"** (`POST /api/environments/compose-services`) passa a devolver também `values` por serviço
   (`normalizeServiceValues`, `service-overrides.ts`): do JSON do `config --no-env-resolution --no-interpolate` (central e
   adotado; `${VAR}` volta como escrito) ou do YAML bruto da revisão vigente (gerenciado; formas curtas de portas com IP e
@@ -486,7 +494,9 @@ mesma validação, auditoria, Pusher e erros.
 - `create_environment` e `update_environment` aceitam `composeOverrides` (OPE-211, o mesmo `composeOverridesSchema` da tela;
   substitui os ajustes salvos inteiros; ausente mantém; `null` no editar = sem ajustes). `get_environment` traz
   `ajustesDosServicos: { salvos, configuracao, implantados, diferem }` e `list_environments`, `ajustesImplantados` e
-  `ajustesNaoImplantados`. Texto simples, por decisão do dono: sem `redact` desse campo.
+  `ajustesNaoImplantados`. Os valores do `environment`, dos `labels` e do YAML avançado nunca vão para o modelo, o card
+  nem o histórico (`redactComposeOverrides`, `opex-format.ts`): a `configuracao` do `get_environment` e o `redact` das
+  ferramentas de criar/editar levam as chaves (e, no YAML, as chaves e as tags) com os valores como `[valor oculto]`.
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; no gerenciado,
   `projectName` e `services`; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela

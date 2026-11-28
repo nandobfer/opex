@@ -3,7 +3,7 @@ import { ENV_FILE } from "./constants"
 import { overrideYamlServices } from "./override-yaml"
 import { round2, type ResourceLimits } from "./resource-limits"
 import type { ComposeOverrides, ServiceValues } from "./schemas"
-import { composeOverridesOf, namedVolumes, overrideBindMounts, normalizeServiceValues, ownImageServices, serviceOverrideLines, unreadableServiceItems } from "./service-overrides"
+import { composeOverridesOf, namedVolumes, overrideBindMounts, overrideYamlReplacesVolumes, normalizeServiceValues, ownImageServices, serviceOverrideLines, unreadableServiceItems } from "./service-overrides"
 
 /** Onde o compose declara o limite: no serviço (`mem_limit`/`cpus`) ou em `deploy.resources.limits`. */
 export type LimitStyle = "service" | "deploy"
@@ -143,14 +143,16 @@ export function runOnPcProblem(services: ComposeService[]): string | null {
 
 /**
  * Bind mounts depois dos ajustes (OPE-211): volumes personalizados no bloco guiado substituem os do compose;
- * os do YAML avançado se somam. Usado no bloqueio de executar no PC.
+ * os do YAML avançado se somam, exceto com `volumes: !override` ou `!reset` (substituem). Usado no bloqueio
+ * de executar no PC.
  */
 export function withOverrideMounts(services: ComposeService[], overrides: ComposeOverrides | null | undefined): ComposeService[] {
     const value = composeOverridesOf(overrides)
     return services.map((service) => {
         const guided = value.services.find((item) => item.service === service.name)?.volumes
         const extra = overrideBindMounts(value, service.name)
-        return { ...service, bindMounts: guided ? extra : [...service.bindMounts, ...extra] }
+        const replaced = Boolean(guided) || overrideYamlReplacesVolumes(value, service.name)
+        return { ...service, bindMounts: replaced ? extra : [...service.bindMounts, ...extra] }
     })
 }
 

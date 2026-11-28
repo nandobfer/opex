@@ -1,6 +1,6 @@
 import { posix } from "node:path"
 import { cancelForwardCommand, cancelReverseForwardCommand, forwardPortCommand, muxCommand, quote, reverseForwardCommand } from "@/features/local-docker/commands"
-import { COMPOSE_LABELS, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
+import { COMPOSE_LABELS, DEPLOYED_DIR, ENV_FILE, OVERRIDE_FILE, REGISTRY_CONTAINER, REGISTRY_IMAGE, REGISTRY_NAMESPACE } from "./constants"
 import { appliedLimits, round2, type ResourceLimits } from "./resource-limits"
 import type { EnvironmentsBuilder, EnvironmentsSettings, Machine } from "./schemas"
 
@@ -231,7 +231,25 @@ export const ensureEnvDirCommand = (settings: EnvironmentsSettings, slug: string
 export const removeEnvDirCommand = (settings: EnvironmentsSettings, slug: string) => `rm -rf ${envDir(settings, slug)}`
 
 export function removeGeneratedCommand(plan: Pick<ComposePlan, "dir" | "filesOn">): string {
-    const command = `rm -f ${plan.dir}/${OVERRIDE_FILE} ${plan.dir}/${ENV_FILE}`
+    const command = `rm -rf ${plan.dir}/${OVERRIDE_FILE} ${plan.dir}/${ENV_FILE} ${plan.dir}/${DEPLOYED_DIR}`
+    return plan.filesOn === "pc" ? muxCommand(command) : command
+}
+
+const GENERATED = `${OVERRIDE_FILE} ${ENV_FILE}`
+
+/**
+ * Cópia do override e do `.env.opex` do último deploy concluído (OPE-211), gravada no sucesso. `bootstrap`
+ * só copia quando ainda não há cópia (ambiente implantado antes desta cópia existir).
+ */
+export function saveDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, options: { bootstrap?: boolean } = {}): string {
+    const save = `mkdir -p ${DEPLOYED_DIR} && for f in ${GENERATED}; do if [ -f "$f" ]; then cp -p "$f" ${DEPLOYED_DIR}/"$f"; else rm -f ${DEPLOYED_DIR}/"$f"; fi; done`
+    const command = `cd ${plan.dir} && umask 077 && ${options.bootstrap ? `if [ ! -d ${DEPLOYED_DIR} ]; then ${save}; fi` : save}`
+    return plan.filesOn === "pc" ? muxCommand(command) : command
+}
+
+/** Volta o override e o `.env.opex` aos do último deploy concluído (sem a cópia, não mexe em nada). */
+export function restoreDeployedFilesCommand(plan: Pick<ComposePlan, "dir" | "filesOn">): string {
+    const command = `cd ${plan.dir} && if [ -d ${DEPLOYED_DIR} ]; then for f in ${GENERATED}; do if [ -f ${DEPLOYED_DIR}/"$f" ]; then cp -p ${DEPLOYED_DIR}/"$f" "$f"; else rm -f "$f"; fi; done; echo restored; fi`
     return plan.filesOn === "pc" ? muxCommand(command) : command
 }
 
@@ -249,8 +267,8 @@ export function cleanTreeCommand(plan: Pick<ComposePlan, "dir" | "filesOn">, env
     const command = envFiles.length
         ? // Arquivo de variáveis do compose vazio e não rastreado (o que o app cria quando falta) não suja a
           // pasta; os de fora da pasta já não entram no `git status` dela.
-          `cd ${plan.dir} && set -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' && for f in ${envFiles.map(quote).join(" ")}; do case "$f" in "$PWD"/*) if [ -f "$f" ] && [ ! -s "$f" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then set -- "$@" ":!\${f#"$PWD"/}"; fi ;; esac; done; if [ -z "$(git status --porcelain -- "$@" 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
-        : `if [ -z "$(git -C ${plan.dir} status --porcelain -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
+          `cd ${plan.dir} && set -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' ':!${DEPLOYED_DIR}' && for f in ${envFiles.map(quote).join(" ")}; do case "$f" in "$PWD"/*) if [ -f "$f" ] && [ ! -s "$f" ] && ! git ls-files --error-unmatch -- "$f" >/dev/null 2>&1; then set -- "$@" ":!\${f#"$PWD"/}"; fi ;; esac; done; if [ -z "$(git status --porcelain -- "$@" 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
+        : `if [ -z "$(git -C ${plan.dir} status --porcelain -- . ':!${ENV_FILE}' ':!${OVERRIDE_FILE}' ':!${DEPLOYED_DIR}' 2>/dev/null)" ]; then echo clean; else echo dirty; fi`
     return plan.filesOn === "pc" ? muxCommand(command) : command
 }
 

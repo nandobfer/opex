@@ -193,12 +193,17 @@ export const composeOverridesOf = (value: ComposeOverrides | null | undefined): 
 /** Campos personalizados de um serviço. */
 export const customizedFields = (override: ServiceOverride): ServiceField[] => SERVICE_FIELDS.filter((field) => override[field] !== null)
 
-/** Serviços com imagem própria (bloco guiado ou `image` no YAML avançado): não buildam nem vão ao registry. */
+/**
+ * Serviços com imagem própria (bloco guiado ou `image` no YAML avançado com uma referência de verdade): não
+ * buildam nem vão ao registry. `image: !reset null` (ou vazia) só tira a imagem: o build do compose continua.
+ */
 export function ownImageServices(overrides: ComposeOverrides | null | undefined): string[] {
     const value = composeOverridesOf(overrides)
-    const yamlKeys = overrideYamlKeys(value.yaml)
     const names = new Set(value.services.filter((item) => item.image !== null).map((item) => item.service))
-    for (const [service, keys] of Object.entries(yamlKeys)) if (keys.includes("image")) names.add(service)
+    for (const [service, node] of overrideYamlServices(value.yaml)) {
+        const image = node.get("image", true) as { tag?: string; value?: unknown } | undefined
+        if (image && image.tag !== "!reset" && typeof image.value === "string" && image.value.trim()) names.add(service)
+    }
     return [...names]
 }
 
@@ -215,6 +220,15 @@ export function overrideBindMounts(overrides: ComposeOverrides | null | undefine
     const yamlNode = overrideYamlServices(value.yaml).get(service)
     const yamlVolumes = volumes(yamlNode ? (yamlNode.toJSON() as Record<string, unknown>).volumes : undefined) ?? []
     return [...guided, ...yamlVolumes].filter((item) => item.type === "bind").map((item) => `${item.source}:${item.target}`)
+}
+
+/**
+ * Os `volumes` do serviço no YAML avançado substituem os do compose? `!override` (troca a lista) e `!reset`
+ * (tira a lista) substituem; sem tag, o compose soma as listas.
+ */
+export function overrideYamlReplacesVolumes(overrides: ComposeOverrides | null | undefined, service: string): boolean {
+    const node = overrideYamlServices(composeOverridesOf(overrides).yaml).get(service)?.get("volumes", true) as { tag?: string } | undefined
+    return node?.tag === "!override" || node?.tag === "!reset"
 }
 
 /** Resumo de um serviço para o log, a linha e a auditoria (do `environment`, só as chaves). */
