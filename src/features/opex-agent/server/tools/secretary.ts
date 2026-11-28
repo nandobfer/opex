@@ -1,6 +1,7 @@
 import { z } from "zod"
+import { aiProviderIdIn } from "@nandobfer/integracoes/modules/integrations/ia/ai/schemas"
 import { DomainError } from "@/lib/api/route"
-import { getAiProvider } from "@/lib/ai/providers"
+import { getAiProvider } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { SECRETARY_MODE_LABELS, SECRETARY_MODES } from "@/features/secretary-agent/constants"
 import { DECISION_PROVIDER_IDS, noticeAnswerSchema } from "@/features/secretary-agent/schemas"
 import { applyAudiencePatch, applyGeneralPatch, removeSubject, SUBJECT_LIST_LABELS, upsertSubject, type GeneralPatch, type SecondaryModelInput } from "@/features/secretary-agent/settings-patch"
@@ -148,7 +149,7 @@ export const secretaryTools = [
         confirmByDefault: true,
         description: "Troca o provedor e o modelo do agente do Secretário (e a variante, opcional). O modelo é conferido no catálogo do provedor (identificador ou nome; veja list_secretary_model_options); provedor sem chave, modelo inexistente ou variante inválida são recusados.",
         input: z.object({
-            provider: z.enum(OPEX_PROVIDER_IDS),
+            provider: aiProviderIdIn(OPEX_PROVIDER_IDS),
             model: z.string().trim().min(1).max(200),
             variant: z.string().trim().min(1).max(60).nullish(),
         }),
@@ -182,7 +183,7 @@ export const secretaryTools = [
             repliesPerHour: z.number().optional().describe("Respostas por conversa por hora (1 a 200)"),
             dailyBudgetUsd: z.number().optional().describe("Orçamento diário (US$ 0,01 a 1000)"),
             prices: z
-                .array(z.object({ provider: z.enum(OPEX_PROVIDER_IDS), model: z.string().trim().min(1).max(200), inputPerMTok: z.number(), outputPerMTok: z.number() }))
+                .array(z.object({ provider: aiProviderIdIn(OPEX_PROVIDER_IDS), model: z.string().trim().min(1).max(200), inputPerMTok: z.number(), outputPerMTok: z.number() }))
                 .max(10)
                 .optional()
                 .describe("Preço estimado (US$ por 1 milhão de tokens) de entrada e saída por modelo"),

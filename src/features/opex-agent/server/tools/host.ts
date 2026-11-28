@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { getOpencodeConnection } from "@/lib/ai/opencode"
+import { getOpencodeConnection } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { loggerFor } from "@/lib/logger"
 import { OPEX_HOST_AUDIT_ENTITY, OPEX_HOST_COMMAND_MAX, OPEX_HOST_MAX_TIMEOUT_LIMIT_SECONDS, OPEX_HOST_OUTPUT_MAX, OPEX_HOST_TIMEOUT_DEFAULT_SECONDS } from "../../constants"

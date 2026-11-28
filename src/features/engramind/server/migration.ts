@@ -4,7 +4,7 @@ import { AI_AGENTS, isAiAgentId, scopedChannelPrefix } from "@/features/ai/agent
 import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { getLocalUser } from "@/lib/local-user"
-import type { AiProviderId } from "@/lib/ai/providers"
+import type { AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import {
     CURATOR_CHUNK,
     CURATOR_CONSUMPTION_ORIGIN,
@@ -230,7 +230,7 @@ const groupKey = (item: Pick<IMigrationItem, "list" | "centralId">) => `${item.l
  * com mensagem acionável, para a etapa nunca ficar "em andamento" para sempre.
  */
 async function askCurator(input: CuratorRunInput, instructions: string, prompt: string, subject: string, timeoutMs = CURATOR_TIMEOUT_MS): Promise<string> {
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {

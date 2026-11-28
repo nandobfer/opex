@@ -1,4 +1,4 @@
-import type { AiUsage } from "@/lib/ai/stream"
+import type { AiUsage } from "@nandobfer/integracoes/modules/integrations/ia/ai/stream"
 import type { AiStreamEvent } from "./types"
 
 /** Estado de um stream de texto de IA (módulo puro: o hook só aplica os eventos do stream). */

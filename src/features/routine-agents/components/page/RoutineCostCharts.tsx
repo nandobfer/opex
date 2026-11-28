@@ -9,7 +9,7 @@ import { MultiLineChart } from "@/components/metrics/MultiLineChart"
 import { formatMetricValue } from "@/components/metrics/format"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { COST_KIND_TONE } from "@/features/ai-billing/cost-tone"
-import { formatMoneyPair } from "@/features/ai-billing/money"
+import { formatMoneyPair } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import type { RoutineAgentMetricsDto } from "../../types"
 
 type Dimension = "providers" | "models" | "plans"

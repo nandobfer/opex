@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ shell: vi.fn(async () => ({ exitCode: 0, status: 'completed', output: '' })) }))
 
-vi.mock('@/lib/ai/opencode-client', () => ({ runOpencodeShell: mocks.shell }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ runOpencodeShell: mocks.shell }))
 vi.mock('@/lib/db/models/Agentic', () => ({ AgenticWorkbench: { updateOne: vi.fn() } }))
 
 import { invalidateRemotePreview } from '@/features/agentic/server/remote-preview'

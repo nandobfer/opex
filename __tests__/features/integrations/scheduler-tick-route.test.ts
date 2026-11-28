@@ -8,8 +8,8 @@ const mocks = vi.hoisted(() => ({
   runFastSchedulerTick: vi.fn(),
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: mocks.getIntegrationConfig }))
-vi.mock('@/features/integrations/scheduler/cron-scheduler', () => ({
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: mocks.getIntegrationConfig }))
+vi.mock('@/lib/integrations/scheduler', () => ({
   registerBuiltInJobs: mocks.registerBuiltInJobs,
   runSchedulerTick: mocks.runSchedulerTick,
   runFastSchedulerTick: mocks.runFastSchedulerTick,

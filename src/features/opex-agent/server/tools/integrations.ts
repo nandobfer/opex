@@ -1,11 +1,11 @@
 import { z } from "zod"
-import { INTEGRATION_IDS, getIntegrationDef, type IntegrationId } from "@/lib/integrations/catalog"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { INTEGRATION_IDS, getIntegrationDef, type IntegrationId } from "@/features/integrations/registry/definitions"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
-import { getIntegrationDetail, IntegrationUpdateError, listIntegrations, updateIntegration } from "@/features/integrations/services/integration-service"
-import { runIntegrationTest } from "@/features/integrations/services/integration-test-runner"
-import { buildIntegrationUpdateSchema, type IntegrationUpdateInput } from "@/features/integrations/schemas/integration.schema"
-import { runJobNow } from "@/features/integrations/scheduler/cron-scheduler"
+import { getIntegrationDetail, IntegrationUpdateError, listIntegrations, updateIntegration } from "@/lib/integrations/server"
+import { runIntegrationTest } from "@/lib/integrations/server"
+import { buildIntegrationUpdateSchema, type IntegrationUpdateInput } from "@nandobfer/integracoes"
+import { runJobNow } from "@/lib/integrations/scheduler"
 import { defineTool, OpexToolError } from "./define"
 import { parseJsonObject } from "./json"
 
@@ -37,8 +37,6 @@ const updateInput = z.object({
         .array(z.object({ key: z.string(), value: z.string().nullable().describe("null limpa o segredo") }))
         .optional()
         .describe("Segredos a gravar (nunca são lidos de volta)"),
-    environment: z.enum(["interno", "externo"]).optional(),
-    debugMode: z.boolean().optional(),
 })
 
 export const integrationTools = [
@@ -47,7 +45,7 @@ export const integrationTools = [
         group: "integrations",
         label: "Listar integrações",
         risk: "read",
-        description: "Integrações do app com situação (configurada, saúde do último teste, modo debug).",
+        description: "Integrações do app com situação (configurada, saúde do último teste) e a origem do adaptador (biblioteca ou próprio). O debug é sempre ativo.",
         input: z.object({}),
         execute: async () => listIntegrations(),
     }),
@@ -66,22 +64,18 @@ export const integrationTools = [
         label: "Configurar integração",
         risk: "destructive",
         description:
-            "Altera campos públicos, segredos (gravar ou limpar), ambiente ou modo debug de uma integração. Os campos são validados pela definição da integração (veja get_integration). Os crons ficam no campo `jobs` da integração `crons`.",
+            "Altera campos públicos e segredos (gravar ou limpar) de uma integração. Os campos são validados pela definição da integração (veja get_integration). Os crons ficam no campo `jobs` da integração `crons`.",
         input: updateInput,
         summarize: (input) => {
             const parts = [
                 input.publicValuesJson ? "campos públicos" : null,
                 input.secrets?.length ? `segredos (${input.secrets.map((secret) => secret.key).join(", ")})` : null,
-                input.environment ? "ambiente" : null,
-                input.debugMode !== undefined ? "modo debug" : null,
             ].filter(Boolean)
             return `Alterar ${parts.join(", ") || "a configuração"} da integração ${getIntegrationDef(input.id).name}`
         },
         redact: (input) => ({ ...input, secrets: input.secrets?.map((secret) => ({ key: secret.key, value: secret.value === null ? null : SECRET_REDACTED })) }),
         execute: async (input, context) => {
             const body: IntegrationUpdateInput = {
-                ...(input.environment ? { environment: input.environment } : {}),
-                ...(input.debugMode !== undefined ? { debugMode: input.debugMode } : {}),
                 ...(input.publicValuesJson ? { publicValues: parseJsonObject(input.publicValuesJson, "publicValuesJson") } : {}),
                 ...(input.secrets?.length
                     ? { secrets: Object.fromEntries(input.secrets.map((secret) => [secret.key, secret.value === null ? { action: "clear" as const } : { action: "set" as const, value: secret.value }])) }

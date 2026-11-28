@@ -1,5 +1,5 @@
 import { DomainError } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import { LOCAL_DOCKER_INTEGRATION_ID } from "../constants"
 
 /**

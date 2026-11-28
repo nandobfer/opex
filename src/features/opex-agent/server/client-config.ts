@@ -1,6 +1,6 @@
 import { clientActorFor, type ClientActor } from "@/features/auth/server/context"
 import { DomainError } from "@/lib/api/route"
-import { getAiProvider } from "@/lib/ai/providers"
+import { getAiProvider } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { AcaoAuditoria, dbConnect, recordAudit } from "@/lib/db"
 import { OrcamentoClient, type IOrcamentoClientOpexAgent } from "@/lib/db/models/Orcamento"
 import { clientChannel } from "@/lib/pusher/channel-names"

@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -27,7 +29,8 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useSetWorkbenchPreview: () => ({ mutate: vi.fn(), isPending: false }),
   useSendWorkbenchLiveMessage: () => ({ mutate: vi.fn(), isPending: false }),
 }))
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 vi.mock('@/features/agentic/hooks/useForks', () => ({ useOpenFork: () => ({ mutate: vi.fn(), isPending: false }) }))
 
 import { ActionBar } from '@/features/agentic/components/workbench/ActionBar'

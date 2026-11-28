@@ -2,12 +2,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ counter: vi.fn(), findOne: vi.fn(), updateOne: vi.fn(), warn: vi.fn() }))
 
-vi.mock('@/lib/db/models/Counter', () => ({ Counter: { updateOne: mocks.counter } }))
-vi.mock('@/lib/db/models/Integration', () => ({ Integration: { findOne: () => ({ lean: mocks.findOne }), updateOne: mocks.updateOne } }))
-vi.mock('@/lib/logger', () => ({ logger: { warn: mocks.warn, info: vi.fn(), error: vi.fn() } }))
+vi.mock("@/lib/db/models/Counter", () => ({ Counter: { updateOne: mocks.counter } }))
+vi.mock('@nandobfer/integracoes/mongoose', () => ({ Integration: { findOne: () => ({ lean: mocks.findOne }), updateOne: mocks.updateOne } }))
+vi.mock("@/lib/logger", () => ({ logger: { warn: mocks.warn, info: vi.fn(), error: vi.fn() } }))
 
-import { migrateOpencodeQuotaCronInterval, quotaJobsToOneMinute } from '@/lib/db/migrations/opencode-quota-cron-interval'
-import { HEALTH_CHECK_JOB_ID, OPENCODE_QUOTA_JOB_ID, type CronJobConfig } from '@/lib/integrations/catalog'
+import { migrateOpencodeQuotaCronInterval, quotaJobsToOneMinute } from "@/lib/db/migrations/opencode-quota-cron-interval"
+import { HEALTH_CHECK_JOB_ID, type CronJobConfig } from "@nandobfer/integracoes"
+import { OPENCODE_QUOTA_JOB_ID } from "@/features/integrations/registry/jobs"
 
 const job = (id: string, minutes: number): CronJobConfig => ({ id, label: id, kind: 'internal', schedule: { type: 'interval', minutes }, enabled: true })
 

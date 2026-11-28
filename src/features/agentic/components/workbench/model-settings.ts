@@ -1,4 +1,4 @@
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { ModelSourceDto } from "../../types"
 
 /** Origem do modelo em uso (dica do texto e resumo do "padrão" no popover). */

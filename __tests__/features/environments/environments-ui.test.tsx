@@ -19,7 +19,7 @@ vi.mock('@/features/environments/hooks/useEnvironments', () => ({
   useEnvironmentDeploys: () => mocks.deploys,
 }))
 vi.mock('@/lib/ndjson-client', () => ({ readNdjson: mocks.readNdjson }))
-vi.mock('@/features/integrations/components/IntegrationConsole', () => ({ IntegrationConsole: () => <div data-testid="console" /> }))
+vi.mock('@nandobfer/integracoes/react', () => ({ IntegrationConsole: () => <div data-testid="console" /> }))
 
 import { EnvironmentRow } from '@/features/environments/components/EnvironmentRow'
 import { MoveDialog } from '@/features/environments/components/MoveDialog'

@@ -1,5 +1,5 @@
 import type { OpexTool } from "@/features/opex-agent/server/tools/define"
-import type { Schedule } from "@/lib/integrations/schedule"
+import type { Schedule } from "@nandobfer/integracoes"
 import type { PluginChannel, PluginRouteMethod } from "../../constants"
 
 /**

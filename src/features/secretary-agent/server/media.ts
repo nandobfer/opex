@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { listAiModels } from "@/lib/ai/catalog"
+import { listAiModels } from "@nandobfer/integracoes/modules/integrations/ia/ai/catalog"
 import { evolution } from "@/features/evolution-api/server/client"
 import { messageDisplayText, type ParsedMessage } from "@/features/evolution-api/message"
 import { modelFileKinds, opexFileDelivery } from "@/features/opex-agent/files"

@@ -80,7 +80,7 @@ export const PLANNER_TIMEOUT_MESSAGE = `O modelo do provisionamento não respond
 async function askPlanner(doc: RoutineAgentDoc, prompt: string, instructions: string): Promise<string> {
     const settings = await loadRoutineAgentSettings()
     if (!settings.provider || !settings.model) throw new Error(NO_MODEL_MESSAGE)
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     const controller = new AbortController()
     let timer: ReturnType<typeof setTimeout> | undefined
     const timeout = new Promise<never>((_, reject) => {

@@ -25,11 +25,11 @@ vi.mock('@/lib/ai/opencode-run', () => ({
     return { outcome: result.outcome, text: '', message: result.message ?? null, costUsd: 0, durationMs: 5, ...(result.failure ? { failure: result.failure } : {}), ...(result.limited ? { limited: true } : {}) }
   },
 }))
-vi.mock('@/lib/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ permission: { reply: mocks.permissionReply }, mcp: { list: async () => ({ data: [] }), add: mocks.mcpAdd, remove: async () => {} } }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({ getOpencodeClient: async () => ({ permission: { reply: mocks.permissionReply }, mcp: { list: async () => ({ data: [] }), add: mocks.mcpAdd, remove: async () => {} } }) }))
 // MCP "Memória própria" real (OPE-115): só a URL pública e o segredo derivado são dublês.
 vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-de-teste') }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
-vi.mock('@/lib/ai/catalog', () => ({ listAiModels: async () => mocks.catalog }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/catalog', () => ({ listAiModels: async () => mocks.catalog }))
 vi.mock('@/lib/db', () => ({ dbConnect: async () => {}, recordAudit: async () => {}, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR', ABORTAR: 'ABORTAR' } }))
 vi.mock('@/lib/pusher/channels', () => ({ publishAppEvent: mocks.publishAppEvent, publishToChannels: vi.fn(async () => {}) }))
 vi.mock('@/lib/storage/s3', () => ({ getFileObject: vi.fn(), getUploadUrl: vi.fn(), headFile: vi.fn(), copyFile: vi.fn(), deleteFile: vi.fn(), storageErrorInfo: () => ({ kind: 'unavailable' }) }))

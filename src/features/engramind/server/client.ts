@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto"
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { debugFetch, integrationDebug } from "@/lib/integrations/debug"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { debugFetch, integrationDebug } from "@/lib/integrations/server"
 import { ENGRAMIND_INTEGRATION_ID } from "../constants"
 import type { EngramindMethod, EngramindRequest } from "../operations"
 import { notConfiguredError, proxyMaskedError, toEngramindError, unreachableError, type EngramindErrorBody } from "./errors"

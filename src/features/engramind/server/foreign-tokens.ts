@@ -89,7 +89,7 @@ async function forget(item: StoredToken, actorId: string): Promise<void> {
     if (item.kind === "app") {
         const { EngramindState, ENGRAMIND_STATE_ID } = await import("./models")
         await EngramindState.updateOne({ _id: ENGRAMIND_STATE_ID, "appToken.tokenId": item.tokenId }, { $set: { appToken: null } })
-        const { updateIntegration } = await import("@/features/integrations/services/integration-service")
+        const { updateIntegration } = await import("@/lib/integrations/server")
         const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
         await updateIntegration(ENGRAMIND_INTEGRATION_ID, { secrets: { appToken: { action: "clear" } } }, actorId)
         return

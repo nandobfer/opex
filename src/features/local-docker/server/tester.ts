@@ -1,4 +1,4 @@
-import { fail, warnResult, type IntegrationTester } from "@/features/integrations/testers/types"
+import { fail, warnResult, type IntegrationTester } from "@/lib/integrations/server"
 import { connectionProblem } from "../commands"
 import { isBuilderMachineActive } from "./active"
 import { loadState, settingsOf } from "./settings"

@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from "framer-motion"
 import { ChevronDown, ChevronUp, Hammer, Search, WifiOff, XCircle } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { IntegrationConsole, type ConsoleSearchResults, type IntegrationConsoleHandle } from "@/features/integrations/components/IntegrationConsole"
+import { IntegrationConsole, type ConsoleSearchResults, type IntegrationConsoleHandle } from "@nandobfer/integracoes/react"
 import { lastGithubRunUrl, type WorkbenchBuildDto } from "../../build-log"
 import { useBuildLogStream, type BuildLogSink } from "../../hooks/useBuilds"
 

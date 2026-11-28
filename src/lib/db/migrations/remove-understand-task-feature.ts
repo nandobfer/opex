@@ -1,5 +1,6 @@
-import { AiFeatureSetting, AiUsageLog } from "@/lib/db/models/Ai"
-import { AiConsumption } from "@/lib/db/models/AiConsumption"
+import { AiFeatureSetting } from "@/lib/db/models/Ai"
+import { AiUsageLog } from "@nandobfer/integracoes/modules/integrations/ia/models/AiUsageLog"
+import { AiConsumption } from "@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption"
 import { logger } from "@/lib/logger"
 
 /** Id da feature "Entender tarefas", removida na OPE-122. */

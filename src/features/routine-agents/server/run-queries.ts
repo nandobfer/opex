@@ -3,7 +3,7 @@ import { RoutineAgent, RoutineRun, RoutineRunStep } from "@/lib/db/models/Routin
 import { brasiliaParts } from "../recurrence"
 import type { RoutineRunStatus } from "../status"
 import type { RoutineAgentMetricsDto, RoutineCostDto, RoutineMoneyPair, RoutineRunDetailDto, RoutineRunDto } from "../types"
-import { emptyTotals, mergeTotals, type CostTotals } from "@/features/ai-billing/effective"
+import { emptyTotals, mergeTotals, type CostTotals } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/effective"
 import { computeRunCosts, costBreakdown, toCostDto, type RunCostData } from "./run-costs"
 import { loadRunDoc } from "./runs"
 import { loadAgentDoc, routineDb, routineLog, toRunDto, type RoutineRunDoc } from "./shared"

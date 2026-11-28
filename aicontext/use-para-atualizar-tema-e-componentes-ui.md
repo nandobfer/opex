@@ -112,7 +112,7 @@ fundo do card (`bg-transparent`), sem o `bg-background` do botão `outline`. Hoo
     `depth` e `path` nas opções (ex.: filtro Slot de `/plugins`).
 - **Debug de logs** (terminal, coluna e modal): `DebugLogConsole` + `useDebugTerminal`,
   `useDebugLogStream` (fonte: `fetch`, canal e evento), `DebugLogsPanel`, `DebugLogsDialog` e
-  `DebugToggleIconButton`, em `src/features/integrations/components` e `hooks`. As integrações
+  `DebugToggleIconButton`, da central de integrações (`@nandobfer/integracoes/react`). As integrações
   (`IntegrationDebugConsole`, `LogsPanel`, `IntegrationDebugDialog`, `DebugToggleButton`) e os plugins
   (`PluginDebugConsole`, `PluginDebugDialog`) são adaptadores sobre eles: debug novo reaproveita esses
   componentes, sem copiar o markup.
@@ -399,7 +399,7 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   "Local"/"Desligado" e `emptyText`) + `ModelPickerField` (+ `VariantSelectField`). Usados em
   `/integracoes/ia`, Agente Opex, Agente Mentor e na "IA do Opex" do Engramind — nunca um `OptionTabs`
   de provedores próprio. Escolha múltipla de modelos (ex.: reservas) usa `MultiAutocomplete`. A
-  **temperatura** usa `TemperatureInput` (`src/features/ai/components/TemperatureInput.tsx`: 0 a 2, passo
+  **temperatura** usa `TemperatureInput` (`@nandobfer/integracoes/modules/integrations/ia/features/ai/components/TemperatureInput`: 0 a 2, passo
   0,1, "Padrão do modelo", vazio = `null`) em todas as telas de IA, nos agentes e no Engramind.
 - Escolha de **um** item numa lista grande ou rica (ex.: tarefa) usa
   `SearchPicker` (`ui/search-picker.tsx`) em vez de `Select`: popover com busca (local fuse.js por

@@ -1,7 +1,4 @@
 /** @vitest-environment happy-dom */
-
-import { existsSync } from "node:fs"
-import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { cleanup, render, screen } from "@testing-library/react"
 
@@ -9,30 +6,42 @@ const mocks = vi.hoisted(() => ({
     notFound: vi.fn(() => {
         throw new Error("NEXT_NOT_FOUND")
     }),
+    redirect: vi.fn((to: string) => {
+        throw new Error(`NEXT_REDIRECT ${to}`)
+    }),
 }))
 
-vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: vi.fn() }))
-vi.mock("@/features/integrations/components/IntegrationDetailPage", () => ({
-    IntegrationDetailPage: ({ id }: { id: string }) => <div data-testid="detail">{id}</div>,
+vi.mock("next/navigation", () => ({ notFound: mocks.notFound, redirect: mocks.redirect }))
+vi.mock("@/features/integrations/components/IntegrationsCentralPage", () => ({
+    IntegrationsCentralPage: ({ slug }: { slug: string[] }) => <div data-testid="central">{slug.join("/") || "(lista)"}</div>,
 }))
 
-import ProvedorIaPage from "@/app/(app)/integracoes/ia/[provider]/page"
-import { hasCustomIntegrationPath, INTEGRATION_IDS, integrationPath } from "@/lib/integrations/catalog"
+import IntegracoesPage from "@/app/(app)/integracoes/[[...slug]]/page"
+import { hasCustomIntegrationPath, INTEGRATION_IDS, integrationPath, integrationsRegistry } from "@/features/integrations/registry/definitions"
 
-const APP_DIR = path.resolve(__dirname, "../../src/app/(app)")
+const open = async (slug?: string[]) => render(await IntegracoesPage({ params: Promise.resolve(slug ? { slug } : {}) }))
 
-afterEach(() => cleanup())
+afterEach(() => {
+    cleanup()
+    vi.clearAllMocks()
+})
 
-describe("páginas dos Inteligência Artificial", () => {
-    it("toda integração com rota própria tem uma página que atende o endereço", () => {
+/**
+ * A página catch-all `/integracoes/[[...slug]]` atende a central inteira pelo registro do Opex:
+ * lista, página de cada integração, provedores de IA, páginas próprias (centrais, clientes) e os
+ * caminhos legados.
+ */
+describe("página catch-all das integrações", () => {
+    it("toda integração com rota própria é atendida pelo registro (sem página estática)", () => {
         for (const id of INTEGRATION_IDS.filter(hasCustomIntegrationPath)) {
-            const segments = integrationPath(id).split("/").filter(Boolean)
-            // Último segmento pode ser estático (`ia/page.tsx`) ou dinâmico (`ia/[provider]/page.tsx`).
-            const parent = segments.slice(0, -1).join("/")
-            const exact = path.join(APP_DIR, ...segments, "page.tsx")
-            const dynamic = path.join(APP_DIR, parent, "[provider]", "page.tsx")
-            expect(existsSync(exact) || (segments.length > 2 && existsSync(dynamic)), `${id} → ${integrationPath(id)}`).toBe(true)
+            const segments = integrationPath(id).split("/").filter(Boolean).slice(1)
+            expect(integrationsRegistry.match(segments), `${id} → ${integrationPath(id)}`).toEqual({ kind: "integration", id, rest: [] })
         }
+    })
+
+    it("sem segmentos abre a lista", async () => {
+        await open()
+        expect(screen.getByTestId("central").textContent).toBe("(lista)")
     })
 
     it.each([
@@ -41,13 +50,29 @@ describe("páginas dos Inteligência Artificial", () => {
         ["anthropic", "ai_anthropic"],
         ["openai", "ai_openai"],
         ["deepseek", "ai_deepseek"],
+        ["opencode-go", "ai_opencode_go"],
+        ["command-code", "ai_command_code"],
         ["jev", "ai_jev"],
     ])("/integracoes/ia/%s abre a integração %s", async (provider, id) => {
-        render(await ProvedorIaPage({ params: Promise.resolve({ provider }) }))
-        expect(screen.getByTestId("detail").textContent).toBe(id)
+        expect(integrationsRegistry.match(["ia", provider])).toEqual({ kind: "integration", id, rest: [] })
+        await open(["ia", provider])
+        expect(screen.getByTestId("central").textContent).toBe(`ia/${provider}`)
     })
 
-    it("provedor desconhecido cai no 404", async () => {
-        await expect(ProvedorIaPage({ params: Promise.resolve({ provider: "mistral" }) })).rejects.toThrow("NEXT_NOT_FOUND")
+    it("páginas próprias abaixo de uma integração (centrais, clientes) seguem para a central", async () => {
+        expect(integrationsRegistry.match(["ia", "centrais", "c1"])).toEqual({ kind: "integration", id: "ai", rest: ["centrais", "c1"] })
+        expect(integrationsRegistry.match(["clientes", "x9"])).toEqual({ kind: "integration", id: "orcamentos", rest: ["x9"] })
+        await open(["clientes", "x9"])
+        expect(screen.getByTestId("central").textContent).toBe("clientes/x9")
+    })
+
+    it("caminho legado e id com caminho próprio redirecionam", async () => {
+        await expect(open(["orcamentos"])).rejects.toThrow("NEXT_REDIRECT /integracoes/clientes")
+        await expect(open(["orcamentos", "c1"])).rejects.toThrow("NEXT_REDIRECT /integracoes/clientes/c1")
+        await expect(open(["ai_gemini"])).rejects.toThrow("NEXT_REDIRECT /integracoes/ia/gemini")
+    })
+
+    it("caminho desconhecido cai no 404", async () => {
+        await expect(open(["nao-existe"])).rejects.toThrow("NEXT_NOT_FOUND")
     })
 })

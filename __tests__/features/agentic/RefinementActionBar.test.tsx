@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { fireEvent, render, screen, within } from '@testing-library/react'
@@ -22,7 +24,8 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useSetWorkbenchStage: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useDeleteWorkbench: () => ({ mutate: vi.fn(), isPending: false }),
 }))
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [], isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 
 import { RefinementActionBar } from '@/features/agentic/components/workbench/RefinementActionBar'
 import type { WorkbenchDto } from '@/features/agentic/types'

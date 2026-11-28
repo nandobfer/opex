@@ -4,8 +4,8 @@ import { fireEvent, render, waitFor } from '@testing-library/react'
 import { useRef } from 'react'
 import { describe, expect, it } from 'vitest'
 
-import { useFillViewportHeight } from '@/features/integrations/hooks/useScrollViewportHeight'
-import { APP_SCROLL_CONTAINER_ID } from '@/hooks/usePageVirtualizer'
+import { useFillViewportHeight } from "@nandobfer/integracoes/react"
+import { APP_SCROLL_CONTAINER_ID } from "@/hooks/usePageVirtualizer"
 
 const rect = (top: number): DOMRect =>
   ({ top, left: 0, right: 0, bottom: top, width: 0, height: 0, x: 0, y: top, toJSON: () => ({}) }) as DOMRect

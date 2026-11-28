@@ -1,7 +1,7 @@
 "use client"
 
 import type { ReactNode } from "react"
-import type { AiModelDto } from "@/lib/ai/providers"
+import type { AiModelDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { ModelChoiceDto } from "../../types"
 import { ModelInUse } from "./ModelInUse"
 import { ModelSettingsPopover } from "./ModelSettingsPopover"

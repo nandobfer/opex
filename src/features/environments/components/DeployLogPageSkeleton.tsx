@@ -2,7 +2,7 @@
 
 import { useRef } from "react"
 import { Skeleton } from "@/components/ui/skeleton"
-import { useFillViewportHeight } from "@/features/integrations/hooks/useScrollViewportHeight"
+import { useFillViewportHeight } from "@nandobfer/integracoes/react"
 import { DEPLOY_LOG_CARD_CLASS, DEPLOY_PAGE_CLASS } from "./deploy-page-layout"
 
 /** Carregamento da página do deploy: o cabeçalho e o cartão do log com as mesmas dimensões (OPE-208). */

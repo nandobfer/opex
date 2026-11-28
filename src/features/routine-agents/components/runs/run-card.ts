@@ -1,4 +1,4 @@
-import { formatUsd } from "@/features/ai-billing/money"
+import { formatUsd } from "@nandobfer/integracoes/modules/integrations/ia/features/ai-billing/money"
 import type { CostKind } from "@/features/ai-billing/cost-tone"
 import { occupiesSlot } from "../../status"
 import type { RoutineRunDto } from "../../types"

@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   after: [] as Promise<unknown>[],
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => mocks.config }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => mocks.config }))
 vi.mock('@/lib/after-response', () => ({
   runAfterResponse: (_label: string, task: () => Promise<unknown>) => {
     mocks.after.push(task())

@@ -1,5 +1,5 @@
-import type { AiSkillDto } from "@/lib/ai/providers"
-import { matchOpencodeSkill } from "@/lib/ai/opencode-skills"
+import type { AiSkillDto } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
+import { matchOpencodeSkill } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills"
 import type { RefinementSkillStateDto } from "./types"
 
 /** Onde a lista foi lida (diretório da sessão), para o motivo citar o que foi consultado. */

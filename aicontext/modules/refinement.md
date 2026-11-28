@@ -112,10 +112,10 @@ de texto). A entrada durável `opex-refinement` passa a levar só o
   quando ele é aberto (ou reaberto depois de descarregado): as primeiras leituras voltam **sem nenhuma
   skill** e depois **só com as nativas**, e a lista completa chega cerca de 1 s depois. Era por isso que a
   aba dizia `ok` e o turno, criado logo depois de `session.create`, caía sempre em "não está instalada".
-  `listOpencodeSkillsAt` (`src/lib/ai/opencode-skill-list.ts`) repete a leitura a cada 300 ms (até 14
+  `listOpencodeSkillsAt` (`@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list`) repete a leitura a cada 300 ms (até 14
   leituras, ≈ 4 s) e para assim que a skill configurada aparece; se ela não aparecer, para quando a lista
   fica igual e não vazia por 4 leituras seguidas (a lista parcial das nativas já se repetiu em 2 leituras no host real). Erro de rede continua sendo "OpenCode sem listar".
-- **Casamento da skill** (`matchOpencodeSkill`, puro, `src/lib/ai/opencode-skills.ts`, usado pela aba, pelo
+- **Casamento da skill** (`matchOpencodeSkill`, puro, `@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skills`, usado pela aba, pelo
   salvar, pelo turno e pelo motor OpenCode dos rotineiros): `id` exato → `name` exato → `id`/`name`
   normalizados (sem espaços nas pontas, minúsculas, só o último segmento de id qualificado `a/b` ou
   `a:b`). Mais de um candidato no passo normalizado não casa nada. `settings.skill` continua guardando o id

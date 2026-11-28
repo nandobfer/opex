@@ -1043,7 +1043,7 @@ enabledMcpServers }`), auditada; nomes fora do catálogo dão 400 `OPEX_TOOL_UNK
   (`src/components/ui/secret-value-input.tsx`), compartilhado com `SecretField` das Integrações.
 - Pontos de montagem: `AppSidebar` (`footerItems`), `AppShell` (`sidebarFooterItems`),
   `AppLayoutShell`, `AiEditorForm`/`AI_TABS`, `prepareModel`/`PreparedModel` exportados de
-  `src/lib/ai/stream.ts`, `loadFeature`/`availability`/`assertCatalog`/`persistFeature`/
+  `@nandobfer/integracoes/modules/integrations/ia/ai/stream`, `loadFeature`/`availability`/`assertCatalog`/`persistFeature`/
   `ProviderSettings` exportados de `src/features/ai/server/settings.ts`,
   `importAttachmentFromStorage` (anexos de tarefa) e `listDrafts` (Orçamentos).
 

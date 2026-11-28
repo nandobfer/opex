@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import React from 'react'
 import { fireEvent, render, screen } from '@testing-library/react'
@@ -17,7 +19,8 @@ vi.mock('@/features/agentic/hooks/useAgentic', () => ({
   useSendWorkbenchLiveMessage: () => ({ mutate: mocks.sendLive, isPending: false }),
 }))
 vi.mock('@/features/adversarial-agent/components/workbench/AdversarialActions', () => ({ AdversarialActions: () => <p>decisões do adversário</p> }))
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiModels: () => ({ data: [{ id: 'anthropic/opus', name: 'Claude Opus', group: 'Anthropic', variants: [] }], isLoading: false, isError: false, error: null }) }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 
 import { ActionBar } from '@/features/agentic/components/workbench/ActionBar'
 import { ReplyTargetProvider } from '@/components/agent-reply/ReplyTargetProvider'

@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { assertCatalog, availability, loadFeature, persistFeature } from "@/features/ai/server/settings"
 import type { AiFeatureAvailability } from "@/features/ai/types"
-import { normalizeFallbacks } from "@/features/ai/model-fallbacks"
+import { normalizeFallbacks } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/model-fallbacks"
 import { DomainError } from "@/lib/api/route"
 import { normalizeColor } from "@/lib/colors"
 import { loggerFor } from "@/lib/logger"
@@ -90,7 +90,7 @@ export async function saveMaddoxSettings(input: MaddoxAgentSettings, actorId: st
     await persistFeature(MADDOX_FEATURE, next, actorId, before)
     if (next.enabled) {
         try {
-            const { getOpencodeClient } = await import("@/lib/ai/opencode-client")
+            const { getOpencodeClient } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client")
             const { ensureMaddoxMcp, maddoxDirectory } = await import("./opencode-session")
             const result = await ensureMaddoxMcp(await getOpencodeClient(), await maddoxDirectory(), next.mcpBaseUrl, { force: next.mcpBaseUrl !== before.settings.mcpBaseUrl })
             if (!result.ok) log.warn({ err: result.error }, "[maddox] MCP do Opex não registrado ao salvar")

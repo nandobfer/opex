@@ -1,6 +1,6 @@
 import type { SessionInfo } from "@opencode/client"
 import { AdversarialReview, adversarialDb } from "@/features/adversarial-agent/server/models"
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { dbConnect } from "@/lib/db"
 import { AgenticFork, AgenticWorkbench } from "@/lib/db/models/Agentic"

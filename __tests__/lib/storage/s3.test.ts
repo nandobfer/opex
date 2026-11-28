@@ -7,10 +7,10 @@ const mocks = vi.hoisted(() => ({
   clients: [] as Array<Record<string, unknown>>,
 }))
 
-vi.mock('@/lib/integrations/config', () => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))
-vi.mock('@/lib/integrations/debug', () => ({
+vi.mock("@nandobfer/integracoes/modules/server/config", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ getIntegration: vi.fn(async () => ({ values: mocks.values, version: mocks.version })) }))()) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/server/debug", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   integrationDebug: () => ({ step: vi.fn(), error: vi.fn(), request: vi.fn(), success: vi.fn(), response: vi.fn() }),
-}))
+}))()) as Record<string, unknown>) }))
 vi.mock('@aws-sdk/s3-request-presigner', () => ({ getSignedUrl: vi.fn(async () => 'https://assinada') }))
 vi.mock('@aws-sdk/client-s3', () => {
   class S3Client {

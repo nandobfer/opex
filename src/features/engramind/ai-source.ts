@@ -1,5 +1,5 @@
-import { DEEPSEEK_API_URL, OPENAI_API_URL } from "@/lib/ai/endpoints"
-import type { IntegrationId } from "@/lib/integrations/catalog"
+import { DEEPSEEK_API_URL, OPENAI_API_URL } from "@nandobfer/integracoes/modules/integrations/ia/ai/endpoints"
+import type { IntegrationId } from "@/features/integrations/registry/definitions"
 
 /**
  * "IA do Opex" no Engramind (módulo PURO): mapeamento entre o provedor escolhido no Opex e as chaves

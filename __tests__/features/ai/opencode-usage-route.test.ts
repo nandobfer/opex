@@ -1,11 +1,12 @@
+import { legacyRoute } from '../../helpers/integrations-route'
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { NextRequest } from "next/server"
 
 const mocks = vi.hoisted(() => ({ aggregate: vi.fn(), findOne: vi.fn(), connect: vi.fn() }))
 vi.mock("@/lib/db", () => ({ dbConnect: mocks.connect }))
-vi.mock("@/lib/db/models/AiConsumption", () => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/models/AiConsumption", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ AiConsumption: { aggregate: mocks.aggregate, findOne: mocks.findOne } }))()) as Record<string, unknown>) }))
 
-import { GET } from "@/app/api/ai/providers/opencode/usage/route"
+const { GET } = legacyRoute("ai", "providers/opencode/usage")
 
 const chain = (doc: { createdAt: Date } | null) => ({
     sort: () => ({ select: () => ({ lean: async () => doc }) }),

@@ -29,7 +29,7 @@ vi.mock('@/features/adversarial-agent/server/models', async () => {
   const { memoryModel } = await import('../../helpers/memory-model')
   return { AdversarialReview: memoryModel(), adversarialDb: vi.fn(async () => undefined) }
 })
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => ({
     session: { create: mocks.sessionCreate, remove: mocks.sessionRemove, instructions: { entry: { put: mocks.instructionsPut } }, form: { cancel: mocks.formCancel } },
     permission: { reply: mocks.permissionReply },
@@ -38,7 +38,7 @@ vi.mock('@/lib/ai/opencode-client', () => ({
 }))
 // MCP "Memória própria" real (OPE-115): só a URL pública e o segredo derivado são dublês.
 vi.mock('@/lib/crypto/secretBox', () => ({ deriveSubkey: () => Buffer.from('segredo-de-teste') }))
-vi.mock('@/lib/integrations/config', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
+vi.mock('@/lib/integrations/runtime', () => ({ getIntegrationConfig: async () => ({ opexPublicUrl: 'http://opex:3100' }) }))
 vi.mock('@/lib/ai/opencode-run', () => ({ runAgentTurn: mocks.runTurn }))
 vi.mock('@/features/agentic/server/hub', () => ({ publishWorkbenchEvent: mocks.publish, flushWorkbenchEvents: vi.fn(async () => undefined) }))
 vi.mock('@/features/tasks/server/service', () => ({ getTask: mocks.getTask }))

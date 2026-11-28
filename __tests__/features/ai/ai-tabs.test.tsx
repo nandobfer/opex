@@ -6,11 +6,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 const mocks = vi.hoisted(() => ({ toastError: vi.fn() }))
 vi.mock('sonner', () => ({ toast: { error: mocks.toastError, success: vi.fn() } }))
 
-import { AI_TAB_ALIASES, AI_TABS } from '@/features/ai/constants'
-import { AI_EDITOR_TABS } from '@/features/ai/tabs'
-import { canonicalAliasUrl, parseTab } from '@/features/integrations/components/tabs/useIntegrationTab'
-import { MergedFeaturesTab } from '@/features/ai/components/shared/MergedFeaturesTab'
-import type { FeatureSectionProps } from '@/features/ai/components/shared/feature-section'
+import { AI_TAB_ALIASES, AI_TABS } from "@/features/ai/constants"
+import { AI_EDITOR_TABS } from "@/features/ai/tabs"
+import { canonicalAliasUrl, parseTab } from "@nandobfer/integracoes/react"
+import { MergedFeaturesTab } from "@/features/ai/components/shared/MergedFeaturesTab"
+import type { FeatureSectionProps } from "@/features/ai/components/shared/feature-section"
 
 afterEach(cleanup)
 beforeEach(() => vi.clearAllMocks())

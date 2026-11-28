@@ -7,8 +7,9 @@ vi.mock('@/lib/pdf/gotenberg', () => ({ gotenbergHealth: async () => {
   return mocks.health()
 } }))
 
-import { INTEGRATION_TESTERS } from '@/features/integrations/testers/testers'
-import { getIntegrationDef } from '@/lib/integrations/catalog'
+import { opexTesters } from '../../helpers/opex-testers'
+const INTEGRATION_TESTERS = await opexTesters()
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
 
 const context = () => ({ emit: vi.fn(), signal: new AbortController().signal })
 

@@ -3,10 +3,10 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 /** OPE-205: o runner de sessão grava os tokens separados (cache e raciocínio) de cada passo do OpenCode. */
 
 const mocks = vi.hoisted(() => ({ record: vi.fn(async () => {}) }))
-vi.mock('@/lib/ai/consumption', () => ({ recordAiConsumption: mocks.record }))
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/consumption', () => ({ recordAiConsumption: mocks.record }))
 
-import { runAgentTurn } from '@/lib/ai/opencode-run'
-import type { OpencodeClient } from '@/lib/ai/opencode-client'
+import { runAgentTurn } from "@/lib/ai/opencode-run"
+import type { OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 
 const ev = (type: string, data: Record<string, unknown> = {}) => ({ type, data: { sessionID: 's1', ...data } })
 

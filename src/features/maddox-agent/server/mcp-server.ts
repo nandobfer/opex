@@ -5,7 +5,7 @@ import { toolErrorMessage, type OpexTool } from "@/features/opex-agent/server/to
 import { compactToolOutput } from "@/features/opex-agent/server/tool-display"
 import { actorIdOf, OWNER_SCOPE, sessionScopeOf, type OpexServerScope } from "@/features/opex-agent/server/scope"
 import { isAlwaysOnGroup } from "@/features/opex-agent/tool-tree"
-import { getOpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { dbConnect } from "@/lib/db"
 import { OpexSession, type IOpexSession } from "@/lib/db/models/Opex"
 import { loggerFor } from "@/lib/logger"

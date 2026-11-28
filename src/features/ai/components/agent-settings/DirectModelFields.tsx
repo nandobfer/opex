@@ -1,10 +1,10 @@
 "use client"
 
 import { FORM_GRID_WIDE } from "@/components/ui/form-grid"
-import { getAiProvider, type AiProviderId } from "@/lib/ai/providers"
+import { getAiProvider, type AiProviderId } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import type { AgentConfig } from "@/features/agentic/schemas"
-import { useAiModels } from "../../hooks/useAi"
-import { ModelPickerField, VariantSelectField } from "../ModelFields"
+import { useAiModels } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import { ModelPickerField, VariantSelectField } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/ModelFields"
 
 /**
  * Modelo e raciocínio de um provedor direto (sem agente nem fallbacks, que são do OpenCode), gravados

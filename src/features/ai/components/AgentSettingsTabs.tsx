@@ -1,8 +1,8 @@
 "use client"
 
 import type { ReactNode } from "react"
-import { IntegrationTabs, type IntegrationTabDef } from "@/features/integrations/components/tabs/IntegrationTabs"
-import { useIntegrationTab } from "@/features/integrations/components/tabs/useIntegrationTab"
+import { IntegrationTabs, type IntegrationTabDef } from "@nandobfer/integracoes/react"
+import { useIntegrationTab } from "@nandobfer/integracoes/react"
 
 /** Parâmetro da URL com a seção ativa dentro da aba de um agente (`?aba=agente-opex&secao=ferramentas`). */
 export const AGENT_SECTION_PARAM = "secao"

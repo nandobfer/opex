@@ -9,7 +9,7 @@ const mocks = vi.hoisted(() => ({
   updateIntegration: vi.fn(async () => undefined),
   stateUpdates: [] as unknown[],
 }))
-vi.mock('@/features/integrations/services/integration-service', () => ({ updateIntegration: mocks.updateIntegration }))
+vi.mock('@/lib/integrations/server', () => ({ updateIntegration: mocks.updateIntegration }))
 vi.mock('@/features/engramind/server/models', () => ({ ENGRAMIND_STATE_ID: 'engramind', engramindDb: async () => undefined, EngramindState: { updateOne: async (...args: unknown[]) => mocks.stateUpdates.push(args) } }))
 
 vi.mock('@/features/engramind/server/client', () => ({ engramindCall: mocks.call }))

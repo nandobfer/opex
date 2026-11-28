@@ -191,7 +191,7 @@ async function rotateToken(tokenId: string, actorId: string): Promise<RotatedTok
     let savedOwn = false
     if (own && issued.secret) {
         try {
-            const { updateIntegration } = await import("@/features/integrations/services/integration-service")
+            const { updateIntegration } = await import("@/lib/integrations/server")
             const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
             await updateIntegration(ENGRAMIND_INTEGRATION_ID, { secrets: { [own === "admin" ? "adminToken" : "appToken"]: { action: "set", value: issued.secret } } }, actorId)
             if (own === "app") {

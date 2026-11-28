@@ -26,7 +26,7 @@ não existe — ver `modules/opencode-resources.md`.
 ## Ativação
 
 - Campo público **"Integração ativa"** (`active`, `boolean`, padrão `false`) da integração
-  `builder_machine` (`src/lib/integrations/catalog.ts`). Sem `env`. Segredo `sshPrivateKey`
+  `builder_machine` (adaptador do Opex: `src/features/integrations/registry/definitions.ts` e `adapters/opex.server.ts`). Sem `env`. Segredo `sshPrivateKey`
   (`group: "card"`, só pela aba Preparo do PC).
 - `src/features/local-docker/server/active.ts`: `isBuilderMachineActive()` (`getIntegrationConfig`
   → `active === true`; erro → `false`) e `assertBuilderMachineActive()` (404
@@ -38,7 +38,7 @@ não existe — ver `modules/opencode-resources.md`.
   Desativada, a página mostra só **Geral** + card **Ativação** ("Integração ativa") e as demais abas
   bloqueadas ("Ative a integração e salve…"); a configuração do PC nem é carregada.
 - **Ativar** (transição desligada → ligada, `updateIntegration`) roda o gancho de ativação
-  (`src/features/integrations/services/enable-hooks.ts`, `INTEGRATION_ENABLE_HOOKS`, depois de gravar
+  (`onEnable` do adaptador `builderMachineAdapter`, `src/features/integrations/adapters/opex.server.ts`, depois de gravar
   e auditar; falha só é logada e não desfaz): `onBuilderMachineEnabled` liga a rotina
   `builder-machine-cleanup` em Integrações › Crons.
 - **Desativar com prévias no PC deixa os containers lá** (o código não alcança mais o PC): a tela

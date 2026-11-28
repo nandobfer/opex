@@ -2,10 +2,10 @@ import { describe, expect, it } from 'vitest'
 
 /** "IA do Opex": provedor do Opex → chaves do Engramind (URL implícita), origem derivada e schemas sem URL. */
 
-import { DEEPSEEK_API_URL, OPENAI_API_URL } from '@/lib/ai/endpoints'
-import { deriveOrigin, embeddingProviderOf, embeddingSettingsOf, opexKeyProviderOf, redatorProviderOf, redatorSettingsOf, type AiSourceSnapshot } from '@/features/engramind/ai-source'
+import { DEEPSEEK_API_URL, OPENAI_API_URL } from "@nandobfer/integracoes/modules/integrations/ia/ai/endpoints"
+import { deriveOrigin, embeddingProviderOf, embeddingSettingsOf, opexKeyProviderOf, redatorProviderOf, redatorSettingsOf, type AiSourceSnapshot } from "@/features/engramind/ai-source"
 import { z } from 'zod'
-import { applyAiSourceSchema, applyAiSourceToolSchema, embeddingSourceSchema, redatorSourceSchema } from '@/features/engramind/schemas/ai-source'
+import { applyAiSourceSchema, applyAiSourceToolSchema, embeddingSourceSchema, redatorSourceSchema } from "@/features/engramind/schemas/ai-source"
 
 describe('mapeamento do Redator', () => {
   it.each([

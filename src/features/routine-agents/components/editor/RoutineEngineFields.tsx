@@ -3,9 +3,9 @@
 import { Controller, useWatch, type UseFormReturn } from "react-hook-form"
 import { Field } from "@/components/ui/field"
 import { OptionTabs } from "@/components/ui/option-tabs"
-import { ProviderModelCard } from "@/features/ai/components/shared/ProviderModelCard"
-import { useAiProviderStatuses } from "@/features/ai/hooks/useAi"
-import { AI_TEXT_PROVIDER_IDS } from "@/lib/ai/providers"
+import { ProviderModelCard } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/shared/ProviderModelCard"
+import { useAiProviderStatuses } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi"
+import { AI_TEXT_PROVIDER_IDS } from "@nandobfer/integracoes/modules/integrations/ia/ai/providers"
 import { isOpexProviderId, type OpexProviderId } from "@/features/opex-agent/constants"
 import { ROUTINE_ENGINES, ROUTINE_ENGINE_LABELS, type RoutineAgentInput, type RoutineEngine } from "../../schemas"
 

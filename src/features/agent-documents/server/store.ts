@@ -3,7 +3,7 @@ import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { AgentFile, type AgentFileKind, type IAgentFile, type IAgentFileOrigin } from "@/lib/db/models/AgentFile"
 import { AcaoAuditoria, recordAudit } from "@/lib/audit/record"
-import { getIntegrationConfig } from "@/lib/integrations/config"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import { loggerFor } from "@/lib/logger"
 import { deleteFile, getFileObject, getFileUrl, getUploadUrl, headFile, storageErrorInfo, uploadFile } from "@/lib/storage/s3"
 import {

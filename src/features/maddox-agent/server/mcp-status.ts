@@ -1,4 +1,4 @@
-import { getOpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import type { MaddoxMcpStatusDto } from "../types"
 import { ensureMaddoxMcp, maddoxDirectory, maddoxMcpStatus } from "./opencode-session"
 import { loadMaddoxSettings } from "./settings"

@@ -1,4 +1,6 @@
 /** @vitest-environment happy-dom */
+import '../../helpers/integrations-render'
+
 
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
@@ -7,7 +9,8 @@ import { framerMotionMock } from '../../helpers/framer-motion'
 /** Seção Skills na aba Agente Opex (OPE-153): entrada no menu de seções e `?secao=skills` montando a seção. */
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAi', () => ({ useAiProviderStatuses: () => ({ providers: [] }) }))
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiProviderStatuses: () => ({ providers: [] }) }))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => [Object.getOwnPropertyDescriptors((await (async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({ useAiProviderStatuses: () => ({ providers: [] }) }))(importOriginal)) as Record<string, unknown>) }))(importOriginal)) as object)].reduce((target, descriptors) => Object.defineProperties(target, descriptors), { ...(await importOriginal<Record<string, unknown>>()) }))
 // Resultado estável: um objeto novo a cada render faria o `form.reset` da aba rodar sem fim.
 vi.mock('@/features/opex-agent/hooks/useOpexSettings', async () => {
   const { DEFAULT_OPEX_AGENT_SETTINGS } = await import('@/features/opex-agent/schemas')

@@ -4,7 +4,7 @@ import type { Dispatch, SetStateAction } from "react"
 import { AnimatePresence, motion } from "framer-motion"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { ToggleCard } from "@/components/ui/toggle-card"
-import { cardMotion, type Draft } from "@/features/integrations/components/detail/draft"
+import { cardMotion, type Draft } from "@nandobfer/integracoes/react"
 
 /**
  * Liga/desliga a integração (campo público `active`, gravado com o Salvar da página). Desativada, as

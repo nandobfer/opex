@@ -7,7 +7,7 @@ import { SidebarHoverButtonItem } from "@/features/layout/components/sidebar/Sid
 import { OpencodeQuotaPanel } from "@/features/opencode-quota/components/OpencodeQuotaPanel"
 import { useOpencodeQuota, useOpencodeQuotaRealtime } from "@/features/opencode-quota/hooks/useOpencodeQuota"
 import { useQuotaPanelPrefs } from "@/features/opencode-quota/hooks/useQuotaPanelPrefs"
-import { visibleQuotaLevel } from "@/features/opencode-quota/logic"
+import { visibleQuotaLevel } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/logic"
 import { useHostMetrics, useHostMetricsRealtime } from "../hooks/useHostMetrics"
 import { hostMetricsLevel } from "../logic"
 import { HostMetricsPanel } from "./HostMetricsPanel"

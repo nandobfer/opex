@@ -1,7 +1,7 @@
 import { ok } from "@/lib/api/responses"
 import { withRoute } from "@/lib/api/route"
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { DEFAULT_QUOTA_BUTTON_REASON } from "@/features/opencode-quota/constants"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { DEFAULT_QUOTA_BUTTON_REASON } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/constants"
 import { refreshOpencodeQuota } from "@/features/opencode-quota/server/service"
 
 export const runtime = "nodejs"

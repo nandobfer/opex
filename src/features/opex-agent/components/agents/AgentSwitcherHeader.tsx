@@ -7,7 +7,7 @@ import { History, Maximize2, MessageSquarePlus, Minimize2, Settings, X } from "l
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
 import { agentColorStyle } from "@/features/maddox-agent/colors"
-import { ModelOverridePicker, type ModelChoiceInput } from "@/features/ai/components/model-picker/ModelOverridePicker"
+import { ModelOverridePicker, type ModelChoiceInput } from "@nandobfer/integracoes/modules/integrations/ia/features/ai/components/model-picker/ModelOverridePicker"
 import { useMaddoxModels } from "@/features/maddox-agent/hooks/useMaddoxModels"
 import type { ChatAgentId } from "../../agents"
 import { useOpexView } from "../../hooks/useOpexSettings"

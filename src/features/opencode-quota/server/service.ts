@@ -1,11 +1,11 @@
-import { getIntegrationConfig } from "@/lib/integrations/config"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getIntegrationConfig } from "@/lib/integrations/runtime"
+import { integrationDebug } from "@/lib/integrations/server"
 import { loggerFor } from "@/lib/logger"
 import { publishAppEvent } from "@/lib/pusher/channels"
-import { OPENCODE_QUOTA_UPDATED_EVENT, QUOTA_RPC_MESSAGES, type QuotaRefreshReason } from "../constants"
-import { keepLastGoodWindows, normalizeQuotaSnapshot, quotaHash } from "../logic"
-import { quotaRpcOutputSchema, quotaSnapshotSchema } from "../schemas"
-import type { OpencodeQuotaDto, OpencodeQuotaState } from "../types"
+import { OPENCODE_QUOTA_UPDATED_EVENT, QUOTA_RPC_MESSAGES, type QuotaRefreshReason } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/constants"
+import { keepLastGoodWindows, normalizeQuotaSnapshot, quotaHash } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/logic"
+import { quotaRpcOutputSchema, quotaSnapshotSchema } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/schemas"
+import type { OpencodeQuotaDto, OpencodeQuotaState } from "@nandobfer/integracoes/modules/integrations/ia/features/opencode-quota/types"
 import { callQuotaRpc, type QuotaRpcCaller } from "./rpc"
 
 /**

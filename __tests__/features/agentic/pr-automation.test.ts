@@ -28,7 +28,7 @@ vi.mock('@/features/agentic/server/developer-memories', () => ({ syncDeveloperMe
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', CRIAR: 'CRIAR' } }))
 vi.mock('@/lib/logger', () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }))
 vi.mock('@/lib/local-user', () => ({ getLocalUser: () => ({ id: 'local' }) }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: vi.fn(async () => ({
     session: {
       get: async () => ({ id: 'sess-1', location: { directory: '/home/u/app/worktrees/ope-50' } }),

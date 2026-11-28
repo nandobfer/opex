@@ -199,7 +199,7 @@ export const APP_TOKEN_LABEL = "Opex · provisionamento (app)"
 
 /** Segredo gravado do token de app (campo privado da integração). */
 async function storedAppToken(): Promise<string | null> {
-    const { getIntegrationConfig } = await import("@/lib/integrations/config")
+    const { getIntegrationConfig } = await import("@/lib/integrations/runtime")
     const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
     const config = (await getIntegrationConfig(ENGRAMIND_INTEGRATION_ID)) as Record<string, string | undefined>
     return config.appToken?.trim() || null
@@ -221,7 +221,7 @@ export async function ensureAppToken(adminTarget: EngramindTarget, actorId: stri
         }
         const issued = await engramindCall<IssuedToken>("POST", { path: "/v1/tokens", body: { kind: "app", app, scopes: APP_TOKEN_SCOPES, label: APP_TOKEN_LABEL } }, { target: adminTarget })
         if (!issued.secret) throw new Error("o Engramind não devolveu o segredo do token de app")
-        const { updateIntegration } = await import("@/features/integrations/services/integration-service")
+        const { updateIntegration } = await import("@/lib/integrations/server")
         const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
         await updateIntegration(ENGRAMIND_INTEGRATION_ID, { secrets: { appToken: { action: "set", value: issued.secret } } }, actorId)
         await engramindDb()
@@ -323,7 +323,7 @@ export function scheduleEngramindStartupCheck(delayMs = STARTUP_DELAY_MS): void 
         void (async () => {
             const { isPreviewInstance } = await import("@/lib/instance")
             if (isPreviewInstance()) return
-            const { getIntegrationConfig } = await import("@/lib/integrations/config")
+            const { getIntegrationConfig } = await import("@/lib/integrations/runtime")
             const { ENGRAMIND_INTEGRATION_ID } = await import("../constants")
             const config = (await getIntegrationConfig(ENGRAMIND_INTEGRATION_ID)) as Record<string, string | undefined>
             if (!config.baseUrl || !config.adminToken) return

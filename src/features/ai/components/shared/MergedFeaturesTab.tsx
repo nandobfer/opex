@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Loader2, Save, Undo2 } from "lucide-react"
 import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
-import { SECTION_PARAM } from "@/features/integrations/components/tabs/useIntegrationTab"
+import { SECTION_PARAM } from "@nandobfer/integracoes/react"
 import type { FeatureSectionHandle, FeatureSectionProps, FeatureSectionState } from "./feature-section"
 
 export interface MergedFeatureSection {

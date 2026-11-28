@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { listCostOf } from '@/lib/ai/pricing/compute'
-import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT, deepseekPrice, deepseekTableModel, isDeepseekPeak, parseHolidayList } from '@/lib/ai/pricing/deepseek'
-import { getIntegrationDef } from '@/lib/integrations/catalog'
+import { listCostOf } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/compute"
+import { DEEPSEEK_DEFAULT_HOLIDAYS_TEXT, deepseekPrice, deepseekTableModel, isDeepseekPeak, parseHolidayList } from "@nandobfer/integracoes/modules/integrations/ia/ai/pricing/deepseek"
+import { getIntegrationDef } from "@/features/integrations/registry/definitions"
 
 /**
  * OPE-203: tabela oficial do DeepSeek (api-docs.deepseek.com/quick_start/pricing, 26/11/2026). Pico: seg–sex, 01–04h e

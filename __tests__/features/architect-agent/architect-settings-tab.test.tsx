@@ -14,7 +14,7 @@ import { modelFavoritesMock } from '../../helpers/model-favorites'
 const mocks = vi.hoisted(() => ({ save: vi.fn(async (values: unknown) => ({ settings: values })), settings: null as unknown, data: null as unknown }))
 
 vi.mock('framer-motion', () => framerMotionMock())
-vi.mock('@/features/ai/hooks/useAiModelFavorites', () => modelFavoritesMock())
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAiModelFavorites", () => modelFavoritesMock())
 vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   // Dados estáveis entre renders, como o TanStack Query (o efeito do formulário reinicia ao mudar).
   useArchitectSettings: () => {
@@ -23,7 +23,7 @@ vi.mock('@/features/architect-agent/hooks/useArchitect', () => ({
   },
   useSaveArchitectSettings: () => ({ mutateAsync: mocks.save, isPending: false }),
 }))
-vi.mock('@/features/ai/hooks/useAi', () => ({
+vi.mock("@/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
   useAiAgents: () => ({ data: [] }),
   useAiModels: (provider: string | null) => ({ data: provider === 'anthropic' ? [{ id: 'claude-sonnet', name: 'Claude Sonnet', variants: ['high'] }] : [], isLoading: false, isError: false }),
   // OpenCode e Anthropic conectados; Gemini configurado mas fora do ar.
@@ -34,7 +34,19 @@ vi.mock('@/features/ai/hooks/useAi', () => ({
       { id: 'gemini', name: 'Gemini', configured: true, connected: false },
     ],
   }),
-}))
+}))(importOriginal)) as Record<string, unknown>) }))
+vi.mock("@nandobfer/integracoes/modules/integrations/ia/features/ai/hooks/useAi", async (importOriginal) => ({ ...(await importOriginal<Record<string, unknown>>()), ...((await (() => ({
+  useAiAgents: () => ({ data: [] }),
+  useAiModels: (provider: string | null) => ({ data: provider === 'anthropic' ? [{ id: 'claude-sonnet', name: 'Claude Sonnet', variants: ['high'] }] : [], isLoading: false, isError: false }),
+  // OpenCode e Anthropic conectados; Gemini configurado mas fora do ar.
+  useAiProviderStatuses: () => ({
+    providers: [
+      { id: 'opencode', name: 'OpenCode', configured: true, connected: true },
+      { id: 'anthropic', name: 'Anthropic', configured: true, connected: true },
+      { id: 'gemini', name: 'Gemini', configured: true, connected: false },
+    ],
+  }),
+}))(importOriginal)) as Record<string, unknown>) }))
 vi.mock('@/features/agentic/hooks/useAgentic', () => ({ useCentrals: () => ({ data: [{ id: 'c1', projectName: 'Opex', repo: 'nandobfer/opex' }], isLoading: false }) }))
 vi.mock('@/features/agentic/components/settings/AgentConfigFields', () => ({ AgentConfigFields: ({ error }: { error?: string }) => <div data-testid="agent-fields">{error}</div> }))
 vi.mock('@/features/architect-agent/components/settings/MemoriesSection', () => ({ MemoriesSection: () => <div>Lista de memórias do arquiteto</div> }))

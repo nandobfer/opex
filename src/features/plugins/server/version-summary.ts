@@ -51,7 +51,7 @@ export async function generateVersionChangeSummary(pluginId: string, versionId: 
     const previous = (await PluginVersion.findOne({ pluginId, number: { $lt: version.number } }).sort({ number: -1 }).lean()) as IPluginVersion | null
     const patches = diffPluginFiles(previous?.files ?? [], version.files).map((file) => file.patch)
 
-    const { streamAi } = await import("@/lib/ai/stream")
+    const { streamAi } = await import("@nandobfer/integracoes/modules/integrations/ia/ai/stream")
     let text = ""
     let error: string | null = null
     for await (const event of streamAi({

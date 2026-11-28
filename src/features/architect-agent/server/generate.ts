@@ -1,7 +1,7 @@
 import { isSessionNotFoundError } from "@opencode/client"
 import { AcaoAuditoria, recordAudit } from "@/lib/db"
 import { AgenticWorkbench } from "@/lib/db/models/Agentic"
-import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, runOpencodeShell, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { DEFAULT_PROVIDER_LIMIT_POLICY } from "@/lib/ai/opencode-events"
 import { runAgentTurn, type TurnEvent, type TurnResult } from "@/lib/ai/opencode-run"
 import { getLocalUser } from "@/lib/local-user"

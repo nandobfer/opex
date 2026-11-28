@@ -37,7 +37,7 @@ vi.mock('@/lib/db/models/RoutineAgent', () => ({
 }))
 vi.mock('@/features/routine-agents/server/workdir', () => ({ ensureRoutineWorkdir: async (slug: string) => `/home/burgos/opex-rotineiros/${slug}` }))
 vi.mock('@/features/ai/server/self-memory/mcp', () => ({ opexPublicBaseUrl: async () => holder.base }))
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => {
     if (holder.clientError) throw holder.clientError
     return {
@@ -78,8 +78,8 @@ vi.mock('@/lib/ai/opencode-client', () => ({
   },
 }))
 // A espera entre leituras da lista de skills não usa timer real nos testes.
-vi.mock('@/lib/ai/opencode-skill-list', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/ai/opencode-skill-list')>()
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-skill-list')>()
   return { ...actual, listOpencodeSkillsAt: (client: Parameters<typeof actual.listOpencodeSkillsAt>[0], directory: string, options: Parameters<typeof actual.listOpencodeSkillsAt>[2] = {}) => actual.listOpencodeSkillsAt(client, directory, { ...options, wait: async () => undefined }) }
 })
 vi.mock('@/lib/ai/opencode-run', () => ({

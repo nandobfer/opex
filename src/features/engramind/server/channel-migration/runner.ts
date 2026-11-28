@@ -471,7 +471,7 @@ export async function startChannelMigration(input: StartChannelMigrationInput, a
     const scriptPath = input.scriptPath?.trim() || (await exportScriptPath())
     if (!scriptPath) throw new DomainError(400, "Informe o caminho do script de export das memórias no host: o backup é obrigatório.", "CHANNEL_MIGRATION_SCRIPT_REQUIRED")
     if (input.scriptPath?.trim() && input.scriptPath.trim() !== (await exportScriptPath())) {
-        const { updateIntegration } = await import("@/features/integrations/services/integration-service")
+        const { updateIntegration } = await import("@/lib/integrations/server")
         const { ENGRAMIND_INTEGRATION_ID } = await import("../../constants")
         await updateIntegration(ENGRAMIND_INTEGRATION_ID, { publicValues: { memoryExportScript: scriptPath } }, actorId)
     }

@@ -1,6 +1,6 @@
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
-import { AiProviderError } from "@/lib/ai/errors"
-import { integrationDebug } from "@/lib/integrations/debug"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
+import { AiProviderError } from "@nandobfer/integracoes/modules/integrations/ia/ai/errors"
+import { integrationDebug } from "@/lib/integrations/server"
 import { LOCAL_DOCKER_INTEGRATION_ID } from "../constants"
 import { runDetached } from "./detached"
 
@@ -108,7 +108,7 @@ async function readAll(client: OpencodeClient, id: string, startCursor: number, 
     }
     return { text, cursor, truncated: true }
 }
-/** Debug da integração Builder Machine (só com o modo debug ligado). */
+/** Debug da integração Builder Machine (sempre ativo). */
 export const builderDebug = integrationDebug(LOCAL_DOCKER_INTEGRATION_ID)
 const clip = (text: string, max = 600) => (text.length > max ? `${text.slice(0, max)}…` : text)
 

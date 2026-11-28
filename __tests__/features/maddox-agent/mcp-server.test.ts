@@ -20,7 +20,7 @@ vi.mock('@/lib/db/models/Opex', () => {
   store.sessions = memoryModel()
   return { OpexSession: store.sessions }
 })
-vi.mock('@/lib/ai/opencode-client', () => ({
+vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () => ({
   getOpencodeClient: async () => ({ session: { get: async ({ sessionID }: { sessionID: string }) => (sessionID in mocks.parentOf ? { parentID: mocks.parentOf[sessionID] } : null) } }),
 }))
 vi.mock('@/features/auth/server/context', () => ({ clientActorFor: mocks.clientActorFor }))

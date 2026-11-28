@@ -1,4 +1,4 @@
-import { getOpencodeClient, type OpencodeClient } from "@/lib/ai/opencode-client"
+import { getOpencodeClient, type OpencodeClient } from "@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client"
 import { removeOpencodeSessionSafe } from "@/lib/ai/opencode-sessions"
 import { dbConnect } from "@/lib/db"
 import { AgenticWorkbench, type IAgenticWorkbench } from "@/lib/db/models/Agentic"

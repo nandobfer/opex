@@ -5,7 +5,7 @@ import { api, unwrapApi } from "@/lib/api"
 import type { ApiResponse } from "@/lib/types/api"
 import type { ConnectionInput } from "../schemas/connection"
 import type { ConnectionSaveResultDto, EngramindConnectionDto, EnvironmentOptionDto } from "../types"
-import { integrationDetailKey, integrationsListKey } from "@/features/integrations/hooks/useIntegrations"
+import { integrationDetailKey, integrationsListKey } from "@nandobfer/integracoes/react"
 import { ENGRAMIND_INTEGRATION_ID } from "../constants"
 import { areaKey, useEngramindMutation } from "./useEngramind"
 

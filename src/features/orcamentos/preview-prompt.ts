@@ -1,5 +1,5 @@
 import { TASK_PRIORITY_LABELS, TASK_TYPE_LABELS, TASK_TYPES, type TaskType } from "@/features/tasks/constants"
-import type { JevQuestion } from "@/lib/ai/jev"
+import type { JevQuestion } from "@nandobfer/integracoes/modules/integrations/ia/ai/jev"
 import { draftEstimateSchema, draftPreviewSchema, type DraftPreview } from "./schemas"
 
 /**
