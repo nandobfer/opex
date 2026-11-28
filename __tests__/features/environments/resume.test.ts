@@ -174,6 +174,31 @@ describe('retomada do deploy depois de o app reiniciar', () => {
     expect(envs.docs[0]!.deployedCommit).toBeFalsy()
   })
 
+  it('OPE-211: retomada depois do up concluído com falha no passo seguinte: deploy falho, mas o estado aplicado é gravado', async () => {
+    const env = await createEnvironment(
+      { name: 'MinIO', slug: 'minio', source: { kind: 'managed', projectName: 'minio', services: [], composeVersion: 1 }, compose: 'services:\n  minio:\n    image: minio/minio\n', env: [], ports: [], healthUrl: 'http://localhost:9000/health', buildOn: 'server', runOn: 'server' },
+      'local',
+    )
+    const envId = String(env._id)
+    revisions.docs.push({ _id: 'r2', environmentId: envId, version: 2, content: '# v2', authorId: 'local', note: null, createdAt: new Date(), deployedAt: null })
+    const applied = { services: [{ service: 'minio', image: 'minio/minio:2', command: null, entrypoint: null, environment: null, labels: null, ports: null, volumes: null, restart: 'always', healthcheck: null, dependsOn: null }], yaml: '' }
+    const limits = { mode: 'shared', memoryGb: 2, swapGb: null, cpus: 1 }
+    // Passo 0 = "Sobe no servidor"; o processo morreu no passo 1 (saúde), depois do up concluído.
+    orphan(envId, { checkpoint: { step: 1, failure: null, ref: null, commit: null, tag: 't9', version: '2.0.0', buildServices: [], skipBuild: false, from: null, composeVersion: 2, overrides: applied, limits } })
+    const calls = host()
+    mocks.run.mockImplementation(async (command: string, _timeout?: number, opts?: RunOptions): Promise<HostResult> => {
+      calls.push({ command, jobId: opts?.jobId })
+      return command.includes('curl -fsS') ? { exitCode: 1, output: 'erro' } : { exitCode: 0, output: '' }
+    })
+    await resumeInterruptedDeploys()
+    await settleResumes()
+    expect(calls.some((call) => call.command.includes('up -d'))).toBe(false)
+    expect(deploys.docs[0]).toMatchObject({ status: 'failed', resumed: true, error: expect.stringContaining('Saúde falhou') })
+    expect(String(deploys.docs[0]!.log)).toContain('Os containers subiram com a configuração deste deploy e um passo seguinte falhou')
+    expect(envs.docs[0]).toMatchObject({ deployedOn: { buildOn: 'server', runOn: 'server' }, deployedRef: null, deployedCommit: null, deployedVersion: '2.0.0', deployedLimits: limits, deployedComposeOverrides: applied, deployedComposeVersion: 2 })
+    expect(revisions.docs.find((item) => item.version === 2)!.deployedAt).toBeInstanceOf(Date)
+  })
+
   it('interrompido antes da fase de execução (sem ponto de retomada): encerra como falha', async () => {
     orphan(await adopted(), { checkpoint: null, heartbeatAt: undefined })
     const calls = host()
