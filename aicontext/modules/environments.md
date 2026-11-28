@@ -96,6 +96,8 @@ do Builder Machine, nativo), com build e execução em máquinas diferentes por 
     "Descartar alterações?"; fechar/recarregar a aba usa o `beforeunload`. O **voltar do navegador** também pergunta:
     com alterações, o guarda empilha uma entrada sentinela de mesma URL; o voltar a consome, o guarda a empilha de novo e
     pergunta ("Descartar e sair" volta duas entradas). Sem alterações (depois de salvar), esse voltar segue direto.
+    Sair por Cancelar ou por link interno consome a sentinela antes de navegar: o editor não fica duplicado no histórico
+    (do destino, um voltar chega ao editor e o seguinte à página anterior a ele).
   - **Tempo real**: o formulário é montado uma vez por ambiente (um evento não reseta o que está sendo editado). Versão
     **mais nova** do ambiente no servidor (`updatedAt`) mostra "Este ambiente foi alterado em outro lugar" com
     **Recarregar** (descarta e relê) e **Manter o que estou editando**.

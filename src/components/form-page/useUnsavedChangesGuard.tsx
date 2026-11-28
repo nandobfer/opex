@@ -23,6 +23,10 @@ function internalHref(event: MouseEvent): string | null {
  * mesmo `history.state`, então o App Router continua na página). O voltar consome a sentinela; o guarda a
  * empilha de novo e pergunta. "Descartar e sair" volta duas entradas (a sentinela e a página). Sem alterações
  * (ex.: depois de salvar), o voltar que consome a sentinela segue direto para a página anterior.
+ *
+ * Saída por Cancelar (`guard`) ou por link interno: com a sentinela no histórico, ela é consumida antes
+ * (`history.back()`) e a navegação só roda no `popstate` seguinte, para o editor não ficar duplicado no
+ * histórico (um voltar a partir do destino chega ao editor, e o seguinte à página anterior a ele).
  */
 export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => void) => void; dialog: ReactNode } {
     const router = useRouter()
@@ -43,6 +47,10 @@ export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => 
     }, [dirty])
 
     const sentinel = useRef(false)
+    // Navegação confirmada esperando a sentinela sair do histórico.
+    const afterBack = useRef<(() => void) | null>(null)
+    // A saída criada pelo voltar do navegador (ela mesma cuida da sentinela).
+    const fromHistory = useRef<(() => void) | null>(null)
     useEffect(() => {
         if (!dirty || sentinel.current) return
         window.history.pushState(window.history.state, "", window.location.href)
@@ -51,6 +59,12 @@ export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => 
 
     useEffect(() => {
         const onPopState = () => {
+            const next = afterBack.current
+            if (next) {
+                afterBack.current = null
+                next()
+                return
+            }
             if (!sentinel.current) return
             if (!dirtyRef.current) {
                 // A sentinela foi consumida sem alterações pendentes: segue para a página anterior.
@@ -59,13 +73,27 @@ export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => 
                 return
             }
             window.history.pushState(window.history.state, "", window.location.href)
-            setPending(() => () => {
+            const leaveByHistory = () => {
                 sentinel.current = false
                 window.history.go(-2)
-            })
+            }
+            fromHistory.current = leaveByHistory
+            setPending(() => leaveByHistory)
         }
         window.addEventListener("popstate", onPopState)
         return () => window.removeEventListener("popstate", onPopState)
+    }, [])
+
+    /** Sai da página, tirando antes a sentinela do histórico (menos na saída que veio do próprio voltar). */
+    const leave = useCallback((action: () => void) => {
+        if (fromHistory.current === action || !sentinel.current) {
+            fromHistory.current = null
+            action()
+            return
+        }
+        sentinel.current = false
+        afterBack.current = action
+        window.history.back()
     }, [])
 
     useEffect(() => {
@@ -81,10 +109,13 @@ export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => 
         return () => document.removeEventListener("click", onClick, true)
     }, [router])
 
-    const guard = useCallback((action: () => void) => {
-        if (dirtyRef.current) setPending(() => action)
-        else action()
-    }, [])
+    const guard = useCallback(
+        (action: () => void) => {
+            if (dirtyRef.current) setPending(() => action)
+            else leave(action)
+        },
+        [leave],
+    )
 
     const dialog = (
         <ConfirmDialog
@@ -99,7 +130,7 @@ export function useUnsavedChangesGuard(dirty: boolean): { guard: (action: () => 
                 const action = pending
                 dirtyRef.current = false
                 setPending(null)
-                action?.()
+                if (action) leave(action)
             }}
         />
     )

@@ -126,6 +126,75 @@ describe('useUnsavedChangesGuard', () => {
     back.mockRestore()
   })
 
+  /**
+   * Histórico simulado (pilha de URLs com índice): `pushState` corta o "avançar" e empilha, `back`/`go` mudam o
+   * índice e disparam `popstate` de forma assíncrona, como o navegador; o `router.push` empilha o destino.
+   */
+  function fakeHistory(start: string[]) {
+    const stack = [...start]
+    let index = stack.length - 1
+    const move = (delta: number) => {
+      index = Math.max(0, Math.min(stack.length - 1, index + delta))
+      setTimeout(() => window.dispatchEvent(new PopStateEvent('popstate')), 0)
+    }
+    const spies = [
+      vi.spyOn(window.history, 'pushState').mockImplementation(() => {
+        stack.splice(index + 1, Infinity, stack[index]!)
+        index = stack.length - 1
+      }),
+      vi.spyOn(window.history, 'back').mockImplementation(() => move(-1)),
+      vi.spyOn(window.history, 'go').mockImplementation((delta?: number) => move(delta ?? 0)),
+    ]
+    nav.push.mockImplementation((href: string) => {
+      stack.splice(index + 1, Infinity, href)
+      index = stack.length - 1
+    })
+    return {
+      current: () => stack[index],
+      entries: () => stack.slice(0, index + 1),
+      restore: () => spies.forEach((spy) => spy.mockRestore()),
+    }
+  }
+  const flush = () => act(async () => { await new Promise((resolve) => setTimeout(resolve, 5)) })
+
+  it('regressão (F7): Cancelar confirmado consome a sentinela; um voltar a partir do destino chega ao editor, sem duplicata', async () => {
+    const history = fakeHistory(['/lista', '/editor'])
+    try {
+      const { rerender } = render(<Guarded dirty={false} action={() => nav.push('/lista')} />)
+      rerender(<Guarded dirty action={() => nav.push('/lista')} />)
+      expect(history.entries()).toEqual(['/lista', '/editor', '/editor'])
+      fireEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar e sair' }))
+      await flush()
+      expect(history.entries()).toEqual(['/lista', '/editor', '/lista'])
+      cleanup()
+      window.history.back()
+      await flush()
+      expect(history.current()).toBe('/editor')
+      window.history.back()
+      await flush()
+      expect(history.current()).toBe('/lista')
+    } finally {
+      history.restore()
+      nav.push.mockReset()
+    }
+  })
+
+  it('regressão (F7): link interno confirmado também não deixa o editor duplicado', async () => {
+    const history = fakeHistory(['/lista', '/editor'])
+    try {
+      render(<Guarded dirty action={vi.fn()} />)
+      fireEvent.click(screen.getByRole('link', { name: 'Outra página' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Descartar e sair' }))
+      await flush()
+      expect(history.entries()).toEqual(['/lista', '/editor', '/outra'])
+      expect(nav.push).toHaveBeenCalledTimes(1)
+    } finally {
+      history.restore()
+      nav.push.mockReset()
+    }
+  })
+
   it('beforeunload só com alterações', () => {
     const add = vi.spyOn(window, 'addEventListener')
     const { rerender } = render(<Guarded dirty={false} action={vi.fn()} />)
