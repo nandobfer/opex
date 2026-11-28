@@ -2,7 +2,7 @@ import { BUILDER_STATUS_LABELS, builderNotices } from "./builder-view"
 import { limitsPendingDeploy } from "./limits-form"
 import { appliedLimitsText, environmentLimitsText, limitsText } from "./resource-limits"
 import { formatUsageBytes } from "./resource-usage"
-import { visit } from "yaml"
+import { isScalar, visit } from "yaml"
 import { parseOverrideYaml } from "./override-yaml"
 import { MACHINE_LABELS, type ComposeOverrides, type EnvironmentInput, type EnvironmentsBuilder, type EnvironmentsSettings } from "./schemas"
 import type { EnvironmentDeploySummaryDto, EnvironmentDto, EnvironmentsBuilderDto, UnmanagedProjectDto } from "./types"
@@ -128,15 +128,23 @@ export function environmentDetailView(env: EnvironmentDto) {
     }
 }
 
-/** YAML avançado com todo valor escalar (não as chaves nem as tags) trocado por `[valor oculto]`. */
+/**
+ * YAML avançado com todo valor escalar (não as chaves nem as tags) trocado por `[valor oculto]` e sem os
+ * comentários (uma linha comentada pode guardar um segredo, ex.: `# SENHA: abc`).
+ */
 function redactOverrideYaml(yaml: string): string {
     if (!yaml.trim()) return yaml
     const doc = parseOverrideYaml(yaml)
     if (!doc || doc.errors.length) return HIDDEN_VALUE
-    visit(doc, {
-        Scalar(key, node) {
-            if (key !== "key" && node.value !== null) node.value = HIDDEN_VALUE
-        },
+    doc.commentBefore = null
+    doc.comment = null
+    visit(doc, (key, node) => {
+        if (!node || typeof node !== "object") return
+        const commented = node as { comment?: string | null; commentBefore?: string | null; spaceBefore?: boolean }
+        if ("comment" in commented) commented.comment = null
+        if ("commentBefore" in commented) commented.commentBefore = null
+        if ("spaceBefore" in commented) commented.spaceBefore = false
+        if (isScalar(node) && key !== "key" && node.value !== null) node.value = HIDDEN_VALUE
     })
     return doc.toString()
 }
@@ -187,8 +195,40 @@ export function mergeEnvironmentPatch(current: EnvironmentInput, patch: Environm
         buildOn: patch.buildOn ?? current.buildOn,
         runOn: patch.runOn ?? current.runOn,
         limits: patch.limits ?? current.limits,
-        composeOverrides: patch.composeOverrides === undefined ? current.composeOverrides : patch.composeOverrides,
+        composeOverrides: patch.composeOverrides === undefined ? current.composeOverrides : restoreHiddenOverrides(patch.composeOverrides, current.composeOverrides ?? null),
     }
+}
+
+/** Erro acionável de `[valor oculto]` sem valor salvo para manter (vai para o modelo). */
+export class HiddenOverrideValueError extends Error {}
+
+/**
+ * Ajustes reenviados a partir do `get_environment` (OPE-211): o `[valor oculto]` mantém o valor salvo, nunca é
+ * gravado. No `environment` e nos `labels`, vale o salvo da mesma chave no mesmo serviço; no YAML avançado, o
+ * mascarado igual ao do salvo mantém o YAML salvo. Sem valor salvo para manter, recusa com o que fazer.
+ */
+export function restoreHiddenOverrides(next: ComposeOverrides | null, saved: ComposeOverrides | null): ComposeOverrides | null {
+    if (!next) return next
+    const services = next.services.map((item) => {
+        const before = saved?.services.find((service) => service.service === item.service)
+        const restore = (field: "environment" | "labels", label: string) => {
+            const entries = item[field]
+            if (!entries) return entries
+            return entries.map((entry) => {
+                if (entry.value !== HIDDEN_VALUE) return entry
+                const kept = before?.[field]?.find((old) => old.key === entry.key)
+                if (!kept) throw new HiddenOverrideValueError(`${label} ${entry.key} do serviço ${item.service} veio como ${HIDDEN_VALUE} e não há valor salvo para manter: envie o valor real ou tire a chave.`)
+                return { key: entry.key, value: kept.value }
+            })
+        }
+        return { ...item, environment: restore("environment", "A variável"), labels: restore("labels", "O label") }
+    })
+    let yaml = next.yaml
+    if (yaml.includes(HIDDEN_VALUE)) {
+        if (saved && saved.yaml.trim() && yaml.trim() === redactOverrideYaml(saved.yaml).trim()) yaml = saved.yaml
+        else throw new HiddenOverrideValueError(`O YAML avançado veio com ${HIDDEN_VALUE}: reenvie o YAML como o get_environment devolveu (sem mudar nada) para manter o salvo, ou envie o YAML completo com os valores reais.`)
+    }
+    return { ...next, services, yaml }
 }
 
 export function mergeSettingsPatch(current: EnvironmentsSettings, patch: Partial<EnvironmentsSettings>): EnvironmentsSettings {

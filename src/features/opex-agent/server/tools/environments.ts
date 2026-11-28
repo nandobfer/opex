@@ -22,7 +22,7 @@ import type { IEnvironment } from "@/features/environments/server/models"
 import { environmentLimitsOf, environmentLimitsText } from "@/features/environments/resource-limits"
 import { composeOverridesText } from "@/features/environments/service-overrides"
 import { moveWarning, slugify } from "@/features/environments/view"
-import { builderView, deployView, environmentDetailView, environmentsListView, mergeBuilderPatch, mergeEnvironmentPatch, mergeSettingsPatch, redactEnvValues, stripAnsi, tailLines } from "@/features/environments/opex-format"
+import { builderView, deployView, environmentDetailView, environmentsListView, mergeBuilderPatch, mergeEnvironmentPatch, mergeSettingsPatch, redactEnvValues, restoreHiddenOverrides, stripAnsi, tailLines } from "@/features/environments/opex-format"
 
 /**
  * Ferramentas do Agente Opex do dono para o módulo Ambientes (montadas no registro do agente). Chamam os mesmos
@@ -193,7 +193,8 @@ export const environmentTools = [
                 buildOn: input.buildOn ?? "server",
                 runOn: input.runOn ?? "server",
                 limits: input.limits ?? null,
-                composeOverrides: input.composeOverrides ?? null,
+                // Sem ambiente salvo, `[valor oculto]` não tem o que manter: recusa com o que fazer (OPE-211).
+                composeOverrides: restoreHiddenOverrides(input.composeOverrides ?? null, null),
             })
             const env = await (await service()).createEnvironment(parsed, context.actorId)
             return { id: String(env._id), slug: env.slug, nome: env.name, criado: true, ...(managed ? { compose: "v1" } : {}), proximoPasso: "Implante com deploy_environment quando o usuário pedir." }
@@ -205,7 +206,7 @@ export const environmentTools = [
         risk: "write",
         confirmByDefault: true,
         description:
-            "Edita um ambiente: só os campos enviados mudam. `env` é a lista completa das variáveis (as ausentes saem; valor vazio mantém o salvo). `limits` substitui os limites de RAM/CPU/swap. `composeOverrides` substitui os ajustes dos serviços do compose (imagem, command, environment, portas, volumes...). Trocar slug ou projeto exige o ambiente derrubado. A nova configuração vale no próximo deploy (Reiniciar não aplica limites).",
+            "Edita um ambiente: só os campos enviados mudam. `env` é a lista completa das variáveis (as ausentes saem; valor vazio mantém o salvo). `limits` substitui os limites de RAM/CPU/swap. `composeOverrides` substitui os ajustes dos serviços do compose (imagem, command, environment, portas, volumes...); reenviando a `configuracao` do get_environment, `[valor oculto]` mantém o valor salvo (no YAML avançado, só se ele vier sem mudança). Trocar slug ou projeto exige o ambiente derrubado. A nova configuração vale no próximo deploy (Reiniciar não aplica limites).",
         input: updateInput,
         summarize: (input) => {
             const fields = Object.keys(input).filter((key) => key !== "environment" && key !== "env")

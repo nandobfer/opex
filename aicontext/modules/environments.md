@@ -578,7 +578,13 @@ mesma validação, auditoria, Pusher e erros.
   `ajustesDosServicos: { salvos, configuracao, implantados, diferem }` e `list_environments`, `ajustesImplantados` e
   `ajustesNaoImplantados`. Os valores do `environment`, dos `labels` e do YAML avançado nunca vão para o modelo, o card
   nem o histórico (`redactComposeOverrides`, `opex-format.ts`): a `configuracao` do `get_environment` e o `redact` das
-  ferramentas de criar/editar levam as chaves (e, no YAML, as chaves e as tags) com os valores como `[valor oculto]`.
+  ferramentas de criar/editar levam as chaves (e, no YAML, as chaves e as tags) com os valores como `[valor oculto]`; o
+  YAML mascarado sai **sem os comentários** (uma linha comentada pode guardar um segredo).
+- **Reenviar a `configuracao`** do `get_environment` (`restoreHiddenOverrides`): `[valor oculto]` nunca é gravado. No
+  `environment` e nos `labels` ele mantém o valor salvo da mesma chave no mesmo serviço; no YAML avançado, o YAML
+  mascarado **igual** ao do salvo mantém o YAML salvo. Sem valor salvo para manter (chave nova, YAML mascarado alterado
+  ou no `create_environment`), a ferramenta recusa dizendo o que fazer (enviar o valor real, tirar a chave ou reenviar o
+  YAML sem mudar).
 - Com confirmação por padrão (`confirmByDefault`): `update_environment` (só os campos enviados; no gerenciado,
   `projectName` e `services`; `env`
   é a lista completa, valor vazio mantém o salvo — só nas ferramentas, que nunca veem os valores; pela
