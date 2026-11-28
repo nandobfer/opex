@@ -30,7 +30,18 @@ vi.mock('@/features/engramind/server/models', () => ({
   EngramindState: {
     findById: () => ({ select: () => ({ lean: async () => ({ agentTokens: holder.tokens }) }) }),
     updateOne: async (_filter: unknown, update: { $set: Record<string, unknown> }) => {
-      for (const [key, value] of Object.entries(update.$set)) holder.tokens[key.replace('agentTokens.', '')] = value
+      for (const [key, value] of Object.entries(update.$set)) {
+        if (key === 'agentTokens') {
+          holder.tokens = value as Record<string, unknown>
+          continue
+        }
+        if (key.startsWith('agentTokens.')) {
+          // O documento criado por outro upsert fica com `agentTokens: null` (default do schema) e o
+          // MongoDB recusa criar o subcampo nesse estado.
+          if (holder.tokens === null) throw new Error("Cannot create field in element {agentTokens: null}")
+          holder.tokens[key.slice('agentTokens.'.length)] = value
+        }
+      }
     },
   },
 }))
@@ -179,6 +190,15 @@ describe('rede das memórias dos agentes', () => {
     expect(subscriptionsOf('mentor').sort()).toEqual(['agentes/adversario', 'agentes/desenvolvedor/*'])
     expect(tokenOf('mentor')[0]!.scopes).toEqual(['read', 'write'])
     for (const [consumer, tokenId] of before) expect((holder.tokens[consumer] as { tokenId: string }).tokenId).toBe(tokenId)
+  })
+
+  it('regressão: agentTokens null no estado (default do schema) não impede o provisionamento', async () => {
+    holder.tokens = null as unknown as Record<string, unknown>
+    const { step, summary } = await ensureAgentMemoryNetwork('local')
+    expect(step.status).toBe('ok')
+    expect(summary.tokensIssued.sort()).toEqual([...MEMORY_IDENTITIES].sort())
+    expect(holder.tokens).toMatchObject({ opex: expect.objectContaining({ tokenId: expect.any(String) }) })
+    expect(await agentTokenFor('opex')).toMatch(/^eng\.tk_/)
   })
 
   it('token gravado que sumiu da lista é reemitido; revogado ou expirado também', async () => {
