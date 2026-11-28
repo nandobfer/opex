@@ -31,7 +31,8 @@ export function buildBootstrapInstructions(input: BootstrapPromptInput): string 
         "Você é o Agente de Bootstrap do Opex. Seu trabalho é provisionar, do zero, o ambiente de um projeto novo NESTE host, usando a infraestrutura local de containers (Docker rootless, bancos e serviços compartilhados).",
         "Escreva em português do Brasil. Seja direto e mostre o que está fazendo.",
         "",
-        "## Projeto",
+        ...projectSection(input),
+        "## Repositório e pasta",
         `- Repositório: ${input.owner}/${input.name} (${input.mode === "new" ? "novo" : "existente"}).`,
         `- Diretório no host: \`${input.directory}\` (crie-o se não existir; se já for um clone deste repositório, reaproveite).`,
         repoLine,
@@ -67,9 +68,18 @@ export function buildBootstrapInstructions(input: BootstrapPromptInput): string 
         .join("\n")
 }
 
+const techLines = (technologies: BootstrapPromptInput["technologies"]) => (technologies.length ? technologies.map((tech) => `- ${tech.name} (${tech.group})`).join("\n") : "- (nenhuma reconhecida no texto: deduza do contexto e confirme)")
+
+/**
+ * Contexto do dono e tecnologias reconhecidas: vão nas instruções duráveis da sessão (valem em toda
+ * tentativa, inclusive numa sessão nova depois de um primeiro turno que nem chegou ao agente).
+ */
+function projectSection(input: Pick<BootstrapPromptInput, "context" | "technologies">): string[] {
+    return ["## Contexto do projeto (escrito pelo dono)", input.context.trim() || "(sem contexto)", "", "## Tecnologias reconhecidas", techLines(input.technologies), ""]
+}
+
 export function buildBootstrapPrompt(input: Pick<BootstrapPromptInput, "owner" | "name" | "context" | "technologies">): string {
-    const techs = input.technologies.length ? input.technologies.map((tech) => `- ${tech.name} (${tech.group})`).join("\n") : "- (nenhuma reconhecida no texto: deduza do contexto e confirme)"
-    return [`Provisione o projeto ${input.owner}/${input.name}.`, "", "## Contexto do projeto (escrito pelo dono)", input.context.trim(), "", "## Tecnologias reconhecidas", techs, "", "Comece pelas conferências de \"Antes de começar\"."].join("\n")
+    return [`Provisione o projeto ${input.owner}/${input.name}.`, "", ...projectSection(input), "Comece pelas conferências de \"Antes de começar\"."].join("\n")
 }
 
 export function buildMissingPrompt(missing: readonly string[]): string {

@@ -10,7 +10,7 @@ import type { WorkbenchEventPayload } from "@/features/agentic/types"
 import { abortWorkbenchRun, clearWorkbenchActive, flushWorkbenchEvents, isWorkbenchActive, markWorkbenchActive, prepareHub, publishWorkbenchEvent } from "@/features/agentic/server/hub"
 import { skillPermissionRules } from "@/features/opencode-resources/skill-permissions"
 import { BOOTSTRAP_DEPLOY_POLL_MS, BOOTSTRAP_HEARTBEAT_MS, PROJECT_BOOTSTRAP_AUDIT_ENTITY, PROJECT_BOOTSTRAP_CONSUMPTION_ORIGIN, PROJECT_BOOTSTRAP_INSTRUCTIONS_KEY, PROJECT_BOOTSTRAP_STAGE_LABEL } from "../constants"
-import { bootstrapCentralConfig, bootstrapEnvironmentInput } from "../environment-input"
+import { bootstrapCentralConfig, bootstrapEnvironmentInput, freeEnvironmentSlug, withEnvironmentSlug } from "../environment-input"
 import { describeMissing } from "../host-checks"
 import { isBootstrapStale } from "../liveness"
 import { buildBootstrapInstructions, buildDeployFailedPrompt } from "../prompts"
@@ -389,18 +389,23 @@ async function runLinkStep(activation: Activation): Promise<Continuation | null>
             if (!(await setOwned(activation, { "created.projectId": projectId }))) return null
         }
         if (!(await setPhase(activation, "link", "central"))) return null
-        let centralId = doc.created?.centralId ?? null
-        if (!centralId) {
-            const existing = await AgenticCentral.findOne({ projectId }).select({ _id: 1 }).lean()
+        if (!doc.centralConfiguredAt) {
             const { createCentral, loadCentral, updateCentral } = await import("@/features/agentic/server/centrals")
-            if (existing) centralId = String(existing._id)
-            else {
-                const project = await Project.findById(projectId).select({ name: 1 }).lean()
-                centralId = (await createCentral({ projectId, projectName: project?.name ?? doc.name, sessionDirectory: doc.directory }, actorId())).id
-                const { config } = await loadCentral(centralId)
-                await updateCentral(centralId, bootstrapCentralConfig(config, doc.result), actorId())
+            let centralId = doc.created?.centralId ?? null
+            if (!centralId) {
+                // Retomada: a central pode ter sido criada antes do id ser gravado (o projeto é deste bootstrap).
+                const existing = await AgenticCentral.findOne({ projectId }).select({ _id: 1 }).lean()
+                if (existing) centralId = String(existing._id)
+                else {
+                    const project = await Project.findById(projectId).select({ name: 1 }).lean()
+                    centralId = (await createCentral({ projectId, projectName: project?.name ?? doc.name, sessionDirectory: doc.directory }, actorId())).id
+                }
+                if (!(await setOwned(activation, { "created.centralId": centralId }))) return null
             }
-            if (!(await setOwned(activation, { "created.centralId": centralId }))) return null
+            // Configuração do bootstrap aplicada também na central achada numa nova tentativa (idempotente).
+            const { config } = await loadCentral(centralId)
+            await updateCentral(centralId, bootstrapCentralConfig(config, doc.result), actorId())
+            if (!(await setOwned(activation, { centralConfiguredAt: new Date() }))) return null
         }
         publishWorkbenchEvent(activation.id, { type: "notice", level: "success", message: "Vínculo do GitHub e central de desenvolvimento criados." })
     } catch (error) {
@@ -448,7 +453,14 @@ async function runDeployStep(activation: Activation): Promise<Continuation | nul
         const input = bootstrapEnvironmentInput({ repoName: doc.name, centralId, result: doc.result }, envText)
         if (!environmentId) {
             const existing = await Environment.findOne({ "source.kind": "central", "source.centralId": centralId }).select({ _id: 1 }).lean()
-            environmentId = existing ? String(existing._id) : String((await createEnvironment(input, actorId()))._id)
+            if (existing) environmentId = String(existing._id)
+            else {
+                const others = await Environment.find().select({ slug: 1, source: 1 }).lean()
+                const taken = new Set(others.flatMap((env) => [env.slug, env.source?.projectName].filter((value): value is string => Boolean(value))))
+                const slug = freeEnvironmentSlug(input.slug, taken)
+                if (slug !== input.slug) publishWorkbenchEvent(activation.id, { type: "notice", level: "info", message: `Já existe um ambiente "${input.slug}": o deste projeto será "${slug}".` })
+                environmentId = String((await createEnvironment(withEnvironmentSlug(input, slug), actorId()))._id)
+            }
             if (!(await setOwned(activation, { "created.environmentId": environmentId }))) return null
         } else {
             // Nova volta depois de um deploy com falha: o agente pode ter mudado o `.env` ou a porta.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { bootstrapCentralConfig, bootstrapEnvironmentInput } from '@/features/project-bootstrap/environment-input'
+import { bootstrapCentralConfig, bootstrapEnvironmentInput, freeEnvironmentSlug } from '@/features/project-bootstrap/environment-input'
 import { environmentCreateSchema } from '@/features/environments/schemas'
 import { defaultCentralConfig } from '@/features/agentic/schemas'
 import { buildBootstrapInstructions, buildDeployFailedPrompt, tailLog } from '@/features/project-bootstrap/prompts'
@@ -31,7 +31,10 @@ describe('bootstrapCentralConfig', () => {
 
 describe('prompts', () => {
     it('modo existente: usa o repositório, pergunta antes de alterar e trabalha na branch padrão', () => {
-        const text = buildBootstrapInstructions({ repo: 'org/app', owner: 'org', name: 'app', visibility: 'private', mode: 'existing', branch: 'develop', directory: '/d', context: '', technologies: [], skills: ['bootstrap-docker'], instructions: '' })
+        const text = buildBootstrapInstructions({ repo: 'org/app', owner: 'org', name: 'app', visibility: 'private', mode: 'existing', branch: 'develop', directory: '/d', context: 'Loja virtual em Rust', technologies: [{ name: 'Rust', group: 'Linguagem' }], skills: ['bootstrap-docker'], instructions: '' })
+        // Contexto e tecnologias nas instruções duráveis (valem em toda tentativa).
+        expect(text).toContain('Loja virtual em Rust')
+        expect(text).toContain('- Rust (Linguagem)')
         expect(text).toContain('JÁ EXISTE')
         expect(text).toContain('PERGUNTE antes de alterar')
         expect(text).toContain('`develop`')
@@ -45,5 +48,14 @@ describe('prompts', () => {
         expect(prompt).toContain('Saúde não respondeu')
         expect(prompt).toContain('ERRO final')
         expect(tailLog('a\n'.repeat(10), 6)).not.toMatch(/^\n/)
+    })
+})
+
+describe('freeEnvironmentSlug', () => {
+    it('usa o slug do repositório quando livre e o próximo -N quando ocupado, até 40 caracteres', () => {
+        expect(freeEnvironmentSlug('app', new Set())).toBe('app')
+        expect(freeEnvironmentSlug('app', new Set(['app', 'app-2']))).toBe('app-3')
+        const long = 'a'.repeat(40)
+        expect(freeEnvironmentSlug(long, new Set([long]))).toBe(`${'a'.repeat(38)}-2`)
     })
 })

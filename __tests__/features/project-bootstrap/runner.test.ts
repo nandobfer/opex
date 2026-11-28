@@ -40,6 +40,10 @@ const mocks = vi.hoisted(() => ({
         },
     },
     store: null as unknown,
+    envs: [] as { slug: string; source: { projectName: string } }[],
+    existingCentral: null as { _id: string } | null,
+    updateCentralFails: false,
+    centralConfig: null as unknown,
 }))
 
 vi.mock('@/lib/db', () => ({ dbConnect: vi.fn(), recordAudit: mocks.recordAudit, AcaoAuditoria: { CRIAR: 'CRIAR', ATUALIZAR: 'ATUALIZAR', EXCLUIR: 'EXCLUIR', EXECUTAR: 'EXECUTAR' } }))
@@ -89,7 +93,7 @@ vi.mock('@/lib/ai/opencode-run', () => ({
 vi.mock('@/features/agentic/server/model-fallback', () => ({ runWithFallback: (agent: unknown, text: string, run: (agent: unknown, text: string) => unknown) => run(agent, text), fallbackNotice: () => '' }))
 vi.mock('@/features/agentic/server/reconnect', () => ({ probeReconnect: vi.fn(async () => mocks.probe) }))
 vi.mock('@/lib/db/models/Project', () => ({ Project: { findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ select: () => ({ lean: async () => ({ name: 'app' }) }) }) } }))
-vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { findOne: () => ({ select: () => ({ lean: async () => null }) }) } }))
+vi.mock('@/lib/db/models/Agentic', () => ({ AgenticCentral: { findOne: () => ({ select: () => ({ lean: async () => mocks.existingCentral }) }) } }))
 vi.mock('@/features/github/server/links', () => ({
     createLink: vi.fn(async () => {
         mocks.calls.push('link')
@@ -104,7 +108,12 @@ vi.mock('@/features/agentic/server/centrals', async () => {
             return { id: 'c'.repeat(24) }
         }),
         loadCentral: vi.fn(async () => ({ config: defaultCentralConfig('/home/u/code/app') })),
-        updateCentral: vi.fn(async () => ({})),
+        updateCentral: vi.fn(async (_id: string, config: unknown) => {
+            if (mocks.updateCentralFails) throw new Error('Modelo padrão inválido')
+            mocks.calls.push('central-config')
+            mocks.centralConfig = config
+            return {}
+        }),
     }
 })
 vi.mock('@/features/environments/server/service', () => ({
@@ -118,7 +127,7 @@ vi.mock('@/features/environments/server/service', () => ({
     getDeploy: vi.fn(async () => ({ log: 'compilando\nERRO: porta ocupada' })),
 }))
 vi.mock('@/features/environments/server/models', () => ({
-    Environment: { findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => ({ name: 'app', slug: 'app', limits: null, composeOverrides: null }), select: () => ({ lean: async () => ({ lastDeployId: null }) }) }) },
+    Environment: { find: () => ({ select: () => ({ lean: async () => mocks.envs }) }), findOne: () => ({ select: () => ({ lean: async () => null }) }), findById: () => ({ lean: async () => ({ name: 'app', slug: 'app', limits: null, composeOverrides: null }), select: () => ({ lean: async () => ({ lastDeployId: null }) }) }) },
     EnvironmentDeploy: { findById: () => ({ select: () => ({ lean: async () => ({ status: mocks.deployOutcome, error: mocks.deployOutcome === 'failed' ? 'Build falhou' : null }) }) }) },
 }))
 vi.mock('@/features/environments/server/deploy', () => {
@@ -133,7 +142,7 @@ vi.mock('@/features/environments/server/deploy', () => {
 })
 
 import { resumeIfStale, startActivation } from '@/features/project-bootstrap/server/runner'
-import { cancelProjectBootstrap, retryProjectBootstrap } from '@/features/project-bootstrap/server/service'
+import { cancelProjectBootstrap, retryProjectBootstrap, sendProjectBootstrapMessage } from '@/features/project-bootstrap/server/service'
 
 type Store = ReturnType<typeof createFakeCollection> & { exists: (filter: Record<string, unknown>) => Promise<unknown> }
 
@@ -164,8 +173,9 @@ function seed(extra: Record<string, unknown> = {}): string {
         mode: 'new',
         branch: 'main',
         directory: '/home/u/code/app',
-        context: 'API em Node',
-        technologies: [],
+        context: 'API em Node para gerir pedidos',
+        centralConfiguredAt: null,
+        technologies: [{ name: 'Node.js', group: 'Backend' }],
         entryColumnKey: 'todo',
         closedColumnKey: null,
         step: 'provision',
@@ -226,6 +236,10 @@ beforeEach(() => {
     mocks.missing = []
     mocks.deployStatus = 'success'
     mocks.deployQueue = []
+    mocks.envs = []
+    mocks.existingCentral = null
+    mocks.updateCentralFails = false
+    mocks.centralConfig = null
     mocks.hostSkills = [{ id: 'bootstrap-docker', name: 'bootstrap-docker' }]
     mocks.skillListFails = false
     mocks.probe = { outcome: 'attached', follow: true, message: null }
@@ -237,7 +251,7 @@ describe('fim do turno', () => {
         const id = seed()
         await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
         await settle()
-        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify', 'link', 'central', 'environment', 'deploy'])
+        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify', 'link', 'central', 'central-config', 'environment', 'deploy'])
         const doc = current(id)
         expect(doc).toMatchObject({ status: 'done', step: 'done' })
         // A branch é a decidida na etapa 1, mesmo que o agente diga outra.
@@ -300,7 +314,7 @@ describe('Tentar novamente', () => {
         const id = seed({ step: 'link', phase: 'central', status: 'failed', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: null, environmentId: null, deployId: null, port: 4014 } })
         await retryProjectBootstrap(id, 'local')
         await settle()
-        expect(mocks.calls).toEqual(['central', 'environment', 'deploy'])
+        expect(mocks.calls).toEqual(['central', 'central-config', 'environment', 'deploy'])
     })
 })
 
@@ -311,7 +325,7 @@ describe('deploy com falha', () => {
         const id = seed()
         await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
         await settle()
-        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify', 'link', 'central', 'environment', 'deploy', 'mkdir', 'turn', 'verify', 'environment-update', 'deploy'])
+        expect(mocks.calls).toEqual(['mkdir', 'turn', 'verify', 'link', 'central', 'central-config', 'environment', 'deploy', 'mkdir', 'turn', 'verify', 'environment-update', 'deploy'])
         // A volta ao agente prepara a sessão de novo (permissões), sem reativar a skill já ativa nela.
         expect(mocks.client.session.update).toHaveBeenCalledWith({ sessionID: 'sess-1', permissions: [{ action: 'skill', resource: '*', effect: 'deny' }, { action: 'skill', resource: 'bootstrap-docker', effect: 'allow' }] })
         expect(mocks.client.session.skill).toHaveBeenCalledTimes(1)
@@ -370,5 +384,65 @@ describe('cancelar e sigilo', () => {
         expect(JSON.stringify(mocks.publishAppEvent.mock.calls)).not.toContain(SECRET)
         expect(JSON.stringify(mocks.publishWorkbenchEvent.mock.calls)).not.toContain(SECRET)
         expect(mocks.publishAppEvent.mock.calls.every(([, payload]) => Object.keys(payload as object).join() === 'id')).toBe(true)
+    })
+})
+
+describe('achados da revisão (rodada 1)', () => {
+    it('as instruções da sessão levam o contexto e as tecnologias; sem sessão, Tentar novamente reenvia o prompt inicial', async () => {
+        mocks.hostSkills = []
+        const id = seed()
+        await startActivation(id, { kind: 'turn', prompt: 'Provisione' }, { previous: null })
+        await settle()
+        expect(current(id).status).toBe('failed')
+        mocks.hostSkills = [{ id: 'bootstrap-docker', name: 'bootstrap-docker' }]
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.turns[0]!.text).toContain('Provisione o projeto org/app')
+        expect(mocks.turns[0]!.text).toContain('API em Node para gerir pedidos')
+        const instructions = (mocks.client.session.instructions.entry.put.mock.calls as unknown as [{ value: string }][])[0]![0].value
+        expect(instructions).toContain('API em Node para gerir pedidos')
+        expect(instructions).toContain('- Node.js (Backend)')
+    })
+
+    it('updateCentral que falha: a nova tentativa aplica a configuração do bootstrap na central já criada', async () => {
+        mocks.updateCentralFails = true
+        const id = seed({ step: 'link', phase: 'link', status: 'failed', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'develop' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: null, environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(current(id)).toMatchObject({ status: 'failed', created: expect.objectContaining({ centralId: 'c'.repeat(24) }) })
+        mocks.updateCentralFails = false
+        mocks.calls = []
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls).toEqual(['central-config', 'environment', 'deploy'])
+        expect(mocks.centralConfig).toMatchObject({ git: expect.objectContaining({ baseBranch: 'develop', prTargetBranch: 'develop' }), environment: expect.objectContaining({ backupDatabase: false }) })
+    })
+
+    it('central achada pelo projeto (id não gravado) também recebe a configuração', async () => {
+        mocks.existingCentral = { _id: 'c'.repeat(24) }
+        const id = seed({ step: 'link', phase: 'central', status: 'failed', result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: true, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: null, environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(mocks.calls.slice(0, 1)).toEqual(['central-config'])
+        expect(current(id).created).toMatchObject({ centralId: 'c'.repeat(24) })
+    })
+
+    it('slug já usado por outro ambiente: cria com o próximo livre', async () => {
+        const { createEnvironment } = await import('@/features/environments/server/service')
+        mocks.envs = [{ slug: 'app', source: { projectName: 'app' } }, { slug: 'outro', source: { projectName: 'app-2' } }]
+        const id = seed({ step: 'deploy', phase: 'environment', status: 'failed', centralConfiguredAt: new Date(), result: { port: 4014, healthPath: '/', hasServer: true, usesMongo: false, branch: 'main' }, created: { repoUrl: null, projectId: 'p'.repeat(24), centralId: 'c'.repeat(24), environmentId: null, deployId: null, port: 4014 } })
+        await retryProjectBootstrap(id, 'local')
+        await settle()
+        expect(vi.mocked(createEnvironment).mock.calls[0]![0]).toMatchObject({ slug: 'app-3', source: expect.objectContaining({ projectName: 'app-3' }) })
+        expect(current(id).status).toBe('done')
+    })
+
+    it('a auditoria da mensagem do dono guarda só o tamanho, nunca o texto', async () => {
+        const id = seed({ status: 'waiting', sessionId: 'sess-1' })
+        await sendProjectBootstrapMessage(id, 'a senha do banco é hunter2', 'local')
+        await settle()
+        const audits = JSON.stringify(mocks.recordAudit.mock.calls)
+        expect(audits).not.toContain('hunter2')
+        expect(audits).toContain('mensagemCaracteres')
     })
 })

@@ -40,6 +40,22 @@ export function bootstrapEnvironmentInput(source: BootstrapEnvironmentSource, en
     }
 }
 
+/**
+ * Slug (e projeto do compose) livre: o do repositório ou, se outro ambiente já usa, o primeiro `<slug>-N` livre
+ * (determinístico, até 40 caracteres). Assim um ambiente antigo com o mesmo nome não trava a etapa 4.
+ */
+export function freeEnvironmentSlug(base: string, taken: ReadonlySet<string>): string {
+    if (!taken.has(base)) return base
+    for (let index = 2; ; index++) {
+        const suffix = `-${index}`
+        const candidate = `${base.slice(0, 40 - suffix.length).replace(/-+$/, "")}${suffix}`
+        if (!taken.has(candidate)) return candidate
+    }
+}
+
+/** Troca o slug e o projeto do compose do ambiente (mesmo valor nos dois). */
+export const withEnvironmentSlug = (input: EnvironmentInput, slug: string): EnvironmentInput => ({ ...input, slug, source: { ...input.source, projectName: slug } } as EnvironmentInput)
+
 /** Central nova com os padrões, a branch do push como base e destino do PR e o backup só com MongoDB. */
 export function bootstrapCentralConfig(config: CentralConfig, result: Pick<BootstrapResult, "branch" | "usesMongo" | "hasServer" | "healthPath">): CentralConfig {
     return {

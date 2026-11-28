@@ -51,13 +51,16 @@ você, destructive = falhou, success = concluída). A etapa atual abre por padr�
 3. **Amarração** (`LinkPanel`): `createLink` (vínculo em Integrações › GitHub, que cria o Projeto) e `createCentral` +
    `updateCentral` com `bootstrapCentralConfig` (branch base e destino do PR = a branch do push; backup do banco **só**
    com MongoDB; caminho de saúde da central). Idempotente: o que já existe (pelo id gravado em `created.*` ou pelo
-   repositório/projeto) não é recriado.
+   repositório/projeto) não é recriado. O id da central é gravado logo depois de criá-la e a configuração do bootstrap é
+   aplicada também na central achada numa nova tentativa, até a marca `centralConfiguredAt` (uma falha do
+   `updateCentral` não deixa a central com os padrões).
 4. **Ambiente e deploy** (`DeployPanel`, com o `DeployLog`): `createEnvironment` com origem Central
    (`bootstrapEnvironmentInput`: nome e slug do repositório, ref da branch, build e execução no servidor, `ports: [porta]`,
    `healthUrl` = `http://localhost:<porta><healthPath>` ou `/` sem servidor, sem limites, variáveis do `.env` lido no host
    por `readText`) e `startDeploy`; o Opex acompanha o registro do deploy. Deploy com falha: soma uma tentativa e **volta à
    etapa 2** na mesma conversa com o erro e o fim do log (sem limite de voltas; o stepper mostra "Tentativa N"); na volta,
-   o ambiente existente é atualizado (o `.env` ou a porta podem ter mudado).
+   o ambiente existente é atualizado (o `.env` ou a porta podem ter mudado). Slug ou projeto do compose já usados por outro
+   ambiente: o ambiente nasce com o primeiro `<slug>-N` livre (`freeEnvironmentSlug`), com aviso na conversa.
 5. **Concluído** (`DonePanel`): links do repositório, da central e do ambiente e a porta.
 
 **Cancelar** (com confirmação) para o agente, dispensa as perguntas e marca **Cancelado**; nada do que foi criado é
@@ -74,6 +77,9 @@ apagado e o resumo lista o que ficou (`createdSummary`).
   acionável; nas demais etapas, refaz a fase (idempotente; um deploy já em andamento é acompanhado).
 - Sessão como no Agente Refinador: instruções duráveis (`session.instructions.entry.put`, chave `opex-bootstrap`;
   sem suporte, vão no prompt), `runWithFallback` + `runAgentTurn`, `pendingForms`/`pendingPermissions` persistidos.
+- As instruções duráveis levam o contexto do dono e as tecnologias reconhecidas, então valem em toda tentativa e numa
+  sessão nova. **Tentar novamente** sem sessão (o primeiro turno nem chegou ao agente, ex.: skill ausente) reenvia o prompt
+  inicial; com sessão, pede que complete o que faltou ou continue de onde parou.
 
 ## Skills do host
 
@@ -109,7 +115,8 @@ só com bootstrap executando, aguardando ou com falha.
 - Coleções `project_bootstraps`, `project_bootstrap_tech_groups` e `project_bootstrap_technologies`; conversa em
   `agentic_events` (chave = id do bootstrap).
 - Auditoria (`BootstrapProjeto`, `TecnologiaBootstrap`, `GrupoTecnologiaBootstrap`) em início, conferência, conclusão,
-  deploy com falha, nova tentativa, mensagem, cancelamento e no catálogo. O `.env` nunca vai para log, evento ou auditoria.
+  deploy com falha, nova tentativa, mensagem (só o tamanho, `mensagemCaracteres`: o texto pode trazer uma credencial),
+  cancelamento e no catálogo. O `.env` nunca vai para log, evento ou auditoria.
 - Pusher em `private-app`: `project-bootstrap-updated` (`{ id }`) e `project-bootstrap-catalog-updated`
   (`{ kind: "group" | "technology" | "seed" }`).
 

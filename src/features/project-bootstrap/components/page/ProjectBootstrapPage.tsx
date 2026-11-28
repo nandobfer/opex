@@ -13,6 +13,7 @@ import { PROJECT_BOOTSTRAP_STATUS_LABELS, PROJECT_BOOTSTRAP_STEP_LABELS, PROJECT
 import { useProjectBootstrap, useProjectBootstrapAction, useProjectBootstrapRealtime } from "../../hooks/useProjectBootstrap"
 import { defaultStepIndex, stepIndex, stepperState } from "../../steps"
 import { createdSummary } from "../../view"
+import { stepSwapMotion } from "../../step-motion"
 import { BootstrapPageHeader } from "../BootstrapPageHeader"
 import { BOOTSTRAP_WIZARD_STEPS } from "../steps-meta"
 import { DeployPanel } from "./DeployPanel"
@@ -87,7 +88,7 @@ export function ProjectBootstrapPage({ id }: { id: string }) {
                 </CardHeader>
                 <CardContent>
                     <AnimatePresence mode="wait" initial={false}>
-                        <motion.div key={stepId} initial={reduceMotion ? false : { opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} exit={reduceMotion ? { opacity: 0 } : { opacity: 0, x: -12 }} transition={{ duration: 0.2 }}>
+                        <motion.div key={stepId} data-testid="bootstrap-step-panel" {...stepSwapMotion(reduceMotion)}>
                             {stepId === "info" && <InfoPanel bootstrap={bootstrap} />}
                             {stepId === "provision" && <ProvisionPanel bootstrap={bootstrap} />}
                             {stepId === "link" && <LinkPanel bootstrap={bootstrap} />}

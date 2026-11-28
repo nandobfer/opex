@@ -42,6 +42,8 @@ export interface IProjectBootstrap {
     stateAt: Date | null
     result: { port: number; healthPath: string; hasServer: boolean; usesMongo: boolean; branch: string } | null
     created: { repoUrl: string | null; projectId: string | null; centralId: string | null; environmentId: string | null; deployId: string | null; port: number | null }
+    /** A configuração do bootstrap (branch, backup, saúde) já foi aplicada na central. */
+    centralConfiguredAt: Date | null
     deploys: { deployId: string; attempt: number; status: string; error: string | null; at: Date }[]
     usage: { costUsd: number; inputTokens: number; outputTokens: number }
     startedAt: Date
@@ -83,6 +85,7 @@ const ProjectBootstrapSchema = new Schema<IProjectBootstrap>(
         stateAt: { type: Date, default: null },
         result: { type: Schema.Types.Mixed, default: null },
         created: { type: Schema.Types.Mixed, default: EMPTY_CREATED },
+        centralConfiguredAt: { type: Date, default: null },
         deploys: {
             type: [new Schema({ deployId: { type: String, required: true }, attempt: { type: Number, required: true }, status: { type: String, required: true }, error: { type: String, default: null }, at: { type: Date, required: true } }, { _id: false })],
             default: [],

@@ -204,7 +204,14 @@ export async function retryProjectBootstrap(id: string, actorId: string): Promis
         return toBootstrapDto(await load(id))
     }
     if (doc.step === "provision") {
-        const prompt = doc.missing?.length ? buildMissingPrompt(doc.missing) : doc.status === "waiting" ? buildCompletePrompt() : buildResumePrompt(doc.error)
+        // Sem sessão, o primeiro turno nem chegou ao agente (ex.: skill ausente): recomeça pelo prompt inicial.
+        const prompt = !doc.sessionId
+            ? buildBootstrapPrompt({ owner: doc.owner, name: doc.name, context: doc.context, technologies: doc.technologies ?? [] })
+            : doc.missing?.length
+              ? buildMissingPrompt(doc.missing)
+              : doc.status === "waiting"
+                ? buildCompletePrompt()
+                : buildResumePrompt(doc.error)
         await startActivation(id, { kind: "turn", prompt })
     } else if (doc.step === "link") await startActivation(id, { kind: "link" })
     else if (doc.step === "deploy") await startActivation(id, { kind: "deploy" })
@@ -267,7 +274,8 @@ export async function sendProjectBootstrapMessage(id: string, text: string, acto
         if (doc.step !== "provision") throw new DomainError(409, "A conversa com o agente é só na etapa de provisionamento", "BOOTSTRAP_NOT_IN_TURN")
         await startActivation(id, { kind: "turn", prompt: text, userText: text })
     }
-    await recordAudit({ userId: actorId, entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { repositorio: doc.repo, mensagem: text } })
+    // Só o tamanho: a mensagem pode trazer uma credencial que o agente pediu (nunca segredos na auditoria).
+    await recordAudit({ userId: actorId, entidade: PROJECT_BOOTSTRAP_AUDIT_ENTITY, entidadeId: id, acao: AcaoAuditoria.ATUALIZAR, depois: { repositorio: doc.repo, mensagemCaracteres: text.length } })
     return toBootstrapDto(await load(id))
 }
 
