@@ -81,6 +81,7 @@ import { fallbackNotice, runWithFallback } from "./model-fallback"
 import { syncWorkbenchTimer } from "./timer-sync"
 import { needsSlotToRun, occupiedSlots, runInCentral, slotQueuePosition, slotQueuePositions } from "./slots"
 import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } from "./remote-preview"
+import { remoteBuildTimeoutMinutes } from "../remote-build-timeout"
 
 /**
  * Fluxo da mesa de trabalho: planejar → (corrigir) → implementar → subir a prévia → (corrigir) →
@@ -89,9 +90,6 @@ import { reserveRemotePreview, invalidateRemotePreview, assertRemotePreview } fr
  */
 
 const TURN_TIMEOUT_MS = 3 * 60 * 60_000
-/** O script da prévia no GitHub Action espera testes + build do workflow: nunca menos que isto. */
-const REMOTE_BUILD_MIN_MINUTES = 25
-
 const actorId = () => getLocalUser().id
 const errorText = (error: unknown) => (error instanceof Error ? error.message : String(error))
 
@@ -1097,7 +1095,7 @@ async function buildTurn(
         }
         resumeJob = null
         log.step(`${WORKBENCH_STAGE_LABELS.building}: ${remote ? "script da prévia remota" : "docker compose"}`, { workbenchId: id, jobId })
-        const timeoutMinutes = remote ? Math.max(REMOTE_BUILD_MIN_MINUTES, config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
+        const timeoutMinutes = remote ? remoteBuildTimeoutMinutes(config.environment.buildTimeoutMinutes) : config.environment.buildTimeoutMinutes
         const run = await runPreviewBuild({
             run: commands.run,
             jobId,
