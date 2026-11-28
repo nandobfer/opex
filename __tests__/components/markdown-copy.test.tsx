@@ -257,6 +257,16 @@ describe("copiar o Markdown renderizado", () => {
         expect(copied()).toBe("**Licença** &copy;")
     })
 
+    it("entidade nomeada de vários caracteres (`&NotEqualTilde;`) não derruba a cópia", () => {
+        const source = "**A** &NotEqualTilde; **B**"
+        const root = mount(source)
+        expect(root.textContent).toContain("\u2242\u0338")
+        selectAll(root)
+        expect(copied()).toBe(source)
+        select(at(root, "\u2242"), end(root, "B"))
+        expect(copied()).toBe("&NotEqualTilde; **B**")
+    })
+
     it("inline aninhado selecionado por inteiro leva a própria marcação, não a do de fora", () => {
         const root = mount("**texto com *ênfase* final** e [ver **forte** aqui](https://x.dev)")
         select(at(root, "ênfase"), end(root, "ênfase"))

@@ -64,42 +64,57 @@ const isSpace = (char: string | undefined) => char !== undefined && /\s/.test(ch
 
 const CHARACTER_REFERENCE = /^&(?:#(\d{1,7})|#[xX]([0-9a-fA-F]{1,6})|([A-Za-z][A-Za-z0-9]{1,31}));/
 
+const namedReferences = new Map<string, string | null>()
+
 /**
- * Tamanho da referência de caractere (`&copy;`, `&#169;`, `&#xA9;`) que começa em `at` e virou `char`
- * na tela; 0 quando não há. Numéricas são conferidas; nomeadas valem pelo caractere renderizado (o
- * micromark só decodifica nomes válidos; um nome inválido fica literal e casa caractere a caractere).
+ * Texto de uma referência nomeada (`&NotEqualTilde;` vira dois caracteres) pela tabela HTML5 do navegador,
+ * a mesma do micromark no navegador; `null` quando o nome não existe (fica literal) ou fora do DOM.
  */
-function referenceLength(source: string, at: number, char: string): number {
-    if (source[at] !== "&") return 0
-    const match = CHARACTER_REFERENCE.exec(source.slice(at, at + 40))
-    if (!match) return 0
+function decodeNamed(reference: string): string | null {
+    if (namedReferences.has(reference)) return namedReferences.get(reference) ?? null
+    if (typeof document === "undefined") return null
+    const box = document.createElement("textarea")
+    box.innerHTML = reference
+    const decoded = box.value !== reference ? box.value : null
+    namedReferences.set(reference, decoded)
+    return decoded
+}
+
+/** Referência de caractere (`&copy;`, `&#169;`, `&#xA9;`) que começa em `at`: tamanho no fonte e texto renderizado. */
+function referenceAt(source: string, at: number, limit: number): { length: number; text: string } | null {
+    if (source[at] !== "&") return null
+    const match = CHARACTER_REFERENCE.exec(source.slice(at, Math.min(limit, at + 40)))
+    if (!match) return null
     const code = match[1] ? Number(match[1]) : match[2] ? parseInt(match[2], 16) : null
-    if (code !== null) {
-        const decoded = code === 0 || code > 0x10ffff ? "\ufffd" : String.fromCodePoint(code)
-        return decoded === char ? match[0].length : 0
-    }
-    if (char === "&") return /^&amp;$/i.test(match[0]) ? match[0].length : 0
-    return match[0].length
+    const text = code !== null ? (code === 0 || code > 0x10ffff ? "\ufffd" : String.fromCodePoint(code)) : decodeNamed(match[0])
+    return text ? { length: match[0].length, text } : null
 }
 
 /**
  * Avança `from` no fonte acompanhando o texto renderizado: caractere igual anda nos dois, espaço casa
  * com espaço (ou é pulado quando o fonte não tem) e o resto do fonte (marcação, `\`, `> `, indentação)
- * é pulado. `null` quando um caractere renderizado não aparece até `limit`.
+ * é pulado. Uma referência de caractere casa inteira com toda a sequência que ela virou na tela (uma
+ * nomeada pode virar mais de um caractere). `null` quando um caractere renderizado não aparece até `limit`.
  */
 export function alignRenderedOffset(source: string, rendered: string, from: number, limit: number = source.length): number | null {
     let cursor = from
-    for (const char of rendered) {
-        if (isSpace(char)) {
-            if (cursor < limit && isSpace(source[cursor])) cursor++
+    let index = 0
+    while (index < rendered.length) {
+        const reference = cursor < limit ? referenceAt(source, cursor, limit) : null
+        if (reference && rendered.startsWith(reference.text, index)) {
+            cursor += reference.length
+            index += reference.text.length
             continue
         }
-        let reference = 0
-        while (cursor < limit && source[cursor] !== char && !(reference = referenceLength(source, cursor, char))) cursor++
-        // `&amp;` renderizado como `&`: a referência inteira, não só o `&` literal.
-        if (cursor < limit && source[cursor] === "&" && char === "&") reference = referenceLength(source, cursor, char)
+        const char = rendered[index]
+        if (isSpace(char)) {
+            if (cursor < limit && isSpace(source[cursor])) cursor++
+            index++
+            continue
+        }
         if (cursor >= limit) return null
-        cursor += reference && cursor + reference <= limit ? reference : 1
+        if (source[cursor] === char) index++
+        cursor++
     }
     return cursor
 }

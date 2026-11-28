@@ -514,7 +514,8 @@ Regra obrigatória em diálogos, abas, cards e passos de assistente:
   documento vive enquanto houver um `Markdown` montado. Cada ponta da seleção é alinhada ao fonte dentro do
   elemento anotado mais interno (caractere igual anda nos dois, espaço casa com espaço, o resto do fonte —
   marcação, `\`, `> `, indentação — é pulado; uma referência de caractere (`&copy;`, `&#169;`, `&#xA9;`,
-  `&amp;`) casa inteira com o caractere que ela virou). Regras (decisões do dono no plano):
+  `&amp;`, `&NotEqualTilde;`) casa inteira com toda a sequência que ela virou na tela — nomeadas decodificadas
+  pela tabela HTML5 do navegador; nome inexistente fica literal). Regras (decisões do dono no plano):
   - **inline** (negrito, itálico, tachado, link, código inline) só leva a marcação quando está inteiro na
     seleção; em parte, vai o texto puro do pedaço. Com inline aninhado decide o mais interno: só `ênfase` de
     `**texto com *ênfase* final**` copia `*ênfase*`;

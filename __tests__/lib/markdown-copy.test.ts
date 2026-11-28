@@ -1,3 +1,5 @@
+/** @vitest-environment happy-dom */
+
 import { describe, expect, it } from "vitest"
 import { alignRenderedOffset } from "@/lib/markdown/copy"
 
@@ -24,6 +26,10 @@ describe("alignRenderedOffset", () => {
         expect(alignRenderedOffset("&#xA9;", "©", 0)).toBe(6)
         expect(alignRenderedOffset("&amp; x", "&", 0)).toBe(5)
         expect(alignRenderedOffset("&#65;", "©", 0)).toBeNull()
+        // Nomeada de dois caracteres (U+2242 U+0338): a sequência inteira casa com a entidade.
+        expect(alignRenderedOffset("a &NotEqualTilde; b", "a \u2242\u0338 b", 0)).toBe(19)
+        // Nome inexistente fica literal na tela e casa caractere a caractere.
+        expect(alignRenderedOffset("&foo; x", "&foo; x", 0)).toBe(7)
     })
 
     it("devolve null quando um caractere renderizado não aparece até o limite", () => {
