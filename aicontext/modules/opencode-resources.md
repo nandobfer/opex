@@ -154,6 +154,15 @@ execução bloqueia as não selecionadas pela permissão `skill` da sessão (`ai
   vindos da tela e do agente.
 - **Ids**: base64url de `[tipo, escopo, nome]` (`ids.ts`).
 
+## Skills usadas pelo Agente de Bootstrap (OPE-215)
+
+O Agente de Bootstrap (`modules/project-bootstrap.md`) usa skills do OpenCode do host (padrão `bootstrap-agents-md`,
+`bootstrap-aicontext` e `bootstrap-docker`, instaladas em `~/.agents/skills`): a aba do agente só **escolhe** quais; o
+conteúdo é criado, editado, ligado/desligado e removido aqui (aba Skills) ou pelas ferramentas `opencode-resources`. Renomear
+ou remover uma delas faz o bootstrap falhar com o motivo e o link para esta aba. A regra das permissões (negar todas e
+liberar só as escolhidas) é `skillPermissionRules` (`src/features/opencode-resources/skill-permissions.ts`), a mesma dos
+agentes rotineiros (`routineSkillPermissions`).
+
 ## Tempo real e auditoria
 
 - Eventos em `private-app`: `opencode-resources-updated` `{ kind, scope }` (restauração: `kind: "all"`),
