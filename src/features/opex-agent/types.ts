@@ -156,6 +156,8 @@ export interface OpexLiveMessage {
     startedAt: string
     /** Raciocinando agora (sem texto novo desde o último pedaço de raciocínio). */
     thinking: boolean
+    /** Agente Maddox (OPE-216): subagentes/comandos em segundo plano que o turno aguarda. */
+    background?: { subagents: number; shells: number; other: number } | null
 }
 
 /** Linha do stream NDJSON `GET /api/opex/sessions/[id]/stream`. */
@@ -172,5 +174,7 @@ export type OpexStreamLine =
     /** Pergunta do OpenCode (Agente Maddox) e a mudança de situação dela. */
     | { type: "form"; form: OpencodeFormDto }
     | { type: "form-status"; id: string; status: OpexFormStatus }
+    /** Agente Maddox (OPE-216): trabalho em segundo plano que o turno aguarda; tudo zerado = a espera acabou. */
+    | { type: "background"; subagents: number; shells: number; other: number }
     | { type: "turn-end"; messageId: string; status: OpexMessageStatus; error: string | null }
     | { type: "ping" }

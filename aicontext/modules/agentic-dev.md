@@ -1497,6 +1497,51 @@ O agente da mesa (qualquer etapa, fork ou fork de fork, depois de falha, reconex
   - Memória excluída (aviso de exclusão ou 404 depois) mostra "não está mais no Engramind"; falha de
     leitura mostra "Tentar novamente". Avisos antigos, sem a referência, continuam como texto.
 
+## Subagentes e trabalho em segundo plano (OPE-216)
+
+Desde a v2.3 do OpenCode **todo subagente roda em segundo plano**: a chamada volta na hora, a execução
+principal termina (`session.execution.succeeded`) e, quando o subagente acaba, o OpenCode entrega o
+resultado na caixa de entrada da sessão e a **acorda numa execução nova**. Desde a v2.3.1 um comando de
+terminal que estoura o tempo também vai para segundo plano. O Opex não impede os agentes de lançar
+subagentes: o turno **espera**.
+
+- **O turno só termina com a sessão quieta** (`runAgentTurn`, `lib/ai/opencode-run.ts`; pendências em
+  `lib/ai/opencode-background.ts`): no fim de execução com sucesso, o runner lê os jobs rodando da sessão
+  (`experimental.job.list`, por tipo: subagente, comando, outros), a caixa de entrada
+  (`session.inbox.list`) e se a própria sessão voltou a rodar (`session.active`). Com algo pendente, a mesa
+  continua **rodando**, publica o evento `background` (`{ subagents, shells, other }`, gravado em
+  `agentic_events`) e acompanha a execução seguinte da mesma sessão (`session.execution.started`).
+  Sem nada pendente, termina como antes. Várias esperas no mesmo turno são aceitas.
+- **Resultado = texto da execução final**, a que roda depois de os subagentes reportarem (ex.: o plano), e
+  não o anúncio "fecho quando os resultados chegarem"; sem texto na execução final, vale o texto inteiro.
+  A Saída da IA continua mostrando tudo. Quem acumula o `onText` (Refinador, Revisor de PR, rotineiros)
+  zera o acumulado no gancho `onSegment`.
+- **Na tela**: com `background`, a linha "Trabalhando…" vira **"Aguardando 2 subagentes e 1 comando em
+  segundo plano…"** (`backgroundLabel`, `features/agentic/background-label.ts`), com ampulheta animada
+  (Framer Motion, desligada com movimento reduzido). Zerado ou fim do turno, a linha volta ao normal.
+- **Tempo limite, batimento e Parar valem durante a espera.** O Parar (e o tempo limite) cancelam também os
+  jobs da sessão (`experimental.job.cancel`; sem a API de jobs, interrompem as subsessões ativas) e, na
+  espera, o turno fecha na hora como interrompido.
+- **Rede de segurança**: na espera o runner relê as pendências a cada 5 s (`BACKGROUND_POLL_MS`); duas
+  leituras seguidas sem nada (e sem a sessão rodando) fecham o turno com o texto do histórico
+  (`recoverTurnText` com `lastExecution`: as mensagens do assistente depois da última entrega sintética).
+  Sem conseguir ler as pendências, o turno termina como antes, com aviso.
+- **Reconectar**: sessão parada, mas com jobs rodando ou entrega pendente, conta como **em andamento**
+  (`probeAttachSession` → `running` com `background`); o acompanhamento começa na espera. O texto
+  recuperado do histórico é o da execução final.
+- **Host antigo** (sem `experimental.job`): os subagentes são as subsessões (`session.list({ parentID })`)
+  que estão em `session.active`; comandos em segundo plano não são vistos.
+- **Trava do planejamento** (`afterTurn`, caso `planning`; `isPlanText` em `features/agentic/plan-text.ts`):
+  texto curto (< 300 caracteres) que **anuncia** trabalho ainda por fazer ("assim que", "quando os
+  resultados chegarem", "fecho o plano", "disparei", "vou investigar"…) e não tem título Markdown nem lista
+  numerada (3+ itens) **não** vira versão do plano: a mesa fica em erro ("O planejador não devolveu um
+  plano: a resposta só anuncia o que ainda vai fazer. Use Tentar de novo.") com **Tentar de novo**. Texto
+  vazio continua recusado; texto curto que não anuncia nada ("nada a alterar") segue aceito.
+- Vale para todos os turnos do OpenCode: mesa, forks, Refinador, Revisor de PR, Agente Adversário,
+  Arquiteto (faixa ao vivo do diagrama mostra a espera), Maddox (a resposta ao vivo mostra a espera, linha
+  NDJSON `background`) e rotineiros com motor OpenCode (um passo "Aguardando trabalho em segundo plano" por
+  espera).
+
 ## Chat durante a execução
 
 - Com o agente **executando**, a mesa (abas **Saída da IA** e **Plano**), o **fork ativo** e o
@@ -1596,6 +1641,13 @@ Auditoria: `CentralDesenvolvimento` (criar/editar/excluir) e `MesaDeTrabalho` (a
 merge, reabrir, definir etapa/concluir manualmente, excluir).
 
 ## Testes
+
+Subagentes em segundo plano (OPE-216): `opencode-run-background.test.ts` (espera e texto final, sem pendência,
+caixa de entrada, comando de terminal, Parar e tempo limite na espera, rede de segurança, host sem API de jobs,
+leitura falha), `opencode-background.test.ts` (contagem, cancelamento, `probeAttachSession`),
+`opencode-events.test.ts`, `timeline.test.ts`, `Timeline.test.tsx`, `background-label.test.ts`,
+`plan-text.test.ts`, `workflow-plan-guard.test.ts`, `opex-agent/pure.test.ts` e `opex-ui.test.tsx` (Maddox) e
+`routine-agents/opencode-engine.test.ts`.
 
 Refinamento na mesa (OPE-137): `workflow-refinement.test.ts` (abertura em Refinando/Especificação pronta,
 mesma conversa, chat ao vivo, fila sem vaga, bloqueio do "Abrir mesa", abertura pela fila, estado final do

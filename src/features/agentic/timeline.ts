@@ -1,4 +1,5 @@
 import type { ChatFileDto } from "@/lib/chat-files/kind"
+import { activeBackground, type BackgroundCounts } from "./background-label"
 import type { AdversarialVerdictFinding, OpencodeFormDto, OpencodePermissionDto, PrWatchOutcome, PrWatchStep, WorkbenchNoticeMemoryRef, WorkbenchStreamLine } from "./types"
 
 /** Saída da mesa como a tela desenha (módulo puro: o hook só aplica as linhas do stream). */
@@ -20,11 +21,13 @@ export interface TimelineState {
     items: TimelineItem[]
     /** O modelo está raciocinando (some quando chega texto ou ferramenta). */
     reasoning: boolean
+    /** Trabalho em segundo plano que o turno aguarda (OPE-216); some quando a sessão acorda ou o turno termina. */
+    background: BackgroundCounts | null
     /** Já recebeu a carga inicial (o `reset` do stream). */
     loaded: boolean
 }
 
-export const INITIAL_TIMELINE: TimelineState = { items: [], reasoning: false, loaded: false }
+export const INITIAL_TIMELINE: TimelineState = { items: [], reasoning: false, background: null, loaded: false }
 
 const keyOf = (prefix: string, seq: number | undefined, fallback: number) => `${prefix}-${seq ?? `x${fallback}`}`
 
@@ -74,13 +77,15 @@ export function applyTimelineLine(state: TimelineState, line: WorkbenchStreamLin
             const tool = items[index] as Extract<TimelineItem, { kind: "tool" }>
             return { ...state, items: replaceLast(items, index, { ...tool, output: line.output }) }
         }
+        case "background":
+            return { ...state, reasoning: false, background: activeBackground(line) }
         case "turn":
-            return { ...state, reasoning: false, items: [...items, { kind: "turn", key: keyOf("turn", line.seq, items.length), stage: line.stage, title: line.title, agent: line.agent, model: line.model, ts: line.ts, end: null }] }
+            return { ...state, reasoning: false, background: null, items: [...items, { kind: "turn", key: keyOf("turn", line.seq, items.length), stage: line.stage, title: line.title, agent: line.agent, model: line.model, ts: line.ts, end: null }] }
         case "turn-end": {
             const index = findLastIndex(items, (item) => item.kind === "turn")
-            if (index < 0) return { ...state, reasoning: false }
+            if (index < 0) return { ...state, reasoning: false, background: null }
             const turn = items[index] as Extract<TimelineItem, { kind: "turn" }>
-            return { ...state, reasoning: false, items: replaceLast(items, index, { ...turn, end: { outcome: line.outcome, message: line.message, durationMs: line.durationMs, costUsd: line.costUsd } }) }
+            return { ...state, reasoning: false, background: null, items: replaceLast(items, index, { ...turn, end: { outcome: line.outcome, message: line.message, durationMs: line.durationMs, costUsd: line.costUsd } }) }
         }
         case "user":
             return { ...state, items: [...items, { kind: "user", key: keyOf("user", line.seq, items.length), text: line.text, ts: line.ts, files: line.files ?? [] }] }

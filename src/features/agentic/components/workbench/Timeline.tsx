@@ -2,9 +2,10 @@
 
 import { useLayoutEffect, type ReactNode } from "react"
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
-import { ArrowDown, Brain, Loader2, MessageSquareDashed } from "lucide-react"
+import { ArrowDown, Brain, Hourglass, Loader2, MessageSquareDashed } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useStickToBottom } from "../../hooks/useStickToBottom"
+import { backgroundLabel } from "../../background-label"
 import { latestPrWatch, type TimelineState } from "../../timeline"
 import { PrWatchCountdown, type PrWatchCountdownProps } from "./PrWatchCountdown"
 import { TimelineItemView } from "./TimelineItemView"
@@ -19,6 +20,9 @@ export function Timeline({ timeline, running, footer = null, footerKey = null, p
     const { scrollRef, atBottom, stickToBottom, scrollToBottom } = useStickToBottom()
     const reduceMotion = useReducedMotion()
     const latestCheckKey = latestPrWatch(timeline.items)?.key ?? null
+    // Espera pelos subagentes/comandos em segundo plano (OPE-216) tem prioridade sobre "Pensando…".
+    const waitingLabel = backgroundLabel(timeline.background)
+    const status = waitingLabel ? { key: "background", label: waitingLabel } : timeline.reasoning ? { key: "reasoning", label: "Pensando…" } : { key: "working", label: "Trabalhando…" }
 
     // A cada mudança da saída (inclusive itens do meio, como o fim de um turno) prende ao fim,
     // se o usuário ainda estiver acompanhando.
@@ -50,10 +54,22 @@ export function Timeline({ timeline, running, footer = null, footerKey = null, p
                 )}
                 <AnimatePresence>
                     {running && timeline.loaded && (
-                        <motion.p key="working" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-3 flex items-center gap-2 text-xs text-muted-foreground">
-                            {timeline.reasoning ? <Brain className="h-3.5 w-3.5 animate-pulse text-primary" aria-hidden /> : <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />}
-                            {timeline.reasoning ? "Pensando…" : "Trabalhando…"}
-                        </motion.p>
+                        <motion.div key="working" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="mt-3 text-xs text-muted-foreground">
+                            <AnimatePresence mode="wait" initial={false}>
+                                <motion.p key={status.key} data-status={status.key} initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -4 }} transition={{ duration: 0.18 }} className="flex items-center gap-2">
+                                    {status.key === "background" ? (
+                                        <motion.span className="inline-flex text-primary" animate={reduceMotion ? undefined : { rotate: [0, 180, 180, 360] }} transition={{ duration: 2.4, repeat: Infinity, ease: "easeInOut" }} aria-hidden>
+                                            <Hourglass className="h-3.5 w-3.5" />
+                                        </motion.span>
+                                    ) : status.key === "reasoning" ? (
+                                        <Brain className="h-3.5 w-3.5 animate-pulse text-primary" aria-hidden />
+                                    ) : (
+                                        <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+                                    )}
+                                    {status.label}
+                                </motion.p>
+                            </AnimatePresence>
+                        </motion.div>
                     )}
                 </AnimatePresence>
                 <AnimatePresence>

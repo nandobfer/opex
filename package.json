@@ -30,7 +30,7 @@
     "@engramind/client": "^0.13.1",
     "@hookform/resolvers": "^5.2.2",
     "@nandobfer/integracoes": "github:nandobfer/integracoes#v0.4.0",
-    "@opencode/client": "2.0.24",
+    "@opencode/client": "2.4.2",
     "@radix-ui/react-accordion": "^1.2.12",
     "@radix-ui/react-alert-dialog": "^1.1.15",
     "@radix-ui/react-avatar": "^1.1.11",

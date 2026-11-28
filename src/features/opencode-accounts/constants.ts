@@ -14,4 +14,5 @@ export const OPENCODE_METHOD_KIND_LABELS = {
     key: "Chave de API",
     oauth: "Login (OAuth)",
     command: "Comando",
+    external: "Externa",
 } as const

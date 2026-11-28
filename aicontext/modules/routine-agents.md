@@ -370,6 +370,9 @@ carrega só as ferramentas e as memórias dele e **nenhuma instrução** além d
   aleatório da execução — só o hash no banco; registrado como `rotina_<id>` e removido no fim).
   Como o prefixo `rotina_<id>_` muda a cada execução e entra nas instruções e nas ferramentas, o cache de
   prompt do motor OpenCode só se repete entre as ativações (retomadas) da mesma execução.
+  Subagentes em segundo plano (OPE-216): o turno espera a sessão ficar quieta; cada espera vira um passo de
+  aviso "Aguardando trabalho em segundo plano" (com a contagem) e o relato da execução é o da execução final
+  (`onSegment` zera o texto acumulado).
   Serviço desligado → **Erro** com o motivo. As permissões falham fechadas: sem conseguir listar os
   MCPs do host → **Erro** acionável; sessão reaproveitada cujas permissões não puderam ser atualizadas
   → sessão nova, com aviso. As chamadas ao MCP da execução (memória, Chamada HTTP) viram passos.

@@ -1,4 +1,5 @@
 import type { AiFeatureAvailability } from "@/features/ai/types"
+import type { BackgroundCounts } from "@/features/agentic/background-label"
 import type { ArchitectDiagramState, ArchitectOrigin, ArchitectPhase } from "./constants"
 import type { ArchitectGraph } from "./graph"
 import type { AppliedOp } from "./stream-parser"
@@ -62,6 +63,8 @@ export interface ArchitectLiveProgress {
     tools: number
     nodes: number
     edges: number
+    /** Subagentes/comandos em segundo plano que o turno do OpenCode aguarda (OPE-216); só ao vivo. */
+    background?: BackgroundCounts | null
 }
 
 /** Linhas do stream `GET /api/architect/diagrams/[id]/stream` (NDJSON). */
