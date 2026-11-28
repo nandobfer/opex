@@ -2,10 +2,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const mocks = vi.hoisted(() => ({ values: { url: 'http://gotenberg:3000/', timeoutSeconds: 30, urlTtlMinutes: 15, urlTtlMaxMinutes: 60 } as Record<string, unknown> }))
 
-vi.mock('@/lib/integrations/runtime', () => ({ getIntegration: async () => ({ values: mocks.values }) }))
-vi.mock('@/lib/integrations/server', () => ({ integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
+// O cliente HTTP é o da integração Gotenberg da biblioteca (OPE-217): os mocks valem dentro dela (`server.deps.inline`).
+vi.mock('@nandobfer/integracoes/modules/server/config', () => ({ getIntegration: async () => ({ values: mocks.values }) }))
+vi.mock('@nandobfer/integracoes/modules/server/debug', () => ({ integrationDebug: () => ({ info: vi.fn(), step: vi.fn(), request: vi.fn(), response: vi.fn(), success: vi.fn(), warn: vi.fn(), error: vi.fn() }) }))
 
-import { convertHtmlToPdf, gotenbergHealth, pdfFormFields, screenshotHtml } from '@/lib/pdf/gotenberg'
+import { gotenbergHealth } from '@nandobfer/integracoes/gotenberg/server'
+import { convertHtmlToPdf, pdfFormFields, screenshotHtml } from '@/lib/pdf/gotenberg'
 import { previewHtml } from '@/lib/pdf/preview'
 
 const fetchMock = vi.fn()

@@ -3,6 +3,7 @@ import { DomainError } from "@/lib/api/route"
 import { dbConnect } from "@/lib/db"
 import { AgentFile, type AgentFileKind, type IAgentFile, type IAgentFileOrigin } from "@/lib/db/models/AgentFile"
 import { AcaoAuditoria, recordAudit } from "@/lib/audit/record"
+import { gotenbergUrlTtlMinutes } from "@nandobfer/integracoes/gotenberg"
 import { getIntegrationConfig } from "@/lib/integrations/runtime"
 import { loggerFor } from "@/lib/logger"
 import { deleteFile, getFileObject, getFileUrl, getUploadUrl, headFile, storageErrorInfo, uploadFile } from "@/lib/storage/s3"
@@ -12,8 +13,6 @@ import {
     AGENT_FILES_PREFIX,
     formatBytes,
     isInlineTextType,
-    URL_TTL_DEFAULT_MINUTES,
-    URL_TTL_MAX_DEFAULT_MINUTES,
     URL_TTL_SIGV4_MAX_MINUTES,
 } from "../constants"
 import type { AgentFileFilters } from "../schemas"
@@ -63,9 +62,7 @@ export function buildAgentKey(id: Types.ObjectId | string, name: string): string
 /** Validade das URLs (segundos) a partir do pedido do agente e dos campos da integração Gotenberg. */
 export async function urlTtl(requestedMinutes?: number): Promise<{ seconds: number; expiresAt: Date }> {
     const config = await getIntegrationConfig("gotenberg").catch(() => null)
-    const defaultMinutes = Number(config?.urlTtlMinutes) > 0 ? Number(config?.urlTtlMinutes) : URL_TTL_DEFAULT_MINUTES
-    const maxMinutes = Math.min(URL_TTL_SIGV4_MAX_MINUTES, Number(config?.urlTtlMaxMinutes) > 0 ? Number(config?.urlTtlMaxMinutes) : URL_TTL_MAX_DEFAULT_MINUTES)
-    const minutes = Math.max(1, Math.min(requestedMinutes ?? defaultMinutes, maxMinutes))
+    const minutes = gotenbergUrlTtlMinutes(config, requestedMinutes, { hardMaxMinutes: URL_TTL_SIGV4_MAX_MINUTES })
     return { seconds: minutes * 60, expiresAt: new Date(Date.now() + minutes * 60_000) }
 }
 
