@@ -72,7 +72,8 @@ vi.mock('@nandobfer/integracoes/modules/integrations/ia/ai/opencode-client', () 
           oc.removed.push(sessionID)
         },
       },
-      project: { list: async (options?: { signal?: AbortSignal }) => (oc.hang === 'project' ? hanging(options?.signal) : oc.projects) },
+      // Cliente 2.4: `project.list(input, requestOptions)` (o prazo vai nas opções da requisição).
+      project: { list: async (_input?: unknown, options?: { signal?: AbortSignal }) => (oc.hang === 'project' ? hanging(options?.signal) : oc.projects) },
     }
   },
 }))

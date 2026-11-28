@@ -322,6 +322,8 @@ export type WorkbenchEventPayload =
     | { type: "permission-replied"; id: string; decision: string }
     | { type: "form"; form: OpencodeFormDto }
     | { type: "form-closed"; id: string }
+    /** Trabalho em segundo plano que o turno aguarda (OPE-216); tudo zerado = a espera acabou. Gravado (a tela volta no estado certo). */
+    | { type: "background"; subagents: number; shells: number; other: number }
     | { type: "turn-end"; outcome: "succeeded" | "failed" | "interrupted"; message: string | null; durationMs: number; costUsd: number }
     /** Passo ao vivo de uma verificação do PR (transitório). */
     | { type: "pr-watch-step"; checkId: string; prNumber: number; level: PrWatchLevel; text: string }

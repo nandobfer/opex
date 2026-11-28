@@ -336,6 +336,10 @@ async function executeTurn(args: TurnArgs): Promise<void> {
                 case "tool":
                     onTool(event)
                     break
+                case "background":
+                    // Subagentes/comandos em segundo plano (OPE-216): a resposta segue ao vivo até a sessão ficar quieta.
+                    publishLine(sessionId, { type: "background", subagents: event.subagents, shells: event.shells, other: event.other })
+                    break
                 case "notice":
                     log.info({ sessionId, level: event.level, message: event.message }, "[maddox] aviso do OpenCode")
                     break

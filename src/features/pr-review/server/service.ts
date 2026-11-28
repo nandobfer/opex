@@ -183,6 +183,10 @@ async function executeReview(id: string, controller: AbortController): Promise<v
                     onText: (delta: string) => {
                         text += delta
                     },
+                    // A sessão acordou depois dos subagentes (OPE-216): vale o texto da execução final.
+                    onSegment: () => {
+                        text = ""
+                    },
                     onStep: async ({ costUsd, tokens }) => {
                         await PrReview.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
                     },

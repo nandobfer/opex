@@ -98,7 +98,7 @@ async function listAllSessions(client: OpencodeClient, timeoutMs: number): Promi
         } while (cursor)
     }
     await scan({})
-    const projects = await client.project.list({ signal: AbortSignal.timeout(timeoutMs) }).catch((error: unknown) => {
+    const projects = await client.project.list({}, { signal: AbortSignal.timeout(timeoutMs) }).catch((error: unknown) => {
         log.warn({ err: error }, "[opencode-session-retention] Não foi possível listar os projetos do OpenCode; segue só com a listagem padrão")
         return []
     })

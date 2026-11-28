@@ -50,13 +50,15 @@ interface AssistantMessageProps {
     /** Resposta ao vivo: cursor piscando e "Pensando…". */
     streaming?: boolean
     thinking?: boolean
+    /** Agente Maddox (OPE-216): rótulo da espera pelos subagentes/comandos em segundo plano. */
+    waiting?: string | null
     message?: OpexMessageDto | null
     onDecide?: (actionId: string, decision: "confirm" | "cancel") => void
     deciding?: boolean
     onRetry?: () => void
 }
 
-function AssistantMessageView({ parts, streaming, thinking, message, onDecide, deciding, onRetry }: AssistantMessageProps) {
+function AssistantMessageView({ parts, streaming, thinking, waiting, message, onDecide, deciding, onRetry }: AssistantMessageProps) {
     const empty = parts.length === 0
     const AgentIcon = useOpexScope().agent.icon
     return (
@@ -72,7 +74,13 @@ function AssistantMessageView({ parts, streaming, thinking, message, onDecide, d
                     if (part.type === "form") return <OpexFormPart key={part.id} part={part} live={Boolean(streaming)} />
                     return <OpexToolCard key={part.id} part={part} onDecide={onDecide} deciding={deciding} />
                 })}
-                <AnimatePresence>{streaming && (empty || (thinking && parts.at(-1)?.type !== "reasoning")) && <ThinkingIndicator key="thinking" />}</AnimatePresence>
+                <AnimatePresence mode="wait">
+                    {streaming && waiting ? (
+                        <ThinkingIndicator key="background" label={waiting} />
+                    ) : (
+                        streaming && (empty || (thinking && parts.at(-1)?.type !== "reasoning")) && <ThinkingIndicator key="thinking" />
+                    )}
+                </AnimatePresence>
                 {message && <MessageFooter message={message} onRetry={onRetry} />}
             </div>
         </motion.div>
@@ -98,7 +106,7 @@ function StreamingText({ text, cursor }: { text: string; cursor: boolean }) {
     )
 }
 
-function ThinkingIndicator() {
+function ThinkingIndicator({ label = "Pensando…" }: { label?: string }) {
     const reduceMotion = useReducedMotion() ?? false
     return (
         <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.15 }} className="flex items-center gap-2 text-xs text-muted-foreground" role="status">
@@ -112,7 +120,7 @@ function ThinkingIndicator() {
                     />
                 ))}
             </span>
-            Pensando…
+            {label}
         </motion.div>
     )
 }

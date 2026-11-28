@@ -37,6 +37,13 @@ describe('normalizeOpencodeEvent', () => {
     expect(normalizeOpencodeEvent(ev('permission.asked', { id: 'p1', action: 'bash', resources: ['rm -rf x'] }), 's1')).toEqual({ kind: 'permission', permission: { id: 'p1', action: 'bash', resources: ['rm -rf x'], message: null } })
     expect(normalizeOpencodeEvent(ev('permission.replied', { requestID: 'p1' }), 's1')).toEqual({ kind: 'permission-replied', id: 'p1' })
   })
+
+  it('início de execução e jobs em segundo plano (OPE-216): a sessão do job vem em data.info', () => {
+    expect(normalizeOpencodeEvent(ev('session.execution.started', {}), 's1')).toEqual({ kind: 'start' })
+    const jobEvent = (sessionID: string) => ({ type: 'experimental.job.updated', data: { info: { id: 'j1', kind: 'subagent', status: 'completed', sessionID } } })
+    expect(normalizeOpencodeEvent(jobEvent('s1'), 's1')).toEqual({ kind: 'job', id: 'j1', jobKind: 'subagent', status: 'completed' })
+    expect(normalizeOpencodeEvent(jobEvent('outra'), 's1')).toBeNull()
+  })
 })
 
 describe('nova tentativa do OpenCode e limite do provedor', () => {

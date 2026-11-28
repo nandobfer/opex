@@ -338,6 +338,10 @@ function turnHooks(doc: ITaskRefinement) {
             onText: (delta: string) => {
                 accumulated.text += delta
             },
+            // A sessão acordou depois dos subagentes (OPE-216): a especificação sai do texto da execução final.
+            onSegment: () => {
+                accumulated.text = ""
+            },
             onStep: async ({ costUsd, tokens }: { costUsd: number; tokens: { input: number; output: number; reasoning: number } }) => {
                 await TaskRefinement.updateOne(filter, { $inc: { "usage.costUsd": costUsd, "usage.inputTokens": tokens.input, "usage.outputTokens": tokens.output, "usage.reasoningTokens": tokens.reasoning } })
             },

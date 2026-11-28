@@ -107,6 +107,11 @@ describe('mensagens', () => {
     expect(screen.getByRole('status').textContent).toContain('Pensando…')
   })
 
+  it('OPE-216: a resposta ao vivo aguardando subagentes mostra a espera', () => {
+    render(<AssistantMessage parts={[{ type: 'text', text: 'Disparei os subagentes.' }]} streaming thinking={false} waiting="Aguardando 2 subagentes em segundo plano…" />)
+    expect(screen.getByRole('status').textContent).toContain('Aguardando 2 subagentes em segundo plano…')
+  })
+
   it('resposta com erro mostra a mensagem e "Tentar novamente"; o rodapé traz modelo, tokens e duração', () => {
     const onRetry = vi.fn()
     render(<AssistantMessage parts={[{ type: 'text', text: 'Parcial' }]} message={message({ status: 'error', error: 'Credencial recusada' })} onRetry={onRetry} />)
