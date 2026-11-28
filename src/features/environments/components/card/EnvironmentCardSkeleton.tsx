@@ -1,5 +1,6 @@
 import { Card } from "@/components/ui/card"
 import { Skeleton } from "@/components/ui/skeleton"
+import { USAGE_BAR_COMPACT_CLASS, USAGE_BAR_COMPACT_TRACK_ROW_CLASS } from "@/components/metrics/usage-bar-layout"
 import { cn } from "@/lib/utils"
 import { CONTAINER_GRID, CONTAINER_ROW_CLASS, CONTAINER_USAGE_CLASS, ENV_CARD_ACTIONS_CLASS, ENV_CARD_CLASS, ENV_CARD_FOOTER_CLASS, ENV_CARD_HEADER_CLASS, ENV_CARD_LIST_CLASS, ENV_CARD_SECTION_CLASS, ENV_CARD_TITLE_CLASS, ENV_USAGE_GRID_CLASS, ENV_USAGE_SUMMARY_CLASS } from "./environment-card-layout"
 
@@ -8,6 +9,15 @@ const BarSkeleton = () => (
     <div className="space-y-1" data-skeleton-usage-bar>
         <Skeleton className="h-3 w-full" />
         <Skeleton className="h-1.5 w-full" />
+    </div>
+)
+/** Barra compacta da coluna Recursos (rótulo + faixa da trilha), nas dimensões da `UsageBar compact`. */
+const CompactBarSkeleton = () => (
+    <div className={USAGE_BAR_COMPACT_CLASS} data-skeleton-usage-bar data-compact="true">
+        <Skeleton className="h-3 w-full" />
+        <div className={USAGE_BAR_COMPACT_TRACK_ROW_CLASS}>
+            <Skeleton className="h-1.5 w-full" />
+        </div>
     </div>
 )
 const METRICS = 4
@@ -52,9 +62,9 @@ export function EnvironmentCardSkeleton({ variant = "owner", cards = 3, containe
                                 <Skeleton className="h-3 w-20" />
                                 <Skeleton className="h-6 w-36" />
                                 {variant === "owner" && (
-                                    <div className={CONTAINER_USAGE_CLASS}>
+                                    <div className={CONTAINER_USAGE_CLASS} data-skeleton-container-usage>
                                         {Array.from({ length: METRICS }, (_, bar) => (
-                                            <BarSkeleton key={bar} />
+                                            <CompactBarSkeleton key={bar} />
                                         ))}
                                     </div>
                                 )}
