@@ -10,9 +10,9 @@ import type { RoutineCostDto, RoutineRunDto } from '@/features/routine-agents/ty
  * (Executando e Esperando) e Cancelar só nos status não finais, com a confirmação vigente.
  */
 
-const mocks = vi.hoisted(() => ({ runs: [] as unknown[], cancel: vi.fn() }))
+const mocks = vi.hoisted(() => ({ runs: [] as unknown[], cancel: vi.fn(), reduced: true }))
 
-vi.mock('framer-motion', () => framerMotionMock())
+vi.mock('framer-motion', () => ({ ...framerMotionMock(), useReducedMotion: () => mocks.reduced }))
 vi.mock('@/features/routine-agents/hooks/useRoutineRuns', () => ({
   useRoutineRuns: () => ({ data: mocks.runs, isLoading: false, isError: false, refetch: vi.fn() }),
   useCancelRoutineRun: () => ({ mutate: mocks.cancel, isPending: false }),
@@ -31,6 +31,7 @@ const run = (extra: Partial<RoutineRunDto> = {}): RoutineRunDto => ({
 })
 
 beforeEach(() => {
+  mocks.reduced = true
   mocks.runs = []
   mocks.cancel.mockReset()
 })
@@ -44,6 +45,19 @@ describe('card da execução (OPE-213)', () => {
       expect(container.querySelector(`[data-status-icon="${status}"]`)).toBeTruthy()
       unmount()
     }
+  })
+
+  it('o ícone de Executando gira pelo Framer Motion (sem animação CSS) e fica parado com movimento reduzido', () => {
+    mocks.reduced = false
+    const { container, unmount } = render(<RoutineRunCard run={run({ status: 'running', finishedAt: null })} />)
+    const icon = container.querySelector('[data-status-icon="running"]')!
+    expect(icon.getAttribute('class')).not.toContain('animate-spin')
+    expect(icon.closest('[data-spinning]')!.getAttribute('data-spinning')).toBe('true')
+    unmount()
+    mocks.reduced = true
+    const reduced = render(<RoutineRunCard run={run({ status: 'running', finishedAt: null })} />)
+    expect(reduced.container.querySelector('[data-status-icon="running"]')!.closest('[data-spinning]')!.getAttribute('data-spinning')).toBe('false')
+    expect(reduced.container.querySelector('[data-status-icon="completed"]')).toBeNull()
   })
 
   it('origem, início, término, duração, motor e modelo', () => {

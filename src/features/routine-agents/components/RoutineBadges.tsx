@@ -1,6 +1,6 @@
 "use client"
 
-import { AnimatePresence, motion } from "framer-motion"
+import { AnimatePresence, motion, useReducedMotion } from "framer-motion"
 import { Ban, CheckCircle2, Clock, Hourglass, Loader2, Moon, ShieldAlert, TimerOff, XCircle, type LucideIcon } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { ROUTINE_AGENT_STATUS_LABELS, ROUTINE_PROVISIONING_LABELS, ROUTINE_RUN_STATUS_LABELS, type RoutineAgentStatus, type RoutineProvisioningStatus, type RoutineRunStatus } from "../status"
@@ -34,13 +34,25 @@ export const ROUTINE_RUN_STATUS_ICONS: Record<RoutineRunStatus, LucideIcon> = {
     expired: TimerOff,
 }
 
+/** Ícone do selo; o de Executando gira com Framer Motion (parado com movimento reduzido). */
+function StatusIcon({ icon: Icon, id, spin }: { icon: LucideIcon; id: string; spin?: boolean }) {
+    const reduceMotion = useReducedMotion()
+    const icon = <Icon className="h-3.5 w-3.5" data-status-icon={id} aria-hidden />
+    if (!spin) return icon
+    return (
+        <motion.span className="inline-flex" data-spinning={reduceMotion ? "false" : "true"} animate={reduceMotion ? { rotate: 0 } : { rotate: 360 }} transition={reduceMotion ? { duration: 0 } : { duration: 1, repeat: Infinity, ease: "linear" }}>
+            {icon}
+        </motion.span>
+    )
+}
+
 /** Troca de status animada (o rótulo muda com fade). */
 function AnimatedBadge({ id, label, variant, icon: Icon, spin }: { id: string; label: string; variant: Variant; icon?: LucideIcon; spin?: boolean }) {
     return (
         <AnimatePresence mode="wait" initial={false}>
             <motion.span key={id} initial={{ opacity: 0, scale: 0.92 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.92 }} transition={{ duration: 0.15 }} className="inline-flex">
                 <Badge variant={variant} className="gap-1 whitespace-nowrap">
-                    {Icon && <Icon className={`h-3.5 w-3.5 ${spin ? "animate-spin motion-reduce:animate-none" : ""}`} data-status-icon={id} aria-hidden />}
+                    {Icon && <StatusIcon icon={Icon} id={id} spin={spin} />}
                     {label}
                 </Badge>
             </motion.span>

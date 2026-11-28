@@ -44,6 +44,23 @@ describe('useRoutineAgentStatus (OPE-213)', () => {
     await waitFor(() => expect(mocks.toastSuccess).toHaveBeenCalledWith('Agente pausado'))
   })
 
+  it('F1: uma releitura antiga em andamento é cancelada e não recoloca o agente como Ativo', async () => {
+    let resolveStale: (value: RoutineAgentDto) => void = () => {}
+    mocks.post.mockReturnValue(new Promise(() => {}))
+    const { client, result } = setup()
+    const stale = client.fetchQuery({ queryKey: routineKeys.agent('a1'), queryFn: () => new Promise<RoutineAgentDto>((done) => (resolveStale = done)), staleTime: 0 }).catch(() => undefined)
+    let staleList: (value: RoutineAgentDto[]) => void = () => {}
+    const staleListFetch = client.fetchQuery({ queryKey: routineKeys.list('current'), queryFn: () => new Promise<RoutineAgentDto[]>((done) => (staleList = done)), staleTime: 0 }).catch(() => undefined)
+    act(() => result.current.mutate({ id: 'a1', action: 'pause' }))
+    await waitFor(() => expect(client.getQueryData<RoutineAgentDto>(routineKeys.agent('a1'))?.status).toBe('paused'))
+    resolveStale(agent)
+    staleList([agent])
+    await stale
+    await staleListFetch
+    expect(client.getQueryData<RoutineAgentDto>(routineKeys.agent('a1'))).toMatchObject({ status: 'paused', nextFireAt: null })
+    expect(client.getQueryData<RoutineAgentDto[]>(routineKeys.list('current'))?.[0]?.status).toBe('paused')
+  })
+
   it('falhou: volta ao status anterior e avisa', async () => {
     mocks.post.mockRejectedValue(new Error('x'))
     const { client, result } = setup()

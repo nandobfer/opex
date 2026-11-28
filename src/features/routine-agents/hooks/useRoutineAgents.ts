@@ -64,7 +64,12 @@ export function useRoutineAgentStatus() {
     const queryClient = useQueryClient()
     return useMutation({
         mutationFn: async ({ id, action }: { id: string; action: RoutineStatusAction }) => unwrapApi((await api.post<ApiResponse<RoutineAgentDto>>(`/routine-agents/${id}/status`, { action })).data),
-        onMutate: ({ id, action }) => ({ rollback: patchAgentStatus(queryClient, id, action) }),
+        onMutate: async ({ id, action }) => {
+            // Uma releitura em andamento (tempo real, revalidação) não pode sobrescrever o status otimista.
+            if (action === "pause" || action === "resume")
+                await Promise.all([queryClient.cancelQueries({ queryKey: routineKeys.agent(id) }), queryClient.cancelQueries({ queryKey: [...routineKeys.all, "list"] })])
+            return { rollback: patchAgentStatus(queryClient, id, action) }
+        },
         onSuccess: (agent, { action }) => {
             toast.success(STATUS_TOAST[action])
             queryClient.setQueryData(routineKeys.agent(agent.id), agent)
