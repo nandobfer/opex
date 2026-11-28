@@ -26,9 +26,14 @@ export function addOverrideService(overrides: ComposeOverrides, service: string)
 
 export const removeOverrideService = (overrides: ComposeOverrides, service: string): ComposeOverrides => ({ ...overrides, services: overrides.services.filter((item) => item.service !== service) })
 
-/** Troca um campo de um serviço (`null` = volta a valer o do compose). */
+/**
+ * Troca um campo de um serviço (`null` = volta a valer o do compose). O serviço entra nos ajustes no
+ * primeiro campo editado e sai quando nenhum campo fica personalizado.
+ */
 export function setOverrideField<F extends ServiceField>(overrides: ComposeOverrides, service: string, field: F, value: ServiceValues[F]): ComposeOverrides {
-    return { ...overrides, services: overrides.services.map((item) => (item.service === service ? { ...item, [field]: value } : item)) }
+    const base = addOverrideService(overrides, service)
+    const services = base.services.map((item) => (item.service === service ? { ...item, [field]: value } : item)).filter((item) => item.service !== service || customizedCount(item) > 0)
+    return { ...base, services }
 }
 
 /** Valor inicial ao ligar "Personalizar": o do compose (quando lido) ou o campo vazio. */
@@ -79,12 +84,58 @@ export function composeFieldText(field: ServiceField, compose: ServiceValues | n
     }
 }
 
-export const customizedCount = (override: ServiceOverride) => SERVICE_FIELDS.filter((field) => override[field] !== null).length
+export function customizedCount(override: ServiceOverride): number {
+    return SERVICE_FIELDS.filter((field) => override[field] !== null).length
+}
 
-/** Serviços do bloco que não estão no compose lido (`null` = ainda não lido). */
-export function orphanOverrideServices(overrides: ComposeOverrides, names: string[] | null): string[] {
-    if (!names) return []
-    return overrides.services.map((item) => item.service).filter((service) => !names.includes(service))
+/** Grupos do painel do serviço (OPE-211, página): campos na ordem em que aparecem. */
+export const SERVICE_FIELD_GROUPS: { id: string; title: string; fields: ServiceField[] }[] = [
+    { id: "imagem", title: "Imagem e comando", fields: ["image", "command", "entrypoint"] },
+    { id: "rede", title: "Rede", fields: ["ports", "dependsOn"] },
+    { id: "armazenamento", title: "Armazenamento", fields: ["volumes"] },
+    { id: "saude", title: "Saúde e ciclo", fields: ["healthcheck", "restart"] },
+    { id: "variaveis", title: "Variáveis e labels", fields: ["environment", "labels"] },
+]
+
+export interface ServiceListItem {
+    name: string
+    /** Dados do compose (`null` = o serviço não está no compose lido; `undefined` = compose não lido). */
+    compose: ServiceValues | null | undefined
+    hasBuild: boolean
+    customized: number
+    ownImage: boolean
+    /** Não está entre os serviços escolhidos na Origem (só quando há escolha). */
+    outside: boolean
+    /** Tem ajuste salvo, mas não está no compose lido. */
+    orphan: boolean
+}
+
+/**
+ * Itens da lista de serviços: os do compose lido (na ordem do compose) e, depois, os que têm ajuste ou
+ * limite mas não estão no compose (ou ainda não há leitura).
+ */
+export function serviceListItems(input: {
+    read: { name: string; hasBuild: boolean; values: ServiceValues }[] | null
+    overrides: ComposeOverrides
+    limitServices: string[]
+    selected: string[]
+    running: string[]
+}): ServiceListItem[] {
+    const names = input.read ? input.read.map((service) => service.name) : []
+    const extra = [...input.overrides.services.map((item) => item.service), ...input.limitServices, ...(input.read ? [] : input.running)].filter((name, index, all) => !names.includes(name) && all.indexOf(name) === index)
+    return [...names, ...extra].map((name) => {
+        const read = input.read?.find((service) => service.name === name)
+        const override = input.overrides.services.find((item) => item.service === name)
+        return {
+            name,
+            compose: input.read ? (read?.values ?? null) : undefined,
+            hasBuild: read?.hasBuild ?? false,
+            customized: override ? customizedCount(override) : 0,
+            ownImage: Boolean(override && override.image !== null),
+            outside: input.selected.length > 0 && !input.selected.includes(name),
+            orphan: Boolean(input.read) && !read && (Boolean(override) || input.limitServices.includes(name)),
+        }
+    })
 }
 
 /** Chaves do environment do serviço que também estão nas Variáveis extras (o environment vence). */

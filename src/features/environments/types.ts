@@ -125,7 +125,15 @@ export interface EnvironmentsListDto {
 
 /** "Ler compose" do formulário: os serviços e os limites declarados no compose (sem o override do app). */
 export interface ComposeServicesDto {
-    services: { name: string; hasBuild: boolean; declared: ResourceLimitsDto; values: ServiceValues; unreadable: { ports: string[]; volumes: string[] } }[]
+    services: {
+        name: string
+        hasBuild: boolean
+        declared: ResourceLimitsDto
+        /** Forma dos limites no compose (`mem_limit`/`cpus` ou `deploy.resources`), para a prévia do override. */
+        limitStyle: { memory: "service" | "deploy"; cpus: "service" | "deploy" }
+        values: ServiceValues
+        unreadable: { ports: string[]; volumes: string[] }
+    }[]
 }
 
 export interface HostCapacityDto {

@@ -1,25 +1,28 @@
 "use client"
 
-import { createContext, useContext, useState, type ReactNode } from "react"
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { useWatch, type UseFormReturn } from "react-hook-form"
-import { toast } from "sonner"
-import { mergeComposeServices } from "../limits-form"
-import { composeServicesInputSchema, DEFAULT_ENVIRONMENT_LIMITS, type EnvironmentInput } from "../schemas"
+import { parseComposeYaml } from "../compose-config"
+import { composeServicesInputSchema, type EnvironmentInput } from "../schemas"
 import type { ComposeServicesDto, EnvironmentDto } from "../types"
 import { useReadComposeServices } from "./useEnvironments"
 
+/** Espera depois da última mudança da origem antes de ler o compose de novo. */
+export const COMPOSE_READ_DEBOUNCE_MS = 800
+
 /**
- * "Ler compose" compartilhado pelo formulário do ambiente (OPE-211): uma leitura alimenta os limites e os
- * serviços do compose. A leitura pedida pelo usuário (`explicit`) também preenche os limites declarados; a
- * automática (Editar abre o bloco dos serviços) só traz os valores "Do compose". Vive dentro do diálogo:
- * fechar descarta o resultado.
+ * Leitura do compose da página Novo/Editar ambiente (OPE-211), uma só para a página toda: alimenta as
+ * sugestões de serviços da Origem, os limites por serviço e a lista de serviços. Lê sozinha ao abrir e
+ * de novo quando a origem muda (espera `COMPOSE_READ_DEBOUNCE_MS`). Lê sempre TODOS os serviços do compose
+ * (a lista marca os que ficam fora do ambiente). No Novo do compose gerenciado, o YAML do editor é lido no
+ * navegador (a revisão ainda não existe no Opex).
  */
 export interface FormComposeRead {
-    /** A origem está completa (no gerenciado, só depois de salvo: a revisão está no Opex). */
+    /** A origem está completa para ler. */
     canRead: boolean
-    read: (options?: { explicit?: boolean }) => void
+    read: () => void
     result: ComposeServicesDto | null
-    /** Nomes dos serviços do último "Ler compose" (`null` = ainda não lido). */
+    /** Nomes dos serviços do compose lido (`null` = ainda não lido). */
     names: string[] | null
     isPending: boolean
     isError: boolean
@@ -27,34 +30,49 @@ export interface FormComposeRead {
 
 const ComposeReadContext = createContext<FormComposeRead | null>(null)
 
-/** Limites declarados no compose entram no campo (e o toast diz o que aconteceu). */
-function applyComposeLimits(form: UseFormReturn<EnvironmentInput>, result: ComposeServicesDto): void {
-    const merged = mergeComposeServices(form.getValues("limits") ?? DEFAULT_ENVIRONMENT_LIMITS, result)
-    form.setValue("limits", merged.limits, { shouldValidate: true, shouldDirty: true })
-    if (merged.differs) toast.info("O compose declara limites diferentes por serviço: use \"Por serviço\" para vê-los.")
-    else toast.success(`Compose lido: ${result.services.length} serviço(s)${merged.filled ? "; limites declarados preenchidos" : ""}`)
+/** Serviços do YAML do compose gerenciado ainda não salvo, no formato da leitura do servidor. */
+function localRead(content: string | undefined): ComposeServicesDto | null {
+    const services = content?.trim() ? parseComposeYaml(content) : null
+    return services ? { services: services.map((service) => ({ name: service.name, hasBuild: service.hasBuild, declared: service.declared, limitStyle: service.limitStyle, values: service.values, unreadable: service.unreadable })) } : null
 }
 
 export function ComposeReadProvider({ form, env, children }: { form: UseFormReturn<EnvironmentInput>; env: EnvironmentDto | null; children: ReactNode }) {
     const source = useWatch({ control: form.control, name: "source" })
-    // Origem incompleta (ex.: Novo sem a central) não dá para ler: nada de pedido que só voltaria erro.
-    const canRead = composeServicesInputSchema.safeParse({ source, environmentId: env?.id }).success && (source?.kind !== "managed" || Boolean(env))
+    const compose = useWatch({ control: form.control, name: "compose" })
+    const local = source?.kind === "managed" && !env
+    // Todos os serviços: a escolha da Origem não muda o que o compose declara.
+    const readSource = useMemo(() => (source ? { ...source, services: [] } : source), [source])
+    const readKey = JSON.stringify(readSource ?? null)
+    const canRead = !local && composeServicesInputSchema.safeParse({ source: readSource, environmentId: env?.id }).success
     const mutation = useReadComposeServices()
+    const { mutate } = mutation
     const [result, setResult] = useState<ComposeServicesDto | null>(null)
-    const read = ({ explicit = true }: { explicit?: boolean } = {}) => {
-        if (!canRead) return
-        const current = form.getValues("source")
-        mutation.mutate(
-            { source: current, ...(env && current?.kind === "managed" ? { environmentId: env.id } : {}) },
-            {
-                onSuccess: (data) => {
-                    setResult(data)
-                    if (explicit) applyComposeLimits(form, data)
-                },
-            },
-        )
+    const lastKey = useRef<string | null>(null)
+
+    const read = useCallback(() => {
+        if (!canRead || !readSource) return
+        lastKey.current = readKey
+        mutate({ source: readSource, ...(env && readSource.kind === "managed" ? { environmentId: env.id } : {}) }, { onSuccess: setResult })
+    }, [canRead, readSource, readKey, env, mutate])
+
+    useEffect(() => {
+        if (!canRead || lastKey.current === readKey) return
+        // A primeira leitura sai na hora; as seguintes esperam a origem parar de mudar.
+        const delay = lastKey.current === null ? 0 : COMPOSE_READ_DEBOUNCE_MS
+        const timer = setTimeout(read, delay)
+        return () => clearTimeout(timer)
+    }, [canRead, readKey, read])
+
+    const localResult = useMemo(() => (local ? localRead(compose) : null), [local, compose])
+    const current = local ? localResult : result
+    const value: FormComposeRead = {
+        canRead: canRead || (local && localResult !== null),
+        read,
+        result: current,
+        names: current ? current.services.map((service) => service.name) : null,
+        isPending: !local && mutation.isPending,
+        isError: !local && mutation.isError,
     }
-    const value: FormComposeRead = { canRead, read, result, names: result ? result.services.map((service) => service.name) : null, isPending: mutation.isPending, isError: mutation.isError }
     return <ComposeReadContext.Provider value={value}>{children}</ComposeReadContext.Provider>
 }
 

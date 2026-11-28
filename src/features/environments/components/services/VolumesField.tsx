@@ -8,6 +8,7 @@ import { useRowIds } from "@/components/ui/key-value-rows"
 import { OptionTabs } from "@/components/ui/option-tabs"
 import { Switch } from "@/components/ui/switch"
 import type { VolumeOverride, VolumeType } from "../../schemas"
+import { TableHeader } from "./TableHeader"
 
 const TYPE_OPTIONS = [
     {
@@ -46,6 +47,7 @@ export function VolumesField({ value, onChange }: { value: VolumeOverride[]; onC
     }
     return (
         <div className="space-y-2">
+            {value.length > 0 && <TableHeader grid={VOLUME_ROW} columns={["Tipo", "Origem (pasta ou volume)", "Destino no container", "", ""]} />}
             <AnimatePresence initial={false}>
                 {value.map((volume, index) => (
                     <motion.div key={ids.ids[index]} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className={VOLUME_ROW}>
@@ -83,7 +85,7 @@ export function VolumesField({ value, onChange }: { value: VolumeOverride[]; onC
             {!value.length && <p className="text-xs text-muted-foreground">Nenhum volume (a lista vazia tira os volumes do compose).</p>}
             <p className="text-xs text-muted-foreground">Pasta relativa: a partir da pasta do primeiro arquivo do compose. Executar no PC não aceita pastas (bind mount).</p>
             <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={() => onChange([...value, { type: "volume", source: "", target: "", readOnly: false }])}>
-                <Plus className="h-4 w-4" aria-hidden /> Volume
+                <Plus className="h-4 w-4" aria-hidden /> Adicionar volume
             </Button>
         </div>
     )

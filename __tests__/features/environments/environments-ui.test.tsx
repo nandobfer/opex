@@ -111,15 +111,24 @@ describe('linha do ambiente', () => {
   it('serviços do compose (OPE-211): resumo dos ajustes implantados e o selo quando os salvos diferem', () => {
     const app = { service: 'app', image: 'nginx:1.27', command: null, entrypoint: null, environment: null, labels: null, ports: null, volumes: null, restart: 'always' as const, healthcheck: null, dependsOn: null }
     const deployed = { services: [app], yaml: '' }
-    render(<EnvironmentRow env={env({ composeOverrides: deployed, deployedComposeOverrides: deployed })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ composeOverrides: deployed, deployedComposeOverrides: deployed })} pcAvailable onIntent={vi.fn()} />)
     expect(screen.getByText(/serviços: app imagem nginx:1\.27 · 2 ajustes/)).toBeTruthy()
     expect(screen.queryByText(/Ajustes dos serviços salvos diferem/)).toBeNull()
     cleanup()
-    render(<EnvironmentRow env={env({ composeOverrides: { services: [{ ...app, restart: null }], yaml: '' }, deployedComposeOverrides: deployed })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ composeOverrides: { services: [{ ...app, restart: null }], yaml: '' }, deployedComposeOverrides: deployed })} pcAvailable onIntent={vi.fn()} />)
     expect(screen.getByText('Ajustes dos serviços salvos diferem dos implantados: faça Deploy')).toBeTruthy()
     cleanup()
-    render(<EnvironmentRow env={env({ deployedOn: null, composeOverrides: deployed })} pcAvailable onIntent={vi.fn()} onOpenDeploy={vi.fn()} />)
+    render(<EnvironmentRow env={env({ deployedOn: null, composeOverrides: deployed })} pcAvailable onIntent={vi.fn()} />)
     expect(screen.queryByText(/Ajustes dos serviços salvos diferem/)).toBeNull()
+  })
+
+  it('OPE-211: o nome e Editar levam à página de edição (sem modal); durante o deploy, Editar fica desligado', () => {
+    render(<EnvironmentRow env={env()} pcAvailable onIntent={vi.fn()} />)
+    expect(screen.getByRole('link', { name: 'Loja' }).getAttribute('href')).toBe('/ambientes/e1/editar')
+    expect(screen.getByRole('link', { name: 'Editar' }).getAttribute('href')).toBe('/ambientes/e1/editar')
+    cleanup()
+    render(<EnvironmentRow env={env({ lastDeploy: deploy({ status: 'running', finishedAt: null, durationMs: null }) })} pcAvailable onIntent={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Editar' }).hasAttribute('disabled')).toBe(true)
   })
 
   it('ambiente no PC com o túnel fechado: ações bloqueadas', () => {

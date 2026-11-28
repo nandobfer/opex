@@ -12,10 +12,8 @@ import { HealthcheckField } from "./HealthcheckField"
 import { PortsField } from "./PortsField"
 import { VolumesField } from "./VolumesField"
 
-const RESTART_OPTIONS = RESTART_POLICIES.map((value) => ({
-    value,
-    label: value,
-}))
+const RESTART_LABELS: Record<(typeof RESTART_POLICIES)[number], string> = { no: "Nunca", always: "Sempre", "on-failure": "Se falhar", "unless-stopped": "Até ser parado" }
+const RESTART_OPTIONS = RESTART_POLICIES.map((value) => ({ value, label: RESTART_LABELS[value], title: `restart: ${value}` }))
 
 interface Props<F extends ServiceField> {
     id: string
@@ -45,7 +43,7 @@ export function ServiceFieldEditor<F extends ServiceField>({ id, service, field,
                     <KeyValueRows rows={rows} onChange={set} itemLabel={label} article={field === "labels" ? "o" : "a"} keyPlaceholder={field === "labels" ? "nome.do.label" : "NOME"} />
                     {!rows.length && <p className="text-xs text-muted-foreground">{field === "environment" ? "Nenhuma variável (a lista vazia tira o environment do compose)." : "Nenhum label (a lista vazia tira os labels do compose)."}</p>}
                     <Button type="button" variant="ghost" size="sm" className="gap-1" onClick={() => set([...rows, { key: "", value: "" }])}>
-                        <Plus className="h-4 w-4" aria-hidden /> {field === "environment" ? "Variável" : "Label"}
+                        <Plus className="h-4 w-4" aria-hidden /> {field === "environment" ? "Adicionar variável" : "Adicionar label"}
                     </Button>
                 </div>
             )

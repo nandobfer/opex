@@ -31,9 +31,19 @@ const text = (value: unknown): string => (value === null || value === undefined 
 function args(value: unknown): string[] | null {
     if (value === undefined || value === null) return null
     if (Array.isArray(value)) return value.map(text)
-    const raw = text(value).trim()
-    if (!raw) return []
-    return (raw.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((part) => part.replace(/^(["'])(.*)\1$/, "$2"))
+    return splitCommandLine(text(value))
+}
+
+/** Linha de comando → argumentos (espaços separam; aspas simples ou duplas agrupam), como o compose faz. */
+export function splitCommandLine(raw: string): string[] {
+    const trimmed = raw.trim()
+    if (!trimmed) return []
+    return (trimmed.match(/"[^"]*"|'[^']*'|\S+/g) ?? []).map((part) => part.replace(/^(["'])(.*)\1$/, "$2"))
+}
+
+/** Argumentos → linha de comando (argumento com espaço ou vazio vai entre aspas). */
+export function joinCommandLine(items: string[]): string {
+    return items.map((item) => (item === "" || /\s/.test(item) ? (item.includes('"') ? `'${item}'` : `"${item}"`) : item)).join(" ")
 }
 
 /** `environment`/`labels`: mapa ou lista `CHAVE=valor`. */

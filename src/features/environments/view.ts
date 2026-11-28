@@ -1,7 +1,12 @@
 import type { OptionTabsOption } from "@/components/ui/option-tabs"
 import { initialLimits } from "./limits-form"
 import { EMPTY_COMPOSE_OVERRIDES, MACHINE_LABELS, MACHINES, type EnvironmentInput, type Machine } from "./schemas"
-import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto } from "./types"
+import type { DeployKind, EnvironmentDto, EnvironmentEnvValuesDto, HostCapacityDto } from "./types"
+
+/** Capacidade das máquinas ainda desconhecida (lista não carregada). */
+export const NO_HOSTS: Record<Machine, HostCapacityDto | null> = { server: null, pc: null }
+/** "o servidor" / "o PC" nas ajudas dos limites. */
+export const MACHINE_SUBJECT: Record<Machine, string> = { server: "o servidor", pc: "o PC" }
 
 /** Regras de tela (puras) do módulo Ambientes. */
 

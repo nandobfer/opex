@@ -8,6 +8,7 @@ import { OptionTabs } from "@/components/ui/option-tabs"
 import { SearchPicker } from "@/components/ui/search-picker"
 import { Switch } from "@/components/ui/switch"
 import type { DependsOn } from "../../schemas"
+import { TableHeader } from "./TableHeader"
 
 const CONDITION_OPTIONS = [
     {
@@ -41,6 +42,7 @@ export function DependsOnField({ value, onChange, services }: { value: DependsOn
     const available = services.filter((service) => !value.some((item) => item.service === service))
     return (
         <div className="space-y-2">
+            {value.length > 0 && <TableHeader grid={DEPENDS_ROW} columns={["Serviço", "Espera até", "", ""]} />}
             <AnimatePresence initial={false}>
                 {value.map((item, index) => (
                     <motion.div key={ids.ids[index]} initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }} exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.18 }} className={DEPENDS_ROW}>
@@ -60,7 +62,7 @@ export function DependsOnField({ value, onChange, services }: { value: DependsOn
             <SearchPicker
                 trigger={
                     <Button type="button" variant="ghost" size="sm" className="gap-1" disabled={!available.length}>
-                        <Plus className="h-4 w-4" aria-hidden /> Dependência
+                        <Plus className="h-4 w-4" aria-hidden /> Adicionar dependência
                     </Button>
                 }
                 items={available}

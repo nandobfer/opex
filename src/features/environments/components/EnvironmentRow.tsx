@@ -6,7 +6,9 @@ import { formatDistanceToNow } from "date-fns"
 import { ptBR } from "date-fns/locale"
 import { ArrowRightLeft, FileCode, FileText, History, Pencil, Play, RefreshCw, RotateCcw, Square, Trash2 } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { deployPath } from "../constants"
+import { ItemNameLink } from "@/components/list/ItemNameLink"
+import { Button } from "@/components/ui/button"
+import { deployPath, environmentEditPath } from "../constants"
 import { useEnvironmentAction } from "../hooks/useEnvironments"
 import { composeNotDeployed } from "../managed-compose"
 import type { EnvironmentDto } from "../types"
@@ -18,7 +20,7 @@ import { DeployMenu } from "./DeployMenu"
 import { EnvironmentActionButton as RowButton, EnvironmentStatusBadges } from "./EnvironmentStatus"
 import { LogsDialog } from "./LogsDialog"
 
-export type RowIntent = { kind: "edit" | "delete" | "move" | "history" | "compose" } | { kind: "deploy-started"; deployId: string }
+export type RowIntent = { kind: "delete" | "move" | "history" | "compose" } | { kind: "deploy-started"; deployId: string }
 
 /** Linha de um ambiente: estado, portas, CPU/RAM, ref/commit, último deploy (link para o log) e as ações. */
 export function EnvironmentRow({ env, pcAvailable, onIntent }: { env: EnvironmentDto; pcAvailable: boolean; onIntent: (intent: RowIntent) => void }) {
@@ -48,7 +50,7 @@ export function EnvironmentRow({ env, pcAvailable, onIntent }: { env: Environmen
         <div className="flex flex-col gap-2 py-3 md:flex-row md:items-center">
             <div className="min-w-0 flex-1 space-y-1">
                 <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-medium">{env.name}</span>
+                    <ItemNameLink href={environmentEditPath(env.id)}>{env.name}</ItemNameLink>
                     <span className="font-mono text-xs text-muted-foreground">{env.slug}</span>
                     <EnvironmentStatusBadges health={health} deploying={deploying} version={version} />
                     {env.source.kind === "adopted" && <Badge variant="secondary">{env.source.git ? "Adotado" : "Adotado (sem git)"}</Badge>}
@@ -94,7 +96,15 @@ export function EnvironmentRow({ env, pcAvailable, onIntent }: { env: Environmen
                 <RowButton label="Logs" icon={FileText} disabled={busy || Boolean(blocked) || !env.deployedOn} onClick={() => run({ action: "logs" })} />
                 {env.source.kind === "managed" && <RowButton label="Compose" icon={FileCode} onClick={() => onIntent({ kind: "compose" })} />}
                 <RowButton label="Histórico" icon={History} onClick={() => onIntent({ kind: "history" })} />
-                <RowButton label="Editar" icon={Pencil} disabled={deploying} onClick={() => onIntent({ kind: "edit" })} />
+                {deploying ? (
+                    <RowButton label="Editar" icon={Pencil} disabled onClick={() => undefined} />
+                ) : (
+                    <Button asChild variant="ghost" size="icon" className="h-8 w-8" title="Editar">
+                        <Link href={environmentEditPath(env.id)} aria-label="Editar">
+                            <Pencil className="h-4 w-4" aria-hidden />
+                        </Link>
+                    </Button>
+                )}
                 <RowButton label="Mover" icon={ArrowRightLeft} disabled={busy || (env.source.kind === "adopted" && env.source.machine === "pc")} onClick={() => onIntent({ kind: "move" })} />
                 <RowButton label="Apagar" icon={Trash2} disabled={busy} onClick={() => onIntent({ kind: "delete" })} />
                 {action.isPending && <RefreshCw className="h-4 w-4 animate-spin text-muted-foreground" aria-label="Executando" />}

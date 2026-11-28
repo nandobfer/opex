@@ -48,4 +48,4 @@ async function readManagedServices(source: Extract<EnvironmentSource, { kind: "m
     return { services: selectServices(parsed, source.services).map(composeServiceDto) }
 }
 
-const composeServiceDto = (service: ComposeService): ComposeServicesDto["services"][number] => ({ name: service.name, hasBuild: service.hasBuild, declared: service.declared, values: service.values, unreadable: service.unreadable })
+const composeServiceDto = (service: ComposeService): ComposeServicesDto["services"][number] => ({ name: service.name, hasBuild: service.hasBuild, declared: service.declared, limitStyle: service.limitStyle, values: service.values, unreadable: service.unreadable })

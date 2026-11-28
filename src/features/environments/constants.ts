@@ -8,6 +8,9 @@ export const ENVIRONMENTS_FEATURE = "environments" as const
 export const ENVIRONMENTS_PATH = "/ambientes"
 /** Página do log de um deploy (OPE-208: substituiu a gaveta), com link próprio e o Voltar do navegador. */
 export const deployPath = (deployId: string) => `${ENVIRONMENTS_PATH}/deploys/${encodeURIComponent(deployId)}`
+/** Páginas Novo/Editar ambiente (OPE-211: substituíram o modal). */
+export const ENVIRONMENT_NEW_PATH = `${ENVIRONMENTS_PATH}/novo`
+export const environmentEditPath = (id: string) => `${ENVIRONMENTS_PATH}/${encodeURIComponent(id)}/editar`
 
 /** Evento em `private-app`: `{ id, change }` (um ambiente ou a lista mudou). */
 export const ENVIRONMENTS_EVENT = "environments"

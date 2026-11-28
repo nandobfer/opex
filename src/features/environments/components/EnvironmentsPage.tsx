@@ -11,7 +11,7 @@ import { CadastroTableSkeleton } from "@/components/list/CadastroTableSkeleton"
 import { EmptyState } from "@/components/feedback/EmptyState"
 import { ErrorState } from "@/components/feedback/ErrorState"
 import { apiErrorMessage } from "@/lib/api"
-import { deployPath } from "../constants"
+import { deployPath, ENVIRONMENT_NEW_PATH } from "../constants"
 import { useEnvironments, useEnvironmentsRealtime } from "../hooks/useEnvironments"
 import type { Machine } from "../schemas"
 import type { EnvironmentDto, UnmanagedProjectDto } from "../types"
@@ -21,7 +21,6 @@ import { ComposeDialog } from "./ComposeDialog"
 import { BuilderCard } from "./builder/BuilderCard"
 import { DeleteEnvironmentDialog } from "./DeleteEnvironmentDialog"
 import { DeployHistoryDialog } from "./DeployHistoryDialog"
-import { EnvironmentFormDialog, NO_HOSTS } from "./EnvironmentFormDialog"
 import { EnvironmentRow, type RowIntent } from "./EnvironmentRow"
 import { MoveDialog } from "./MoveDialog"
 import { SettingsDialog } from "./SettingsDialog"
@@ -32,7 +31,7 @@ const GROUPS: { machine: Machine; title: string; icon: typeof Server }[] = [
     { machine: "pc", title: "PC", icon: Monitor },
 ]
 
-type Dialog = { kind: "form"; env: EnvironmentDto | null } | { kind: "delete" | "move" | "history" | "compose"; env: EnvironmentDto } | { kind: "adopt"; project: UnmanagedProjectDto } | { kind: "settings" } | null
+type Dialog = { kind: "delete" | "move" | "history" | "compose"; env: EnvironmentDto } | { kind: "adopt"; project: UnmanagedProjectDto } | { kind: "settings" } | null
 
 function EnvironmentsContent() {
     useEnvironmentsRealtime()
@@ -45,12 +44,12 @@ function EnvironmentsContent() {
     const groups = groupByMachine(data?.items ?? [])
     const onIntent = (env: EnvironmentDto, intent: RowIntent) => {
         if (intent.kind === "deploy-started") openDeploy(intent.deployId)
-        else setDialog(intent.kind === "edit" ? { kind: "form", env } : { kind: intent.kind, env })
+        else setDialog({ kind: intent.kind, env })
     }
 
     return (
         <div className="flex flex-col gap-6">
-            <CadastroHeader title="Ambientes" description="Projetos Docker Compose no servidor e no PC (Builder Machine), com deploy, logs e mover entre máquinas." actionLabel="Novo ambiente" actionIcon={<Plus className="h-4 w-4" />} onAction={() => setDialog({ kind: "form", env: null })}>
+            <CadastroHeader title="Ambientes" description="Projetos Docker Compose no servidor e no PC (Builder Machine), com deploy, logs e mover entre máquinas." actionLabel="Novo ambiente" actionIcon={<Plus className="h-4 w-4" />} onAction={() => router.push(ENVIRONMENT_NEW_PATH)}>
                 <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span>{data ? (data.pcAvailable ? "PC disponível (túnel aberto)" : (data.pcReason ?? "PC indisponível")) : "Conferindo as máquinas…"}</span>
                     <Button type="button" variant="ghost" size="sm" className="ml-auto gap-1.5" onClick={() => setDialog({ kind: "settings" })}>
@@ -67,7 +66,7 @@ function EnvironmentsContent() {
                 <ErrorState title="Não foi possível carregar os ambientes" description={apiErrorMessage(query.error, "Tente novamente.")} onRetry={() => void query.refetch()} />
             ) : (
                 <>
-                    {!data.items.length && <EmptyState icon={Server} title="Nenhum ambiente ainda" description="Crie um a partir do repositório de uma central ou com um compose gerenciado (escrito aqui), ou adote um projeto do compose em execução." actionLabel="Novo ambiente" onAction={() => setDialog({ kind: "form", env: null })} />}
+                    {!data.items.length && <EmptyState icon={Server} title="Nenhum ambiente ainda" description="Crie um a partir do repositório de uma central ou com um compose gerenciado (escrito aqui), ou adote um projeto do compose em execução." actionLabel="Novo ambiente" onAction={() => router.push(ENVIRONMENT_NEW_PATH)} />}
                     {GROUPS.filter((group) => groups[group.machine].length).map(({ machine, title, icon: Icon }) => (
                         <CadastroTableCard key={machine}>
                             <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold">
@@ -87,7 +86,6 @@ function EnvironmentsContent() {
                     <UnmanagedList projects={data.unmanaged} onAdopt={(project) => setDialog({ kind: "adopt", project })} />
                 </>
             )}
-            <EnvironmentFormDialog open={dialog?.kind === "form"} env={dialog?.kind === "form" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} hosts={data?.hosts ?? NO_HOSTS} onClose={() => setDialog(null)} />
             <DeleteEnvironmentDialog env={dialog?.kind === "delete" ? dialog.env : null} onClose={() => setDialog(null)} />
             <MoveDialog env={dialog?.kind === "move" ? dialog.env : null} pcAvailable={data?.pcAvailable ?? false} pcReason={data?.pcReason ?? null} onClose={() => setDialog(null)} onStarted={openDeploy} />
             <DeployHistoryDialog env={dialog?.kind === "history" ? dialog.env : null} onClose={() => setDialog(null)} />
