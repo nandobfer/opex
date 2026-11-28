@@ -136,9 +136,11 @@ export async function deleteTechnology(id: string, actorId: string): Promise<voi
 /**
  * Carga inicial (migração idempotente): grava os grupos e as tecnologias uma única vez, marcando a
  * carga. Com a marca, não faz nada (o que o dono remover não volta).
+ *
+ * Roda como migração no `dbConnect()`, com a conexão já aberta: não chama `dbConnect` de novo (nem nada
+ * que o chame), para não travar o registro — ele esperaria a própria migração terminar.
  */
 export async function seedTechCatalog(): Promise<{ seeded: boolean }> {
-    await dbConnect()
     if (await AiFeatureSetting.exists({ feature: CATALOG_SEED_FEATURE })) return { seeded: false }
     for (const [order, group] of SEED_TECH_GROUPS.entries()) {
         const saved = await ProjectBootstrapTechGroup.findOneAndUpdate({ name: group.name }, { $setOnInsert: { name: group.name, color: group.color, order } }, { upsert: true, new: true }).lean()
